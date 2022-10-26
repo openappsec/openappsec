@@ -30,9 +30,11 @@ open-appsec uses two models:
 
 2. An unsupervised model that is being built in real time in the protected environment. This model uses traffic patterns specific to the environment.
 
-## Documentation
+# Resources
+* [Project Website](https://openappsec.io)
 * [Offical documentation](https://docs.openappsec.io/)
 * [Video Tutorial](https://www.youtube.com/watch?v=ZmFrA2ibdog)
+* [Live Kubernetes Playground](https://killercoda.com/open-appsec/scenario/simple-appsec-kubernetes-ingress)
 
 # Repositories
 
@@ -41,11 +43,11 @@ open-appsec GitHub includes three main repositores:
 * [openappsec/openappsec](https://github.com/openappsec/openappsec) the main code and logic of open-appsec. Developed in C++.
 * [openappsec/attachement](https://github.com/openappsec/attachment) connects between processes that provide HTTP data (e.g NGINX) and the open-appsec Agent security logic. Developed in C.
 * [openappsec/smartsync](https://github.com/openappsec/smartsync) in charge of correlating learning data from multiple agent instances and delivering a unified learning model for each asset. Developed in Golang.
-* [openappsec/smartsync-shared-files](https://github.com/openappsec/smartsync-shared-files) interface to physical storage used by smartsync service for storing learning data
+* [openappsec/smartsync-shared-files](https://github.com/openappsec/smartsync-shared-files) interface to physical storage used by smartsync service for storing learning data. Developed in Golang.
 
-## open-appsec NGINX attachment compilation instructions
+# Compilation instructions
 
-### Installing external dependencies
+## Installing external dependencies
 
 Before compiling the services, you'll need to ensure the latest development versions of the following libraries:
 * Boost
@@ -63,7 +65,7 @@ An example of installing the packages on Alpine:
  $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev
 ```
 
-### Compiling and packaging the agent code
+## Compiling and packaging the agent code
 
 1. Clone this repository
 2. Run CMake command
@@ -77,7 +79,7 @@ An example of installing the packages on Alpine:
  $ make package
 ```
 
-### Placing the agent code inside an Alpine docker image
+## Placing the agent code inside an Alpine docker image
 
 Once the agent code has been compiled and packaged, an Alpine image running it can be created. This requires permissions to excute the `docker` command.
 
@@ -87,7 +89,7 @@ Once the agent code has been compiled and packaged, an Alpine image running it c
 
 This will create a local image for your docker called `agent-docker`.
 
-### Deplyment of the agent docker image as container
+## Deplyment of the agent docker image as container
 
 To run a Nano-Agent as a container the following steps are requiered:
 
@@ -112,21 +114,21 @@ CONTAINER ID        IMAGE               COMMAND                          CREATED
 
 This will run a docker container using the agent docker image.
 
-## Contact
+# Community
 Please join open-appsec community and follow us on LinkedIn.
 
-* [Community] https://www.openappsec.io/community
-* [LinkedIn] https://www.linkedin.com/company/open-appsec
+* [Community](https://www.openappsec.io/community)
+* [LinkedIn](https://www.linkedin.com/company/open-appsec)
 
 
-## Contributing
+# Contributing
 We welcome everyone that wishes to share their knowledge and expertise to enhance and expand the project.
 
 Please see the [Contributing Guidelines](https://github.com/openappsec/openappsec/blob/main/CONTRIBUTING.md]).
 
-## Security
+# Security
 
-### Security Audit
+## Security Audit
 open-appsec code was audited by an independent third party in September-October 2022.
 See the [full report](https://github.com/openappsec/openappsec/blob/main/LEXFO-CHP20221014-Report-Code_audit-OPEN-APPSEC-v1.2.pdf).
 
