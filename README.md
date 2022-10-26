@@ -128,7 +128,7 @@ Please see the [Contributing Guidelines](https://github.com/openappsec/openappse
 
 # Security
 
-## Security Audit
+### Security Audit
 open-appsec code was audited by an independent third party in September-October 2022.
 See the [full report](https://github.com/openappsec/openappsec/blob/main/LEXFO-CHP20221014-Report-Code_audit-OPEN-APPSEC-v1.2.pdf).
 
@@ -136,7 +136,7 @@ See the [full report](https://github.com/openappsec/openappsec/blob/main/LEXFO-C
 If you've found a vulnerability or a potential vulnerability in open-appsec please let us know at securityalert@openappsec.io. We'll send a confirmation email to acknowledge your report within 24 hours, and we'll send an additional email when we've identified the issue positively or negatively.
 
 
-## License
+# License
 open-appsec is open source and available under Apache 2.0 license.
 
 The basic ML model is open source and available under Apache 2.0 license.
