@@ -19,11 +19,11 @@ Every request to the application goes through three phases:
 3. If the request is identified as a valid and legitimate request, the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
 
 
-##  Machine Learning Models
+##  Machine Learning models
 
 open-appsec uses two models:
 
-1. A supervised model that was trained offline and fed with millions of requests, both malicious and benign.
+1. A supervised model that was trained offline based on millions of requests, both malicious and benign.
     
     * A basic model is provided as part of this repository. It is recommended for use in Monitor-Only and Test environments.
     * An advanced model which is more accurate and recommended for Production use, can be downloaded from [open-appsec portal](https://my.openappsec.io). User Menu->Download advanced ML model. This model updates from time to time and you will get an email when these updates happen.
@@ -38,7 +38,7 @@ open-appsec uses two models:
 
 # Repositories
 
-open-appsec GitHub includes three main repositores:
+open-appsec GitHub includes four main repositores:
 
 * [openappsec/openappsec](https://github.com/openappsec/openappsec) the main code and logic of open-appsec. Developed in C++.
 * [openappsec/attachement](https://github.com/openappsec/attachment) connects between processes that provide HTTP data (e.g NGINX) and the open-appsec Agent security logic. Developed in C.
@@ -124,7 +124,7 @@ Please join open-appsec community and follow us on LinkedIn.
 # Contributing
 We welcome everyone that wishes to share their knowledge and expertise to enhance and expand the project.
 
-Please see the [Contributing Guidelines](https://github.com/openappsec/openappsec/blob/main/CONTRIBUTING.md]).
+Please see the [Contributing Guidelines](https://github.com/openappsec/openappsec/blob/main/CONTRIBUTING.md).
 
 # Security
 
