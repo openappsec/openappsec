@@ -3,6 +3,8 @@
 <h1>openappsec/openappsec</h1>
 </div>
 
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6629/badge)](https://bestpractices.coreinfrastructure.org/projects/6629)
+
 # About
 [open-appsec](https://www.openappsec.io) (openappsec.io) builds on machine learning to provide pre-emptive web app & API threat protection against OWASP-Top-10 and zero-day attacks. It can be deployed as add-on to Kubernetes Ingress, NGINX, Envoy (soon) and API Gateways.
 
