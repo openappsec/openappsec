@@ -1,0 +1,76 @@
+#!/bin/bash
+
+function print_usage
+{
+	echo "$0 OPTION [GOOGLE-TEST-DIRECTORY]"
+	echo "Provide compilation and linker options required by C Mock."
+	echo ""
+	echo "Options:"
+	echo ""
+	echo "  --cflags   print compilation options"
+	echo "  --libs     print linker options"
+	echo "  -h, --help print help"
+	echo ""
+	echo "GOOGLE-TEST-DIRECTORY is a directory contaning downloaded and built Google Test."
+}
+
+function check_directory
+{
+	DIR=$1
+
+	if [ -e "$DIR" ]; then
+		if [ ! -d "$DIR" ]; then
+			echo "'$DIR' is not a directory."
+			exit 1
+		fi
+	else
+		echo "'$DIR' does not exist."
+		exit 1
+	fi
+}
+
+function find_directories
+{
+	DIR=$(readlink -f "$1")
+	FILE_PATTERN=$2
+
+	find "$DIR" -regex $FILE_PATTERN -type f -exec dirname {} \; | sort | uniq
+}
+
+if [ $# -lt 1 -o $# -gt 2 ]; then
+	print_usage 1>&2
+	exit 1
+fi
+
+case $1 in
+	'--cflags')
+		CMOCK_DIR=$(dirname $(dirname $(readlink -f $0)))
+		OPTIONS="-I'$CMOCK_DIR/include'"
+
+		if [ $# -eq 2 ]; then
+			GTEST_DIR=$2
+			check_directory "$GTEST_DIR"
+			OPTIONS+=$(find_directories "$GTEST_DIR" '.*/\(gtest/gtest\.h\|gmock/gmock.h\)' | xargs -d '\n' dirname | xargs -d '\n' printf " -I'%s'")
+		fi
+
+		echo $OPTIONS
+		;;
+	'--libs')
+		OPTIONS="-rdynamic -Wl,--no-as-needed -ldl"
+
+		if [ $# -eq 2 ]; then
+			GTEST_DIR=$2
+			check_directory "$GTEST_DIR"
+			OPTIONS+=$(find_directories "$GTEST_DIR" '.*/\(libgtest\|libgmock\|libgmock_main\)\.a' | xargs -d '\n' printf " -L'%s'")
+		fi
+
+		echo $OPTIONS
+		;;
+	'-h'|'--help')
+		print_usage
+		;;
+	*)
+		print_usage 1>&2
+		exit 1
+		;;
+esac

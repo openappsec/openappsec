@@ -1,0 +1,90 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : policies.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                default:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    practices:
+                      type: array
+                      items:
+                        type: string
+                    triggers:
+                      type: array
+                      items:
+                        type: string
+                    custom-response:
+                      type: string
+                    source-identifiers:
+                      type: string
+                    trusted-sources:
+                      type: string
+                    exceptions:
+                      type: array
+                      items:
+                        type: string
+                specific-rules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      host:
+                        type: string
+                      mode:
+                        type: string
+                        enum:
+                          - prevent-learn
+                          - detect-learn
+                          - prevent
+                          - detect
+                          - inactive
+                      practices:
+                        type: array
+                        items:
+                          type: string
+                      triggers:
+                        type: array
+                        items:
+                          type: string
+                      custom-response:
+                        type: string
+                      source-identifiers:
+                        type: string
+                      trusted-sources:
+                        type: string
+                      exceptions:
+                        type: array
+                        items:
+                          type: string
+
+  scope: Cluster
+  names:
+    plural: policies
+    singular: policy
+    kind: Policy
+    shortNames:
+    - policy

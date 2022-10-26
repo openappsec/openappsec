@@ -1,0 +1,30 @@
+# If you wish to add a package to the cp-nano-cli.sh shell script,
+# just add a variable at the end of the file in the following format
+# <variable_name>="<packageName(directory name under /etc/cp/)> <default_port(optional)> <Formatted-Name(optioanl)>"
+# ** Please do not change the starting line of the variables (6th)
+
+orchestration="orchestration 7777"
+access_control="accessControl 8000"
+http_manager="httpManager 8888"
+iot_enforce="iot 6981 IoT_Enforce"
+iot_gw_sensor="iot 9090 IoT_GW_Sensor"
+iot_snmp="iot 8090 IoT_SNMP"
+iot_netflows="iot 8092 IoT_Netflows"
+iot_dns="iot 8094 IoT_DNS"
+iot_cisco_ise="iot 8096 IoT_Cisco_ISE"
+iot_ms_dhcp="iot 9192 IoT_MS_DHCP"
+iot_unix_dhcp="iot 9096 IoT_Unix_DHCP"
+iot_syslog_dhcp="iot 9094 IoT_Syslog_DHCP"
+iot_infoblox_dhcp="iot 9098 IoT_Infoblox_DHCP"
+attachment_registrator="attachmentRegistrator 8124"
+reverse_proxy_manager="rpmanager 8898"
+http_transaction_handler="HttpTransactionHandler"
+workload_protection="workloadProtection 1337"
+dedicated_network_handler="dedicatedNetworkHandler 8901"
+agent_intelligence_service="agentIntelligence 9000"
+messaging_proxy="messagingProxy 8164"
+sdwan="sdwan 1204 SD-WAN"
+sdwan_logger="sdwanLogger 2204 SD-WAN_Logger"
+cpview_metric_provider="cpviewMetricProvider 8282"
+hello_world="hello_world"
+# ** Please do not remove this comment - newline at end of file required.

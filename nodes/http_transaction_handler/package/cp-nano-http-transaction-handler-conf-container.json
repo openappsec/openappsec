@@ -1,0 +1,45 @@
+{
+    "Logging": {
+        "Fog Log URI": [
+            {
+                "value": "/api/v1/agents/events/bulk"
+            }
+        ],
+        "Log file name":[
+            {
+                "value": "/var/log/nano_agent/cp-nano-http-transaction-handler.log"
+            }
+        ],
+        "NanoService": [
+            {
+                "value": "Linux nano agent HTTP Transaction Handler service"
+            }
+        ]
+    },
+    "connection": {
+        "Nano service API Port Range start": [
+            {
+                "value": 12000
+            }
+        ],
+        "Nano service API Port Range end": [
+            {
+                "value": 13000
+            }
+        ]
+    },
+    "message": {
+    	"Connection timeout": [
+            {
+                "value": 10000000
+            }
+        ]
+    },
+    "HTTP manager": {
+        "Container mode": [
+            {
+                "value": true
+            }
+        ]
+    }
+}

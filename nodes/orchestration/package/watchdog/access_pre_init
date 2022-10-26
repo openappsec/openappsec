@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# chkconfig: 2345 16 99
+# description: Blcoks traffic until Access Control is ready.
+#
+
+FILESYSTEM_PATH="/etc/cp"
+
+. "/etc/environment"
+if [ -n "${CP_ENV_FILESYSTEM}" ] ; then
+    FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
+fi
+
+CPNANO_KERNEL_MONITOR=${FILESYSTEM_PATH}/accessControl/cp-nano-access-control-kernel-modules-monitor.sh
+
+case "$1" in
+    start)
+        grep "process:cp-nano-watchdog t" /config/active 1>/dev/null 2>/dev/null
+        if [  $? -eq 0 ] ; then
+            if [ -x ${CPNANO_KERNEL_MONITOR} ]; then
+                ${CPNANO_KERNEL_MONITOR} --init
+            fi
+        fi
+        ;;
+    stop)
+        ;;
+    restart)
+        ;;
+    status)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status|restart}"
+esac
+
+exit 0
+

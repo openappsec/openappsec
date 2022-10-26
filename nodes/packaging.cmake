@@ -1,0 +1,47 @@
+execute_process(COMMAND python3 ${CMAKE_SOURCE_DIR}/core/version/build_version_vars_h.py print-version-only OUTPUT_VARIABLE PACKAGE_VERSION)
+string(STRIP ${PACKAGE_VERSION} PACKAGE_VERSION)
+
+function(gen_help)
+    math(EXPR lastIndex "${ARGC}-1")
+    foreach(index RANGE 0 ${lastIndex} 2)
+        set(ARG ${ARGV${index}})
+        string(LENGTH ${ARG} ARG_LEN)
+        while(${ARG_LEN} LESS 40)
+            set(ARG "${ARG} ")
+            math(EXPR ARG_LEN "${ARG_LEN}+1")
+        endwhile()
+        set(HELP "${HELP}ARGPACKINGMAGIC  ${ARGV${index}}ARGSPACEMAGIC")
+        math(EXPR index "${index}+1")
+        set(HELP "${HELP} ${ARGV${index}}")
+    endforeach()
+    set(HELP ${HELP} PARENT_SCOPE)
+endfunction(gen_help)
+
+function(set_package_params params)
+    set(PKG_PARAM "${params}" PARENT_SCOPE)
+endfunction(set_package_params)
+
+add_custom_target(package)
+
+function(gen_package name dir script)
+    math(EXPR lastIndex "${ARGC}-1")
+    foreach(index RANGE 3 ${lastIndex})
+        set(label ${label};${ARGV${index}})
+    endforeach()
+    set(ARTIFACT ${CMAKE_INSTALL_PREFIX}/${name})
+    set(DIR ${CMAKE_INSTALL_PREFIX}/${dir})
+    set(TARGET_NAME make_package_${dir})
+    set(WRAPPER ${CMAKE_SOURCE_DIR}/build_system/tools/packaging/makeself_wrapper.sh)
+    set(MAKESELF ${CMAKE_SOURCE_DIR}/external/makeself/makeself.sh)
+    if ("${PKG_PARAM}" STREQUAL "")
+        add_custom_command(OUTPUT ${ARTIFACT}
+            COMMAND ${WRAPPER} ${MAKESELF} --needroot ${DIR} ${ARTIFACT} \"${label}\" \"${HELP}\" \"${PACKAGE_VERSION}\" \"${script}\"
+        )
+    else()
+        add_custom_command(OUTPUT ${ARTIFACT}
+            COMMAND ${WRAPPER} ${MAKESELF} --needroot\\ ${PKG_PARAM} ${DIR} ${ARTIFACT} \"${label}\" \"${HELP}\" \"${PACKAGE_VERSION}\" \"${script}\"
+        )
+    endif()
+    add_custom_target(${TARGET_NAME} DEPENDS ${ARTIFACT})
+    add_dependencies(package ${TARGET_NAME})
+endfunction(gen_package)

@@ -1,0 +1,10 @@
+if("${PLATFORM_TYPE}" MATCHES  "arm.*")
+    ADD_DEFINITIONS(-Wno-sign-compare)
+elseif("${PLATFORM_TYPE}" STREQUAL "alpine")
+    ADD_DEFINITIONS(-Wno-deprecated-copy)
+endif()
+include_directories(${CMAKE_SOURCE_DIR}/components/include)
+include_directories(${gtest_INCLUDE_DIRS})
+add_library(cptest cptest.cc cptest_data_buf.cc cptest_tcppacket.cc)
+
+add_subdirectory(cptest_ut)

@@ -1,0 +1,340 @@
+// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "health_checker.h"
+
+#include <string>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <unordered_map>
+
+#include "config.h"
+#include "log_generator.h"
+#include "health_check_manager.h"
+
+using namespace std;
+using namespace ReportIS;
+
+USE_DEBUG_FLAG(D_HEALTH_CHECK);
+
+class HealthChecker::Impl
+{
+public:
+    void
+    init()
+    {
+        i_mainloop = Singleton::Consume<I_MainLoop>::by<HealthChecker>();
+        i_socket = Singleton::Consume<I_Socket>::by<HealthChecker>();
+        initConfig();
+        initServerSocket();
+
+        registerConfigLoadCb(
+            [&]()
+            {
+                initConfig();
+                initServerSocket();
+            }
+        );
+    }
+
+    void
+    initServerSocket()
+    {
+        if (!enable) {
+            return;
+        }
+
+        if (!checkInternalHealthCheckStatus()) {
+            reportError("Internal health check failed. Wait for restart.");
+            return;
+        }
+
+        if (port == 0) {
+            string error_msg =
+                "Cannot initialize health check component, listening port was not provided. "
+                "Please provide valid port (>0).";
+            reportError(error_msg);
+            return;
+        }
+
+        if (server_sock == -1) {
+            i_mainloop->addOneTimeRoutine(
+                I_MainLoop::RoutineType::System,
+                [this] () { HandleProbeStartup(); },
+                "Health check probe listener startup",
+                false
+            );
+        }
+    }
+
+    void
+    fini()
+    {
+        closeConnection();
+    }
+
+private:
+    bool
+    checkInternalHealthCheckStatus()
+    {
+        dbgTrace(D_HEALTH_CHECK) << "Start agent general health check.";
+
+        HealthCheckStatus status =
+            Singleton::Consume<I_Health_Check_Manager>::by<HealthChecker>()->getAggregatedStatus();
+
+        dbgTrace(D_HEALTH_CHECK)
+            << "Finished agent general health check. Received aggregated status: "
+            << HealthCheckStatusReply::convertHealthCheckStatusToStr(status);
+
+        return status != HealthCheckStatus::UNHEALTHY;
+    }
+
+    void
+    reportError(const string &error_msg)
+    {
+        dbgWarning(D_HEALTH_CHECK) << error_msg;
+        LogGen(
+            error_msg,
+            Audience::SECURITY,
+            Severity::CRITICAL,
+            Priority::URGENT,
+            Tags::ORCHESTRATOR
+        );
+    }
+
+    void
+    closeConnection()
+    {
+        dbgDebug(D_HEALTH_CHECK) << "Closing connection";
+        if (server_sock > 0) {
+            i_socket->closeSocket(server_sock);
+            server_sock = -1;
+            dbgDebug(D_HEALTH_CHECK) << "Server socket closed";
+        }
+
+        if (routine_id > 0 && i_mainloop->doesRoutineExist(routine_id)) {
+            i_mainloop->stop(routine_id);
+            routine_id = 0;
+        }
+
+        for (auto socket_routine : client_sockets_routines) {
+            auto routine = socket_routine.first;
+            if (routine > 0 && i_mainloop->doesRoutineExist(routine)) {
+                i_mainloop->stop(routine);
+            }
+            auto socket = socket_routine.second;
+
+            if (socket > 0) {
+                i_socket->closeSocket(socket);
+            }
+        }
+        client_sockets_routines.clear();
+    }
+
+    void
+    initCloudVendorConfig()
+    {
+        static const map<string, pair<string, int>> ip_port_defaults_map = {
+            {"Azure", make_pair("168.63.129.16", 8117)},
+            {"Aws", make_pair("", 8117)}
+        };
+        auto cloud_vendor_maybe = getSetting<string>("reverseProxy", "cloudVendorName");
+        if (cloud_vendor_maybe.ok()) {
+            const string cloud_vendor = cloud_vendor_maybe.unpack();
+            auto value = ip_port_defaults_map.find(cloud_vendor);
+            if (value != ip_port_defaults_map.end()) {
+                const pair<string, uint> &ip_port_pair = value->second;
+                ip_address = ip_port_pair.first;
+                port = ip_port_pair.second;
+                enable = true;
+            }
+        }
+
+        ip_address = getProfileAgentSettingWithDefault<string>(
+            ip_address,
+            "agent.config.orchestration.healthCheckProbe.IP"
+        );
+        port = getProfileAgentSettingWithDefault<uint>(port, "agent.config.orchestration.healthCheckProbe.port");
+        enable = getProfileAgentSettingWithDefault<bool>(enable, "agent.config.orchestration.healthCheckProbe.enable");
+
+        ip_address = getConfigurationWithDefault<string>(ip_address, "Health Check", "Probe IP");
+        port = getConfigurationWithDefault<uint>(port, "Health Check", "Probe port");
+        enable = getConfigurationWithDefault<bool>(enable, "Health Check", "Probe enabled");
+    }
+
+    void
+    initConfig()
+    {
+        auto prev_ip_address = ip_address;
+        auto prev_port = port;
+
+        initCloudVendorConfig();
+
+        max_connections = getProfileAgentSettingWithDefault<uint>(
+            10,
+            "agent.config.orchestration.healthCheckProbe.maximunConnections"
+        );
+        max_connections = getConfigurationWithDefault<uint>(
+            max_connections,
+            "Health Check",
+            "Probe maximun open connections"
+        );
+
+        max_retry_interval = getProfileAgentSettingWithDefault<uint>(
+            600,
+            "agent.config.orchestration.healthCheckProbe.socketReopenPeriod"
+        );
+        max_retry_interval = getConfigurationWithDefault<uint>(
+            max_retry_interval,
+            "Health Check",
+            "Probe socket reopen period"
+        );
+        if (!enable) {
+            if (server_sock != -1) closeConnection();
+            return;
+        }
+
+        if (prev_ip_address != ip_address || prev_port != port) {
+            if (server_sock != -1) closeConnection();
+        }
+    }
+
+    void
+    HandleProbeStartup()
+    {
+        size_t next_retry_interval = 1;
+        while (server_sock == -1) {
+            next_retry_interval =
+                next_retry_interval < max_retry_interval ? next_retry_interval*2 : max_retry_interval;
+            auto socket = i_socket->genSocket(
+                I_Socket::SocketType::TCP,
+                false,
+                true,
+                "0.0.0.0:" + to_string(port)
+            );
+            if (socket.ok()) {
+                dbgInfo(D_HEALTH_CHECK) << "Successfully created probe listener."
+                << " port: "
+                << port;
+                server_sock = socket.unpack();
+            } else {
+                dbgWarning(D_HEALTH_CHECK)
+                    << "Failed to set up socket:"
+                    << ", Error: "
+                    << socket.getErr()
+                    << ", trying again to set up socket in "
+                    << next_retry_interval
+                    << " seconds";
+                i_mainloop->yield(chrono::seconds(next_retry_interval));
+            }
+        }
+        routine_id = i_mainloop->addFileRoutine(
+            I_MainLoop::RoutineType::RealTime,
+            server_sock,
+            [this] () { handleConnection(); },
+            "Health check probe server",
+            true
+        );
+    }
+
+    void
+    handleConnection()
+    {
+        if (open_connections_counter >= max_connections) {
+            dbgDebug(D_HEALTH_CHECK)
+                << "Cannot serve new client, reached maximun open connections bound which is:"
+                << open_connections_counter
+                << "maximun allowed: "
+                << max_connections;
+            return;
+        }
+        Maybe<I_Socket::socketFd> accepted_socket = i_socket->acceptSocket(server_sock, false, ip_address);
+        if (!accepted_socket.ok()) {
+            dbgWarning(D_HEALTH_CHECK)
+                << "Failed to accept a new client socket: "
+                << accepted_socket.getErr();
+            return;
+        }
+
+        auto new_client_socket = accepted_socket.unpack();
+        if (new_client_socket <= 0) {
+            i_socket->closeSocket(new_client_socket);
+            dbgWarning(D_HEALTH_CHECK)
+                << "Failed to initialize communication, generated client socket is OK yet negative";
+            return;
+        }
+
+        dbgDebug(D_HEALTH_CHECK) << "Successfully accepted client, client fd: " << new_client_socket;
+        open_connections_counter++;
+        auto curr_routine = i_mainloop->addFileRoutine(
+            I_MainLoop::RoutineType::RealTime,
+            new_client_socket,
+            [this] ()
+            {
+                auto curr_routine_id = i_mainloop->getCurrentRoutineId().unpack();
+                auto curr_client_socket = client_sockets_routines[curr_routine_id];
+                auto data_recieved = i_socket->receiveData(curr_client_socket, sizeof(uint8_t), false);
+                if (!data_recieved.ok()) {
+                    dbgDebug(D_HEALTH_CHECK) << "Connection with client closed, client fd: " << curr_client_socket;
+                    open_connections_counter--;
+                    i_socket->closeSocket(curr_client_socket);
+                    client_sockets_routines.erase(curr_routine_id);
+                    i_mainloop->stop();
+                }
+            },
+            "Health check probe connection handler",
+            true
+        );
+        client_sockets_routines[curr_routine] = new_client_socket;
+    }
+
+    bool enable;
+    uint max_retry_interval;
+    unordered_map<I_MainLoop::RoutineID, I_Socket::socketFd> client_sockets_routines;
+    bool is_first_run                               = true;
+    uint open_connections_counter                   = 0;
+    uint max_connections                            = 0;
+    string ip_address                               = "";
+    uint port                                       = 0;
+    I_Socket::socketFd server_sock                  = -1;
+    I_MainLoop::RoutineID routine_id                = 0;
+    I_MainLoop *i_mainloop                          = nullptr;
+    I_Socket *i_socket                              = nullptr;
+    I_Health_Check_Manager *i_health_check_manager  = nullptr;
+};
+
+HealthChecker::HealthChecker() : Component("HealthChecker"), pimpl(make_unique<Impl>()) {}
+HealthChecker::~HealthChecker() {}
+
+void
+HealthChecker::preload()
+{
+    registerExpectedConfiguration<uint>("Health Check", "Probe maximun open connections");
+    registerExpectedConfiguration<bool>("Health Check", "Probe enabled");
+    registerExpectedConfiguration<string>("Health Check", "Probe IP");
+    registerExpectedConfiguration<uint>("Health Check", "Probe port");
+    registerExpectedConfiguration<uint>("Health Check", "Probe socket reopen period");
+    registerExpectedSetting<string>("reverseProxy", "cloudVendorName");
+}
+
+void
+HealthChecker::init()
+{
+    pimpl->init();
+}
+
+void
+HealthChecker::fini()
+{
+    pimpl->fini();
+}

@@ -1,0 +1,13 @@
+language: c++
+
+dist: bionic
+
+before_script:
+    - git clone --depth=1 https://github.com/google/googletest/
+    - cd googletest
+    - cmake CMakeLists.txt
+    - make
+    - cd ..
+    - GTEST_DIR=./googletest make
+
+script: make test

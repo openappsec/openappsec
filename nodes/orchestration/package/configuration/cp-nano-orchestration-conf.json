@@ -1,0 +1,21 @@
+{
+    "Logging": {
+        "Log file name":[
+            {
+                "value": "nano_agent/cp-nano-orchestration.log"
+            }
+        ],
+        "NanoService": [
+            {
+                "value": "Linux nano agent Orchestration service"
+            }
+        ]
+    },
+    "message": {
+    	"Connection timeout":[
+            {
+                "value": 10000000
+            }
+        ]
+    }
+}

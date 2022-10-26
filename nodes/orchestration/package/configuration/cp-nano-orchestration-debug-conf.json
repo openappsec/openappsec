@@ -1,0 +1,11 @@
+{
+    "Debug": [
+        {
+            "Streams": [
+                {
+                    "Output": "nano_agent/cp-nano-orchestration.dbg"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,5 @@
+add_definitions(-DUSERSPACE)
+
+add_library(nginx_attachment nginx_attachment.cc nginx_attachment_config.cc nginx_attachment_opaque.cc nginx_parser.cc user_identifiers_config.cc nginx_intaker_metric.cc nginx_attachment_metric.cc cidrs_data.cc)
+
+target_link_libraries(nginx_attachment http_configuration http_transaction_data connkey table buffers -lshmem_ipc)

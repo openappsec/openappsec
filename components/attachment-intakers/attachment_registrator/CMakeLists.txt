@@ -1,0 +1,1 @@
+add_library(attachment_registrator attachment_registrator.cc)

@@ -1,0 +1,67 @@
+Licenses for Third-Party Components
+This section contains licensing information for third-party components that are used by Check Point's Nano agent. We are thankful to all individuals that have created these third-party components.
+
+1. Protobuf
+Protocol Buffers (a.k.a., protobuf) are Google's language-neutral, platform-neutral, extensible mechanism for serializing structured data. 
+The source is available at https://github.com/protocolbuffers/protobuf
+The License is available at https://github.com/protocolbuffers/protobuf/blob/master/LICENSE
+
+2. Nginx
+nginx [engine x] is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server.
+The source is available at https://trac.nginx.org/nginx/browser
+The License is available at http://nginx.org/LICENSE
+
+3. BusyBox
+BusyBox combines tiny versions of many common UNIX utilities into a single small executable.
+It provides minimalist replacements for most of the utilities you usually find in bzip2, coreutils, dhcp, diffutils, e2fsprogs, file, findutils, gawk, grep, inetutils, less,  modutils, net-tools, procps, sed, shadow, sysklogd, sysvinit, tar, util-linux, and vim.
+The utilities in BusyBox often have fewer options than their full-featured cousins, however, the options that are included provide the expected functionality and behave very much like their larger counterparts.
+The source is available at https://github.com/mirror/busybox
+The License is available at https://github.com/mirror/busybox/blob/master/LICENSE
+
+4. boost
+The Boost project provides free peer-reviewed portable C++ source libraries.
+The source is available at https://github.com/boostorg/boost
+The License is available at https://github.com/boostorg/boost/blob/master/LICENSE_1_0.txt
+
+5. cereal
+cereal is a header-only C++11 serialization library.
+cereal takes arbitrary data types and reversibly turns them into different representations, such as compact binary encodings, XML, or JSON.
+cereal was designed to be fast, light-weight, and easy to extend - it has no external dependencies and can be easily bundled with other code or used standalone.
+The source is available at https://github.com/USCiLab/cereal
+The License is available at https://github.com/USCiLab/cereal/blob/master/LICENSE
+
+6. picojson
+PicoJSON is a tiny JSON parser / serializer for C++.
+The source is available at https://github.com/kazuho/picojson
+The License is available at https://github.com/kazuho/picojson/blob/master/LICENSE
+
+7. openssl
+OpenSSL is a robust, commercial-grade, full-featured Open Source Toolkit for the Transport Layer Security (TLS) protocol formerly known as the Secure Sockets Layer (SSL) protocol.
+The protocol implementation is based on a full-strength general purpose cryptographic library, which can also be used stand-alone.
+The source is available at https://github.com/openssl/openssl
+The License is available at https://github.com/openssl/openssl/blob/master/LICENSE.txt
+
+8. yajl
+A fast streaming JSON parsing library in C.
+The source is available at https://github.com/lloyd/yajl
+The License is available at https://github.com/lloyd/yajl/blob/master/COPYING
+
+9. RapidJSON
+A fast JSON parser/generator for C++ with both SAX/DOM style API.
+The source is available at https://github.com/Tencent/rapidjson
+The License is available at https://github.com/Tencent/rapidjson/blob/master/license.txt
+
+10. zlib
+A massively spiffy yet delicately unobtrusive compression library.
+The source is available at https://github.com/madler/zlib
+The License is available at https://zlib.net/zlib_license.html
+
+11. libxml2
+Libxml2 is the XML C parser and toolkit developed for the Gnome project (but usable outside of the Gnome platform), it is free software available under the MIT License.
+The source is available at https://github.com/GNOME/libxml2
+The License is available at https://github.com/GNOME/libxml2/blob/master/Copyright
+
+12. pcre2
+The PCRE library is a set of functions that implement regular expression pattern matching using the same syntax and semantics as Perl 5. PCRE has its own native API, as well as a set of wrapper functions that correspond to the POSIX regular expression API.
+The source is available at https://github.com/luvit/pcre2
+The License is available at https://github.com/luvit/pcre2/blob/master/LICENCE

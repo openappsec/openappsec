@@ -1,0 +1,7 @@
+controller:
+  kind: DaemonSet
+  service:
+    type: ClusterIP
+  extraModules:
+    - name: opentelemetry
+      image: busybox

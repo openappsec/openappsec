@@ -1,0 +1,43 @@
+// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef __TRACE_H__
+#define __TRACE_H__
+
+#include <string>
+
+#include "context.h"
+
+class Trace
+{
+public:
+    Trace(std::string _id = std::string());
+    ~Trace();
+
+    std::string getTraceId() const;
+
+private:
+    std::string trace_id;
+    Context context;
+};
+
+class TraceWrapper
+{
+public:
+    TraceWrapper(std::string _id);
+    std::string getTraceId() const;
+
+private:
+    std::shared_ptr<Trace> trace;
+};
+#endif // __TRACE_H__

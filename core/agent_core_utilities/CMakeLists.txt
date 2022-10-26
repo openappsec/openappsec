@@ -1,0 +1,3 @@
+add_library(agent_core_utilities agent_core_utilities.cc)
+
+add_subdirectory(agent_core_utilities_ut)

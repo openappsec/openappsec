@@ -1,0 +1,11 @@
+{
+    "Debug": [
+        {
+            "Streams": [
+                {
+                    "Output": "/var/log/nano_agent/cp-nano-http-transaction-handler.dbg"
+                }
+            ]
+        }
+    ]
+}

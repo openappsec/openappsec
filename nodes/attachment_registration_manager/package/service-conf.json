@@ -1,0 +1,21 @@
+{
+    "connection": {
+        "Nano service API Port Primary": [
+            {
+                "value": 8124
+            }
+        ],
+        "Nano service API Port Alternative": [
+            {
+                "value": 8127
+            }
+        ]
+    },
+    "message": {
+        "Connection timeout": [
+            {
+                "value": 10000000
+            }
+        ]
+    }
+}

@@ -1,0 +1,4 @@
+add_library(messaging_downloader_server messaging_downloader_server.cc)
+add_library(messaging_downloader_client messaging_downloader_client.cc)
+
+add_subdirectory(messaging_downloader_ut)

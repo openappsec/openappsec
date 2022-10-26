@@ -1,0 +1,22 @@
+annotations:
+  artifacthub.io/changes: |
+    - "[8459](https://github.com/kubernetes/ingress-nginx/pull/8459) Update default allowed CORS headers"
+    - "[8202](https://github.com/kubernetes/ingress-nginx/pull/8202) disable modsecurity on error page"
+    - "[8178](https://github.com/kubernetes/ingress-nginx/pull/8178) Add header Host into mirror annotations"
+    - "[8213](https://github.com/kubernetes/ingress-nginx/pull/8213) feat: always set auth cookie"
+    - "[8548](https://github.com/kubernetes/ingress-nginx/pull/8548) Implement reporting status classes in metrics"
+    - "[8612](https://github.com/kubernetes/ingress-nginx/pull/8612) move so files under /etc/nginx/modules"
+    - "[8624](https://github.com/kubernetes/ingress-nginx/pull/8624) Add patch to remove root and alias directives"
+    - "[8623](https://github.com/kubernetes/ingress-nginx/pull/8623) Improve path rule"
+  artifacthub.io/prerelease: "false"
+apiVersion: v2
+appVersion: 1.2.1
+keywords:
+- ingress
+- nginx
+kubeVersion: '>=1.19.0-0'
+name: open-appsec-k8s-nginx-ingress
+sources:
+- https://github.com/kubernetes/ingress-nginx
+type: application
+version: 4.1.4

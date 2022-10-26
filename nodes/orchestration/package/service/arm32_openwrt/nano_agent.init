@@ -1,0 +1,96 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          nano_agent
+# Required-Start:    $local_fs $network $named $time $syslog
+# Required-Stop:     $local_fs $network $named $time $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Description:       Check Point Linux Nano Agent
+### END INIT INFO
+
+FILESYSTEM_PATH="/etc/cp"
+LOG_FILE_PATH="/var/log"
+
+if [ -n "${CP_ENV_FILESYSTEM}" ]; then
+  FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
+fi
+if [ -n "${CP_ENV_LOG_FILE}" ]; then
+  LOG_FILE_PATH=$CP_ENV_FILESYSTEM
+fi
+
+START=99
+SCRIPT="$FILESYSTEM_PATH/watchdog/cp-nano-watchdog --arm32_openwrt"
+
+PIDFILE=/var/run/nano_agent.pid
+LOGFILE=$LOG_FILE_PATH/nano_agent.log
+SERVICE_NAME=nano_agent
+
+start()
+{
+  if [ -f $PIDFILE ] && [ -s $PIDFILE ] && kill -0 $(cat $PIDFILE); then
+    echo 'Service already running' >&2
+    return 1
+  fi
+  echo "Starting service ${SERVICE_NAME}" >&2
+  $SCRIPT >$LOGFILE 2>&1 &
+  echo $! >$PIDFILE
+
+  sleep 2
+  PID=$(cat $PIDFILE)
+  if [ "$(ps w | grep $SERVICE_NAME | head -n-1)" != "" ]; then
+    echo "${SERVICE_NAME} is now running, the PID is $PID"
+  else
+    echo ''
+    echo "Error! Could not start $SERVICE_NAME!"
+  fi
+}
+
+stop()
+{
+  if [ ! -f "$PIDFILE" ] || ! kill -0 $(cat "$PIDFILE"); then
+    echo 'Service not running' >&2
+    return 1
+  fi
+  echo "Stopping service ${SERVICE_NAME}" >&2
+  kill -15 $(cat "$PIDFILE") && rm -f "$PIDFILE"
+  echo 'Service stopped' >&2
+}
+
+status()
+{
+  printf "%-50s" "Checking $SERVICE_NAME"
+  if [ -f $PIDFILE ] && [ -s $PIDFILE ]; then
+    PID=$(cat $PIDFILE)
+    if [ -z "$(ps axf | grep ${PID} | grep -v grep)" ]; then
+      printf "%s\n" "The process appears to be dead but pidfile still exists"
+    else
+      echo "Running, the PID is $PID"
+    fi
+  else
+    printf "%s\n" "Service not running"
+  fi
+}
+
+boot()
+{
+  start
+}
+
+case "$1" in
+start)
+  start
+  ;;
+stop)
+  stop
+  ;;
+status)
+  status
+  ;;
+restart)
+  stop
+  start
+  ;;
+*)
+  echo "Usage: $0 {start|stop|status|restart}"
+  ;;
+esac

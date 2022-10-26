@@ -1,0 +1,3 @@
+add_library(update_communication update_communication.cc hybrid_communication.cc fog_communication.cc fog_authenticator.cc local_communication.cc)
+
+add_subdirectory(update_communication_ut)

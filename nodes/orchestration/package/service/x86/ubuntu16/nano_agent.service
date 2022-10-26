@@ -1,0 +1,11 @@
+[Unit]
+Description=CP_Nano_Linux_Agent
+Before=network-pre.target
+Wants=network-pre.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Restart=on-failure
+EnvironmentFile=/etc/environment

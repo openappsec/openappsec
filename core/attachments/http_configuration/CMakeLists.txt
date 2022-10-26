@@ -1,0 +1,3 @@
+add_library(http_configuration http_configuration.cc)
+
+add_subdirectory(http_configuration_ut)

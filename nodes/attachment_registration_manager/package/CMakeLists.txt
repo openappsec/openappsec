@@ -1,0 +1,4 @@
+install(FILES install-attachment-registration-manager.sh  DESTINATION attachment_registration_manager_service/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+install(FILES debug-conf.json DESTINATION attachment_registration_manager_service/conf PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+install(FILES service-conf.json DESTINATION attachment_registration_manager_service/conf PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+install(FILES cp-nano-attachment-registration-manager.cfg DESTINATION attachment_registration_manager_service/conf PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
