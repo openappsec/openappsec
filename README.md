@@ -10,13 +10,13 @@
 
 The open-appsec engine learns how users normally interact with your web application. It then uses this information to automatically detect requests that fall outside of normal operations, and sends those requests for further analysis to decide whether the request is malicious or not.
 
-Every request to the application goes through three phases:
+Upon every HTTP request, all parts are decoded, JSON and XML sections are extracted, and any IP-level access control is applied.
 
-1. The payload is decoded. All HTTP requests are parsed, JSON and XML sections are extracted, and any IP-level access control is applied.
+Every request to the application goes through two phases:
 
-2. Multiple variables are fed to the machine learning engine. These variables, which are either directly extracted from the HTTP request or decoded from different parts of the payload, include attack indicators, IP addresses, user agents, fingerprints, and many other considerations. The supervised model of the machine learning engine uses these variables to compare the request with many common attack patterns found across the globe.
+1. Multiple variables are fed to the machine learning engine. These variables, which are either directly extracted from the HTTP request or decoded from different parts of the payload, include attack indicators, IP addresses, user agents, fingerprints, and many other considerations. The supervised model of the machine learning engine uses these variables to compare the request with many common attack patterns found across the globe.
 
-3. If the request is identified as a valid and legitimate request, the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
+2. If the request is identified as a valid and legitimate request, the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
 
 
 ##  Machine Learning models
@@ -89,12 +89,12 @@ Once the agent code has been compiled and packaged, an Alpine image running it c
 
 This will create a local image for your docker called `agent-docker`.
 
-## Deplyment of the agent docker image as container
+## Deployment of the agent docker image as container
 
-To run a Nano-Agent as a container the following steps are requiered:
+To run a Nano-Agent as a container the following steps are required:
 
-1. If you are using a container management system / plan on deploying the container using your CI, Add the agent docker image in an accessible registry.
-2. If you are planing to manage the agent using the open appsec UI, then make sure to obtain an agent token from the Management Portal and Enforce.
+1. If you are using a container management system / plan on deploying the container using your CI, add the agent docker image to an accessible registry.
+2. If you are planning to manage the agent using the open-appsec UI, then make sure to obtain an agent token from the Management Portal and Enforce.
 3. Run the agent with the follwing command (where –e https_proxy parameter is optional):
 
 `docker run -d --name=agent-container --ipc=host -v=<path to persistent location for agent config>:/etc/cp/conf -v=<path to persistent location for agent data files>:/etc/cp/data -v=<path to persistent location for agent debugs and logs>:/var/log/nano_agent –e https_proxy=<user:password@Proxy address:port> -it <agent-image> /cp-nano-agent [--token <token> | --hybrid-mode]`
@@ -107,7 +107,7 @@ CONTAINER ID        IMAGE               COMMAND                          CREATED
 1e67f2abbfd4        agent-docker        "/cp-nano-agent --hybrid-mode"   1 minute ago        Up 1 minute                             agent-container
 ```
 
- Note that you are not requiered to use a token from the Management Portal if you are managing your security policy locally. However, you are requiered to use the --hybryd-mode flag in such case. In adddition, the voliums in the command are mandatory only if you wish to have persistecy upon restart/upgrade/crash of the agent and its re execition.
+ Note that you are not requiered to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --hybryd-mode flag in such case. In addition, the voliums in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re execution.
  Lastly, --ipc=host argument is mandatory in order for the agent to have access to shared memory with a protected attachment (nginx server).
 
 4. Create or replace the NGINX container using the [Attachment Repository](https://github.com/openappsec/attachment).
