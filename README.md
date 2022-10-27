@@ -18,6 +18,7 @@ Every request to the application goes through two phases:
 
 2. If the request is identified as a valid and legitimate request, the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
 
+The project is currently in Beta and feedback is most welcomed!
 
 ##  Machine Learning models
 
