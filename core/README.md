@@ -2,7 +2,7 @@
 
 ## Overview
 The `core` directory contains code that is used to generate the libraries common to several elements in the system - most notibly the `ngen_core` library.
-The code in this directory should not be changed without informing the Infinity Next Agent group, as changes here have a far reaching consequences.
+The code in this directory should not be changed without informing as changes here have a far reaching consequences.
 
 ## Important code sections
 For the typical developer, the important parts of agent-core are all under the `include` directory, which in turn is divided into several sections:
