@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <sstream>
 #include <sys/socket.h>
+#include <boost/algorithm/string.hpp>
 
 #include "debug.h"
 
@@ -68,7 +69,7 @@ RestConn::parseConn() const
         os.str(line);
         string head, data;
         os >> head >> data;
-        if (head == "Content-Length:" || head == "content-length:") {
+        if (boost::iequals(head, "Content-Length:")) {
             try {
                 len = stoi(data, nullptr);
             } catch (...) {
