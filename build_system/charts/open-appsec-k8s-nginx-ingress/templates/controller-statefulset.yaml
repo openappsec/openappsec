@@ -112,8 +112,10 @@ spec:
         {{- end }}
           resources:
             {{ toYaml .Values.resources | nindent 12 }}
-        {{- if .Values.appsec.persistence.enabled }}
           volumeMounts:
+          - name: advanced-model
+            mountPath: /advanced-model
+        {{- if .Values.appsec.persistence.enabled }}
           - name: appsec-conf
             mountPath: /etc/cp/conf
           - name: appsec-data
@@ -247,6 +249,10 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
     {{- if (or .Values.controller.customTemplate.configMapName .Values.controller.extraVolumeMounts .Values.controller.admissionWebhooks.enabled .Values.controller.extraVolumes .Values.controller.extraModules) }}
       volumes:
+        - name: advanced-model
+          configMap:
+            name: advanced-model-config
+            optional: true
       {{- if .Values.controller.extraModules }}
         - name: modules
           emptyDir: {}

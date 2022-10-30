@@ -56,6 +56,12 @@ fi
 /nano-service-installers/$ATTACHMENT_REGISTRATION_SERVICE --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
 
+# use advanced model if exist as data for agent
+FILE=/advanced-model/open-appsec-advanced-model.tgz
+if [ -f "$FILE" ]; then
+    tar -xzvf $FILE -C /etc/cp/conf/waap
+fi
+
 touch /etc/cp/watchdog/wd.startup
 while true; do
     if [ -z "$init" ]; then
