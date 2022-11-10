@@ -103,17 +103,16 @@ spec:
           - {{ .Values.appsec.proxy }}
         {{- end }}          
           imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
-        {{- if eq .Values.appsec.playground false }}
           env:
+        {{- if eq .Values.appsec.playground false }}
             - name: SHARED_STORAGE_HOST
               value: {{ .Values.appsec.storage.name }}-svc
             - name: LEARNING_HOST
               value: {{ .Values.appsec.learning.name }}-svc
         {{- else }}
-          env:        
-            - name: K8S_PLAYGROUND_ENVIRONMENT
-              value: {{ .Values.appsec.playground }}
-        {{- end -}}
+            - name: PLAYGROUND
+              value: "true"
+        {{- end }}
           resources:
             {{ toYaml .Values.resources | nindent 12 }}
           volumeMounts:
