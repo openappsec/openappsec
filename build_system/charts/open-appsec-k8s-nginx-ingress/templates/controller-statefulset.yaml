@@ -110,6 +110,7 @@ spec:
             - name: LEARNING_HOST
               value: {{ .Values.appsec.learning.name }}-svc
         {{- else }}
+          env:        
             - name: K8S_PLAYGROUND_ENVIRONMENT
               value: {{ .Values.appsec.playground }}
         {{- end -}}
