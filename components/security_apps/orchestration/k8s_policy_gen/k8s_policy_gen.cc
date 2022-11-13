@@ -13,9 +13,12 @@
 
 #include "k8s_policy_gen.h"
 
+#include <algorithm>
+#include <cctype>
 #include <map>
 #include <set>
 #include <string>
+#include <iostream>
 #include <fstream>
 #include <streambuf>
 #include <cereal/types/vector.hpp>
@@ -854,9 +857,28 @@ private:
     string token;
     map<string, string> practice_name_to_id_map;
 
+    bool 
+    isPlaygroundEnv()
+    {
+        string playground_variable = "PLAYGROUND";
+        const char* env_string = getenv(playground_variable.c_str());
+        
+        if (env_string)
+        {
+          string env_value = env_string;
+          std::transform(env_value.begin(), env_value.end(), env_value.begin(), 
+                         [](unsigned char c){ return std::tolower(c); });
+          return env_value == "true";           
+        }
+         
+        return false;
+    }
+
     bool
     getClusterId()
     {
+        string playground_uid = isPlaygroundEnv() ? "playground-" : "";
+
         dbgTrace(D_K8S_POLICY) << "Getting cluster UID";
         NamespaceData namespaces_data;
         bool res = messaging->sendObject(
@@ -885,7 +907,7 @@ private:
                     uid,
                     EnvKeyAttr::LogSection::SOURCE
                 );
-                Singleton::Consume<I_AgentDetails>::by<K8sPolicyGenerator::Impl>()->setClusterId(uid);
+                Singleton::Consume<I_AgentDetails>::by<K8sPolicyGenerator::Impl>()->setClusterId(playground_uid + uid);
                 return true;
             }
         }
