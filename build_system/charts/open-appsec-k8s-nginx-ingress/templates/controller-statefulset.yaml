@@ -103,12 +103,15 @@ spec:
           - {{ .Values.appsec.proxy }}
         {{- end }}          
           imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
-        {{- if eq .Values.appsec.playground false }}
           env:
+        {{- if eq .Values.appsec.playground false }}
             - name: SHARED_STORAGE_HOST
               value: {{ .Values.appsec.storage.name }}-svc
             - name: LEARNING_HOST
               value: {{ .Values.appsec.learning.name }}-svc
+        {{- else }}
+            - name: PLAYGROUND
+              value: "true"
         {{- end }}
           resources:
             {{ toYaml .Values.resources | nindent 12 }}
