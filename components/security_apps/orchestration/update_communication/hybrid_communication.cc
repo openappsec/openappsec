@@ -159,10 +159,6 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
     }
 
 
-    if (file_name.compare("policy") == 0) {
-        return curr_policy;
-    }
-
     if (resourse_file.getFileName() == "manifest") {
         if (!access_token.ok()) return genError("Acccess Token not available.");
 
