@@ -14,14 +14,18 @@
 #ifndef __I_LOCAL_POLICY_MGMT_GEN_H__
 #define __I_LOCAL_POLICY_MGMT_GEN_H__
 
-class I_K8S_Policy_Gen
+class I_LocalPolicyMgmtGen
 {
 public:
+    enum class LocalPolicyEnv { LINUX, K8S, COUNT };
+
+
     virtual std::string parsePolicy(const std::string &policy_version) = 0;
     virtual const std::string & getPolicyPath(void) const = 0;
+    virtual LocalPolicyEnv getEnvType() const = 0;
 
 protected:
-    ~I_K8S_Policy_Gen() {}
+    ~I_LocalPolicyMgmtGen() {}
 };
 
 #endif //__I_LOCAL_POLICY_MGMT_GEN_H__

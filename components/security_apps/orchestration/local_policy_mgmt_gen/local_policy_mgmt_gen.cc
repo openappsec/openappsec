@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "k8s_policy_gen.h"
+#include "local_policy_mgmt_gen.h"
 
 #include <map>
 #include <set>
@@ -31,6 +31,7 @@
 #include "url_parser.h"
 #include "i_messaging.h"
 #include "i_agent_details.h"
+#include "i_shell_cmd.h"
 #include "customized_cereal_map.h"
 #include "include/appsec_practice_section.h"
 #include "include/ingress_data.h"
@@ -45,11 +46,12 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
 
-const static string policy_path = "/tmp/k8s.policy";
+const static string local_appsec_policy_path = "/tmp/local_appsec.policy";
 const static string open_appsec_io = "openappsec.io/";
 const static string policy_key = "policy";
 const static string syslog_key = "syslog";
 const static string mode_key = "mode";
+const static string local_mgmt_policy_path = "/conf/local_policy.yaml";
 
 class SecurityAppsWrapper
 {
@@ -171,34 +173,41 @@ private:
     std::vector<SingleNamespaceData> items;
 };
 
-class K8sPolicyGenerator::Impl
+class LocalPolicyMgmtGenerator::Impl
         :
-    public Singleton::Provide<I_K8S_Policy_Gen>::From<K8sPolicyGenerator>,
+    public Singleton::Provide<I_LocalPolicyMgmtGen>::From<LocalPolicyMgmtGenerator>,
     public Singleton::Consume<I_Messaging>,
     public Singleton::Consume<I_AgentDetails>,
     public Singleton::Consume<I_Environment>,
-    public Singleton::Consume<I_MainLoop>
+    public Singleton::Consume<I_MainLoop>,
+    public Singleton::Consume<I_OrchestrationTools>,
+    public Singleton::Consume<I_ShellCmd>
 {
 public:
     void
     init()
     {
         token = retrieveToken();
-        if (token.empty()) return;
-        dbgTrace(D_K8S_POLICY) << "Initializing K8S policy generator";
+        if (token.empty()) {
+            dbgInfo(D_K8S_POLICY) << "Initializing Linux Local-Policy generator";
+            env_type = LocalPolicyEnv::LINUX;
+            return;
+        }
+        env_type = LocalPolicyEnv::K8S;
+        dbgInfo(D_K8S_POLICY) << "Initializing K8S policy generator";
         conn_flags.setFlag(MessageConnConfig::SECURE_CONN);
         conn_flags.setFlag(MessageConnConfig::IGNORE_SSL_VALIDATION);
 
-        messaging = Singleton::Consume<I_Messaging>::by<K8sPolicyGenerator::Impl>();
+        messaging = Singleton::Consume<I_Messaging>::by<LocalPolicyMgmtGenerator::Impl>();
 
-        Singleton::Consume<I_MainLoop>::by<K8sPolicyGenerator::Impl>()->addOneTimeRoutine(
+        Singleton::Consume<I_MainLoop>::by<LocalPolicyMgmtGenerator::Impl>()->addOneTimeRoutine(
             I_MainLoop::RoutineType::Offline,
             [this] ()
             {
                 ScopedContext ctx;
                 ctx.registerValue<bool>("k8s_env", true);
                 while(!getClusterId()) {
-                    Singleton::Consume<I_MainLoop>::by<K8sPolicyGenerator::Impl>()->yield(chrono::seconds(1));
+                    Singleton::Consume<I_MainLoop>::by<LocalPolicyMgmtGenerator::Impl>()->yield(chrono::seconds(1));
                 }
                 return;
             },
@@ -206,30 +215,375 @@ public:
         );
     }
 
-    const string & getPolicyPath(void) const override { return policy_path; }
+    const string & getPolicyPath(void) const override { return local_appsec_policy_path; }
+
+    template<class container_it>
+    container_it
+    extractElement(container_it begin, container_it end, const string &element_name)
+    {
+        dbgTrace(D_K8S_POLICY) << "Tryting to find element: " << element_name;
+        for (container_it it = begin; it < end; it++) {
+            if (element_name == it->getName()) {
+                dbgTrace(D_K8S_POLICY) << "Element with name " << element_name << "was found";
+                return it;
+            }
+        }
+        dbgTrace(D_K8S_POLICY) << "Element with name " << element_name << "was not found";
+        return end;
+    }
+
+    template<class T>
+    Maybe<T>
+    getObjectFromCluster(const string &path)
+    {
+        T object;
+        bool res = messaging->sendObject(
+            object,
+            I_Messaging::Method::GET,
+            "kubernetes.default.svc",
+            443,
+            conn_flags,
+            path,
+            "Authorization: Bearer " + token + "\nConnection: close"
+        );
+
+        if (res) return object;
+
+        return genError("Was not able to get object form k8s cluser in path: " + path);
+    }
 
     string
-    parsePolicy(const string &policy_version)
+    parseLinuxPolicy(const string &policy_version)
+    {
+        dbgFlow(D_K8S_POLICY);
+
+        string policy_path = getConfigurationFlagWithDefault(
+            getFilesystemPathConfig() + local_mgmt_policy_path,
+            "local_mgmt_policy"
+        );
+
+        auto maybe_policy_as_json = Singleton::Consume<I_ShellCmd>::by<LocalPolicyMgmtGenerator::Impl>()->
+            getExecOutput(getFilesystemPathConfig() + "/bin/yq " + policy_path + " -o json");
+
+        if (!maybe_policy_as_json.ok()) {
+            dbgWarning(D_K8S_POLICY) << "Could not convert policy from yaml to json";
+            return "";
+        }
+
+        auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalPolicyMgmtGenerator::Impl>();
+        auto maybe_policy = i_orchestration_tools->jsonStringToObject<AppsecLinuxPolicy>(
+            maybe_policy_as_json.unpack()
+        );
+
+        if (!maybe_policy.ok()) {
+            dbgWarning(D_K8S_POLICY) << "Policy was not loaded. Error: " << maybe_policy.getErr();
+            return "";
+        }
+
+        AppsecLinuxPolicy appsec_policy = maybe_policy.unpack();
+        ScopedContext ctx;
+        ctx.registerFunc<AppsecLinuxPolicy>("get_linux_local_policy", [&appsec_policy](){
+            return appsec_policy;
+        });
+
+        vector<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
+        ParsedRule default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
+
+        string asset;
+        string annotation_type;
+        string annotation_name;
+        string policy_annotation;
+        string syslog_address;
+        string syslog_port;
+
+        set<string> generated_apps;
+        set<WebAppSection> parsed_web_apps_set;
+        vector<RulesConfigRulebase> parsed_rules;
+        vector<LogTriggerSection> parsed_log_triggers;
+        set<InnerException> parsed_exeptions;
+        vector<WebUserResponseTriggerSection> parsed_web_user_res;
+        map<string, AppSecPracticeSpec> practice_map;
+        map<string, LogTriggerSection> log_triggers_map;
+        map<string, InnerException> exception_map;
+        map<string, WebUserResponseTriggerSection> web_user_res_map;
+        map<string, TrustedSourcesSpec> trusted_sources_map;
+        map<string, vector<SourceIdentifierSpec>> source_identifiers_map;
+        RulesConfigRulebase cleanup_rule;
+        string cleanup_rule_mode = "Inactive";
+
+        for (const ParsedRule &parsed_rule : specific_rules) {
+            string asset_name = parsed_rule.getHost();
+            dbgTrace(D_K8S_POLICY) << "Handling specific rule for asset: " << asset_name;
+
+            string practice_annotation_name;
+            // TBD: support multiple practices
+            if (parsed_rule.getPractices().size() > 0 && !parsed_rule.getPractices()[0].empty()) {
+                practice_annotation_name = parsed_rule.getPractices()[0];
+            } else if (default_rule.getPractices().size() > 0 && !default_rule.getPractices()[0].empty()) {
+                practice_annotation_name = default_rule.getPractices()[0];
+            }
+
+            string trigger_annotation_name;
+            // TBD: support multiple triggers
+            if (parsed_rule.getLogTriggers().size() > 0 && !parsed_rule.getLogTriggers()[0].empty()) {
+                trigger_annotation_name = parsed_rule.getLogTriggers()[0];
+            } else if (default_rule.getLogTriggers().size() > 0 && !default_rule.getLogTriggers()[0].empty()) {
+                trigger_annotation_name = default_rule.getLogTriggers()[0];
+            }
+
+            string exception_annotation_name;
+            // TBD: support multiple exceptions
+            if (parsed_rule.getExceptions().size() > 0 && !parsed_rule.getExceptions()[0].empty()) {
+                exception_annotation_name = parsed_rule.getExceptions()[0];
+            } else if (default_rule.getExceptions().size() > 0 && !default_rule.getExceptions()[0].empty()) {
+                exception_annotation_name = default_rule.getExceptions()[0];
+            }
+
+            string web_user_res_annotation_name =
+                parsed_rule.getCustomResponse().empty() ?
+                default_rule.getCustomResponse() :
+                parsed_rule.getCustomResponse();
+
+            string source_identifiers_annotation_name =
+                parsed_rule.getSourceIdentifiers().empty() ?
+                default_rule.getSourceIdentifiers() :
+                parsed_rule.getSourceIdentifiers();
+
+            string trusted_sources_annotation_name =
+                parsed_rule.getTrustedSources ().empty() ?
+                default_rule.getTrustedSources() :
+                parsed_rule.getTrustedSources();
+
+            auto pos = asset_name.find("/");
+            string url;
+            string uri;
+            if (pos != string::npos) {
+                url = asset_name.substr(0, asset_name.find("/"));
+                uri = asset_name.substr(asset_name.find("/"));
+            } else {
+                url = asset_name;
+                uri = "";
+            }
+
+            vector<pair<string, string>> web_user_res_vec;
+            extractExceptions(
+                exception_annotation_name,
+                exception_map,
+                parsed_exeptions,
+                appsec_policy.getAppsecExceptionSpecs());
+
+
+            if (!extractTriggers(
+                    trigger_annotation_name,
+                    log_triggers_map,
+                    parsed_log_triggers,
+                    syslog_address,
+                    syslog_port)
+            ) {
+                dbgWarning(D_K8S_POLICY)
+                    << "Failed extracting triggers. Trigger name: "
+                    << trigger_annotation_name;
+                return "";
+            }
+
+            if (!extractWebUserResponse(
+                web_user_res_annotation_name,
+                web_user_res_map,
+                web_user_res_vec,
+                parsed_web_user_res)
+            ) {
+                dbgWarning(D_K8S_POLICY)
+                    << "Failed extracting custom response. Custom response name: "
+                    << web_user_res_annotation_name;
+                return "";
+            }
+
+            AppSecTrustedSources parsed_trusted_sources;
+            if (!extractTrustedSources(
+                asset_name,
+                trusted_sources_annotation_name,
+                source_identifiers_annotation_name,
+                trusted_sources_map,
+                source_identifiers_map,
+                parsed_trusted_sources)
+            ) {
+                dbgWarning(D_K8S_POLICY)
+                    << "Failed extracting trused sources. Trusted source name: "
+                    << trusted_sources_annotation_name
+                    << ", Source identifiers annotation name: "
+                    << source_identifiers_annotation_name;
+                return "";
+            }
+
+            if (!practice_annotation_name.empty() && practice_map.count(practice_annotation_name) == 0) {
+                vector<AppSecPracticeSpec> appsec_practice = appsec_policy.getAppSecPracticeSpecs();
+                auto it = extractElement(appsec_practice.begin(), appsec_practice.end(), practice_annotation_name);
+                if (it == appsec_practice.end()) {
+                    dbgWarning(D_K8S_POLICY) << "Unable to find practice. Practice name: " << practice_annotation_name;
+                    return "";
+                }
+                practice_map.emplace(practice_annotation_name, *it);
+                dbgTrace(D_K8S_POLICY)
+                    << "Successfully retrieved AppSec practice "
+                    << practice_annotation_name;
+            }
+
+            string log_trigger_id;
+            LogTriggerSection log_trigger_annotation;
+            if (log_triggers_map.count(trigger_annotation_name) > 0) {
+                log_trigger_id = log_triggers_map.at(trigger_annotation_name).getTriggerId();
+                log_trigger_annotation = log_triggers_map.at(trigger_annotation_name);
+            }
+            string exception_id;
+            if (exception_map.count(exception_annotation_name) > 0) {
+                exception_id = exception_map.at(exception_annotation_name).getBehaviorId();
+            }
+            if (asset_name == "*") {
+                asset_name = "Any";
+                url = "Any";
+                uri = "Any";
+            }
+            RulesConfigRulebase rules_config = createMultiRulesSections(
+                url,
+                uri,
+                practice_annotation_name,
+                "WebApplication",
+                trigger_annotation_name,
+                log_trigger_id,
+                "log",
+                web_user_res_vec,
+                asset_name,
+                exception_annotation_name,
+                exception_id
+            );
+            string port = "80";
+            string full_url = asset_name == "Any" ? "" : url + uri + ":" + port;
+            string asset_id = rules_config.getAsstId();
+            string practice_id = rules_config.getPracticeId();
+
+            if (!generated_apps.count(full_url)) {
+                WebAppSection web_app = WebAppSection(
+                    full_url,
+                    asset_id,
+                    asset_name,
+                    asset_id,
+                    asset_name,
+                    practice_id,
+                    practice_annotation_name,
+                    practice_map.at(practice_annotation_name),
+                    log_trigger_annotation,
+                    default_rule.getMode(),
+                    parsed_trusted_sources
+                );
+
+                parsed_web_apps_set.insert(web_app);
+                parsed_rules.push_back(rules_config);
+                generated_apps.insert(full_url);
+            }
+        }
+
+        string exception_name;
+        if (!default_rule.getExceptions().empty()) {
+            exception_name = default_rule.getExceptions()[0];
+            if (!extractExceptions(exception_name, exception_map, parsed_exeptions)) return "";
+        }
+
+        string trigger_name;
+        if (!default_rule.getLogTriggers().empty()) {
+            trigger_name = default_rule.getLogTriggers()[0];
+            if (!extractTriggers(
+                trigger_name,
+                log_triggers_map,
+                parsed_log_triggers,
+                syslog_address,
+                syslog_port)) return "";
+        }
+
+        vector<pair<string, string>> default_web_user_res_vec;
+        string web_user_res_annotation_name = default_rule.getCustomResponse();
+        if (!extractWebUserResponse(
+            web_user_res_annotation_name,
+            web_user_res_map,
+            default_web_user_res_vec,
+            parsed_web_user_res)
+        ) return "";
+
+        AppSecTrustedSources default_parsed_trusted_sources;
+        string trusted_sources_annotation_name = default_rule.getTrustedSources();
+        string source_identifiers_annotation_name = default_rule.getSourceIdentifiers();
+        if (!extractTrustedSources(
+            "Any",
+            trusted_sources_annotation_name,
+            source_identifiers_annotation_name,
+            trusted_sources_map,
+            source_identifiers_map,
+            default_parsed_trusted_sources)
+        ) {
+            dbgWarning(D_K8S_POLICY)
+                << "Failed extracting trused sources. Trusted source name: "
+                << trusted_sources_annotation_name
+                << ", Source identifiers annotation name: "
+                << source_identifiers_annotation_name;
+            return "";
+        }
+
+        string practice_name;
+        if (!default_rule.getPractices().empty()) {
+            practice_name = default_rule.getPractices()[0];
+        }
+        if (!practice_name.empty() && practice_map.count(practice_name) == 0) {
+            vector<AppSecPracticeSpec> appsec_practice = appsec_policy.getAppSecPracticeSpecs();
+            auto it = extractElement(appsec_practice.begin(), appsec_practice.end(), practice_name);
+            if(it == appsec_practice.end()) {
+                dbgWarning(D_K8S_POLICY) << "Failed to retrieve AppSec practice for the dafult practice";
+                return "";
+            }
+            practice_map.emplace(practice_name, *it);
+            dbgTrace(D_K8S_POLICY)
+                << "Successfully retrieved AppSec practice"
+                << practice_name;
+        }
+
+        vector<WebAppSection> parsed_web_apps(parsed_web_apps_set.begin(), parsed_web_apps_set.end());
+
+        TriggersWrapper triggers_section(TriggersRulebase(parsed_log_triggers, parsed_web_user_res));
+        AppSecWrapper waap_section = createMultipleAppSecSections(parsed_web_apps);
+        RulesConfigWrapper rules_config_section(parsed_rules);
+
+        ExceptionsWrapper exceptions_section = createExceptionSection(parsed_exeptions);
+        SecurityAppsWrapper security_app_section = SecurityAppsWrapper(
+            waap_section,
+            triggers_section,
+            rules_config_section,
+            exceptions_section,
+            policy_version
+        );
+
+        SettingsWrapper profiles_section = createProfilesSection();
+        K8sPolicyWrapper k8s_policy = K8sPolicyWrapper(profiles_section, security_app_section);
+
+        return dumpPolicyToFile(k8s_policy);
+    }
+
+    LocalPolicyEnv getEnvType() const { return env_type;}
+
+    string
+    parseK8sPolicy(const string &policy_version)
     {
         ScopedContext ctx;
         ctx.registerValue<bool>("k8s_env", true);
 
-        IngressData ingress;
-        bool res = messaging->sendObject(
-                    ingress,
-                    I_Messaging::Method::GET,
-                    "kubernetes.default.svc",
-                    443,
-                    conn_flags,
-                    "/apis/networking.k8s.io/v1/ingresses",
-                    "Authorization: Bearer " + token + "\nConnection: close"
-        );
+        auto maybe_ingress = getObjectFromCluster<IngressData>("/apis/networking.k8s.io/v1/ingresses");
 
-        if(!res) {
+        if (!maybe_ingress.ok()) {
             // TBD: Error handling : INXT-31444
-            dbgError(D_K8S_POLICY) << "Failed to retrieve K8S Ingress configurations";
+            dbgError(D_K8S_POLICY)
+                << "Failed to retrieve K8S Ingress configurations. Error: "
+                << maybe_ingress.getErr();
             return "";
         }
+
+        IngressData ingress = maybe_ingress.unpack();
 
         set<string> generated_apps;
         set<WebAppSection> parsed_web_apps_set;
@@ -303,18 +657,16 @@ public:
             }
 
             dbgTrace(D_K8S_POLICY) << "Trying to parse policy for " << policy_annotation;
-            AppsecSpecParser<AppsecPolicySpec> appsec_policy;
-            res = messaging->sendObject(appsec_policy,
-                                I_Messaging::Method::GET,
-                                "kubernetes.default.svc",
-                                443,
-                                conn_flags,
-                                "/apis/openappsec.io/v1beta1/policies/" + policy_annotation,
-                                "Authorization: Bearer " + token + "\nConnection: close");
-            if(!res) {
-                dbgError(D_K8S_POLICY) << "Failed to retrieve AppSec policy";
+            auto maybe_appsec_policy = getObjectFromCluster<AppsecSpecParser<AppsecPolicySpec>>(
+                "/apis/openappsec.io/v1beta1/policies/" + policy_annotation
+            );
+
+            if (!maybe_appsec_policy.ok()) {
+                dbgError(D_K8S_POLICY) << "Failed to retrieve AppSec policy. Error: " << maybe_appsec_policy.getErr();
                 return "";
             }
+
+            AppsecSpecParser<AppsecPolicySpec> appsec_policy = maybe_appsec_policy.unpack();
             dbgTrace(D_K8S_POLICY) << "Succeessfully retrieved AppSec policy: " << appsec_policy.getSpec();
 
             vector<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
@@ -363,17 +715,8 @@ public:
                     default_rule.getTrustedSources() :
                     parsed_rule.getTrustedSources();
 
-                auto pos = asset_name.find("/");
-                string url;
-                string uri;
-                if (pos != string::npos) {
-                    url = asset_name.substr(0, asset_name.find("/"));
-                    uri = asset_name.substr(asset_name.find("/"));
-                } else {
-                    url = asset_name;
-                    uri = "";
-                }
-
+                string url = asset_name.substr(0, asset_name.find("/"));
+                string uri = asset_name.substr(asset_name.find("/"));
                 if (specific_assets_from_ingress.find({url, uri}) != specific_assets_from_ingress.end()) {
                     // Erasing the current asset from the specific assets, because it won't have default policy
                     specific_assets_from_ingress.erase({url, uri});
@@ -430,21 +773,23 @@ public:
                 }
 
                 if (!practice_annotation_name.empty() && practice_map.count(practice_annotation_name) == 0) {
-                    AppsecSpecParser<AppSecPracticeSpec> appsec_practice;
-                    res = messaging->sendObject(appsec_practice,
-                                        I_Messaging::Method::GET,
-                                        "kubernetes.default.svc",
-                                        443,
-                                        conn_flags,
-                                        "/apis/openappsec.io/v1beta1/practices/" + practice_annotation_name,
-                                        "Authorization: Bearer " + token + "\nConnection: close");
-                    if(!res) {
-                        dbgError(D_K8S_POLICY) << "Failed to retrieve AppSec practice for asset " << asset_name;
+                    auto maybe_appsec_practice = getObjectFromCluster<AppsecSpecParser<AppSecPracticeSpec>>(
+                        "/apis/openappsec.io/v1beta1/practices/" + practice_annotation_name
+                    );
+
+                    if (!maybe_appsec_practice.ok()) {
+                        dbgError(D_K8S_POLICY)
+                            << "Failed to retrieve AppSec practice for asset "
+                            << asset_name
+                            << ". Error: "
+                            << maybe_appsec_practice.getErr();
                         return "";
                     }
+
+                    AppsecSpecParser<AppSecPracticeSpec> appsec_practice = maybe_appsec_practice.unpack();
                     practice_map.emplace(practice_annotation_name, appsec_practice.getSpec());
                     dbgTrace(D_K8S_POLICY)
-                        << "Successfully retrieved AppSec practice "
+                        << "Successfully retrieved AppSec practice"
                         << practice_annotation_name
                         << appsec_practice.getSpec();
                 }
@@ -459,12 +804,6 @@ public:
                 if (exception_map.count(exception_annotation_name) > 0) {
                     exception_id = exception_map.at(exception_annotation_name).getBehaviorId();
                 }
-                if (asset_name == "*") {
-                    asset_name = "Any";
-                    url = "Any";
-                    uri = "Any";
-                }
-
                 RulesConfigRulebase rules_config = createMultiRulesSections(
                     url,
                     uri,
@@ -554,18 +893,18 @@ public:
                 practice_name = default_rule.getPractices()[0];
             }
             if (!practice_name.empty() && practice_map.count(practice_name) == 0) {
-                AppsecSpecParser<AppSecPracticeSpec> appsec_practice;
-                res = messaging->sendObject(appsec_practice,
-                                    I_Messaging::Method::GET,
-                                    "kubernetes.default.svc",
-                                    443,
-                                    conn_flags,
-                                    "/apis/openappsec.io/v1beta1/practices/" + practice_name,
-                                    "Authorization: Bearer " + token + "\nConnection: close");
-                if(!res) {
-                    dbgError(D_K8S_POLICY) << "Failed to retrieve AppSec practice for the dafult practice";
+                auto maybe_appsec_practice = getObjectFromCluster<AppsecSpecParser<AppSecPracticeSpec>>(
+                    "/apis/openappsec.io/v1beta1/practices/" + practice_name
+                );
+
+                if (!maybe_appsec_practice.ok()) {
+                    dbgError(D_K8S_POLICY)
+                        << "Failed to retrieve AppSec practice for the dafult practice. Error: "
+                        << maybe_appsec_practice.getErr();
                     return "";
                 }
+
+                AppsecSpecParser<AppSecPracticeSpec> appsec_practice = maybe_appsec_practice.unpack();
                 practice_map.emplace(practice_name, appsec_practice.getSpec());
                 dbgTrace(D_K8S_POLICY)
                     << "Successfully retrieved AppSec practice"
@@ -690,6 +1029,12 @@ public:
         return dumpPolicyToFile(k8s_policy);
     }
 
+    string
+    parsePolicy(const string &policy_version)
+    {
+        return env_type == LocalPolicyEnv::K8S ? parseK8sPolicy(policy_version) : parseLinuxPolicy(policy_version);
+    }
+
     SettingsWrapper
     createProfilesSection()
     {
@@ -779,7 +1124,7 @@ public:
     WebUserResponseTriggerSection
     createWebUserResponseTriggerSection(
         const string &trigger_name,
-        const AppSecWebUserResponseSpec &trigger_spec)
+        const AppSecCustomResponseSpec &trigger_spec)
     {
         string mode = trigger_spec.getMode();
         string response_body = trigger_spec.getMessageBody();
@@ -866,41 +1211,37 @@ private:
     const string cluster_url = "https://kubernetes.default.svc";
     const string service_account = "/var/run/secrets/kubernetes.io/serviceaccount";
     const string cacert_path = service_account + "/ca.crt";
-    string token;
+    string token = "";
+    LocalPolicyEnv env_type;
     map<string, string> practice_name_to_id_map;
 
     bool
     getClusterId()
     {
         dbgTrace(D_K8S_POLICY) << "Getting cluster UID";
-        NamespaceData namespaces_data;
-        bool res = messaging->sendObject(
-                    namespaces_data,
-                    I_Messaging::Method::GET,
-                    "kubernetes.default.svc",
-                    443,
-                    conn_flags,
-                    "/api/v1/namespaces/",
-                    "Authorization: Bearer " + token + "\nConnection: close"
-        );
+        auto maybe_namespaces_data = getObjectFromCluster<NamespaceData>("/api/v1/namespaces/");
 
-        if(!res) {
-            dbgError(D_K8S_POLICY) << "Failed to retrieve K8S namespace data";
+        if (!maybe_namespaces_data.ok()) {
+            dbgError(D_K8S_POLICY)
+                << "Failed to retrieve K8S namespace data. Error: "
+                << maybe_namespaces_data.getErr();
             return false;
         }
+
+        NamespaceData namespaces_data = maybe_namespaces_data.unpack();
 
         string uid;
         for (const SingleNamespaceData &ns : namespaces_data.getItems()) {
             if (ns.getMetadata().getName() == "kube-system") {
                 uid = ns.getMetadata().getUID();
                 dbgTrace(D_K8S_POLICY) << "Found k8s cluster UID: " << uid;
-                I_Environment *env = Singleton::Consume<I_Environment>::by<K8sPolicyGenerator::Impl>();
+                I_Environment *env = Singleton::Consume<I_Environment>::by<LocalPolicyMgmtGenerator::Impl>();
                 env->getConfigurationContext().registerValue<string>(
                     "k8sClusterId",
                     uid,
                     EnvKeyAttr::LogSection::SOURCE
                 );
-                Singleton::Consume<I_AgentDetails>::by<K8sPolicyGenerator::Impl>()->setClusterId(uid);
+                Singleton::Consume<I_AgentDetails>::by<LocalPolicyMgmtGenerator::Impl>()->setClusterId(uid);
                 return true;
             }
         }
@@ -916,7 +1257,7 @@ private:
             k8s_policy.serialize(ar);
         }
         string policy_str = ss.str();
-        ofstream policy_file("/tmp/k8s.policy");
+        ofstream policy_file(local_appsec_policy_path);
         policy_file << policy_str;
         policy_file.close();
         return policy_str;
@@ -939,31 +1280,15 @@ private:
         return readFileContent(service_account + "/token");
     }
 
-    bool
+    void
     extractExceptions(
         const string &exception_annotation_name,
         map<string, InnerException> &exception_map,
-        set<InnerException> &parsed_exeptions)
+        set<InnerException> &parsed_exeptions,
+        const vector<AppsecExceptionSpec> &appsec_excepetion_specs)
     {
         if (!exception_annotation_name.empty() && exception_map.count(exception_annotation_name) == 0) {
-            dbgTrace(D_K8S_POLICY) << "Trying to retrieve exceptions for " << exception_annotation_name;
-            AppsecSpecParser<vector<AppsecExceptionSpec>> appsec_exception;
-            bool res = messaging->sendObject(appsec_exception,
-                                I_Messaging::Method::GET,
-                                "kubernetes.default.svc",
-                                443,
-                                conn_flags,
-                                "/apis/openappsec.io/v1beta1/exceptions/" + exception_annotation_name,
-                                "Authorization: Bearer " + token + "\nConnection: close");
-            if(!res) {
-                dbgError(D_K8S_POLICY) << "Failed to retrieve AppSec exception";
-                return false;
-            }
-            dbgTrace(D_K8S_POLICY)
-                << "Successfuly retrieved AppSec exceptions for "
-                << exception_annotation_name;
-
-            for (const AppsecExceptionSpec &parsed_exeption : appsec_exception.getSpec()) {
+            for (const AppsecExceptionSpec &parsed_exeption : appsec_excepetion_specs) {
                 ExceptionMatch exception_match(parsed_exeption);
                 string behavior =
                     parsed_exeption.getAction() == "skip" ?
@@ -975,7 +1300,73 @@ private:
                 parsed_exeptions.insert(inner_exception);
             }
         }
+    }
+
+    bool
+    extractExceptions(
+        const string &exception_annotation_name,
+        map<string, InnerException> &exception_map,
+        set<InnerException> &parsed_exeptions)
+    {
+        if (!exception_annotation_name.empty() && exception_map.count(exception_annotation_name) == 0) {
+            dbgTrace(D_K8S_POLICY) << "Trying to retrieve exceptions for " << exception_annotation_name;
+
+            auto maybe_appsec_exception = getObjectFromCluster<AppsecSpecParser<vector<AppsecExceptionSpec>>>(
+                "/apis/openappsec.io/v1beta1/exceptions/" + exception_annotation_name
+            );
+
+            if (!maybe_appsec_exception.ok()) {
+                dbgError(D_K8S_POLICY)
+                    << "Failed to retrieve AppSec exception. Error: "
+                    << maybe_appsec_exception.getErr();
+                return false;
+            }
+
+            AppsecSpecParser<vector<AppsecExceptionSpec>> appsec_exception = maybe_appsec_exception.unpack();
+            dbgTrace(D_K8S_POLICY)
+                << "Successfuly retrieved AppSec exceptions for "
+                << exception_annotation_name;
+
+            extractExceptions(exception_annotation_name, exception_map, parsed_exeptions, appsec_exception.getSpec());
+        }
         return true;
+    }
+
+    Maybe<AppsecTriggerSpec>
+    getAppsecTriggerSpec(const string &trigger_annotation_name)
+    {
+        string error_message;
+        if (getEnvType() == LocalPolicyEnv::K8S) {
+            auto maybe_appsec_trigger = getObjectFromCluster<AppsecSpecParser<AppsecTriggerSpec>>(
+                "/apis/openappsec.io/v1beta1/logtriggers/" + trigger_annotation_name
+            );
+
+            if (!maybe_appsec_trigger.ok()) {
+                error_message = "Failed to retrieve AppSec triggers. Error: " + maybe_appsec_trigger.getErr();
+                dbgError(D_K8S_POLICY) <<  error_message;
+                return genError(error_message);
+            }
+
+            return maybe_appsec_trigger.unpack().getSpec();
+        }
+
+        auto maybe_appsec_policy = Singleton::Consume<I_Environment>::by<LocalPolicyMgmtGenerator::Impl>()->
+            get<AppsecLinuxPolicy>("get_linux_local_policy");
+        if (!maybe_appsec_policy.ok()) {
+            error_message = "Failed to retrieve AppSec triggers";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        auto triggers_vec = maybe_appsec_policy.unpack().getAppsecTriggerSpecs();
+        auto trigger_it = extractElement(triggers_vec.begin(), triggers_vec.end(), trigger_annotation_name);
+        if (trigger_it == triggers_vec.end()) {
+            error_message = "Failed to retrieve AppSec triggers";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        return *trigger_it;
     }
 
     bool
@@ -1003,30 +1394,112 @@ private:
             parsed_log_triggers.push_back(log_triggers_section);
         } else if (!trigger_annotation_name.empty() && log_triggers_map.count(trigger_annotation_name) == 0) {
             dbgTrace(D_K8S_POLICY) << "Trying to retrieve triggers for " << trigger_annotation_name;
-            AppsecSpecParser<AppsecTriggerSpec> appsec_trigger;
-            bool res = messaging->sendObject(appsec_trigger,
-                                I_Messaging::Method::GET,
-                                "kubernetes.default.svc",
-                                443,
-                                conn_flags,
-                                "/apis/openappsec.io/v1beta1/logtriggers/" + trigger_annotation_name,
-                                "Authorization: Bearer " + token + "\nConnection: close");
-            if(!res) {
-                dbgError(D_K8S_POLICY) << "Failed to retrieve AppSec triggers";
+
+            Maybe<AppsecTriggerSpec> maybe_appsec_trigger_spec = getAppsecTriggerSpec(trigger_annotation_name);
+
+            if (!maybe_appsec_trigger_spec.ok()) {
+                dbgWarning(D_K8S_POLICY) << "Error: " << maybe_appsec_trigger_spec.getErr();
                 return false;
             }
+
             dbgTrace(D_K8S_POLICY)
                 << "Successfuly retrieved AppSec exceptions for "
                 << trigger_annotation_name
                 << ":\n"
-                << appsec_trigger.getSpec();
+                << *maybe_appsec_trigger_spec;
 
             LogTriggerSection log_triggers_section =
-                createLogTriggersSection(trigger_annotation_name, false, "", appsec_trigger.getSpec());
+                createLogTriggersSection(trigger_annotation_name, false, "", *maybe_appsec_trigger_spec);
             log_triggers_map.emplace(trigger_annotation_name, log_triggers_section);
             parsed_log_triggers.push_back(log_triggers_section);
         }
         return true;
+    }
+
+    Maybe<TrustedSourcesSpec>
+    getAppsecTrustedSourceSpecs(const string &trusted_sources_name)
+    {
+        string error_message;
+        if (getEnvType() == LocalPolicyEnv::K8S) {
+            auto maybe_trusted_sources_from_ingress = getObjectFromCluster<AppsecSpecParser<TrustedSourcesSpec>>(
+                "/apis/openappsec.io/v1beta1/trustedsources/" + trusted_sources_name
+            );
+
+            if (!maybe_trusted_sources_from_ingress.ok()) {
+                error_message = "Failed to retrieve trusted sources. Error: " +
+                    maybe_trusted_sources_from_ingress.getErr();
+                dbgError(D_K8S_POLICY) << error_message;
+                return genError(error_message);
+            }
+
+            return maybe_trusted_sources_from_ingress.unpack().getSpec();
+        }
+
+        auto maybe_appsec_policy = Singleton::Consume<I_Environment>::by<LocalPolicyMgmtGenerator::Impl>()->
+            get<AppsecLinuxPolicy>("get_linux_local_policy");
+
+        if (!maybe_appsec_policy.ok()) {
+            error_message = "Failed to retrieve AppSec triggers";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        auto trusted_sources_vec = maybe_appsec_policy.unpack().getAppsecTrustedSourceSpecs();
+        auto trusted_sources_it = extractElement(
+            trusted_sources_vec.begin(),
+            trusted_sources_vec.end(),
+            trusted_sources_name);
+
+        if (trusted_sources_it == trusted_sources_vec.end()) {
+            error_message = "Failed to retrieve AppSec triggers";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        return *trusted_sources_it;
+    }
+
+    Maybe<vector<SourceIdentifierSpec>>
+    getAppsecSourceIdentifierSpecs(const string &source_identifiers_name)
+    {
+        string error_message;
+        if (getEnvType() == LocalPolicyEnv::K8S) {
+            auto maybe_source_identifier = getObjectFromCluster<AppsecSpecParser<vector<SourceIdentifierSpec>>>(
+                "/apis/openappsec.io/v1beta1/sourcesidentifiers/" + source_identifiers_name
+            );
+
+            if (!maybe_source_identifier.ok()) {
+                error_message = "Failed to retrieve trusted sources. Error: " + maybe_source_identifier.getErr();
+                dbgError(D_K8S_POLICY) << error_message;
+                return genError(error_message);
+            }
+
+            return maybe_source_identifier.unpack().getSpec();
+        }
+
+        auto maybe_appsec_policy = Singleton::Consume<I_Environment>::by<LocalPolicyMgmtGenerator::Impl>()->
+            get<AppsecLinuxPolicy>("get_linux_local_policy");
+
+        if (!maybe_appsec_policy.ok()) {
+            error_message = "Failed to retrieve AppSec triggers";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        auto source_identifiers_vec = maybe_appsec_policy.unpack().getAppsecSourceIdentifierSpecs();
+        auto source_identifier_it = extractElement(
+            source_identifiers_vec.begin(),
+            source_identifiers_vec.end(),
+            source_identifiers_name
+        );
+
+        if (source_identifier_it == source_identifiers_vec.end()) {
+            error_message = "Failed to retrieve AppSec triggers";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        return (*source_identifier_it).getIdentifiers();
     }
 
     bool
@@ -1048,41 +1521,31 @@ private:
             return false;
         }
 
-        AppsecSpecParser<TrustedSourcesSpec> trusted_sources_from_ingress;
-        AppsecSpecParser<vector<SourceIdentifierSpec>> source_identifier_from_ingress;
-
         // Parsing trusted sources from the k8s API
         if (!trusted_sources_map.count(trusted_sources_name)) {
             dbgTrace(D_K8S_POLICY) << "Trying to retrieve trusted sources for: " << trusted_sources_name;
-            bool res = messaging->sendObject(trusted_sources_from_ingress,
-                                I_Messaging::Method::GET,
-                                "kubernetes.default.svc",
-                                443,
-                                conn_flags,
-                                "/apis/openappsec.io/v1beta1/trustedsources/" + trusted_sources_name,
-                                "Authorization: Bearer " + token + "\nConnection: close");
-            if(!res) {
-                dbgError(D_K8S_POLICY) << "Failed to retrieve trusted sources";
+
+            auto trusted_sources_from_ingress_spec = getAppsecTrustedSourceSpecs(trusted_sources_name);
+            if (!trusted_sources_from_ingress_spec.ok()) {
+                dbgWarning(D_K8S_POLICY) << trusted_sources_from_ingress_spec.getErr();
                 return false;
             }
-            trusted_sources_map[trusted_sources_name] = trusted_sources_from_ingress.getSpec();
+
+            trusted_sources_map[trusted_sources_name] = trusted_sources_from_ingress_spec.unpack();
         }
 
         // Parsing source identifiers from the k8s API
         if (!source_identifiers_map.count(source_identifiers_name)) {
             dbgTrace(D_K8S_POLICY) << "Trying to retrieve sources identifiers for: " << source_identifiers_name;
-            bool res = messaging->sendObject(source_identifier_from_ingress,
-                                I_Messaging::Method::GET,
-                                "kubernetes.default.svc",
-                                443,
-                                conn_flags,
-                                "/apis/openappsec.io/v1beta1/sourcesidentifiers/" + source_identifiers_name,
-                                "Authorization: Bearer " + token + "\nConnection: close");
-            if(!res) {
-                dbgError(D_K8S_POLICY) << "Failed to retrieve trusted sources";
+
+            auto source_identifier_from_ingress_spec = getAppsecSourceIdentifierSpecs(source_identifiers_name);
+
+            if (!source_identifier_from_ingress_spec.ok()) {
+                dbgWarning(D_K8S_POLICY) << "Error: " << source_identifier_from_ingress_spec.getErr();
                 return false;
             }
-            source_identifiers_map[source_identifiers_name] = source_identifier_from_ingress.getSpec();
+
+            source_identifiers_map[source_identifiers_name] = source_identifier_from_ingress_spec.unpack();
         }
 
         // Generating the (Trusted Sources X Source Identifiers) matrix
@@ -1109,6 +1572,49 @@ private:
         return true;
     }
 
+    Maybe<AppSecCustomResponseSpec>
+    getAppSecCustomResponseSpecs(const string &web_user_res_annotation_name)
+    {
+        string error_message;
+        if (getEnvType() == LocalPolicyEnv::K8S) {
+            auto maybe_appsec_web_user_res = getObjectFromCluster<AppsecSpecParser<AppSecCustomResponseSpec>>(
+                "/apis/openappsec.io/v1beta1/customresponses/" + web_user_res_annotation_name
+            );
+
+            if (!maybe_appsec_web_user_res.ok()) {
+                error_message = "Failed to retrieve appsec web user res. Error: " +
+                    maybe_appsec_web_user_res.getErr();
+                dbgError(D_K8S_POLICY) << error_message;
+                return genError(error_message);
+            }
+            return maybe_appsec_web_user_res.unpack().getSpec();
+        }
+
+        auto maybe_appsec_policy = Singleton::Consume<I_Environment>::by<LocalPolicyMgmtGenerator::Impl>()->
+            get<AppsecLinuxPolicy>("get_linux_local_policy");
+
+        if (!maybe_appsec_policy.ok()) {
+            error_message = "Failed to retrieve appsec web user response.";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        auto web_user_res_vec = maybe_appsec_policy.unpack().getAppSecCustomResponseSpecs();
+        auto web_user_res_it = extractElement(
+            web_user_res_vec.begin(),
+            web_user_res_vec.end(),
+            web_user_res_annotation_name);
+
+        if (web_user_res_it == web_user_res_vec.end()) {
+            error_message = "Failed to retrieve appsec web user response.";
+            dbgDebug(D_K8S_POLICY) << error_message;
+            return genError(error_message);
+        }
+
+        return *web_user_res_it;
+
+    }
+
     bool
     extractWebUserResponse(
         const string &web_user_res_annotation_name,
@@ -1116,25 +1622,21 @@ private:
         vector<pair<string, string>> &web_user_res_vec,
         vector<WebUserResponseTriggerSection> &parsed_web_user_res)
     {
-        if(!web_user_res_annotation_name.empty()) {
+        if (!web_user_res_annotation_name.empty()) {
             dbgTrace(D_K8S_POLICY) << "Trying to retrieve web user response for: " << web_user_res_annotation_name;
-            AppsecSpecParser<AppSecWebUserResponseSpec> appsec_web_user_res;
-            bool res = messaging->sendObject(appsec_web_user_res,
-                                I_Messaging::Method::GET,
-                                "kubernetes.default.svc",
-                                443,
-                                conn_flags,
-                                "/apis/openappsec.io/v1beta1/customresponses/" + web_user_res_annotation_name,
-                                "Authorization: Bearer " + token + "\nConnection: close");
-            if(!res) {
-                dbgError(D_K8S_POLICY) << "Failed to retrieve appsec web user res";
+            auto maybe_appsec_web_user_res_spec = getAppSecCustomResponseSpecs(web_user_res_annotation_name);
+
+            if (!maybe_appsec_web_user_res_spec.ok()) {
+                dbgWarning(D_K8S_POLICY) << maybe_appsec_web_user_res_spec.getErr();
                 return false;
             }
 
-            if(web_user_res_map.count(web_user_res_annotation_name) == 0) {
+            AppSecCustomResponseSpec appsec_web_user_res_spec = maybe_appsec_web_user_res_spec.unpack();
+
+            if (web_user_res_map.count(web_user_res_annotation_name) == 0) {
                 WebUserResponseTriggerSection web_user_res_section = createWebUserResponseTriggerSection(
                     web_user_res_annotation_name,
-                    appsec_web_user_res.getSpec());
+                    appsec_web_user_res_spec);
 
                 web_user_res_map.emplace(web_user_res_annotation_name, web_user_res_section);
                 parsed_web_user_res.push_back(web_user_res_section);
@@ -1157,26 +1659,27 @@ private:
                 << "Successfuly retrieved AppSec web user response for: "
                 << web_user_res_annotation_name
                 << ":\n"
-                << appsec_web_user_res.getSpec();
+                << appsec_web_user_res_spec;
         }
         return true;
     }
 };
 
 
-K8sPolicyGenerator::K8sPolicyGenerator()
+LocalPolicyMgmtGenerator::LocalPolicyMgmtGenerator()
         :
-    Component("K8sPolicyGenerator"),
-    pimpl(make_unique<K8sPolicyGenerator::Impl>()) {}
+    Component("LocalPolicyMgmtGenerator"),
+    pimpl(make_unique<LocalPolicyMgmtGenerator::Impl>()) {}
 
-K8sPolicyGenerator::~K8sPolicyGenerator() {}
+LocalPolicyMgmtGenerator::~LocalPolicyMgmtGenerator() {}
 
 void
-K8sPolicyGenerator::init()
+LocalPolicyMgmtGenerator::init()
 {
     pimpl->init();
 }
 
 void
-K8sPolicyGenerator::preload()
+LocalPolicyMgmtGenerator::preload()
 {}
+
