@@ -44,6 +44,9 @@ public:
 
     virtual const string & getConfigurationFlag(const string &flag_name) const = 0;
 
+    virtual const string &
+    getConfigurationFlagWithDefault(const string &default_val, const string &flag_name) const = 0;
+
     virtual const string & getFilesystemPathConfig() const = 0;
     virtual const string & getLogFilesPathConfig() const = 0;
 

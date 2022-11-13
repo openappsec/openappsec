@@ -1,0 +1,18 @@
+commonKey: first document
+a: Easy! as one two three
+b:
+  c: 2
+  d: [3, 4]
+  e:
+    - name: fred
+      value: 3
+    - name: sam
+      value: 4
+---
+commonKey: second document
+another:
+  document: here
+---
+commonKey: third document
+wow: 
+  - here is another

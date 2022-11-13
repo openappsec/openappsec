@@ -1,0 +1,63 @@
+package yqlib
+
+import (
+	"bufio"
+	"container/list"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+)
+
+func readStream(filename string) (io.Reader, error) {
+	var reader *bufio.Reader
+	if filename == "-" {
+		reader = bufio.NewReader(os.Stdin)
+	} else {
+		// ignore CWE-22 gosec issue - that's more targeted for http based apps that run in a public directory,
+		// and ensuring that it's not possible to give a path to a file outside thar directory.
+		file, err := os.Open(filename) // #nosec
+		if err != nil {
+			return nil, err
+		}
+		reader = bufio.NewReader(file)
+	}
+	return reader, nil
+
+}
+
+func writeString(writer io.Writer, txt string) error {
+	_, errorWriting := writer.Write([]byte(txt))
+	return errorWriting
+}
+
+func readDocuments(reader io.Reader, filename string, fileIndex int, decoder Decoder) (*list.List, error) {
+	err := decoder.Init(reader)
+	if err != nil {
+		return nil, err
+	}
+	inputList := list.New()
+	var currentIndex uint
+
+	for {
+		candidateNode, errorReading := decoder.Decode()
+
+		if errors.Is(errorReading, io.EOF) {
+			switch reader := reader.(type) {
+			case *os.File:
+				safelyCloseFile(reader)
+			}
+			return inputList, nil
+		} else if errorReading != nil {
+			return nil, fmt.Errorf("bad file '%v': %w", filename, errorReading)
+		}
+		candidateNode.Document = currentIndex
+		candidateNode.Filename = filename
+		candidateNode.FileIndex = fileIndex
+		candidateNode.EvaluateTogether = true
+
+		inputList.PushBack(candidateNode)
+
+		currentIndex = currentIndex + 1
+	}
+}

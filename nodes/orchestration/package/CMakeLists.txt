@@ -25,3 +25,6 @@ install(FILES configuration/cp-nano-orchestration-debug-conf.json DESTINATION ./
 install(FILES watchdog/watchdog DESTINATION ./orchestration/watchdog/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
 install(FILES watchdog/wait-for-networking-inspection-modules.sh DESTINATION ./orchestration/watchdog/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
 install(FILES watchdog/access_pre_init DESTINATION ./orchestration/watchdog/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+
+install(FILES local-default-policy.yaml DESTINATION ./orchestration/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+

@@ -27,7 +27,7 @@ target_link_libraries(
     update_communication
     orchestration_tools
     messaging_downloader_client
-    k8s_policy_gen
+    local_policy_mgmt_gen
     curl
 
     -Wl,--end-group

@@ -99,6 +99,7 @@ public:
     vector<string> getProfileAgentSettings(const string &regex) const override;
 
     const string & getConfigurationFlag(const string &flag_name) const override;
+    const string & getConfigurationFlagWithDefault(const string &default_val, const string &flag_name) const override;
     const string & getFilesystemPathConfig() const override;
     const string & getLogFilesPathConfig() const override;
 
@@ -421,6 +422,15 @@ ConfigComponent::Impl::getConfigurationFlag(const string &flag_name) const
 
     const static string not_found = "";
     return not_found;
+}
+
+const string &
+ConfigComponent::Impl::getConfigurationFlagWithDefault(const string &default_val, const string &flag_name) const
+{
+    const string &val = getConfigurationFlag(flag_name);
+    if (!val.empty()) return val;
+
+    return default_val;
 }
 
 const string &

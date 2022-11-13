@@ -64,6 +64,13 @@ getConfigurationFlag(const string &flag)
     return Singleton::Consume<I_Config>::from<MockConfigProvider>()->getConfigurationFlag(flag);
 }
 
+string
+getConfigurationFlagWithDefault(const string &default_val, const string &flag)
+{
+    return
+        Singleton::Consume<I_Config>::from<MockConfigProvider>()->getConfigurationFlagWithDefault(default_val, flag);
+}
+
 const string &
 getFilesystemPathConfig()
 {

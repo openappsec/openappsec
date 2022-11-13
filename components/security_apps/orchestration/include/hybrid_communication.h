@@ -23,7 +23,7 @@
 #include "singleton.h"
 #include "i_update_communication.h"
 #include "fog_authenticator.h"
-#include "i_k8s_policy_gen.h"
+#include "i_local_policy_mgmt_gen.h"
 #include "i_orchestration_tools.h"
 #include "i_agent_details.h"
 #include "i_orchestration_status.h"
@@ -39,7 +39,7 @@
 class HybridCommunication
         :
     public FogAuthenticator,
-    Singleton::Consume<I_K8S_Policy_Gen>
+    Singleton::Consume<I_LocalPolicyMgmtGen>
 {
 public:
     virtual void init() override;

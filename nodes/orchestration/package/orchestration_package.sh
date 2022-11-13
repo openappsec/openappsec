@@ -324,6 +324,10 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
         fi
     fi
 
+    if [ $var_hybrid_mode = true ] && [ -z "$var_fog_address" ]; then
+        var_fog_address="$var_default_gem_fog_address"
+    fi
+
     if [ -n "$var_proxy" ]; then
         if [ "$var_proxy" = 'none' ]; then
             echo "Ignoring system proxy"
@@ -536,6 +540,8 @@ install_cp_nano_ctl()
     CP_NANO_CLI="cp-nano-cli.sh"
     CP_NANO_JSON="cpnano_json"
     CP_NANO_CTL="cpnano"
+    CP_NANO_YQ_LOCATION="./scripts/yq"
+    CP_NANO_YQ="yq"
 
     if [ -f $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED} ]; then
         cp_exec "rm -rf $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED}"
@@ -563,6 +569,9 @@ install_cp_nano_ctl()
 
     cp_exec "cp -f ${CP_NANO_BASE64} ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_BASE64}" ${FORCE_STDOUT}
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_BASE64}"
+
+    cp_exec "cp -f ${CP_NANO_YQ_LOCATION} ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_YQ}" ${FORCE_STDOUT}
+    cp_exec "chmod 700 ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_YQ}"
 }
 
 set_conf_temp_location()
@@ -645,6 +654,9 @@ copy_orchestration_executable()
     cp_print "Copying cp-nano-agent binary file to folder: ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}" $FORCE_STDOUT
     cp_copy "$ORCHESTRATION_EXE_SOURCE_PATH" ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}"
+    if [ $var_hybrid_mode = true ]; then
+        cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+    fi
 }
 
 copy_k8s_executable()

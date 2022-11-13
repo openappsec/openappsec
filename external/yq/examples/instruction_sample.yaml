@@ -1,0 +1,7 @@
+- command: update 
+  path: b.c
+  value:
+    #great 
+    things: frog # wow!
+- command: delete
+  path: b.d

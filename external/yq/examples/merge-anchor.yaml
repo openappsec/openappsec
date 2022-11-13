@@ -1,0 +1,19 @@
+foo: &foo
+  a: foo_a
+  thing: foo_thing
+  c: foo_c
+
+bar: &bar
+  b: bar_b
+  thing: bar_thing
+  c: bar_c
+
+foobarList:
+  b: foobarList_b
+  <<: [*foo,*bar]
+  c: foobarList_c
+
+foobar:
+  c: foobar_c
+  <<: *foo
+  thing: foobar_thing

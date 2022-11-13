@@ -12,6 +12,6 @@ add_subdirectory(manifest_controller)
 add_subdirectory(update_communication)
 add_subdirectory(details_resolver)
 add_subdirectory(health_check)
-add_subdirectory(k8s_policy_gen)
+add_subdirectory(local_policy_mgmt_gen)
 
 add_subdirectory(orchestration_ut)

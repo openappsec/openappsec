@@ -86,6 +86,8 @@ bool reloadConfiguration(const std::string &version = "");
 
 std::string getConfigurationFlag(const std::string &flag);
 
+std::string getConfigurationFlagWithDefault(const std::string &default_val, const std::string &flag_name);
+
 const std::string & getFilesystemPathConfig();
 const std::string & getLogFilesPathConfig();
 

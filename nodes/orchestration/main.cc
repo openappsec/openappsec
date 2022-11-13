@@ -53,7 +53,7 @@
 #include "health_check_manager.h"
 #include "generic_metric.h"
 #include "tenant_manager.h"
-#include "k8s_policy_gen.h"
+#include "local_policy_mgmt_gen.h"
 
 using namespace std;
 
@@ -78,7 +78,7 @@ main(int argc, char **argv)
         HealthChecker,
         HealthCheckManager,
         MessagingDownloaderClient,
-        K8sPolicyGenerator
+        LocalPolicyMgmtGenerator
     > comps;
 
     comps.registerGlobalValue<uint>("Nano service API Port Primary", 7777);

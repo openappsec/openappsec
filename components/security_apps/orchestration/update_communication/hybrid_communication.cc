@@ -45,17 +45,17 @@ HybridCommunication::init()
 string
 HybridCommunication::getChecksum(const string &policy_version)
 {
-    dbgFlow(D_ORCHESTRATOR) << "Checking the policy Checksum";
     string clean_plicy_version = policy_version;
-    if (!clean_plicy_version.empty() && clean_plicy_version[clean_plicy_version.size() - 1] == '\n')
-    clean_plicy_version.erase(clean_plicy_version.size() - 1);
+    if (!clean_plicy_version.empty() && clean_plicy_version[clean_plicy_version.size() - 1] == '\n') {
+        clean_plicy_version.erase(clean_plicy_version.size() - 1);
+    }
 
-    curr_policy = Singleton::Consume<I_K8S_Policy_Gen>::by<HybridCommunication>()->parsePolicy(clean_plicy_version);
+    curr_policy = Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->parsePolicy(clean_plicy_version);
 
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogAuthenticator>();
     Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
         I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-        Singleton::Consume<I_K8S_Policy_Gen>::by<HybridCommunication>()->getPolicyPath()
+        Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->getPolicyPath()
     );
 
     if (!file_checksum.ok()) {
@@ -69,16 +69,59 @@ Maybe<string>
 HybridCommunication::getNewVersion()
 {
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogAuthenticator>();
-    return orchestration_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
+    auto env = Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->getEnvType();
+    if (env == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S) {
+        return orchestration_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
+    }
+
+    string policy_path = getConfigurationFlagWithDefault(
+        getFilesystemPathConfig() + "/conf/local_policy.yaml",
+        "local_mgmt_policy"
+    );
+
+    Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
+        I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
+        policy_path
+    );
+
+    if (!file_checksum.ok()) {
+        dbgWarning(D_ORCHESTRATOR) << "Policy checksum was not calculated: " << file_checksum.getErr();
+        return genError(file_checksum.getErr());
+    }
+
+    return file_checksum.unpack();
 }
 
 Maybe<void>
 HybridCommunication::getUpdate(CheckUpdateRequest &request)
 {
-    dbgFlow(D_ORCHESTRATOR) << "Getting policy update in an Hybrid Communication";
+    string manifest_checksum = "";
+    dbgTrace(D_ORCHESTRATOR) << "Getting updates in Hybrid Communication";
+    if (access_token.ok()) {
+        static const string check_update_str = "/api/v2/agents/resources";
+        auto request_status = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->sendObject(
+            request,
+            HTTPMethod::POST,
+            fog_address_ex + check_update_str,
+            buildOAuth2Header((*access_token).getToken())
+        );
+
+        if (!request_status) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to get response after check update request.";
+            return genError("Failed to request updates");
+        }
+
+        Maybe<string> maybe_new_manifest = request.getManifest();
+        manifest_checksum = maybe_new_manifest.ok() ? maybe_new_manifest.unpack() : "";
+    } else {
+        dbgWarning(D_ORCHESTRATOR) << "Acccess Token not available.";
+    }
+
+    dbgTrace(D_ORCHESTRATOR) << "Getting policy update in Hybrid Communication";
+
     auto maybe_new_version = getNewVersion();
     if (!maybe_new_version.ok() || maybe_new_version == curr_version) {
-        request = CheckUpdateRequest("", "", "", "", "", "");
+        request = CheckUpdateRequest(manifest_checksum, "", "", "", "", "");
         dbgDebug(D_ORCHESTRATOR) << "No new version is currently available";
         return Maybe<void>();
     }
@@ -98,7 +141,7 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
         << " policy: "
         << (policy_response.empty() ? "has no change," : "has new update," );
 
-    request = CheckUpdateRequest("", policy_response, "", "", "", "");
+    request = CheckUpdateRequest(manifest_checksum, policy_response, "", "", "", "");
     curr_version = *maybe_new_version;
 
     return Maybe<void>();
@@ -107,13 +150,35 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
 Maybe<string>
 HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
 {
-    auto file_name = resourse_file.getFileName();
+    dbgTrace(D_ORCHESTRATOR)
+        << "Downloading attribute file on hybrid mode, file name: "
+        << resourse_file.getFileName();
+
+    if (resourse_file.getFileName() == "policy") {
+        return curr_policy;
+    }
+
 
     if (file_name.compare("policy") == 0) {
         return curr_policy;
     }
 
-    dbgWarning(D_ORCHESTRATOR) << "Failed downloading the attribute files";
+    if (resourse_file.getFileName() == "manifest") {
+        if (!access_token.ok()) return genError("Acccess Token not available.");
+
+        auto unpacked_access_token = access_token.unpack().getToken();
+
+        static const string file_attribute_str = "/api/v2/agents/resources/";
+        Maybe<string> attribute_file = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->downloadFile(
+            resourse_file,
+            resourse_file.getRequestMethod(),
+            fog_address_ex + file_attribute_str + resourse_file.getFileName(),
+            buildOAuth2Header((*access_token).getToken()) // Header
+        );
+        return attribute_file;
+    }
+
+    dbgTrace(D_ORCHESTRATOR) << "Unnecessary attribute files downloading on hybrid mode";
     return string("");
 }
 
