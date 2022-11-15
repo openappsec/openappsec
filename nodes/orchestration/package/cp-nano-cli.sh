@@ -934,11 +934,11 @@ run_status() # Initials - rs
     fi
 
     if [ -n "$(cat /etc/cp/conf/agent_details.json | grep "hybrid_mode")" ]; then
-        rs_mgmt_mode_text="Local managment"
+        rs_mgmt_mode_text="Local management"
     else
-        rs_mgmt_mode_text="Cloud managment"
+        rs_mgmt_mode_text="Cloud management"
     fi
-    echo "Managment mode: ${rs_mgmt_mode_text}"
+    echo "Management mode: ${rs_mgmt_mode_text}"
     echo "Policy files: "
     echo "    /etc/cp/conf/local_policy.yaml"
 
