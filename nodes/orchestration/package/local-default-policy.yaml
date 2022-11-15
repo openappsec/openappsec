@@ -34,7 +34,7 @@ practices:
       max-header-size-bytes: 102400
       max-object-depth: 40
       max-url-size-bytes: 32768
-      minimum-confidence: Transparent
+      minimum-confidence: critical
       override-mode: detect-learn
       protections:
         csrf-protection: detect-learn

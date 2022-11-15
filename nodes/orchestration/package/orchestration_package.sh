@@ -833,7 +833,7 @@ install_orchestration()
         exit 0
     fi
 
-    cp_print "\nStarting installation of Check Point Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
+    cp_print "\nStarting installation of open-appsec Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
 
     cp_exec "rm -rf ${FILESYSTEM_PATH}/${SERVICE_PATH}"
     cp_exec "rm -rf ${FILESYSTEM_PATH}/${WATCHDOG_PATH}"
@@ -975,21 +975,21 @@ install_orchestration()
     install_watchdog
 
     cp_print "Note: in order for the agent to remain active and effective it must connect to the Fog/Cloud at least every 45 days" ${FORCE_STDOUT}
-    cp_print "Check Point Nano Agent installation completed successfully" ${FORCE_STDOUT}
+    cp_print "open-appsec Nano Agent installation completed successfully" ${FORCE_STDOUT}
 
     if [ $var_hybrid_mode = false ] && [ $var_offline_mode = false ] && [ $var_no_otp = false ] && [ $var_skip_registration = false ]; then
         time_sleep=2
         time_out=60
-        cp_print "Registering Check Point Nano Agent to Fog.." ${FORCE_STDOUT}
+        cp_print "Registering open-appsec Nano Agent to Fog.." ${FORCE_STDOUT}
         until $USR_SBIN_PATH/${CP_NANO_CTL} -s 2> /dev/null | grep -q "Registration status: Succeeded"; do
             time_out=$(( time_out - time_sleep ))
             if [ $time_out -le 0 ]; then
-                cp_print "Check Point Nano Agent registration failed. Failed to register to Fog: $var_fog_address" ${FORCE_STDOUT}
+                cp_print "open-appsec Nano Agent registration failed. Failed to register to Fog: $var_fog_address" ${FORCE_STDOUT}
                 exit 1
             fi
             sleep ${time_sleep}
         done
-        cp_print "Check Point Nano Agent is registered to $var_fog_address" ${FORCE_STDOUT}
+        cp_print "open-appsec Nano Agent is registered to $var_fog_address" ${FORCE_STDOUT}
     fi
 }
 
@@ -1032,7 +1032,7 @@ uninstall_orchestration()
     if [ ! -f "$uninstall_script" ]; then
         cp_dir="${FILESYSTEM_PATH}"
         if [ ! -d "$cp_dir" ]; then
-            echo "Check Point Nano Agent is not installed"
+            echo "open-appsec Nano Agent is not installed"
             exit 1
         fi
         echo "Failed to uninstall Orchestration Nano Service, uninstall script was not found in: $uninstall_script "
@@ -1040,9 +1040,9 @@ uninstall_orchestration()
     fi
      cp_exec "${uninstall_script}"
     if test "$?" = "0"; then
-        cp_print "Check Point Nano Agent successfully uninstalled" ${FORCE_STDOUT}
+        cp_print "open-appsec Nano Agent successfully uninstalled" ${FORCE_STDOUT}
     else
-        cp_print "Check Point Nano Agent failed to uninstall" ${FORCE_STDOUT}
+        cp_print "open-appsec Nano Agent failed to uninstall" ${FORCE_STDOUT}
         exit 1
     fi
 }

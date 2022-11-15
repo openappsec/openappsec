@@ -127,9 +127,9 @@ MS_Help()
 {
   local install_usage=
   if test x"\$additional_args_help" != x; then
-      install_usage="--install [additional arguments]    Install Check Point Nano service"
+      install_usage="--install [additional arguments]    Install open-appsec Nano service"
   else
-      install_usage="--install                           Install Check Point Nano service"
+      install_usage="--install                           Install open-appsec Nano service"
   fi
   
   additional_args_help=\$(if test x"\$additional_args_help" != x; then echo "Aditional arguments for the --install property are:\$additional_args_help"; fi)
@@ -138,8 +138,8 @@ MS_Help()
 Usage: \$0 [options]
 With following options
   \$install_usage
-  --uninstall                         Uninstall Check Point Nano service
-  --version                           Check Point package version
+  --uninstall                         Uninstall open-appsec Nano service
+  --version                           open-appsec package version
   \$additional_args_help
 EOH
 }
@@ -158,11 +158,11 @@ MS_Advanced_Help()
  2) Running \$0 :
   \$0 [options] [--] [additional arguments to embedded script]
   with following options (in that order)
-  --install              Install Check Point service
-  --uninstall            Uninstall Check Point service
-  --pre_install_test     Preform pre installation test for Check Point service
-  --post_install_test    Preform post installation test for Check Point service
-  --version              Check Point package version
+  --install              Install open-appsec service
+  --uninstall            Uninstall open-appsec service
+  --pre_install_test     Preform pre installation test for open-appsec service
+  --post_install_test    Preform post installation test for open-appsec service
+  --version              open-appsec package version
   --confirm              Ask before running embedded script
   --quiet                Do not print anything except error messages
   --noexec               Do not run embedded script

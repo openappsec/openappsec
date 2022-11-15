@@ -278,7 +278,7 @@ usage()
     printf "%s %s : Load configuration\n" "$load_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#load_config_option})))")"
     printf "%s %s : Set proxy\n" "$proxy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#proxy_option})))")"
     printf "%s %s : Display configuration\n" "$display_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_config_option})))")"
-    printf "%s %s : Create Openappsec agent info\n" "$cp_agent_info_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#cp_agent_info_option})))")"
+    printf "%s %s : Create open-appsec agent info\n" "$cp_agent_info_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#cp_agent_info_option})))")"
     printf "%s %s : Display current policy\n" "$display_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_policy_option})))")"
     printf "%s %s : Load gradual policy\n" "$set_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_gradual_policy_option})))")"
     printf "%s %s : Remove gradual policy\n" "$delete_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#delete_gradual_policy_option})))")"
@@ -463,15 +463,15 @@ read_agent_run_status() # Initials - rars
     rars_output=$(tail -n 1 /tmp/agent-status.txt)
     if [ "$1" = "start" ]; then
         if [ "$rars_output" = "running" ]; then
-            echo "Openappsec Nano Agent watchdog started successfully"
+            echo "open-appsec Nano Agent watchdog started successfully"
         else
-            echo "Openappsec Nano Agent is already running"
+            echo "open-appsec Nano Agent is already running"
         fi
     else # "$1" = "stop"
         if [ "$rars_output" = "down" ]; then
-            echo "Openappsec Nano Agent stopped successfully"
+            echo "open-appsec Nano Agent stopped successfully"
         else
-            echo "Openappsec Nano Agent is not running"
+            echo "open-appsec Nano Agent is not running"
         fi
     fi
 }
@@ -527,7 +527,7 @@ run_stop_agent()
 
 uninstall_agent() # Initials - ua
 {
-    printf "Are you sure you want to uninstall Openappsec Nano Agent? (Y/N): " && read -r ua_confirm
+    printf "Are you sure you want to uninstall open-appsec Nano Agent? (Y/N): " && read -r ua_confirm
     case $ua_confirm in
     [Yy] | [Yy][Ee][Ss]) ;;
     *) exit 1 ;;
@@ -540,9 +540,9 @@ uninstall_agent() # Initials - ua
     fi
     ${ua_uninstall_script}
     if test "$?" = "0"; then
-        echo "Openappsec Nano Agent successfully uninstalled"
+        echo "open-appsec Nano Agent successfully uninstalled"
     else
-        echo "Failed to uninstall Openappsec Nano Agent"
+        echo "Failed to uninstall open-appsec Nano Agent"
         exit 1
     fi
 }
@@ -824,7 +824,7 @@ print_single_service_status() # Initials - psss
         return
     fi
 
-    echo "---- Openappsec $(format_nano_service_name "$psss_service_name") Nano Service ----"
+    echo "---- open-appsec $(format_nano_service_name "$psss_service_name") Nano Service ----"
 
     psss_is_userspace_process_running=$(is_userspace_running "$psss_service_name")
 
@@ -900,7 +900,7 @@ run_status() # Initials - rs
         rs_agent_version="Version $rs_agent_version"
     fi
 
-    echo "---- Openappsec Nano Agent ----"
+    echo "---- open-appsec Nano Agent ----"
     echo "$rs_agent_version"
     if [ "$(is_userspace_running "watchdog")" = true ] || [ "$(is_userspace_running "agent")" = true ]; then
         format_colored_status_line "Status: Running"
@@ -1434,16 +1434,16 @@ set_mode()
     if [ "$mode" = "online_mode" ]; then
         time_sleep=2
         time_out=60
-        echo "Registering Openappsec Nano Agent to Fog.."
+        echo "Registering open-appsec Nano Agent to Fog.."
         until $USR_SBIN_PATH/${CP_NANO_CTL} -s 2> /dev/null | grep -q "Registration status: Succeeded"; do
             time_out=$(( time_out - time_sleep ))
             if [ $time_out -le 0 ]; then
-                echo "Openappsec Nano Agent registration failed. Failed to register to Fog: $fog_address"
+                echo "open-appsec Nano Agent registration failed. Failed to register to Fog: $fog_address"
                 exit 1
             fi
             sleep ${time_sleep}
         done
-        echo "Openappsec Nano Agent is registered to $fog_address"
+        echo "open-appsec Nano Agent is registered to $fog_address"
         echo "Orchestration mode changed successfully"
     else
         echo "Orchestration mode was changed successfully"
