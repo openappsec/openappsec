@@ -76,8 +76,6 @@ customresponses:
   - name: appsec-default-web-user-response
     mode: response-code-only
     http-response-code: 403
-    message-title: This is the best title ever
-    message-body: Look at this body
 
 exceptions:
 trustedsources:
