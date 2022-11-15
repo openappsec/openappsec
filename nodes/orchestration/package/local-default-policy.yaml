@@ -5,10 +5,7 @@ policies:
     mode: detect-learn
     practices:
     - webapp-default-practice
-    source-identifiers:
-    trusted-sources:
     custom-response: appsec-default-web-user-response
-    exceptions:
   specific-rules:
   - host: "*"
     triggers:
@@ -16,10 +13,7 @@ policies:
     mode: detect-learn
     practices:
     - webapp-default-practice
-    source-identifiers:
-    trusted-sources:
     custom-response: appsec-default-web-user-response
-    exceptions:
 
 practices:
   - name: webapp-default-practice

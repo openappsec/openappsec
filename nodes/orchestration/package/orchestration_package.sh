@@ -558,7 +558,8 @@ install_cp_nano_ctl()
     cp_exec "cp -f $CP_NANO_CLI ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     if ! [ -f $USR_SBIN_PATH/${CP_NANO_CTL} ]; then
-        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
+	cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
+        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/open-appsec-ctl"
     fi
 
     cp_exec "cp -f ${CP_NANO_DEBUG} ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG}"
