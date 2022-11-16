@@ -16,6 +16,10 @@
 
 #include <set>
 #include <chrono>
+#include <stdlib.h>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
 
 #include "report/base_field.h"
 #include "report/report_enums.h"
@@ -69,6 +73,26 @@ public:
         setEngineVersion();
         setServiceName();
         setInstanceAwareness();
+    }
+
+    static bool
+    isPlaygroundEnv()
+    {
+        std::string playground_variable = "PLAYGROUND";
+        const char *env_string = getenv(playground_variable.c_str());
+
+        if (env_string) {
+            std::string env_value = env_string;
+            std::transform(
+                env_value.begin(),
+                env_value.end(),
+                env_value.begin(),
+                [](unsigned char c){ return std::tolower(c); }
+            );
+            return env_value == "true";
+        }
+
+        return false;
     }
 
     void serialize(cereal::JSONOutputArchive &ar) const;

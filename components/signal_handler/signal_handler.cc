@@ -207,6 +207,9 @@ private:
         }
 
         set<ReportIS::Tags> tags;
+        string agent_uid =
+            (Report::isPlaygroundEnv() ? "playground-" : "") +
+            Singleton::Consume<I_AgentDetails>::by<SignalHandler>()->getAgentId();
         Report message_to_fog(
             "Nano service startup after crash",
             curr_time,
@@ -218,7 +221,7 @@ private:
             Severity::HIGH,
             Priority::HIGH,
             chrono::seconds(0),
-            LogField("agentId", Singleton::Consume<I_AgentDetails>::by<SignalHandler>()->getAgentId()),
+            LogField("agentId", agent_uid),
             tags,
             Tags::INFORMATIONAL
         );

@@ -80,7 +80,11 @@ public:
             _severity,
             _priority,
             std::chrono::seconds(0),
-            LogField("agentId", Singleton::Consume<I_AgentDetails>::by<LogGen>()->getAgentId()),
+            LogField(
+                "agentId",
+                (Report::isPlaygroundEnv() ? "playground-" : "") +
+                Singleton::Consume<I_AgentDetails>::by<LogGen>()->getAgentId()
+            ),
             std::forward<Args>(args)...
         )
     {

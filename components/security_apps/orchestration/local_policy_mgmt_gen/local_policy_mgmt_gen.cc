@@ -28,6 +28,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 
 #include "rest.h"
+#include "report/report.h"
 #include "debug.h"
 #include "config.h"
 #include "connkey.h"
@@ -1218,27 +1219,10 @@ private:
     LocalPolicyEnv env_type;
     map<string, string> practice_name_to_id_map;
 
-    bool 
-    isPlaygroundEnv()
-    {
-        string playground_variable = "PLAYGROUND";
-        const char* env_string = getenv(playground_variable.c_str());
-        
-        if (env_string)
-        {
-          string env_value = env_string;
-          std::transform(env_value.begin(), env_value.end(), env_value.begin(), 
-                         [](unsigned char c){ return std::tolower(c); });
-          return env_value == "true";           
-        }
-         
-        return false;
-    }
-
     bool
     getClusterId()
     {
-        string playground_uid = isPlaygroundEnv() ? "playground-" : "";
+        string playground_uid = Report::isPlaygroundEnv() ? "playground-" : "";
 
         dbgTrace(D_K8S_POLICY) << "Getting cluster UID";
         auto maybe_namespaces_data = getObjectFromCluster<NamespaceData>("/api/v1/namespaces/");

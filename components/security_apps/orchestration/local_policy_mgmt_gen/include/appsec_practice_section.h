@@ -119,9 +119,9 @@ public:
     load(cereal::JSONInputArchive &archive_in)
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSec Web Attack Protections";
-        parseAppsecJSONKey<std::string>("csrf-protection", csrf_protection, archive_in, "Inactive");
-        parseAppsecJSONKey<std::string>("error-disclosure", error_disclosure, archive_in, "Inactive");
-        parseAppsecJSONKey<std::string>("open-redirect", open_redirect, archive_in, "Inactive");
+        parseAppsecJSONKey<std::string>("csrf-enabled", csrf_protection, archive_in, "inactive");
+        parseAppsecJSONKey<std::string>("error-disclosure-enabled", error_disclosure, archive_in, "inactive");
+        parseAppsecJSONKey<std::string>("open-redirect-enabled", open_redirect, archive_in, "inactive");
         parseAppsecJSONKey<bool>("non-valid-http-methods", non_valid_http_methods, archive_in, false);
     }
 
@@ -253,7 +253,7 @@ public:
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSec Snort Signatures practice";
         parseAppsecJSONKey<std::string>("override-mode", override_mode, archive_in, "Inactive");
-        parseAppsecJSONKey<std::vector<std::string>>("configmap", config_map, archive_in);
+        parseAppsecJSONKey<std::vector<std::string>>("files", config_map, archive_in);
     }
 
     const std::string & getOverrideMode() const { return override_mode; }
@@ -285,7 +285,7 @@ public:
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSecPracticeOpenSchemaAPI practice";
         parseAppsecJSONKey<std::string>("override-mode", override_mode, archive_in, "Inactive");
-        parseAppsecJSONKey<std::vector<std::string>>("configmap", config_map, archive_in);
+        parseAppsecJSONKey<std::vector<std::string>>("files", config_map, archive_in);
     }
 
     const std::string & getOverrideMode() const { return override_mode; }
@@ -777,12 +777,12 @@ public:
         dbgTrace(D_K8S_POLICY) << "Loading AppSec policy spec";
         parseAppsecJSONKey<AppsecPolicySpec>("policies", policies, archive_in);
         parseAppsecJSONKey<std::vector<AppSecPracticeSpec>>("practices", practices, archive_in);
-        parseAppsecJSONKey<std::vector<AppsecTriggerSpec>>("logtriggers", log_triggers, archive_in);
-        parseAppsecJSONKey<std::vector<AppSecCustomResponseSpec>>("customresponses", custom_responses, archive_in);
+        parseAppsecJSONKey<std::vector<AppsecTriggerSpec>>("log-triggers", log_triggers, archive_in);
+        parseAppsecJSONKey<std::vector<AppSecCustomResponseSpec>>("custom-responses", custom_responses, archive_in);
         parseAppsecJSONKey<std::vector<AppsecExceptionSpec>>("exceptions", exceptions, archive_in);
-        parseAppsecJSONKey<std::vector<TrustedSourcesSpec>>("trustedsources", trusted_sources, archive_in);
+        parseAppsecJSONKey<std::vector<TrustedSourcesSpec>>("trusted-sources", trusted_sources, archive_in);
         parseAppsecJSONKey<std::vector<SourceIdentifierSpecWrapper>>(
-            "sourceidentifiers",
+            "source-identifier",
             sources_identifier,
             archive_in
         );

@@ -245,6 +245,9 @@ DebugFogStream::finishMessage()
         if (team.ok()) audience_team = *team;
     }
 
+    string agent_uid =
+        (Report::isPlaygroundEnv() ? "playground-" : "") +
+        Singleton::Consume<I_AgentDetails>::by<DebugFogStream>()->getAgentId();
     Report message_to_fog(
         "Debug message",
         curr_time,
@@ -256,7 +259,7 @@ DebugFogStream::finishMessage()
         getSeverity(),
         Priority::LOW,
         chrono::seconds(0),
-        LogField("agentId", Singleton::Consume<I_AgentDetails>::by<DebugFogStream>()->getAgentId()),
+        LogField("agentId", agent_uid),
         LogField("issuingFunction", func_name),
         LogField("issuingFile", file_name),
         LogField("issuingLine", line),
@@ -328,6 +331,9 @@ DebugFogStream::handleThresholdReach()
         if (team.ok()) audience_team = *team;
     }
 
+    string agent_uid =
+        (Report::isPlaygroundEnv() ? "playground-" : "") +
+        Singleton::Consume<I_AgentDetails>::by<DebugFogStream>()->getAgentId();
     Report message_to_fog(
         "Debug message",
         curr_time,
@@ -339,7 +345,7 @@ DebugFogStream::handleThresholdReach()
         Severity::MEDIUM,
         Priority::LOW,
         chrono::seconds(0),
-        LogField("agentId", Singleton::Consume<I_AgentDetails>::by<DebugFogStream>()->getAgentId()),
+        LogField("agentId", agent_uid),
         LogField("issuingFunction", __FUNCTION__),
         LogField("issuingFile", "debug_streams.cc"),
         LogField("issuingLine", __LINE__),

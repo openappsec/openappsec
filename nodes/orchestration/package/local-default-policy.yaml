@@ -6,7 +6,7 @@ policies:
     practices:
     - webapp-default-practice
     custom-response: appsec-default-web-user-response
-  specific-rules:
+  specific-rules: []
 
 practices:
   - name: webapp-default-practice
@@ -33,7 +33,7 @@ practices:
       validated-URIs: []
       override-mode: detect-learn
 
-logtriggers:
+log-triggers:
   - name: appsec-default-log-trigger
     access-control-logging:
       allow-events: false
@@ -53,18 +53,11 @@ logtriggers:
       url-query: false
     log-destination:
       cloud: false
-      file:
       stdout:
         format: json
-      syslog-service:
-      cef-service:
 
-customresponses:
+custom-responses:
   - name: appsec-default-web-user-response
     mode: response-code-only
     http-response-code: 403
-
-exceptions:
-trustedsources:
-sourceidentifiers:
 

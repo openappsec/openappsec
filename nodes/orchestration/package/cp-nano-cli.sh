@@ -899,6 +899,25 @@ print_single_service_status() # Initials - psss
     fi
 }
 
+get_status_content()
+{
+    if [ "${remove_curl_ld_path}" = "true" ]; then
+        gsc_orch_status=$(LD_LIBRARY_PATH="" ${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/show-orchestration-status 2>&1)
+    else
+        gsc_orch_status=$(${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/show-orchestration-status 2>&1)
+    fi
+
+    if echo "$gsc_orch_status" | grep -q "update status"; then
+        gsc_line_count=$(echo "$gsc_orch_status" | grep -c '^')
+
+        gsc_temp_old_status=$(echo "$gsc_orch_status" | sed -r "${gsc_line_count},${gsc_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
+    else
+        gsc_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
+    fi
+
+    echo ${gsc_temp_old_status}
+}
+
 run_status() # Initials - rs
 {
     rs_orch_service_full_path=$(get_nano_service_path 'orchestration')
@@ -1463,7 +1482,7 @@ set_mode()
         time_sleep=2
         time_out=60
         echo "Registering open-appsec Nano Agent to Fog.."
-        until $USR_SBIN_PATH/${CP_NANO_CTL} -s 2> /dev/null | grep -q "Registration status: Succeeded"; do
+        until get_status_content | grep -q "Registration status: Succeeded"; do
             time_out=$(( time_out - time_sleep ))
             if [ $time_out -le 0 ]; then
                 echo "open-appsec Nano Agent registration failed. Failed to register to Fog: $fog_address"

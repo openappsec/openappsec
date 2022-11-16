@@ -596,6 +596,10 @@ private:
                 auto team = i_env->get<AudienceTeam>("Audience Team");
                 if (team.ok()) audience_team = *team;
 
+                string agent_uid =
+                    (Report::isPlaygroundEnv() ? "playground-" : "") +
+                    Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId();
+
                 Report policy_update_message(
                     "Agent's policy has been updated",
                     curr_time,
@@ -607,7 +611,7 @@ private:
                     Severity::INFO,
                     Priority::LOW,
                     chrono::seconds(0),
-                    LogField("agentId", Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId()),
+                    LogField("agentId", agent_uid),
                     Tags::ORCHESTRATOR
                 );
                 policy_update_message.addToOrigin(LogField("policyVersion", new_policy_version));
