@@ -7,13 +7,6 @@ policies:
     - webapp-default-practice
     custom-response: appsec-default-web-user-response
   specific-rules:
-  - host: "*"
-    triggers:
-    - appsec-default-log-trigger
-    mode: detect-learn
-    practices:
-    - webapp-default-practice
-    custom-response: appsec-default-web-user-response
 
 practices:
   - name: webapp-default-practice
@@ -62,7 +55,7 @@ logtriggers:
       cloud: false
       file:
       stdout:
-        format: json-formatted
+        format: json
       syslog-service:
       cef-service:
 

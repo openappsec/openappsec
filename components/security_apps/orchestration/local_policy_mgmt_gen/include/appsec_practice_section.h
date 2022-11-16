@@ -14,7 +14,10 @@
 #ifndef __APPSEC_PRACTICE_SECTION_H__
 #define __APPSEC_PRACTICE_SECTION_H__
 
+#include <list>
+
 #include <cereal/archives/json.hpp>
+#include <cereal/types/list.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -697,6 +700,8 @@ public:
 
     const std::string & getMode() const { return mode; }
 
+    void setHost(const std::string &_host) { host = _host; };
+
     void setMode(const std::string &_mode) { mode = _mode; };
 
     const std::string & getCustomResponse() const { return custom_response; }
@@ -749,16 +754,18 @@ public:
         if (default_mode_annot.ok() && !default_mode_annot.unpack().empty() && default_rule.getMode().empty()) {
             default_rule.setMode(default_mode_annot.unpack());
         }
-        parseAppsecJSONKey<std::vector<ParsedRule>>("specific-rules", specific_rules, archive_in);
+        default_rule.setHost("*");
+        parseAppsecJSONKey<std::list<ParsedRule>>("specific-rules", specific_rules, archive_in);
+        specific_rules.push_front(default_rule);
     }
 
     const ParsedRule & getDefaultRule() const { return default_rule; }
 
-    const std::vector<ParsedRule> & getSpecificRules() const { return specific_rules; }
+    const std::list<ParsedRule> & getSpecificRules() const { return specific_rules; }
 
 private:
     ParsedRule default_rule;
-    std::vector<ParsedRule> specific_rules;
+    std::list<ParsedRule> specific_rules;
 };
 
 class AppsecLinuxPolicy : Singleton::Consume<I_Environment>

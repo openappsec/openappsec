@@ -289,7 +289,7 @@ public:
             return appsec_policy;
         });
 
-        vector<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
+        list<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
         ParsedRule default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
 
         string asset;
@@ -672,7 +672,7 @@ public:
             AppsecSpecParser<AppsecPolicySpec> appsec_policy = maybe_appsec_policy.unpack();
             dbgTrace(D_K8S_POLICY) << "Succeessfully retrieved AppSec policy: " << appsec_policy.getSpec();
 
-            vector<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
+            list<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
             ParsedRule default_rule = appsec_policy.getSpec().getDefaultRule();
 
             for (const ParsedRule &parsed_rule : specific_rules) {
