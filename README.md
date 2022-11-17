@@ -52,6 +52,7 @@ Installer for standard NGINX:
 
 ```bash
 wget https://downloads.openappsec.io/open-appsec-nginx-install && chmod +x open-appsec-nginx-install
+./open-appsec-nginx-install
 ```
 
 It is recommended to read the documentation or follow the video tutorial.
