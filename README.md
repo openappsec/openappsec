@@ -34,8 +34,27 @@ open-appsec uses two models:
 # Resources
 * [Project Website](https://openappsec.io)
 * [Offical documentation](https://docs.openappsec.io/)
-* [Video Tutorial](https://www.youtube.com/watch?v=ZmFrA2ibdog)
+* [Video Tutorial](https://www.youtube.com/playlist?list=PL8pzPlPbjDY0V2u7E-KZQrzIiw41fWB0h)
 * [Live Kubernetes Playground](https://killercoda.com/open-appsec/scenario/simple-appsec-kubernetes-ingress)
+* [Live Linux/NGINX Playground](https://killercoda.com/open-appsec/scenario/simple-appsec-for-nginx)
+
+
+# open-appsec Installation
+
+Installer for Kubernetes:
+
+```bash
+wget https://downloads.openappsec.io/open-appsec-k8s-install && chmod +x open-appsec-k8s-install
+./open-appsec-k8s-install
+```
+
+Installer for standard NGINX:
+
+```bash
+wget https://downloads.openappsec.io/open-appsec-nginx-install && chmod +x open-appsec-nginx-install
+```
+
+It is recommended to read the documentation or follow the video tutorial.
 
 # Repositories
 
