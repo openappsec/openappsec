@@ -62,7 +62,7 @@ It is recommended to read the documentation or follow the video tutorial.
 open-appsec GitHub includes four main repositores:
 
 * [openappsec/openappsec](https://github.com/openappsec/openappsec) the main code and logic of open-appsec. Developed in C++.
-* [openappsec/attachement](https://github.com/openappsec/attachment) connects between processes that provide HTTP data (e.g NGINX) and the open-appsec Agent security logic. Developed in C.
+* [openappsec/attachment](https://github.com/openappsec/attachment) connects between processes that provide HTTP data (e.g NGINX) and the open-appsec Agent security logic. Developed in C.
 * [openappsec/smartsync](https://github.com/openappsec/smartsync) in charge of correlating learning data from multiple agent instances and delivering a unified learning model for each asset. Developed in Golang.
 * [openappsec/smartsync-shared-files](https://github.com/openappsec/smartsync-shared-files) interface to physical storage used by smartsync service for storing learning data. Developed in Golang.
 
