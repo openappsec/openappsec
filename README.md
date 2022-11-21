@@ -8,7 +8,7 @@
 # About
 [open-appsec](https://www.openappsec.io) (openappsec.io) builds on machine learning to provide preemptive web app & API threat protection against OWASP-Top-10 and zero-day attacks. It can be deployed as add-on to Kubernetes Ingress, NGINX, Envoy (soon) and API Gateways.
 
-The open-appsec engine learns how users normally interact with your web application. It then uses this information to automatically detect requests that fall outside of normal operations, and sends those requests for further analysis to decide whether the request is malicious or not.
+The open-appsec engine learns how users normally interact with your web application. It then uses this information to automatically detect requests that fall outside of normal operations, and conducts further analysis to decide whether the request is malicious or not.
 
 Upon every HTTP request, all parts are decoded, JSON and XML sections are extracted, and any IP-level access control is applied.
 
