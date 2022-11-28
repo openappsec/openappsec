@@ -135,13 +135,6 @@ CONTAINER ID        IMAGE               COMMAND                          CREATED
 
 This will run a docker container using the agent docker image.
 
-# Community
-Please join open-appsec community and follow us on LinkedIn.
-
-* [Community](https://www.openappsec.io/community)
-* [LinkedIn](https://www.linkedin.com/company/open-appsec)
-
-
 # Contributing
 We welcome everyone that wishes to share their knowledge and expertise to enhance and expand the project.
 
