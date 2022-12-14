@@ -48,7 +48,7 @@ wget https://downloads.openappsec.io/open-appsec-k8s-install && chmod +x open-ap
 ./open-appsec-k8s-install
 ```
 
-Installer for standard NGINX:
+Installer for standard NGINX (list of supported/pre-compiled NGINX attachements is available [here](https://downloads.openappsec.io/supported-nginx.txt)):
 
 ```bash
 wget https://downloads.openappsec.io/open-appsec-nginx-install && chmod +x open-appsec-nginx-install
