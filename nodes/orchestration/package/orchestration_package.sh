@@ -655,6 +655,9 @@ copy_orchestration_executable()
     cp_print "Copying cp-nano-agent binary file to folder: ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}" $FORCE_STDOUT
     cp_copy "$ORCHESTRATION_EXE_SOURCE_PATH" ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}"
+    cp_copy open-appsec-cloud-mgmt ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-cloud-mgmt
+    cp_copy open-appsec-cloud-mgmt-k8s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-cloud-mgmt-k8s
+    cp_copy open-appsec-ctl.sh ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-ctl.sh
     if [ $var_hybrid_mode = true ]; then
         cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
     fi

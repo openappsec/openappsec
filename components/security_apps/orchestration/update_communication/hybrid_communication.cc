@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "hybrid_communication.h"
+#include "update_policy_notification.h"
 #include "rest.h"
 #include "config.h"
 #include "log_generator.h"
@@ -30,66 +31,20 @@ using HTTPMethod = I_Messaging::Method;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
+#define TUNING_HOST_ENV_NAME "TUNING_HOST"
+static const string defaultTuningHost = "appsec-tuning-svc";
+
 void
 HybridCommunication::init()
 {
     FogAuthenticator::init();
+    declarative_policy_utils.init();
     dbgTrace(D_ORCHESTRATOR) << "Initializing the Hybrid Communication Component";
     if (getConfigurationFlag("otp") != "") {
         otp = getConfigurationFlag("otp");
     } else {
         otp = "cp-3fb5c718-5e39-47e6-8d5e-99b4bc5660b74b4b7fc8-5312-451d-a763-aaf7872703c0";
     }
-}
-
-string
-HybridCommunication::getChecksum(const string &policy_version)
-{
-    string clean_plicy_version = policy_version;
-    if (!clean_plicy_version.empty() && clean_plicy_version[clean_plicy_version.size() - 1] == '\n') {
-        clean_plicy_version.erase(clean_plicy_version.size() - 1);
-    }
-
-    curr_policy = Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->parsePolicy(clean_plicy_version);
-
-    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogAuthenticator>();
-    Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
-        I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-        Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->getPolicyPath()
-    );
-
-    if (!file_checksum.ok()) {
-        dbgWarning(D_ORCHESTRATOR) << "Failed the policy checksum calculation";
-        return "";
-    }
-    return file_checksum.unpack();
-}
-
-Maybe<string>
-HybridCommunication::getNewVersion()
-{
-    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogAuthenticator>();
-    auto env = Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->getEnvType();
-    if (env == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S) {
-        return orchestration_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
-    }
-
-    string policy_path = getConfigurationFlagWithDefault(
-        getFilesystemPathConfig() + "/conf/local_policy.yaml",
-        "local_mgmt_policy"
-    );
-
-    Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
-        I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-        policy_path
-    );
-
-    if (!file_checksum.ok()) {
-        dbgWarning(D_ORCHESTRATOR) << "Policy checksum was not calculated: " << file_checksum.getErr();
-        return genError(file_checksum.getErr());
-    }
-
-    return file_checksum.unpack();
 }
 
 Maybe<void>
@@ -117,32 +72,61 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
         dbgWarning(D_ORCHESTRATOR) << "Acccess Token not available.";
     }
 
-    dbgTrace(D_ORCHESTRATOR) << "Getting policy update in Hybrid Communication";
-
-    auto maybe_new_version = getNewVersion();
-    if (!maybe_new_version.ok() || maybe_new_version == curr_version) {
+    if (!declarative_policy_utils.shouldApplyPolicy()) {
         request = CheckUpdateRequest(manifest_checksum, "", "", "", "", "");
-        dbgDebug(D_ORCHESTRATOR) << "No new version is currently available";
         return Maybe<void>();
     }
 
-    auto policy_checksum = request.getPolicy();
+    dbgTrace(D_ORCHESTRATOR) << "Getting policy update in Hybrid Communication";
 
-    auto offline_policy_checksum = getChecksum(maybe_new_version.unpack());
+    string policy_response = declarative_policy_utils.getUpdate(request);
 
-    string policy_response = "";
+    auto env = Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->getEnvType();
+    if (env == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S && !policy_response.empty()) {
+        dbgDebug(D_ORCHESTRATOR) << "Policy has changes, sending notification to tuning host";
+        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<HybridCommunication>();
+        I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<HybridCommunication>();
 
-    if (!policy_checksum.ok() || offline_policy_checksum != policy_checksum.unpack()) {
-        policy_response = offline_policy_checksum;
+        UpdatePolicyCrdObject policy_change_object(policy_response);
+
+        Flags<MessageConnConfig> conn_flags;
+        conn_flags.setFlag(MessageConnConfig::EXTERNAL);
+
+        string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
+
+        auto get_tuning_host = []()
+            {
+                static string tuning_host;
+                if (tuning_host != "") return tuning_host;
+
+                char* tuning_host_env = getenv(TUNING_HOST_ENV_NAME);
+                if (tuning_host_env != NULL) {
+                    tuning_host = string(tuning_host_env);
+                    return tuning_host;
+                }
+                dbgWarning(D_ORCHESTRATOR) << "tuning host is not set. using default";
+                tuning_host = defaultTuningHost;
+
+                return tuning_host;
+            };
+
+        bool ok = messaging->sendNoReplyObject(
+            policy_change_object,
+            I_Messaging::Method::POST,
+            get_tuning_host(),
+            80,
+            conn_flags,
+            "/api/update-policy-crd",
+            tenant_header
+        );
+        dbgDebug(D_ORCHESTRATOR) << "sent tuning policy update notification ok: " << ok;
+        if (!ok) {
+            dbgWarning(D_ORCHESTRATOR) << "failed to send  tuning notification";
+        }
     }
 
-    dbgDebug(D_ORCHESTRATOR)
-        << "Local update response: "
-        << " policy: "
-        << (policy_response.empty() ? "has no change," : "has new update," );
-
     request = CheckUpdateRequest(manifest_checksum, policy_response, "", "", "", "");
-    curr_version = *maybe_new_version;
+    declarative_policy_utils.turnOffApplyPolicyFlag();
 
     return Maybe<void>();
 }
@@ -155,9 +139,8 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         << resourse_file.getFileName();
 
     if (resourse_file.getFileName() == "policy") {
-        return curr_policy;
+        return declarative_policy_utils.getCurrPolicy();
     }
-
 
     if (resourse_file.getFileName() == "manifest") {
         if (!access_token.ok()) return genError("Acccess Token not available.");

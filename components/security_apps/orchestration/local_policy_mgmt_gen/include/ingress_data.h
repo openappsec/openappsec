@@ -23,7 +23,7 @@
 #include "cereal/archives/json.hpp"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 class IngressMetadata
 {
 public:
@@ -220,5 +220,5 @@ private:
     std::string apiVersion;
     std::vector<SingleIngressData> items;
 };
-
+// LCOV_EXCL_STOP
 #endif // __INGRESS_DATA_H__

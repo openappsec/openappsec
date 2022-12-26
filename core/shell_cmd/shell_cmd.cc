@@ -68,7 +68,7 @@ public:
             return genError("Cannot execute an empty command");
         }
 
-        uint max_ms_tmout = getConfigurationWithDefault(10000u, "Infra", "Shell Command Timeout");
+        uint max_ms_tmout = getConfigurationWithDefault(400000u, "Infra", "Shell Command Timeout");
         if (ms_tmout > max_ms_tmout) {
             return genError("Provided timeout is too long, max timeout is " + to_string(max_ms_tmout));
         }

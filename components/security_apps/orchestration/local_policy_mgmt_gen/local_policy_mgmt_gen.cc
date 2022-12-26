@@ -56,7 +56,7 @@ const static string policy_key = "policy";
 const static string syslog_key = "syslog";
 const static string mode_key = "mode";
 const static string local_mgmt_policy_path = "/conf/local_policy.yaml";
-
+// LCOV_EXCL_START Reason: no test exist
 class SecurityAppsWrapper
 {
 public:
@@ -719,8 +719,16 @@ public:
                     default_rule.getTrustedSources() :
                     parsed_rule.getTrustedSources();
 
-                string url = asset_name.substr(0, asset_name.find("/"));
-                string uri = asset_name.substr(asset_name.find("/"));
+                auto pos = asset_name.find("/");
+                string url;
+                string uri;
+                if (pos != string::npos) {
+                    url = asset_name.substr(0, asset_name.find("/"));
+                    uri = asset_name.substr(asset_name.find("/"));
+                } else {
+                    url = asset_name;
+                    uri = "";
+                }
                 if (specific_assets_from_ingress.find({url, uri}) != specific_assets_from_ingress.end()) {
                     // Erasing the current asset from the specific assets, because it won't have default policy
                     specific_assets_from_ingress.erase({url, uri});
@@ -1247,7 +1255,8 @@ private:
                     uid,
                     EnvKeyAttr::LogSection::SOURCE
                 );
-                Singleton::Consume<I_AgentDetails>::by<LocalPolicyMgmtGenerator::Impl>()->setClusterId(playground_uid + uid);
+                auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<LocalPolicyMgmtGenerator::Impl>();
+                i_agent_details->setClusterId(playground_uid + uid);
                 return true;
             }
         }
@@ -1688,4 +1697,4 @@ LocalPolicyMgmtGenerator::init()
 void
 LocalPolicyMgmtGenerator::preload()
 {}
-
+// LCOV_EXCL_STOP

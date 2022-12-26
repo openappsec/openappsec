@@ -50,6 +50,7 @@ public:
     void
     preload()
     {
+        registerExpectedSetting<string>("profileManagedMode");
         FogAuthenticator::preload();
         LocalCommunication::preload();
     }

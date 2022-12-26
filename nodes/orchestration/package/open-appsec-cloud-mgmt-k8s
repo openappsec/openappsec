@@ -1,0 +1,285 @@
+#!/bin/bash
+
+POLICY_CRDS_PATH="/tmp/policy_crds.json"
+APISERVER=https://kubernetes.default.svc
+SERVICEACCOUNT=/var/run/secrets/kubernetes.io/serviceaccount
+TOKEN=$(cat ${SERVICEACCOUNT}/token)
+NAMESPACE=$(cat ${SERVICEACCOUNT}/namespace)
+CACERT=${SERVICEACCOUNT}/ca.crt
+ra_token=
+tenant_id=
+agent_id=
+profile_id=
+cluster_id=
+latest_policy_version=1
+
+load_agent_details()
+{
+    tenant_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Tenant ID|TenantID|g" | /etc/cp/bin/yq -P '.TenantID')
+    agent_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Agent ID|AgentID|g" | /etc/cp/bin/yq -P '.AgentID')
+    profile_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Profile ID|ProfileID|g" | /etc/cp/bin/yq -P '.ProfileID')
+    cluster_id=$(echo $(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET ${APISERVER}/api/v1/namespaces/ ) \
+        | /etc/cp/bin/yq .items | /etc/cp/bin/yq  '.[] | select(.metadata.name  | contains("kube-system"))' | /etc/cp/bin/yq .metadata.uid)
+}
+
+get_latest_policy_version()
+{
+    bucket_list=$(curl -s -w "%{http_code}\n" --request GET \
+        -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Authorization: Bearer ${ra_token}" \
+        "$var_fog/agents-core/storage/?list-type=2&prefix=${tenant_id}/${profile_id}")
+    paths_list=$(echo $bucket_list  | /etc/cp/bin/yq -p xml | grep "/policy")
+
+    prefix="${tenant_id}/${profile_id}"
+    paths=$(echo $paths_list | tr " " "\n" | grep / )
+    for path in $paths; do
+        new_path=$(echo ${path%/*})
+        version=$(echo ${new_path##*/})
+        if [[ $version =~ ^-?[0-9]+$ ]] && [  $latest_policy_version -lt $version  ]; then
+            latest_policy_version=$version
+        fi
+    done
+    latest_policy_version=$((latest_policy_version+1))
+    echo "Policy version: $latest_policy_version"
+}
+
+concat_to_policy()
+{
+    crd_to_concat="$1"
+    is_first=$2
+    if [ ! -z $is_first ]; then
+        POLICY="$POLICY \"$1\": "
+    else
+        POLICY="$POLICY, \"$1\": "
+    fi
+    CRD=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+        -X GET ${APISERVER}/apis/openappsec.io/v1beta1/$crd_to_concat)
+    CRD=$(echo $CRD|tr -d '\n')
+    if [ -z "$CRD" ]; then
+        CRD="{}"
+    fi
+    POLICY="$POLICY $CRD"
+}
+
+generate_policy()
+{
+    POLICY="{ \"Policy\": {"
+    concat_to_policy policies true
+    concat_to_policy practices
+    concat_to_policy logtriggers
+    concat_to_policy customresponses
+    concat_to_policy exceptions
+    concat_to_policy sourcesidentifiers
+    concat_to_policy trustedsources
+
+    POLICY="$POLICY, \"assets\": { \"items\":[ "
+
+    FIRST="1"
+    all_ingresses=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+        -X GET ${APISERVER}/apis/networking.k8s.io/v1/ingresses)
+    namespaces=$(echo $all_ingresses | /etc/cp/bin/yq -P '.items[].metadata.namespace')
+
+    for ns in ${namespaces}; do
+        ingress_in_ns=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+            -X GET ${APISERVER}/apis/networking.k8s.io/v1/namespaces/${ns}/ingresses)
+        ingress_list=$(echo $ingress_in_ns | /etc/cp/bin/yq -P '.items[].metadata.name')
+        for ingress_name in ${ingress_list}; do
+            ingress_crd=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+                -X GET ${APISERVER}/apis/networking.k8s.io/v1/namespaces/${ns}/ingresses/${ingress_name})
+
+            if echo $ingress_crd | grep -n "openappsec" 1>/dev/null; then
+                ingress_crd=$(echo $ingress_crd | tr -d '\n')
+            fi
+            if [ "$FIRST" = "0" ]; then
+                POLICY="$POLICY ,"
+            fi
+            POLICY="$POLICY $ingress_crd"
+            FIRST="0"
+        done
+    done
+
+    POLICY="$POLICY ] } } }"
+    echo $POLICY > $POLICY_CRDS_PATH
+}
+
+upload_the_crds_to_s3()
+{
+    echo "Uploading local configuration to cloud..."
+    upload_res="$(curl -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${POLICY_CRDS_PATH}" \
+        -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${ra_token}" \
+        "$var_fog/agents-core/storage/$tenant_id/$profile_id/$latest_policy_version/policy-$cluster_id.json")"
+
+    if test "$upload_res" != "200"; then
+        echo "Failed uploading CRDs to cloud: Failed Error code ${upload_res}"
+        return 1
+    fi
+
+    check_file_exists="$(curl -o /dev/null -s -w "%{http_code}\n" --request GET -H "user-agent: Infinity Next (a7030abf93a4c13)" \
+        -H "Authorization: Bearer ${ra_token}" \
+        "$var_fog/agents-core/storage/$tenant_id/$profile_id/$latest_policy_version/policy-$cluster_id.json")"
+    if test "$check_file_exists" != "200"; then
+        echo "Failed uploading CRD to cloud: Failed on checking the file.  Error code ${check_file_exists}"
+        return 1
+    fi
+}
+
+send_notification_to_the_fog()
+{
+    correlation_id=$(cat /proc/sys/kernel/random/uuid)
+    DATE=$(date "+%FT%T.000")
+    upload_res=$(curl -o /dev/null -s -w "%{http_code}\n" --request POST "$var_fog/api/v1/agents/events/bulk" \
+        -H "X-Trace-Id:${correlation_id}" --header "Authorization: Bearer ${ra_token}" \
+        --header "user-agent: Infinity Next (a7030abf93a4c13)" --header "Content-Type: application/json" \
+        --data "{\"logs\": [{\"log\": {\"eventTime\": \"$DATE\",\"eventName\": \
+        \"Agent started onboarding process to cloud management\",\"eventSeverity\": \"Info\",\"eventPriority\": \
+        \"Urgent\",\"eventLogLevel\": \"info\",\"eventType\": \"Event Driven\",\"eventLevel\": \"Log\",\"eventAudience\": \
+        \"Internal\",\"eventAudienceTeam\": \"Agent Core\",\"eventFrequency\": 0,\"eventSource\": {\"serviceName\": \
+        \"Orchestration\",\"agentId\": \"$agent_id\",\"tenantId\": \"$tenant_id\",\"serviceId\": \"1\",\"issuingEngineVersion\": \
+        \"1.2229.123456\",\"issuingEngine\": \"onboardingInfoProvider\"},\"eventData\": {\"eventObject\": {\"onboardingInfo\": \
+        {\"policyVersion\": $latest_policy_version,\"clusterId\": \"$cluster_id\",\"profileId\": \"$profile_id\"}}},\
+        \"eventTags\": [\"Orchestration\"]}, \"tenantId\": \"$tenant_id\", \"id\": 1}]}")
+
+    if test "$upload_res" != "200"; then
+        sleep 5
+        upload_res=$(curl -o /dev/null -s -w "%{http_code}\n" --request POST "$var_fog/api/v1/agents/events/bulk" \
+            -H "X-Trace-Id:${correlation_id}" --header "Authorization: Bearer ${ra_token}" \
+            --header "user-agent: Infinity Next (a7030abf93a4c13)" --header "Content-Type: application/json" \
+            --data "{\"logs\": [{\"log\": {\"eventTime\": \"$DATE\",\"eventName\": \
+            \"Agent started onboarding process to cloud management\",\"eventSeverity\": \"Info\",\"eventPriority\": \
+            \"Urgent\",\"eventLogLevel\": \"info\",\"eventType\": \"Event Driven\",\"eventLevel\": \"Log\",\
+            \"eventAudience\": \"Internal\",\"eventAudienceTeam\": \"Agent Core\",\"eventFrequency\": 0,\"eventSource\": \
+            {\"serviceName\": \"Orchestration\",\"agentId\": \"$agent_id\",\"tenantId\": \"$tenant_id\",\
+            \"serviceId\": \"1\",\"issuingEngineVersion\": \"1.2229.123456\",\"issuingEngine\": \"onboardingInfoProvider\"},\
+            \"eventData\": {\"eventObject\": {\"onboardingInfo\": {\"policyVersion\": $latest_policy_version,\
+            \"clusterId\": \"$cluster_id\",\"profileId\": \"$profile_id\"}}},\"eventTags\": [\"Orchestration\"]}, \
+            \"tenantId\": \"$tenant_id\", \"id\": 1}]}")
+        if test "$upload_res" != "200"; then
+            echo "Failed to notify the FOG on the new CRDs: Failed Error code ${upload_res}"
+            return 1
+        fi
+    fi
+}
+
+poll_for_status_file()
+{
+    correlation_id=$(cat /proc/sys/kernel/random/uuid)
+
+    attempt_counter=0
+    max_attempts=18
+
+    until [ ${attempt_counter} -eq ${max_attempts} ]; do
+        if [ ${attempt_counter} -eq ${max_attempts} ];then
+            echo "Max attempts reached"
+            exit 1
+        fi
+        file_exists="$(curl -s -w "%{http_code}\n" --request GET -H "user-agent: Infinity Next (a7030abf93a4c13)" \
+            -H "Authorization: Bearer ${ra_token}" \
+            "$var_fog/agents-core/storage/$tenant_id/$profile_id/$latest_policy_version/status-$cluster_id.json")"
+
+        check_file_exists=$(echo $file_exists | grep 200)
+        if [ ! -z "$check_file_exists" ]; then
+            FAILURE=$(echo $file_exists | grep "false")
+            if [ ! -z "$FAILURE" ]; then
+                echo "Failed creating the Assets: $(echo $file_exists | cut -c27- | cut -d '"' -f 1)"
+                exit 1
+            else
+                echo "."
+                return 0
+            fi
+        else
+            echo -n '.'
+            attempt_counter=$(($attempt_counter+1))
+            sleep 10
+        fi
+    done
+    echo "Error: Status file was not generated"
+    exit 1
+}
+
+upload_crds_to_the_cloud()
+{
+    STATUS="FAILURE"
+    load_agent_details
+    get_latest_policy_version
+    generate_policy
+
+    upload_the_crds_to_s3
+    if [ "$?" = "1" ]; then
+        echo "Failed uploading the CRDs to S3"
+        exit 1
+    fi
+
+    send_notification_to_the_fog
+    if [ "$?" = "1" ]; then
+        echo "Failed Notifying to FOG"
+        exit 1
+    fi
+
+    poll_for_status_file
+    if [ "$?" = "0" ]; then
+        STATUS="SUCCESS"
+    fi
+
+    if [ "$STATUS" = "FAILURE" ]; then
+        echo "Failed to upload CRDs to the cloud"
+        exit 1
+    fi
+}
+
+usage()
+{
+    echo "Usage: $0 --token <token> [options...] ]"
+    echo "    --token <token>                     : Registration token"
+    echo "Options:"
+    echo "    --fog       <fog address>          : Namespace with the relevant Helm Chart"
+    echo "    --upload_policy_only               : Upload policy to the fog, withput changing agent mode"
+    exit 255
+}
+
+validate_flags()
+{
+    if [ -z $var_token ]; then
+        usage
+        exit 1
+    fi
+}
+
+validate_arg_value_exists()
+{
+    if test "$2" = "1"; then
+        echo "Error: The script is missing value for '$1'"
+        usage
+        exit 1
+    fi
+}
+
+while true; do
+    if [ "$1" = "--token" ]; then
+        validate_arg_value_exists "$1" "$#"
+        shift
+        var_token="$1"
+    elif [ "$1" = "--fog" ]; then
+        validate_arg_value_exists "$1" "$#"
+        shift
+        var_fog="$1"
+    elif [ "$1" = "--access_token" ] || [ "$1" = "-at" ]; then
+        validate_arg_value_exists "$1" "$#"
+        shift
+        ra_token="$1"
+    elif [ -z "$1" ]; then
+        break
+    fi
+    shift
+done
+
+if [ -z "$var_fog" ]; then
+    var_fog=$(cat /etc/cp/conf/agent_details.json | sed "s|Fog domain|Fogdomain|g" | /etc/cp/bin/yq -P '.Fogdomain')
+    var_fog="https://$var_fog"
+fi
+
+upload_crds_to_the_cloud
+if [ "$?" = "0" ]; then
+    echo "SUCCESS"
+fi
+
+exit 0

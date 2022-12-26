@@ -24,7 +24,7 @@
 #include "rest.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 enum class PracticeType { WebApplication, WebAPI };
 enum class TriggerType { Log, WebUserResponse };
 enum class MatchType { Condition, Operator };
@@ -102,5 +102,5 @@ public:
 private:
     T spec;
 };
-
+// LCOV_EXCL_STOP
 #endif // __K8S_POLICY_COMMON_H__

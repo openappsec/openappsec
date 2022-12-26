@@ -31,9 +31,17 @@ using HTTPMethod = I_Messaging::Method;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
+void
+FogCommunication::init()
+{
+    FogAuthenticator::init();
+    declarative_policy_utils.init();
+}
+
 Maybe<void>
 FogCommunication::getUpdate(CheckUpdateRequest &request)
 {
+    dbgTrace(D_ORCHESTRATOR) << "Getting updates - fog Communication";
     if (!access_token.ok()) return genError("Acccess Token not available.");
 
     auto unpacked_access_token = access_token.unpack().getToken();
@@ -49,6 +57,41 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
         dbgDebug(D_ORCHESTRATOR) << "Failed to get response after check update request.";
         return genError("Failed to request updates");
     }
+
+    string policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
+    dbgTrace(D_ORCHESTRATOR) << "Profile managed mode: " << policy_mgmt_mode;
+    if (policy_mgmt_mode == "declarative") {
+        Maybe<string> maybe_new_manifest = request.getManifest();
+        string manifest_checksum = maybe_new_manifest.ok() ? maybe_new_manifest.unpack() : "";
+
+        Maybe<string> maybe_new_settings = request.getSettings();
+        string settings_checksum = maybe_new_settings.ok() ? maybe_new_settings.unpack() : "";
+
+        Maybe<string> maybe_new_data = request.getData();
+        string data_checksum = maybe_new_data.ok() ? maybe_new_data.unpack() : "";
+
+        if (declarative_policy_utils.shouldApplyPolicy()) {
+            string policy_response = declarative_policy_utils.getUpdate(request);
+            if (!policy_response.empty()) {
+                dbgTrace(D_ORCHESTRATOR) << "Apply policy - declarative mode";
+                auto agent_details = Singleton::Consume<I_AgentDetails>::by<DeclarativePolicyUtils>();
+                auto maybe_fog_address = agent_details->getFogDomain();
+                string fog_address = maybe_fog_address.ok() ? maybe_fog_address.unpack() : "";
+
+                declarative_policy_utils.sendUpdatesToFog(
+                    unpacked_access_token,
+                    agent_details->getTenantId(),
+                    agent_details->getProfileId(),
+                    fog_address
+                );
+            }
+            request = CheckUpdateRequest(manifest_checksum, policy_response, settings_checksum, data_checksum, "", "");
+            declarative_policy_utils.turnOffApplyPolicyFlag();
+        } else {
+            request = CheckUpdateRequest(manifest_checksum, "", settings_checksum, data_checksum, "", "");
+        }
+    }
+
     dbgDebug(D_ORCHESTRATOR) << "Got response after check update request.";
     return Maybe<void>();
 }
@@ -60,6 +103,11 @@ FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
 
     auto unpacked_access_token = access_token.unpack().getToken();
 
+    string policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
+    if (policy_mgmt_mode == "declarative" && resourse_file.getFileName() =="policy") {
+        dbgDebug(D_ORCHESTRATOR) << "Download policy on declarative mode - returnig the local policy";
+        return declarative_policy_utils.getCurrPolicy();
+    }
     static const string file_attribute_str = "/api/v2/agents/resources/";
     Maybe<string> attribute_file = Singleton::Consume<I_Messaging>::by<FogCommunication>()->downloadFile(
         resourse_file,

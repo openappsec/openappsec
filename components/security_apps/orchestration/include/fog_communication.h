@@ -33,13 +33,18 @@
 #include "i_time_get.h"
 #include "i_encryptor.h"
 #include "maybe_res.h"
+#include "declarative_policy_utils.h"
 
 class FogCommunication : public FogAuthenticator
 {
 public:
+    void init() override;
     Maybe<void> getUpdate(CheckUpdateRequest &request) override;
     Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) override;
     Maybe<void> sendPolicyVersion(const std::string &policy_version) const override;
+
+private:
+    DeclarativePolicyUtils declarative_policy_utils;
 };
 
 #endif // __FOG_COMMUNICATION_H__

@@ -26,7 +26,7 @@
 #include "k8s_policy_common.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 class AssetUrlParser
 {
 public:
@@ -227,7 +227,7 @@ public:
         triggers(_triggers)
     {
         try {
-            id = to_string(boost::uuids::random_generator()());
+            id = _url+_uri;
             bool any = _name == "Any" && _url == "Any" && _uri == "Any";
             if (_uri != "/") {
                 context = any ? "All()" : "Any("
@@ -387,5 +387,5 @@ public:
 private:
     RulesConfig rules_config_rulebase;
 };
-
+// LCOV_EXCL_STOP
 #endif // __RULES_CONFIG_SECTION_H__

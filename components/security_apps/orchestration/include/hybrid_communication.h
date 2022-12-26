@@ -35,6 +35,7 @@
 #include "i_time_get.h"
 #include "i_encryptor.h"
 #include "maybe_res.h"
+#include "declarative_policy_utils.h"
 
 class HybridCommunication
         :
@@ -42,17 +43,15 @@ class HybridCommunication
     Singleton::Consume<I_LocalPolicyMgmtGen>
 {
 public:
-    virtual void init() override;
+    void init() override;
     Maybe<void> getUpdate(CheckUpdateRequest &request) override;
     Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) override;
     Maybe<void> sendPolicyVersion(const std::string &policy_version) const override;
-    std::string getChecksum(const std::string &policy_version);
 
 private:
     Maybe<std::string> getNewVersion();
 
-    std::string curr_version;
-    std::string curr_policy;
+    DeclarativePolicyUtils declarative_policy_utils;
 };
 
 #endif // __HYBRID_COMMUNICATION_H__

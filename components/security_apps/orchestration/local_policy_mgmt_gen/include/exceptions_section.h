@@ -26,7 +26,7 @@
 #include "k8s_policy_common.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 class AppsecExceptionSpec
 {
 public:
@@ -309,5 +309,5 @@ public:
 private:
     Exception exception_rulebase;
 };
-
+// LCOV_EXCL_STOP
 #endif // __EXCEPTPIONS_SECTION_H__

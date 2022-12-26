@@ -23,7 +23,7 @@
 #include "debug.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 class AgentSettingsSection
 {
 public:
@@ -75,5 +75,5 @@ public:
 private:
     std::vector<AgentSettingsSection> agentSettings;
 };
-
+// LCOV_EXCL_STOP
 #endif // __SNORT_SECTION_H__

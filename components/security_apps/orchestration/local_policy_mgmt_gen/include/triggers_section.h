@@ -24,7 +24,7 @@
 #include "k8s_policy_common.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 class LogTriggerSection
 {
 public:
@@ -633,5 +633,5 @@ public:
 private:
     TriggersRulebase triggers_rulebase;
 };
-
+// LCOV_EXCL_STOP
 #endif // __TRIGGERS_SECTION_H__

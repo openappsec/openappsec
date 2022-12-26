@@ -31,7 +31,7 @@
 #include "trusted_sources_section.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
-
+// LCOV_EXCL_START Reason: no test exist
 class AppSecWebBotsURI
 {
 public:
@@ -700,9 +700,9 @@ public:
 
     const std::string & getMode() const { return mode; }
 
-    void setHost(const std::string &_host) { host = _host; };
+    void setHost(const std::string &_host) { host = _host; }
 
-    void setMode(const std::string &_mode) { mode = _mode; };
+    void setMode(const std::string &_mode) { mode = _mode; }
 
     const std::string & getCustomResponse() const { return custom_response; }
 
@@ -827,5 +827,5 @@ operator<<(std::ostream &os, const AppsecPolicySpec &obj)
         << std::endl << "]";
     return os;
 }
-
+// LCOV_EXCL_STOP
 #endif // __APPSEC_PRACTICE_SECTION_H__
