@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "time_print.h"
 #include "components_list.h"
 #include "nginx_attachment.h"
 #include "gradual_deployment.h"
