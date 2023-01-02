@@ -13,9 +13,6 @@
 
 #include "local_communication.h"
 #include "config.h"
-#include "sasal.h"
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 
@@ -183,5 +180,3 @@ LocalCommunication::sendPolicyVersion(const string &) const
     dbgTrace(D_ORCHESTRATOR) << "Agent in offline mode, no need to send policy version";
     return Maybe<void>();
 }
-
-SASAL_END

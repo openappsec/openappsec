@@ -13,9 +13,7 @@
 
 #include "general_adaptor.h"
 #include <stdlib.h>
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 void fw_kfree(void *addr, CP_MAYBE_UNUSED size_t size, CP_MAYBE_UNUSED const char *caller)
 {
     free(addr);
@@ -62,4 +60,3 @@ void kiss_pmglob_memory_kfree(void *addr, CP_MAYBE_UNUSED size_t size, CP_MAYBE_
     free(addr);
     return;
 }
-SASAL_END

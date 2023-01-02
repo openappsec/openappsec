@@ -46,13 +46,10 @@
 #include "agent_details.h"
 #include "messaging_buffer/http_request_event.h"
 #include "boost/asio.hpp"
-#include "sasal.h"
 #include "message_metric.h"
 #include "smart_bio.h"
 #include "connkey.h"
 #include "agent_core_utilities.h"
-
-SASAL_START // Communication
 
 using namespace std;
 using namespace chrono;
@@ -343,6 +340,7 @@ public:
         }
         stringstream token_steam;
         token_steam << token_file.rdbuf();
+
         auto new_token = token_steam.str();
         if (access_token != new_token) {
             access_token = new_token;
@@ -2077,5 +2075,3 @@ ProtoMessageComp::preload()
     registerExpectedConfiguration<string>("message",   "Data printout type");
     registerExpectedConfiguration<uint32_t>("message", "Internal Fog error timeout");
 }
-
-SASAL_END

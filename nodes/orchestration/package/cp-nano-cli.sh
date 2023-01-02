@@ -5,7 +5,7 @@ LOG_FILE_PATH="/var/log"
 INIT_D_PATH="/etc/init.d"
 USR_LIB_PATH="/usr/lib"
 USR_SBIN_PATH="/usr/sbin"
-CP_NANO_CTL="open-appsec-ctl"
+CP_NANO_CTL="cpnano"
 BIN_PATH="bin"
 CP_NANO_BASE64="cpnano_base64"
 INSTALL_DIR_INDEX=1
@@ -27,7 +27,7 @@ var_default_fog_address="i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="inext-agents-us.cloud.ngen.checkpoint.com"
 
-#NOTE: open-appsec-ctl only supports nano services with name of the format cp-nano-<service>
+#NOTE: cpnano only supports nano services with name of the format cp-nano-<service>
 cp_nano_service_name_prefix="cp-nano"
 
 cp_nano_conf_suffix="conf.json"
@@ -264,11 +264,7 @@ usage()
     set_public_key="-pk, --set-public-key <Public key file path>"
     set_traffic_recording_policy_option="-tr, --traffic-recording-policy <off|req_hdr|req_body|resp_hdr|resp_body>"
     print_metrics_option="-pm, --print-metrics <service>"
-    view_policy_option="-vp, --view-policy [policy-file]"
-    edit_policy_option="-ep, --edit-policy [policy-file]"
-    apply_policy_option="-ap, --apply-policy [policy-file]"
-    list_policy_option="-lp, --list-policies"
-    view_logs_option="-vl, --view-logs"
+
     # Padding makes each comment to start a specific index, increase 'line_padding' when option length is bigger than pedding.
     line_padding='                                                                                                          '
     echo "Options:"
@@ -279,21 +275,16 @@ usage()
     printf "%s %s : Start a service previously stopped\n" "$start_service_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#start_service_option})))")"
     printf "%s %s : Stop service\n" "$stop_service_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#stop_service_option})))")"
     printf "%s %s : Uninstall agent\n" "$uninstall_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#uninstall_option})))")"
-    printf "%s %s : Open a policy file as read only\n" "$view_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#view_policy_option})))")"
-    printf "%s %s : Open and edit a policy file\n" "$edit_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#edit_policy_option})))")"
-    printf "%s %s : Apply a new policy file\n" "$apply_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#apply_policy_option})))")"
-    printf "%s %s : View list of used policy files\n" "$list_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#list_policy_option})))")"
-    printf "%s %s : View security logs\n" "$view_logs_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#view_logs_option})))")"
-   # printf "%s %s : Load configuration\n" "$load_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#load_config_option})))")"
-   # printf "%s %s : Set proxy\n" "$proxy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#proxy_option})))")"
-   # printf "%s %s : Display configuration\n" "$display_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_config_option})))")"
-   # printf "%s %s : Create open-appsec agent info\n" "$cp_agent_info_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#cp_agent_info_option})))")"
-   # printf "%s %s : Display current policy\n" "$display_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_policy_option})))")"
-   # printf "%s %s : Load gradual policy\n" "$set_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_gradual_policy_option})))")"
-   # printf "%s %s : Remove gradual policy\n" "$delete_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#delete_gradual_policy_option})))")"
-   # printf "%s %s : Set the SSL certificate's public key file path (PEM format)\n" "$set_public_key" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_public_key})))")"
-   # printf "%s %s : Set traffic recording policy\n" "$set_traffic_recording_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_traffic_recording_policy_option})))")"
-   # printf "%s %s : Print metrics report\n" "$print_metrics_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#print_metrics_option})))")"
+    printf "%s %s : Load configuration\n" "$load_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#load_config_option})))")"
+    printf "%s %s : Set proxy\n" "$proxy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#proxy_option})))")"
+    printf "%s %s : Display configuration\n" "$display_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_config_option})))")"
+    printf "%s %s : Create Check Point agent info\n" "$cp_agent_info_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#cp_agent_info_option})))")"
+    printf "%s %s : Display current policy\n" "$display_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_policy_option})))")"
+    printf "%s %s : Load gradual policy\n" "$set_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_gradual_policy_option})))")"
+    printf "%s %s : Remove gradual policy\n" "$delete_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#delete_gradual_policy_option})))")"
+    printf "%s %s : Set the SSL certificate's public key file path (PEM format)\n" "$set_public_key" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_public_key})))")"
+    printf "%s %s : Set traffic recording policy\n" "$set_traffic_recording_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_traffic_recording_policy_option})))")"
+    printf "%s %s : Print metrics report\n" "$print_metrics_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#print_metrics_option})))")"
 
     exit 255
 }
@@ -472,15 +463,15 @@ read_agent_run_status() # Initials - rars
     rars_output=$(tail -n 1 /tmp/agent-status.txt)
     if [ "$1" = "start" ]; then
         if [ "$rars_output" = "running" ]; then
-            echo "open-appsec Nano Agent watchdog started successfully"
+            echo "Check Point Nano Agent watchdog started successfully"
         else
-            echo "open-appsec Nano Agent is already running"
+            echo "Check Point Nano Agent is already running"
         fi
     else # "$1" = "stop"
         if [ "$rars_output" = "down" ]; then
-            echo "open-appsec Nano Agent stopped successfully"
+            echo "Check Point Nano Agent stopped successfully"
         else
-            echo "open-appsec Nano Agent is not running"
+            echo "Check Point Nano Agent is not running"
         fi
     fi
 }
@@ -536,7 +527,7 @@ run_stop_agent()
 
 uninstall_agent() # Initials - ua
 {
-    printf "Are you sure you want to uninstall open-appsec Nano Agent? (Y/N): " && read -r ua_confirm
+    printf "Are you sure you want to uninstall Check Point Nano Agent? (Y/N): " && read -r ua_confirm
     case $ua_confirm in
     [Yy] | [Yy][Ee][Ss]) ;;
     *) exit 1 ;;
@@ -549,9 +540,9 @@ uninstall_agent() # Initials - ua
     fi
     ${ua_uninstall_script}
     if test "$?" = "0"; then
-        echo "open-appsec Nano Agent successfully uninstalled"
+        echo "Check Point Nano Agent successfully uninstalled"
     else
-        echo "Failed to uninstall open-appsec Nano Agent"
+        echo "Failed to uninstall Check Point Nano Agent"
         exit 1
     fi
 }
@@ -565,10 +556,10 @@ run_update_gradual_policy() # Initials - rugp
     rugp_service_name=$1
     shift
 
-    rugp_gp_usage="Usage: open-appsec-ctl -gp|--set-gradual-policy [access-control|http-manager] <ip-ranges>"
+    rugp_gp_usage="Usage: cpnano -gp|--set-gradual-policy [access-control|http-manager] <ip-ranges>"
     rugp_success_message="Gradual policy for $rugp_service_name was set successfully"
     if [ "$rugp_mod" = "delete" ]; then
-        rugp_gp_usage="Usage: open-appsec-ctl -dg|--delete-gradual-policy [access-control|http-manager]"
+        rugp_gp_usage="Usage: cpnano -dg|--delete-gradual-policy [access-control|http-manager]"
         rugp_success_message="Gradual policy for $rugp_service_name was deleted successfully"
     fi
 
@@ -630,7 +621,7 @@ run_update_gradual_policy() # Initials - rugp
 run_set_traffic_recording_policy() # Initials - rstrp
 {
     if [ "$1" != "off" ] && [ "$1" != "req_hdr" ] && [ "$1" != "req_body" ] && [ "$1" != "resp_hdr" ] && [ "$1" != "resp_body" ]; then
-        printf "Error: Could not set up traffic recording.\nUsage: open-appsec-ctl <-tr|--traffic-recording> <off|req_hdr|req_body|resp_hdr|resp_body>\n"
+        printf "Error: Could not set up traffic recording.\nUsage: cpnano <-tr|--traffic-recording> <off|req_hdr|req_body|resp_hdr|resp_body>\n"
         exit 1
     fi
 
@@ -833,7 +824,7 @@ print_single_service_status() # Initials - psss
         return
     fi
 
-    echo "---- open-appsec $(format_nano_service_name "$psss_service_name") Nano Service ----"
+    echo "---- Check Point $(format_nano_service_name "$psss_service_name") Nano Service ----"
 
     psss_is_userspace_process_running=$(is_userspace_running "$psss_service_name")
 
@@ -899,25 +890,6 @@ print_single_service_status() # Initials - psss
     fi
 }
 
-get_status_content()
-{
-    if [ "${remove_curl_ld_path}" = "true" ]; then
-        gsc_orch_status=$(LD_LIBRARY_PATH="" ${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/show-orchestration-status 2>&1)
-    else
-        gsc_orch_status=$(${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/show-orchestration-status 2>&1)
-    fi
-
-    if echo "$gsc_orch_status" | grep -q "update status"; then
-        gsc_line_count=$(echo "$gsc_orch_status" | grep -c '^')
-
-        gsc_temp_old_status=$(echo "$gsc_orch_status" | sed -r "${gsc_line_count},${gsc_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
-    else
-        gsc_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
-    fi
-
-    echo ${gsc_temp_old_status}
-}
-
 run_status() # Initials - rs
 {
     rs_orch_service_full_path=$(get_nano_service_path 'orchestration')
@@ -928,7 +900,7 @@ run_status() # Initials - rs
         rs_agent_version="Version $rs_agent_version"
     fi
 
-    echo "---- open-appsec Nano Agent ----"
+    echo "---- Check Point Nano Agent ----"
     echo "$rs_agent_version"
     if [ "$(is_userspace_running "watchdog")" = true ] || [ "$(is_userspace_running "agent")" = true ]; then
         format_colored_status_line "Status: Running"
@@ -944,30 +916,11 @@ run_status() # Initials - rs
 
     if echo "$rs_orch_status" | grep -q "update status"; then
         rs_line_count=$(echo "$rs_orch_status" | grep -c '^')
-        rs_policy_load_time="$(echo "${rs_orch_status}" | grep "Last policy update"| sed "s|\"||g" | sed "s|,||g")"
-
-        rs_temp_old_status=$(echo "$rs_orch_status" | sed -r "${rs_line_count},${rs_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
+        echo "$rs_orch_status" | sed -r "${rs_line_count},${rs_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g'
     else
-        rs_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
-        rs_policy_load_time="$(cat /etc/cp/conf/orchestrations_status.json | grep "Last policy update" | sed "s|\"||g" | sed "s|,||g")"
+        sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g'
     fi
 
-    if [ -n "$(cat /etc/cp/conf/agent_details.json | grep "hybrid_mode")" ]; then
-        rs_mgmt_mode_text="Local management"
-    else
-        rs_mgmt_mode_text="Cloud management"
-    fi
-    echo "Management mode: ${rs_mgmt_mode_text}"
-    echo "Policy files: "
-    echo "    /etc/cp/conf/local_policy.yaml"
-
-    if [ -n "$(echo ${rs_temp_old_status} | grep "Last update status" | grep "Fail")" ]; then
-        rs_policy_load_status="Error"
-    else
-        rs_policy_load_status="Success"
-    fi
-    echo "Policy load status: ${rs_policy_load_status}"
-    echo ${rs_policy_load_time}
     echo ""
 
     for service in $all_services; do
@@ -980,7 +933,7 @@ run_load_settings() # Initials - rls
     rls_service_to_update=$1
     if [ -z "$rls_service_to_update" ] || [ -z "$(get_nano_service_location_and_port "$rls_service_to_update")" ]; then
         echo "Error: Could not load configuration"
-        printf "Usage: open-appsec-ctl <-lc|--load-config> <%b>\n" "$(get_installed_services '|')"
+        printf "Usage: cpnano <-lc|--load-config> <%b>\n" "$(get_installed_services '|')"
         exit 1
     fi
 
@@ -1003,7 +956,7 @@ set_proxy() # Initials - sp
 
     if [ -z "$sp_proxy" ]; then
         echo "Error: Proxy was not provided."
-        ech "Usage: open-appsec-ctl <-sp|--set-proxy> <proxy>"
+        ech "Usage: cpnano <-sp|--set-proxy> <proxy>"
         exit 1
     fi
 
@@ -1481,16 +1434,16 @@ set_mode()
     if [ "$mode" = "online_mode" ]; then
         time_sleep=2
         time_out=60
-        echo "Registering open-appsec Nano Agent to Fog.."
-        until get_status_content | grep -q "Registration status: Succeeded"; do
+        echo "Registering Check Point Nano Agent to Fog.."
+        until $USR_SBIN_PATH/${CP_NANO_CTL} -s 2> /dev/null | grep -q "Registration status: Succeeded"; do
             time_out=$(( time_out - time_sleep ))
             if [ $time_out -le 0 ]; then
-                echo "open-appsec Nano Agent registration failed. Failed to register to Fog: $fog_address"
+                echo "Check Point Nano Agent registration failed. Failed to register to Fog: $fog_address"
                 exit 1
             fi
             sleep ${time_sleep}
         done
-        echo "open-appsec Nano Agent is registered to $fog_address"
+        echo "Check Point Nano Agent is registered to $fog_address"
         echo "Orchestration mode changed successfully"
     else
         echo "Orchestration mode was changed successfully"
@@ -1500,7 +1453,7 @@ set_mode()
 start_service() # Initials - starts
 {
     if [ -z "$1" ]; then
-        printf "Usage: open-appsec-ctl <-rs|--start-service> <%b>\n" "$(get_installed_services '|')"
+        printf "Usage: cpnano <-rs|--start-service> <%b>\n" "$(get_installed_services '|')"
         exit 255
     fi
     starts_persistance_arg=""
@@ -1537,7 +1490,7 @@ start_service() # Initials - starts
 stop_service() # Initials - stops
 {
     if [ -z "$1" ]; then
-        printf "Usage: open-appsec-ctl <-qs|--stop-service> <%b>\n" "$(get_installed_services '|')"
+        printf "Usage: cpnano <-qs|--stop-service> <%b>\n" "$(get_installed_services '|')"
         exit 255
     fi
     stops_persistance_arg=""
@@ -1630,27 +1583,6 @@ run() # Initials - r
     elif [ "--set-mode" = "$1" ] || [ "-sm" = "$1" ]; then
         shift
         set_mode "${@}"
-    elif [ "-vp" = "$1" ] || [ "--view-policy" = "$1" ]; then
-        shift
-        var_policy_file=$1
-        if [ -z ${var_policy_file} ]; then
-            var_policy_file="/etc/cp/conf/local_policy.yaml"
-        fi
-        less ${var_policy_file}
-    elif [ "-ep" = "$1" ] || [ "--edit-policy" = "$1" ]; then
-        shift
-        var_policy_file=$1
-        if [ -z ${var_policy_file} ]; then
-            var_policy_file="/etc/cp/conf/local_policy.yaml"
-        fi
-        vi ${var_policy_file}
-    elif [ "-ap" = "$1" ] || [ "--apply-policy" = "$1" ]; then
-        echo "Error: This option is not yet supported"
-        exit 1
-    elif [ "-lp" = "$1" ] || [ "--list-policies" = "$1" ]; then
-        echo "/etc/cp/conf/local_policy.yaml"
-    elif [ "-vl" = "$1" ] || [ "--view-logs" = "$1" ]; then
-        less /var/log/nano_agent/cp-nano-http-transaction-handler.log?
     else
         usage
     fi

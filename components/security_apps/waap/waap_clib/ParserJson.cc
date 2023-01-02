@@ -102,11 +102,12 @@ int ParserJson::cb_string(const unsigned char* s, yajl_size_t slen) {
 int ParserJson::cb_map_key(const unsigned char* s, yajl_size_t slen) {
     dbgTrace(D_WAAP_PARSER_JSON) << "ParserJson::cb_map_key(): '" << std::string((const char*)s, slen) << "'";
 
+    m_key.push((char*)s, slen);
+
     if (m_receiver2) {
-        m_receiver2->onMapKey((const char*)s, slen);
+        m_receiver2->onMapKey(m_key.c_str(), m_key.size());
     }
 
-    m_key.push((char*)s, slen);
     return 1;
 }
 

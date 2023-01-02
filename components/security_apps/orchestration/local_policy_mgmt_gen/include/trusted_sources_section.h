@@ -34,7 +34,7 @@ public:
     {
         dbgTrace(D_K8S_POLICY) << "Loading trusted sources spec";
         parseAppsecJSONKey<int>("minNumOfSources", min_num_of_sources, archive_in, 3);
-        parseAppsecJSONKey<std::vector<std::string>>("sources-identifiers", sources_identifiers, archive_in);
+        parseAppsecJSONKey<std::vector<std::string>>("sourcesIdentifiers", sources_identifiers, archive_in);
         parseAppsecJSONKey<std::string>("name", name, archive_in);
     }
 
@@ -110,7 +110,7 @@ public:
     load(cereal::JSONInputArchive &archive_in)
     {
         dbgTrace(D_K8S_POLICY) << "Loading trusted sources spec";
-        parseAppsecJSONKey<std::string>("source-identifier", source_identifier, archive_in);
+        parseAppsecJSONKey<std::string>("sourceIdentifier", source_identifier, archive_in);
         parseAppsecJSONKey<std::vector<std::string>>("value", value, archive_in);
     }
 

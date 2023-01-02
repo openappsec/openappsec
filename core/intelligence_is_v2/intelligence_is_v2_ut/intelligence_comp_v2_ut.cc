@@ -16,6 +16,8 @@ using namespace chrono;
 using namespace Intelligence_IS_V2;
 
 USE_DEBUG_FLAG(D_METRICS);
+USE_DEBUG_FLAG(D_INTELLIGENCE);
+
 
 class IntelligenceComponentTestV2
         :
@@ -28,6 +30,7 @@ public:
         debug_output.clear();
         Debug::setNewDefaultStdout(&debug_output);
         Debug::setUnitTestFlag(D_METRICS, Debug::DebugLevel::TRACE);
+        Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
         setConfiguration<bool>(false, string("metric"), string("fogMetricSendEnable"));
 
         EXPECT_CALL(
@@ -675,4 +678,178 @@ TEST_F(IntelligenceComponentTestV2, offlineIntelligenceTest)
     EXPECT_EQ(sources_iter->getConfidence(), 600);
     EXPECT_EQ(sources_iter->getAttributes().begin()->getUser().toString(), "Max");
     EXPECT_EQ(sources_iter->getAttributes().begin()->getPhase().toString(), "offline test");
+}
+
+TEST_F(IntelligenceComponentTestV2, bulkOnlineIntelligenceTest)
+{
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    vector<QueryRequest> requests;
+    requests.emplace_back(Condition::EQUALS, "category", "whatever", true);
+    requests.emplace_back(Condition::EQUALS, "category", "cloud", true);
+    requests.emplace_back(Condition::EQUALS, "category", "nothing", true);
+    requests.emplace_back(Condition::EQUALS, "category", "iot", true);
+
+    string response_str(
+        "{\n"
+        "  \"errors\": [\n"
+        "    {\n"
+        "      \"index\": 0,\n"
+        "      \"statusCode\": 400,\n"
+        "      \"message\": \"Bad request. Error: Invalid cursor\"\n"
+        "    },"
+        "    {\n"
+        "      \"index\": 2,\n"
+        "      \"statusCode\": 405,\n"
+        "      \"message\": \"Bad request. Error: Something else\"\n"
+        "    }"
+        "  ],\n" // errors
+        "  \"queriesResponse\": [\n"
+        "    {\n"
+        "      \"index\": 1,\n"
+        "      \"response\": {\n"
+        "        \"assetCollections\": [\n"
+        "          {\n"
+        "            \"schemaVersion\": 1,\n"
+        "            \"assetType\": \"workload-cloud-ip\",\n"
+        "            \"assetTypeSchemaVersion\": 1,\n"
+        "            \"permissionType\": \"tenant\",\n"
+        "            \"permissionGroupId\": \"some-group-id\",\n"
+        "            \"name\": \"[1.1.1.1]\",\n"
+        "            \"class\": \"workload\",\n"
+        "            \"category\": \"cloud\",\n"
+        "            \"family\": \"ip\",\n"
+        "            \"group\": \"\",\n"
+        "            \"order\": \"\",\n"
+        "            \"kind\": \"\",\n"
+        "            \"mainAttributes\": {\n"
+        "               \"ipv4Addresses\": [\n"
+        "                   \"1.1.1.1\",\n"
+        "                   \"2.2.2.2\"\n"
+        "               ],\n"
+        "               \"phase\": \"testing\"\n"
+        "            },\n"  // mainAttributes
+        "            \"sources\": [\n"
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "                 \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 500,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"red\",\n"
+        "                   \"user\": \"Omry\",\n"
+        "                   \"phase\": \"testing\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                 }\n"
+        "               },\n" // source 1
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229bb11\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7bbb11\",\n"
+        "                 \"assetId\": \"cb068860528cb6bfb000cc35e79f11aeefed2\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 600,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"white\",\n"
+        "                   \"user\": \"Max\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                  }\n"
+        "               }\n" // source 2
+        "            ]\n" // sources
+        "          }\n" // asset 1
+        "        ],\n" // asset collection
+        "        \"status\": \"done\",\n"
+        "        \"totalNumAssets\": 2,\n"
+        "        \"cursor\": \"start\"\n"
+        "      }\n" // response
+        "    },\n" // queryresponse 1
+        "    {\n"
+        "      \"index\": 3,\n"
+        "      \"response\": {\n"
+        "        \"assetCollections\": [\n"
+        "          {\n"
+        "            \"schemaVersion\": 1,\n"
+        "            \"assetType\": \"workload-cloud-ip\",\n"
+        "            \"assetTypeSchemaVersion\": 1,\n"
+        "            \"permissionType\": \"tenant\",\n"
+        "            \"permissionGroupId\": \"some-group-id\",\n"
+        "            \"name\": \"[2.2.2.2]\",\n"
+        "            \"class\": \"workload\",\n"
+        "            \"category\": \"iot\",\n"
+        "            \"family\": \"ip\",\n"
+        "            \"group\": \"\",\n"
+        "            \"order\": \"\",\n"
+        "            \"kind\": \"\",\n"
+        "            \"mainAttributes\": {\n"
+        "               \"ipv4Addresses\": [\n"
+        "                   \"1.1.1.1\",\n"
+        "                   \"2.2.2.2\"\n"
+        "               ],\n"
+        "               \"phase\": \"testing\"\n"
+        "            },\n"  // mainAttributes
+        "            \"sources\": [\n"
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "                 \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 500,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"red\",\n"
+        "                   \"user\": \"Omry2\",\n"
+        "                   \"phase\": \"testing2\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                 }\n"
+        "               },\n" // source 1
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229bb11\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7bbb11\",\n"
+        "                 \"assetId\": \"cb068860528cb6bfb000cc35e79f11aeefed2\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 600,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"white\",\n"
+        "                   \"user\": \"Max\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                  }\n"
+        "               }\n" // source 2
+        "            ]\n" // sources
+        "          }\n" // asset 1
+        "        ],\n" // asset collection
+        "        \"status\": \"done\",\n"
+        "        \"totalNumAssets\": 2,\n"
+        "        \"cursor\": \"start\"\n"
+        "      }\n" // response
+        "    }\n" // queryresponse 1
+        "  ]\n" // queryresponses
+        "}\n"
+    );
+    Debug::setNewDefaultStdout(&cout);
+    EXPECT_CALL(
+        messaging_mock,
+        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
+    ).WillOnce(Return(response_str));
+    auto maybe_ans = intell->queryIntelligence<Profile>(requests);
+    EXPECT_TRUE(maybe_ans.ok());
+    auto vec = maybe_ans.unpack();
+    EXPECT_EQ(vec.size(), 4u);
+    EXPECT_FALSE(vec[0].ok());
+    EXPECT_TRUE(vec[1].ok());
+    EXPECT_FALSE(vec[2].ok());
+    EXPECT_TRUE(vec[3].ok());
+
+    auto assets1_vec = vec[1].unpack();
+    EXPECT_EQ(assets1_vec.size(), 1u);
+    auto iter = assets1_vec.begin();
+    EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry");
+    EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing");
+
+    auto assets3_vec = vec[3].unpack();
+    EXPECT_EQ(assets1_vec.size(), 1u);
+    iter = assets3_vec.begin();
+    EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry2");
+    EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing2");
 }

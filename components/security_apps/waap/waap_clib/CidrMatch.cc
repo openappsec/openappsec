@@ -80,7 +80,7 @@ bool isCIDR(const std::string& strCIDR, CIDRData& cidr)
     // get ip from targetCidr
     std::string strPrefix = pos != std::string::npos ? strCIDR.substr(0, pos) : strCIDR;
     // get subnet mask from targetCidr or calculate it based on ipv4 / ipv6
-    std::string strSuffix = pos != std::string::npos ? strCIDR.substr(pos + 1) :
+    std::string strSuffix = (pos != std::string::npos && (pos + 1) <= strCIDR.size()) ? strCIDR.substr(pos + 1) :
         (strCIDR.find(':') == std::string::npos) ? "32" : "128";
 
     int bits = -1;

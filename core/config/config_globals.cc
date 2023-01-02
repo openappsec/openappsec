@@ -84,9 +84,9 @@ getLogFilesPathConfig()
 }
 
 string
-getPolicyConfigPath(const string &name, ConfigFileType type, const string &tenant)
+getPolicyConfigPath(const string &name, ConfigFileType type, const string &tenant, const string &profile)
 {
-    return Singleton::Consume<I_Config>::from<MockConfigProvider>()->getPolicyConfigPath(name, type, tenant);
+    return Singleton::Consume<I_Config>::from<MockConfigProvider>()->getPolicyConfigPath(name, type, tenant, profile);
 }
 
 void

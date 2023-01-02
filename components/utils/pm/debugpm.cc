@@ -18,13 +18,11 @@
 #include <string.h>
 #include <string>
 #include <iostream>
-#include "sasal.h"
 
 using namespace std;
 
 USE_DEBUG_FLAG(D_PM);
 
-SASAL_START // Multiple Pattern Matcher
 // Helper class for printing C format string
 class CFmtPrinter
 {
@@ -60,4 +58,3 @@ debugPrtCFmt(const char *func, uint line, const char *fmt, ...)
     Debug("PM", func, line, Debug::DebugLevel::TRACE, D_PM).getStreamAggr() << CFmtPrinter(fmt, va);
     va_end(va);
 }
-SASAL_END

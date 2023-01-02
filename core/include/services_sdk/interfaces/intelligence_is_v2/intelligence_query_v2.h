@@ -14,10 +14,13 @@
 #ifndef __INTELLIGENCE_QUERY_V2_H__
 #define __INTELLIGENCE_QUERY_V2_H__
 
+#include<vector>
+
 #include "cereal/archives/json.hpp"
 #include "intelligence_types_v2.h"
 #include "query_request_v2.h"
 #include "query_response_v2.h"
+#include "bulk_query_response_v2.h"
 #include "rest.h"
 
 template <typename UserSerializableReplyAttr>
@@ -27,7 +30,17 @@ public:
     IntelligenceQuery(QueryRequest &filter)
             :
         request(filter),
-        response()
+        response(),
+        responses(),
+        is_bulk(false)
+    {}
+
+    IntelligenceQuery(std::vector<QueryRequest> &filters)
+            :
+        requests(filters),
+        response(),
+        responses(),
+        is_bulk(true)
     {}
 
     Maybe<std::string> genJson() const;
@@ -37,7 +50,8 @@ public:
     void save(cereal::JSONOutputArchive &ar) const;
 
     std::vector<AssetReply<UserSerializableReplyAttr>> getData();
-    ResponseStatus getResponseStatus() { return response.getResponseStatus(); }
+    std::vector<Maybe<std::vector<AssetReply<UserSerializableReplyAttr>>>> getBulkData();
+    ResponseStatus getResponseStatus();
     int getResponseAssetCollectionsSize() const { return response.getAssetCollectionsSize(); }
     const std::string & getResponseCursorVal() const { return response.getCursor(); }
 
@@ -46,8 +60,13 @@ public:
     void setRequestCursor(CursorState state, const std::string &value);
 
 private:
-    QueryRequest &request;
+    static QueryRequest dummy_query_request;
+    static std::vector<QueryRequest> dummy_query_requests;
+    std::vector<QueryRequest> &requests = dummy_query_requests;
+    QueryRequest &request = dummy_query_request;
     IntelligenceQueryResponse<UserSerializableReplyAttr> response;
+    std::vector<IntelligenceQueryResponse<UserSerializableReplyAttr>> responses;
+    bool is_bulk;
 };
 
 #include "intelligence_query_v2_impl.h"

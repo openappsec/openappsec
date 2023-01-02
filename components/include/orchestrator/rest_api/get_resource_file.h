@@ -24,12 +24,25 @@ class GetResourceFile : public ClientRest
     class TenantResource : public ClientRest
     {
     public:
-        TenantResource(const std::string &_tenant_id, const std::string &_version, const std::string &_checksum)
+        TenantResource(
+            const std::string &_tenant_id,
+            const std::string &_profile_id,
+            const std::string &_version,
+            const std::string &_checksum)
                 :
             tenant_id(_tenant_id),
+            profile_id(_profile_id),
             version(_version),
             checksum(_checksum)
         {
+        }
+
+        TenantResource(const TenantResource &other)
+        {
+            tenant_id = other.tenant_id;
+            profile_id = other.profile_id;
+            version = other.version;
+            checksum = other.checksum;
         }
 
         bool
@@ -37,11 +50,13 @@ class GetResourceFile : public ClientRest
         {
             return
                 tenant_id.get() == other.tenant_id.get() &&
+                profile_id.get() == other.profile_id.get() &&
                 version.get()   == other.version.get() &&
                 checksum.get()  == other.checksum.get();
         }
 
         C2S_LABEL_PARAM(std::string, tenant_id, "tenantId");
+        C2S_LABEL_PARAM(std::string, profile_id, "profileId");
         C2S_LABEL_PARAM(std::string, version,   "version");
         C2S_LABEL_PARAM(std::string, checksum,  "checksum");
     };
@@ -76,12 +91,16 @@ public:
     }
 
     void
-    addTenant(const std::string &tenant_id, const std::string &version, const std::string &checksum)
+    addTenant(
+        const std::string &tenant_id,
+        const std::string &profile_id,
+        const std::string &version,
+        const std::string &checksum)
     {
         if (!isVirtual()) return;
 
         if (!tenants.isActive()) tenants = std::vector<TenantResource>();
-        tenants.get().emplace_back(tenant_id, version, checksum);
+        tenants.get().emplace_back(tenant_id, profile_id, version, checksum);
     }
 
     std::string

@@ -63,6 +63,7 @@ load_paths()
 	if [ -z "${MAX_ROTATION}" ]; then
         MAX_ROTATION=$DEFAULT_MAX_ROTATION
 	fi
+
 }
 
 load_paths
@@ -169,7 +170,7 @@ sigterm()
         rm ${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_STOP}
     fi
 
-    echo "down" >>$AGENT_RUN_STATUS_FILE
+    echo "down" > $AGENT_RUN_STATUS_FILE
 
     log "sigterm" "cp-nano-agent watchdog service was successfully stopped "
     exit 0
@@ -512,9 +513,9 @@ is_service_running()
             cmd_pid=$(pidof $base_name)
         fi
     elif [ $ARCH = "alpine" ]; then
-        cmd_pid=$(ps -ef | awk -v srv="$service" '{if(($4 ~ srv || $3 ~ srv || $6 ~ srv) && ($4 != "awk" && $4 != "grep" )) print $1}')
+        cmd_pid=$(ps -ef | awk -v srv="$service$" '{if(($4 ~ srv || $3 ~ srv || $6 ~ srv) && ($4 != "awk" && $4 != "grep" )) print $1}')
     else
-        cmd_pid=$(ps -eo pid,cmd | awk -v srv="$service" '{if($2 ~ srv || $3 ~ srv) print $1}')
+        cmd_pid=$(ps -eo pid,cmd | awk -v srv="$service$" '{if($2 ~ srv || $3 ~ srv) print $1}')
     fi
 
     if [ "${cmd_pid:-null}" = null ]; then
@@ -609,12 +610,12 @@ load_volatile_services()
                 echo -en "["$(date)"]" >> ${srv_debug_file}
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} ${family_arg} --id=${instance_id} &"
                 increment_watchdog_process_restart_counter
-                echo "running" >> $AGENT_RUN_STATUS_FILE
+                echo "running" > $AGENT_RUN_STATUS_FILE
                 already_running="1"
             fi
 
-            if test "$already_running" = "0" && [ -f /tmp/agent-status.txt ]; then
-                echo "already running" >>$AGENT_RUN_STATUS_FILE
+            if test "$already_running" = "0" && [ -f $AGENT_RUN_STATUS_FILE ]; then
+                echo "already running" > $AGENT_RUN_STATUS_FILE
             fi
         done
     fi
@@ -667,18 +668,18 @@ load_services()
             fi
 
             log "load_services" "Respawn ${service}"
-            if [ "${service}" == "/etc/cp/agentIntelligence/redis/redis-server" ]; then
+            if [ "${service}" = "/etc/cp/agentIntelligence/redis/redis-server" ]; then
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} &"
             else
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} &"
             fi
             increment_watchdog_process_restart_counter
-            echo "running" >> $AGENT_RUN_STATUS_FILE
+            echo "running" > $AGENT_RUN_STATUS_FILE
             already_running="1"
         fi
 
-        if test "$already_running" = "0" && [ -f /tmp/agent-status.txt ]; then
-            echo "already running" >>$AGENT_RUN_STATUS_FILE
+        if test "$already_running" = "0" && [ -f $AGENT_RUN_STATUS_FILE ]; then
+            echo "already running" > $AGENT_RUN_STATUS_FILE
         fi
     done
 }

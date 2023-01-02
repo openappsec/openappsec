@@ -245,7 +245,7 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
@@ -352,7 +352,7 @@ TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
@@ -498,7 +498,7 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(l4_firewall));
@@ -584,7 +584,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
@@ -635,7 +635,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
     // Only settings now being updated
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(l4_firewall));
@@ -730,7 +730,7 @@ TEST_F(ServiceControllerTest, backup)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
@@ -842,7 +842,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
@@ -963,7 +963,7 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
     string orchestration_settings_path = configuration_dir + "/orchestration/orchestration" + settings_extension;
 
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_path)).WillOnce(Return(false));
@@ -1028,7 +1028,7 @@ TEST_F(ServiceControllerTest, emptyServices)
     Maybe<map<string, string>> json_parser_return = map<string, string>();
     string empty_string = "";
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(empty_string));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(empty_string, _)).Times(1).WillRepeatedly(
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(empty_string, _, _)).Times(1).WillRepeatedly(
         Return(json_parser_return)
     );
 
@@ -1083,7 +1083,7 @@ TEST_F(ServiceControllerTest, failingWhileLoadingCurrentConfiguration)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(err));
@@ -1151,7 +1151,7 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _)).Times(1).WillRepeatedly(
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _)).Times(1).WillRepeatedly(
         Return(json_parser_return)
     );
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
@@ -1211,7 +1211,7 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
@@ -1328,7 +1328,7 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _)).Times(1).WillRepeatedly(
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _)).Times(1).WillRepeatedly(
         Return(json_parser_return)
     );
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
@@ -1357,16 +1357,18 @@ TEST_F(ServiceControllerTest, testPortsRest)
 
 TEST_F(ServiceControllerTest, testMultitenantConfFiles)
 {
-    map<string, pair<string, string>> tenant_files_input = {
-        {"tenant1", make_pair("/etc/cp/conf/tenant1_policy.json", "/etc/cp/conf/tenant1_settings.json")},
-        {"tenant2", make_pair("/etc/cp/conf/tenant2_policy.json", "")}
+    map<pair<string, string>, pair<string, string>> tenant_files_input = {
+        {make_pair("tenant1", "1234"),
+        make_pair("/etc/cp/conf/tenant1_profile_1234_policy.json", "/etc/cp/conf/tenant1_profile_1234_settings.json")},
+        {make_pair("tenant2", "1235"),
+        make_pair("/etc/cp/conf/tenant2_profile_1235_policy.json", "")}
     };
 
     vector<string> ids = {"family1_id2"};
     vector<string> empty_ids;
 
-    EXPECT_CALL(tenant_manager, getInstances("tenant1")).WillOnce(Return(ids));
-    EXPECT_CALL(tenant_manager, getInstances("tenant2")).WillOnce(Return(empty_ids));
+    EXPECT_CALL(tenant_manager, getInstances("tenant1", "1234")).WillOnce(Return(ids));
+    EXPECT_CALL(tenant_manager, getInstances("tenant2", "1235")).WillOnce(Return(empty_ids));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
     EXPECT_CALL(
@@ -1386,7 +1388,8 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
     ).WillOnce(Return(Maybe<string>(reply_msg)));
 
     for(auto entry : tenant_files_input) {
-        auto tenant = entry.first;
+        auto tenant = entry.first.first;
+        auto profile = entry.first.second;
         auto files = entry.second;
         string conf_file_name = files.first;
         string settings_file_name = files.second;
@@ -1430,20 +1433,25 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
                                     "}";
 
         string l4_firewall_policy_path_new =
-            configuration_dir + "/tenant_" + tenant + "/l4_firewall/l4_firewall" + policy_extension;
+            configuration_dir + "/tenant_" + tenant +
+            "_profile_" + profile +"/l4_firewall/l4_firewall" + policy_extension;
         Maybe<map<string, string>> json_parser_return =
             map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
 
         EXPECT_CALL(mock_orchestration_tools, readFile(conf_file_name)).WillOnce(Return(new_configuration));
 
-        EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, tenant))
+        EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, tenant, profile))
             .WillOnce(Return(json_parser_return));
 
-        EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist(configuration_dir + "/tenant_" + tenant))
-            .WillOnce(Return(false));
+        EXPECT_CALL(
+            mock_orchestration_tools,
+            doesDirectoryExist(configuration_dir + "/tenant_" + tenant + "_profile_" + profile)
+        ).WillOnce(Return(false));
 
-        EXPECT_CALL(mock_orchestration_tools, createDirectory(configuration_dir + "/tenant_" + tenant))
-            .WillOnce(Return(true));
+        EXPECT_CALL(
+            mock_orchestration_tools,
+            createDirectory(configuration_dir + "/tenant_" + tenant + "_profile_" + profile)
+        ).WillOnce(Return(true));
 
         EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path_new)).WillOnce(Return(false));
 
@@ -1454,7 +1462,7 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
             "l4_firewall", l4_firewall_policy_path_new, OrchestrationStatusConfigType::POLICY)
         );
 
-        string new_policy_file_path = "/etc/cp/conf/tenant_" + tenant + "/" + "policy.json";
+        string new_policy_file_path = "/etc/cp/conf/tenant_" + tenant + "_profile_" + profile + "/" + "policy.json";
         EXPECT_CALL(mock_orchestration_tools, copyFile(conf_file_name, new_policy_file_path + backup_extension))
             .WillOnce(Return(true));
         EXPECT_CALL(mock_orchestration_tools, copyFile(conf_file_name, new_policy_file_path)).WillOnce(Return(true));
@@ -1469,7 +1477,9 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
             )
         ).WillRepeatedly(Return(string("registered and running")));
 
-        EXPECT_TRUE(i_service_controller->updateServiceConfiguration(conf_file_name, settings_file_name, {}, tenant));
+        EXPECT_TRUE(
+            i_service_controller->updateServiceConfiguration(conf_file_name, settings_file_name, {}, tenant, profile)
+        );
     }
 }
 
@@ -1542,7 +1552,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     Maybe<map<string, string>> json_parser_return =
         map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _))
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).

@@ -54,7 +54,7 @@ CIDRSData::CIDRSData(const string &str_cidr)
     string str_prefix = pos != string::npos ? str_cidr.substr(0, pos) : str_cidr;
     // get subnet mask from targetCidr or calculate it based on ipv4 / ipv6
     string str_suffix;
-    if (pos != string::npos) {
+    if (pos != string::npos && (pos + 1) <= str_cidr.size()) {
         str_suffix = str_cidr.substr(pos + 1);
     } else if (str_cidr.find(':') == string::npos) {
         str_suffix = "32";

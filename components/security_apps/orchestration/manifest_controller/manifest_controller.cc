@@ -15,7 +15,6 @@
 
 #include "config.h"
 #include "debug.h"
-#include "sasal.h"
 #include "environment.h"
 #include "version.h"
 #include "log_generator.h"
@@ -23,8 +22,6 @@
 
 using namespace std;
 using namespace ReportIS;
-
-SASAL_START // Orchestration - Manifest Handler
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -441,5 +438,3 @@ ManifestController::init()
 {
     pimpl->init();
 }
-
-SASAL_END

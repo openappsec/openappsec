@@ -23,10 +23,6 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 
-#include "sasal.h"
-
-SASAL_START // Orchestration - Tools
-
 using namespace std;
 using namespace rapidjson;
 
@@ -41,7 +37,8 @@ public:
     Maybe<map<packageName, packageDetails>>
     jsonObjectSplitter(
         const string &json,
-        const string &tenant_id) const override;
+        const string &tenant_id,
+        const string &profile_id) const override;
 
     Maybe<string> readFile(const string &path) const override;
     bool writeFile(const string &text, const string &path) const override;
@@ -238,7 +235,10 @@ OrchestrationTools::Impl::copyFile(const string &src_path, const string &dst_pat
 }
 
 Maybe<map<packageName, packageDetails>>
-OrchestrationTools::Impl::jsonObjectSplitter(const string &json, const string &tenant_id) const
+OrchestrationTools::Impl::jsonObjectSplitter(
+    const string &json,
+    const string &tenant_id,
+    const string &profile_id) const
 {
     Document document;
     map<string, string> parsed;
@@ -247,12 +247,16 @@ OrchestrationTools::Impl::jsonObjectSplitter(const string &json, const string &t
     if (document.HasParseError()) return genError("JSON file is not valid.");
 
     for (Value::MemberIterator itr = document.MemberBegin(); itr != document.MemberEnd(); ++itr) {
-
         if (!tenant_id.empty() && itr->value.IsObject()) {
-
             itr->value.AddMember(
                 Value("tenantID"),
                 Value(tenant_id.c_str(), tenant_id.size()),
+                document.GetAllocator()
+            );
+
+            itr->value.AddMember(
+                Value("profileID"),
+                Value(profile_id.c_str(), profile_id.size()),
                 document.GetAllocator()
             );
         }
@@ -471,5 +475,3 @@ OrchestrationTools::Impl::base64Decode(const string &input) const
 OrchestrationTools::OrchestrationTools() : Component("OrchestrationTools"), pimpl(make_unique<Impl>()) {}
 
 OrchestrationTools::~OrchestrationTools() {}
-
-SASAL_END

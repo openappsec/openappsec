@@ -286,7 +286,7 @@ while true; do
             LOG_FILE_PATH=$1
         fi
         echo "Log files path: ${LOG_FILE_PATH}"
-    elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
+    elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--smb_sve_v2" ] || [ "$1" = "--smb_thx_v3" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
         shift
 		continue
     elif [ "$1" = "--skip_registration" ]; then
@@ -323,7 +323,6 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             fi
         fi
     fi
-
     if [ $var_hybrid_mode = true ] && [ -z "$var_fog_address" ]; then
         var_fog_address="$var_default_gem_fog_address"
     fi
@@ -558,8 +557,7 @@ install_cp_nano_ctl()
     cp_exec "cp -f $CP_NANO_CLI ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     if ! [ -f $USR_SBIN_PATH/${CP_NANO_CTL} ]; then
-	cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
-        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/open-appsec-ctl"
+        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
     fi
 
     cp_exec "cp -f ${CP_NANO_DEBUG} ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG}"
@@ -824,20 +822,22 @@ install_orchestration()
 
         cp_print "Upgrade completed successfully" ${FORCE_STDOUT}
 
-        cat "/etc/systemd/system/nano_agent.service" | grep -q "EnvironmentFile=/etc/environment"
-        result=$?
+        if [ -f /etc/systemd/system/nano_agent.service ]; then
+            cat "/etc/systemd/system/nano_agent.service" | grep -q "EnvironmentFile=/etc/environment"
+            result=$?
 
-        if [ $var_container_mode = false ] && [ $result -eq 0 ]; then
-            sed -i "$ d" /etc/systemd/system/nano_agent.service
-            echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/nano_agent.service
-            echo >> /etc/systemd/system/nano_agent.service
-            cp_exec "systemctl daemon-reload"
-            cp_exec "systemctl restart nano_agent"
+            if [ $var_container_mode = false ] && [ $result -eq 0 ]; then
+                sed -i "$ d" /etc/systemd/system/nano_agent.service
+                echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/nano_agent.service
+                echo >> /etc/systemd/system/nano_agent.service
+                cp_exec "systemctl daemon-reload"
+                cp_exec "systemctl restart nano_agent"
+            fi
         fi
         exit 0
     fi
 
-    cp_print "\nStarting installation of open-appsec Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
+    cp_print "\nStarting installation of Check Point Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
 
     cp_exec "rm -rf ${FILESYSTEM_PATH}/${SERVICE_PATH}"
     cp_exec "rm -rf ${FILESYSTEM_PATH}/${WATCHDOG_PATH}"
@@ -979,21 +979,21 @@ install_orchestration()
     install_watchdog
 
     cp_print "Note: in order for the agent to remain active and effective it must connect to the Fog/Cloud at least every 45 days" ${FORCE_STDOUT}
-    cp_print "open-appsec Nano Agent installation completed successfully" ${FORCE_STDOUT}
+    cp_print "Check Point Nano Agent installation completed successfully" ${FORCE_STDOUT}
 
     if [ $var_hybrid_mode = false ] && [ $var_offline_mode = false ] && [ $var_no_otp = false ] && [ $var_skip_registration = false ]; then
         time_sleep=2
         time_out=60
-        cp_print "Registering open-appsec Nano Agent to Fog.." ${FORCE_STDOUT}
+        cp_print "Registering Check Point Nano Agent to Fog.." ${FORCE_STDOUT}
         until $USR_SBIN_PATH/${CP_NANO_CTL} -s 2> /dev/null | grep -q "Registration status: Succeeded"; do
             time_out=$(( time_out - time_sleep ))
             if [ $time_out -le 0 ]; then
-                cp_print "open-appsec Nano Agent registration failed. Failed to register to Fog: $var_fog_address" ${FORCE_STDOUT}
+                cp_print "Check Point Nano Agent registration failed. Failed to register to Fog: $var_fog_address" ${FORCE_STDOUT}
                 exit 1
             fi
             sleep ${time_sleep}
         done
-        cp_print "open-appsec Nano Agent is registered to $var_fog_address" ${FORCE_STDOUT}
+        cp_print "Check Point Nano Agent is registered to $var_fog_address" ${FORCE_STDOUT}
     fi
 }
 
@@ -1036,7 +1036,7 @@ uninstall_orchestration()
     if [ ! -f "$uninstall_script" ]; then
         cp_dir="${FILESYSTEM_PATH}"
         if [ ! -d "$cp_dir" ]; then
-            echo "open-appsec Nano Agent is not installed"
+            echo "Check Point Nano Agent is not installed"
             exit 1
         fi
         echo "Failed to uninstall Orchestration Nano Service, uninstall script was not found in: $uninstall_script "
@@ -1044,9 +1044,9 @@ uninstall_orchestration()
     fi
      cp_exec "${uninstall_script}"
     if test "$?" = "0"; then
-        cp_print "open-appsec Nano Agent successfully uninstalled" ${FORCE_STDOUT}
+        cp_print "Check Point Nano Agent successfully uninstalled" ${FORCE_STDOUT}
     else
-        cp_print "open-appsec Nano Agent failed to uninstall" ${FORCE_STDOUT}
+        cp_print "Check Point Nano Agent failed to uninstall" ${FORCE_STDOUT}
         exit 1
     fi
 }

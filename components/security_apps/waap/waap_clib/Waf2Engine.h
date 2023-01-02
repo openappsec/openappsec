@@ -254,7 +254,7 @@ private:
     size_t getViolatingUserLimitSize() const;
 
     // Internal
-    void processUri(const char *uri, const std::string &scanStage);
+    void processUri(const std::string &uri, const std::string &scanStage);
     void parseContentType(const char* value, int value_len);
     void parseCookie(const char* value, int value_len);
     void parseReferer(const char* value, int value_len);

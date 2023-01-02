@@ -52,6 +52,10 @@ start() {
     echo ''
     echo "Error! Could not start $SERVICE_NAME!"
   fi
+  if [ -f /pfrm2.0/bin/cleanup_nano.sh ]; then
+    killall -9 cleanup_nano.sh
+    nohup /pfrm2.0/bin/cleanup_nano.sh > /dev/null 2>&1 &
+  fi
 }
 
 stop() {

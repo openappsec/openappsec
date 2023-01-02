@@ -60,4 +60,3 @@ custom-responses:
   - name: appsec-default-web-user-response
     mode: response-code-only
     http-response-code: 403
-

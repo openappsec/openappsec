@@ -15,13 +15,10 @@
 
 #include "debug.h"
 #include "config.h"
-#include "sasal.h"
 #include "agent_details.h"
 #include "orchestration_comp.h"
 
 using namespace std;
-
-SASAL_START // Orchestration - Manifest Handler
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -380,5 +377,3 @@ ManifestHandler::selfUpdate(
         package_handler->preInstallPackage(orch_service_name, current_installation_file) &&
         package_handler->installPackage(orch_service_name, current_installation_file, false);
 }
-
-SASAL_END

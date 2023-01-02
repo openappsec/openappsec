@@ -188,7 +188,7 @@ Maybe<uint>
 Buffer::findFirstOf(const Buffer &buf, uint start) const
 {
     dbgAssert(start <= len) << "Buffer::findFirstOf() returned: Cannot set a start point after buffer's end";
-    
+
     for (; start + buf.size() <= len; ++start) {
         auto sub_buffer = getSubBuffer(start, start + buf.size());
         if (sub_buffer == buf) return start;

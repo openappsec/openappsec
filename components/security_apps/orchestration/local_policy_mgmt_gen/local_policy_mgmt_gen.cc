@@ -15,10 +15,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <map>
 #include <set>
 #include <string>
-#include <iostream>
 #include <fstream>
 #include <streambuf>
 #include <cereal/types/vector.hpp>
@@ -28,7 +28,6 @@
 #include <boost/uuid/uuid_generators.hpp>
 
 #include "rest.h"
-#include "report/report.h"
 #include "debug.h"
 #include "config.h"
 #include "connkey.h"
@@ -290,7 +289,7 @@ public:
             return appsec_policy;
         });
 
-        list<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
+        vector<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
         ParsedRule default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
 
         string asset;
@@ -673,7 +672,7 @@ public:
             AppsecSpecParser<AppsecPolicySpec> appsec_policy = maybe_appsec_policy.unpack();
             dbgTrace(D_K8S_POLICY) << "Succeessfully retrieved AppSec policy: " << appsec_policy.getSpec();
 
-            list<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
+            vector<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
             ParsedRule default_rule = appsec_policy.getSpec().getDefaultRule();
 
             for (const ParsedRule &parsed_rule : specific_rules) {
@@ -1228,9 +1227,29 @@ private:
     map<string, string> practice_name_to_id_map;
 
     bool
+    isPlaygroundEnv()
+    {
+        string playground_variable = "PLAYGROUND";
+        const char *env_string = getenv(playground_variable.c_str());
+
+        if (env_string) {
+            string env_value = env_string;
+            transform(
+                env_value.begin(),
+                env_value.end(),
+                env_value.begin(),
+                [](unsigned char c) { return std::tolower(c); }
+            );
+            return env_value == "true";
+        }
+
+        return false;
+    }
+    
+    bool
     getClusterId()
     {
-        string playground_uid = Report::isPlaygroundEnv() ? "playground-" : "";
+        string playground_uid = isPlaygroundEnv() ? "playground-" : "";
 
         dbgTrace(D_K8S_POLICY) << "Getting cluster UID";
         auto maybe_namespaces_data = getObjectFromCluster<NamespaceData>("/api/v1/namespaces/");

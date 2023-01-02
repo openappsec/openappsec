@@ -27,10 +27,7 @@
 #include "table_opaque.h"
 #include "http_manager_opaque.h"
 #include "log_generator.h"
-#include "sasal.h"
 #include "http_inspection_events.h"
-
-SASAL_START // HTTP Manager
 
 USE_DEBUG_FLAG(D_HTTP_MANAGER);
 
@@ -208,7 +205,7 @@ public:
         LogGen(
             "Web AppSec Policy Loaded Successfully",
             ReportIS::Audience::SECURITY,
-            ReportIS::Severity::LOW,
+            ReportIS::Severity::INFO,
             ReportIS::Priority::LOW,
             ReportIS::Tags::THREAT_PREVENTION
         );
@@ -375,5 +372,3 @@ HttpManager::preload()
     registerExpectedConfiguration<string>("HTTP manager", "Response Size Limit Verdict");
     registerConfigLoadCb([this] () { pimpl->sendPolicyLog(); });
 }
-
-SASAL_END

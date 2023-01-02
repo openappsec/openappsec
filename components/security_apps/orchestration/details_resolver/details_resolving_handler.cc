@@ -92,7 +92,7 @@ DetailsResolvingHanlder::Impl::getResolvedDetails() const
     }
 
     I_AgentDetailsReporter *reporter = Singleton::Consume<I_AgentDetailsReporter>::by<DetailsResolvingHanlder>();
-    reporter->addAttr(resolved_details);
+    reporter->addAttr(resolved_details, true);
 
     return resolved_details;
 }

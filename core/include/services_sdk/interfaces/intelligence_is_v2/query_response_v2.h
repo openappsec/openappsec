@@ -102,17 +102,23 @@ public:
 
     void loadFromJson(cereal::JSONInputArchive &ar);
 
+    template<class Archive>
+    void serialize(Archive &ar);
+
     Intelligence_IS_V2::ResponseStatus getResponseStatus() const;
     uint getAmountOfAssets() const;
     const std::string & getCursor() const;
     int getAssetCollectionsSize() const;
     const std::vector<AssetReply<UserSerializableReplyAttr>> & getData() const;
+    bool isValidInBulk() const;
+    void setFailInBulk();
 
 private:
     Intelligence_IS_V2::ResponseStatus status = Intelligence_IS_V2::ResponseStatus::IN_PROGRESS;
     uint total_num_assets = 0;
     std::string cursor = "";
     std::vector<AssetReply<UserSerializableReplyAttr>> asset_collections;
+    bool partial_fail_in_bulk = false;
 };
 
 #include "query_response_v2_impl.h"

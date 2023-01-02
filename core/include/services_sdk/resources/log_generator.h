@@ -80,11 +80,7 @@ public:
             _severity,
             _priority,
             std::chrono::seconds(0),
-            LogField(
-                "agentId",
-                (Report::isPlaygroundEnv() ? "playground-" : "") +
-                Singleton::Consume<I_AgentDetails>::by<LogGen>()->getAgentId()
-            ),
+            LogField("agentId", Singleton::Consume<I_AgentDetails>::by<LogGen>()->getAgentId()),
             std::forward<Args>(args)...
         )
     {
@@ -104,11 +100,14 @@ public:
 
     ReportIS::AudienceTeam getAudienceTeam() const;
 
+    std::string getLogInsteadOfSending();
+
 private:
     std::chrono::microseconds getCurrentTime() const;
     void loadBaseLogFields();
 
     Report log;
+    bool send_log = true;
 };
 
 #endif // __LOG_GENERATOR_H__

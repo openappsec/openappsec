@@ -17,13 +17,10 @@
 #include "log_generator.h"
 #include "agent_details.h"
 #include "version.h"
-#include "sasal.h"
 
 #include <algorithm>
 #include <map>
 #include <vector>
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 using namespace cereal;
@@ -568,5 +565,3 @@ FogAuthenticator::init()
     loadRequiredSecurityApps();
     initRestAPI();
 }
-
-SASAL_END

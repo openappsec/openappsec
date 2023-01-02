@@ -89,7 +89,9 @@ getMgmtParentObjAttr(shared_ptr<istream> file_stream, const string &parent_obj, 
     }
     return genError("Parent object attribute was not found. Attr: " + attr);
 }
+#endif // gaia || smb
 
+#if defined(gaia)
 Maybe<string>
 getMgmtParentObjUid(shared_ptr<istream> file_stream)
 {
@@ -117,7 +119,26 @@ getMgmtParentObjName(shared_ptr<istream> file_stream)
     const string &unparsed_name = maybe_unparsed_name.unpack();
     return chopHeadAndTail(unparsed_name, "(", ")");
 }
-#endif // gaia || smb
+
+#elif defined(smb)
+Maybe<string>
+getMgmtParentObjUid(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+    return genError("Parent object uuid was not found.");
+}
+
+Maybe<string>
+getMgmtParentObjName(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+    return genError("Parent object name was not found.");
+}
+#endif // end if gaia/smb
 
 Maybe<string>
 getOsRelease(shared_ptr<istream> file_stream)

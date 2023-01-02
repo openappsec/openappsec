@@ -1128,6 +1128,11 @@ static const SingleRegex broken_utf_evasion_re(
     err,
     "broken_utf_evasion"
 );
+static const SingleRegex csp_report_policy_re(
+    "default-src\\s+[^\\w]+.*report-uri\\s+[^\\w]+",
+    err,
+    "csp_report_policy"
+);
 
 static void b64TestChunk(const string &s,
         string::const_iterator chunkStart,
@@ -1391,10 +1396,16 @@ unescapeInvalidUtf8(const string &payload)
     return unescaped_text;
 }
 
-bool
-containsBrokenUtf8(const string &payload)
+Maybe<std::string>
+containsBrokenUtf8(const string &payload, const string &unquoted_payload)
 {
-    return broken_utf_evasion_re.hasMatch(payload);
+    if (broken_utf_evasion_re.hasMatch(unquoted_payload)) {
+        return unquoted_payload;
+    } else if (broken_utf_evasion_re.hasMatch(payload)) {
+        return payload;
+    } else {
+        return genError("does not contain broken-down UTF8");
+    }
 }
 
 string
@@ -1424,6 +1435,12 @@ unescapeBrokenUtf8(const string &payload)
 
     dbgTrace(D_WAAP_EVASIONS) << "unescaped_text: " << unescaped_text;
     return unescaped_text;
+}
+
+bool
+containsCspReportPolicy(const string &payload)
+{
+    return csp_report_policy_re.hasMatch(payload);
 }
 
 string
@@ -1823,6 +1840,11 @@ ContentType detectContentType(const char* hdr_value) {
         // Detect JSON content type if Content-Type header value is application/json or ends with "/json"
         if (my_stricmp(slash_p + 1, "json") || my_stristarts_with(hdr_value, "application/json")) {
             return CONTENT_TYPE_JSON;
+        }
+
+        // Detect Graphql content type if Content-Type header value is application/graphql
+        if (my_stristarts_with(hdr_value, "application/graphql")) {
+            return CONTENT_TYPE_GQL;
         }
 
         // Detect HTML content type

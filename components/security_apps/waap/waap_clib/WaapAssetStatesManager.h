@@ -24,7 +24,7 @@ class WaapAssetState;
 
 class I_WaapAssetStatesManager {
 public:
-    virtual bool initBasicWaapSigs(const std::string& sigsFname, const std::string& sigScoresFname) = 0;
+    virtual bool initBasicWaapSigs(const std::string& waapDataFileName) = 0;
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateGlobal() = 0;
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateById(const std::string& assetId) = 0;
     virtual void setAssetDirectoryPath(const std::string &assetDirectoryPath) = 0;
@@ -36,7 +36,7 @@ public:
     virtual ~WaapAssetStatesManager();
 
     void preload();
-    virtual bool initBasicWaapSigs(const std::string& sigsFname, const std::string& sigScoresFname);
+    virtual bool initBasicWaapSigs(const std::string& waapDataFileName);
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateGlobal();
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateById(const std::string& assetId);
 
@@ -53,7 +53,7 @@ public:
     Impl();
     virtual ~Impl();
 
-    virtual bool initBasicWaapSigs(const std::string& sigsFname, const std::string& sigScoresFname);
+    virtual bool initBasicWaapSigs(const std::string& waapDataFileName);
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateGlobal();
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateById(const std::string& assetId);
     virtual void setAssetDirectoryPath(const std::string &assetDirectoryPath);

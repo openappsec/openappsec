@@ -295,8 +295,8 @@ TEST_F(DownloaderTest, download_virtual_policy)
 {
     GetResourceFile resourse_file(GetResourceFile::ResourceFileType::VIRTUAL_POLICY);
 
-    resourse_file.addTenant("0000", "1", "checksum0000");
-    resourse_file.addTenant("1111", "2", "checksum1111");
+    resourse_file.addTenant("0000", "1234", "1", "checksum0000");
+    resourse_file.addTenant("1111", "1235", "2", "checksum1111");
 
     string tenant_0000_file =
         "{"
@@ -319,6 +319,7 @@ TEST_F(DownloaderTest, download_virtual_policy)
         "    \"tenants\": [\n"
         "        {\n"
         "            \"tenantId\": \"0000\",\n"
+        "            \"profileId\": \"1234\",\n"
         "            \"policy\": {\n"
         "                \"waap\": \"108-005\",\n"
         "                \"accessControl\": \"Internal error, check logs\",\n"
@@ -328,6 +329,7 @@ TEST_F(DownloaderTest, download_virtual_policy)
         "        },\n"
         "        {\n"
         "            \"tenantId\": \"1111\",\n"
+        "            \"profileId\": \"1235\",\n"
         "            \"policy\": {\n"
         "                \"messageId\": \"108-005\",\n"
         "                \"message\": \"Internal error, check logs\",\n"
@@ -340,16 +342,16 @@ TEST_F(DownloaderTest, download_virtual_policy)
 
     EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_0000_file, "/tmp/virtualPolicy_0000.download"))
+    EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_0000_file, "/tmp/virtualPolicy_0000_profile_1234.download"))
         .WillOnce(Return(true));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_1111_file, "/tmp/virtualPolicy_1111.download"))
+    EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_1111_file, "/tmp/virtualPolicy_1111_profile_1235.download"))
         .WillOnce(Return(true));
 
-    map<string, string> expected_downloaded_files =
+    map<pair<string, string>, string> expected_downloaded_files =
         {
-            { "0000", "/tmp/virtualPolicy_0000.download" },
-            { "1111", "/tmp/virtualPolicy_1111.download" }
+            { {"0000", "1234" }, "/tmp/virtualPolicy_0000_profile_1234.download" },
+            { {"1111", "1235" }, "/tmp/virtualPolicy_1111_profile_1235.download" }
         };
 
     EXPECT_EQ(
@@ -365,7 +367,12 @@ TEST_F(DownloaderTest, download_virtual_settings)
 {
     GetResourceFile resourse_file(GetResourceFile::ResourceFileType::VIRTUAL_SETTINGS);
 
-    resourse_file.addTenant("4c721b40-85df-4364-be3d-303a10ee9789", "1", "checksum0000");
+    resourse_file.addTenant(
+        "4c721b40-85df-4364-be3d-303a10ee9789",
+        "4c721b40-85df-4364-be3d-303a10ee9780",
+        "1",
+        "checksum0000"
+    );
 
     string tenant_0000_file =
         "{"
@@ -389,6 +396,7 @@ TEST_F(DownloaderTest, download_virtual_settings)
         "    \"tenants\": [\n"
         "        {\n"
         "            \"tenantId\": \"4c721b40-85df-4364-be3d-303a10ee9789\",\n"
+        "            \"profileId\": \"4c721b40-85df-4364-be3d-303a10ee9780\",\n"
         "            \"settings\": {\n"
         "                \"agentSettings\": [\n"
         "                    {\n"
@@ -410,14 +418,24 @@ TEST_F(DownloaderTest, download_virtual_settings)
 
     EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
 
+    stringstream tenant_0000_path;
+    tenant_0000_path << "/tmp/virtualSettings_4c721b40-85df-4364-be3d-303a10ee9789"
+                    "_profile_4c721b40-85df-4364-be3d-303a10ee9780.download";
     EXPECT_CALL(
         mock_orchestration_tools,
-        writeFile(tenant_0000_file, "/tmp/virtualSettings_4c721b40-85df-4364-be3d-303a10ee9789.download")
+        writeFile(
+            tenant_0000_file,
+            tenant_0000_path.str()
+        )
     ).WillOnce(Return(true));
 
-    map<string, string> expected_downloaded_files = {
-        {   "4c721b40-85df-4364-be3d-303a10ee9789",
-            "/tmp/virtualSettings_4c721b40-85df-4364-be3d-303a10ee9789.download"
+    stringstream file_path;
+    file_path << "/tmp/virtualSettings_4c721b40-85df-4364-be3d-303a10ee9789"
+                "_profile_4c721b40-85df-4364-be3d-303a10ee9780.download";
+
+    map<pair<string, string>, string> expected_downloaded_files = {
+        {   {"4c721b40-85df-4364-be3d-303a10ee9789", "4c721b40-85df-4364-be3d-303a10ee9780"},
+            file_path.str()
         }
     };
 

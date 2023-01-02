@@ -13,10 +13,6 @@
 
 #include "http_decoder.h"
 
-#include "sasal.h"
-
-SASAL_START // Communication
-
 using namespace std;
 
 USE_DEBUG_FLAG(D_COMMUNICATION);
@@ -354,5 +350,3 @@ HTTPResponse::getResponse() const
     }
     return genError(string("Request failed, Error: ") + status_code_str + " " + status_code_message->second);
 }
-
-SASAL_END

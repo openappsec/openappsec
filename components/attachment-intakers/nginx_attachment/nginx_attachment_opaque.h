@@ -38,7 +38,10 @@ public:
         ctx.activate();
         gen_ctx.activate();
         if (session_tenant != "") {
-            Singleton::Consume<I_Environment>::by<NginxAttachmentOpaque>()->setActiveTenant(session_tenant);
+            Singleton::Consume<I_Environment>::by<NginxAttachmentOpaque>()->setActiveTenantAndProfile(
+                session_tenant,
+                session_profile
+            );
         }
 
     }
@@ -47,7 +50,7 @@ public:
     deactivateContext()
     {
         if (session_tenant != "") {
-            Singleton::Consume<I_Environment>::by<NginxAttachmentOpaque>()->unsetActiveTenant();
+            Singleton::Consume<I_Environment>::by<NginxAttachmentOpaque>()->unsetActiveTenantAndProfile();
         }
         gen_ctx.deactivate();
         ctx.deactivate();
@@ -66,7 +69,7 @@ public:
     static uint minVer() { return 0; }
 
     const std::string & getSessionTenant() const { return session_tenant; }
-    void setSessionTenant(const std::string &tenant);
+    void setSessionTenantAndProfile(const std::string &tenant, const std::string &profile);
     void setSourceIdentifier(const std::string &header_key, const std::string &source_identifier);
     const std::string & getSourceIdentifiersType() const;
 
@@ -85,6 +88,7 @@ private:
     GenericRulebaseContext  gen_ctx;
     Context                 ctx;
     std::string             session_tenant;
+    std::string             session_profile;
     std::string             uuid;
     std::string             source_identifier;
     std::string             identifier_type;

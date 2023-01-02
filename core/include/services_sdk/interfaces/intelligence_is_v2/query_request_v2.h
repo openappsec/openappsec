@@ -38,6 +38,7 @@ public:
     );
 
     void saveToJson(cereal::JSONOutputArchive &ar) const;
+    void save(cereal::JSONOutputArchive &ar) const;
 
     uint getAssetsLimit() const;
     const SerializableQueryFilter & getQuery() const;
@@ -87,6 +88,23 @@ private:
     SerializableAttributesMap requested_attributes;
     SerializableQueryTypes query_types;
     QueryRequest calcQueryRequestOperator(const QueryRequest &other_query, const Operator &operator_type);
+};
+
+class BulkQueryRequest
+{
+public:
+    BulkQueryRequest() {}
+
+    BulkQueryRequest(QueryRequest &request, int index);
+    
+    void saveToJson(cereal::JSONOutputArchive &ar) const;
+    void save(cereal::JSONOutputArchive &ar) const;
+
+    QueryRequest getQueryRequest() const;
+
+private:
+    QueryRequest request;
+    int index;
 };
 
 #endif // __QUERY_REQUEST_V2_H__

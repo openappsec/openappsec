@@ -18,10 +18,7 @@
 #include "boost/uuid/uuid_io.hpp"
 
 #include "config.h"
-#include "sasal.h"
 #include "virtual_modifiers.h"
-
-SASAL_START // HTTP Manager - Transaction data
 
 using namespace std;
 using namespace boost::uuids;
@@ -34,6 +31,7 @@ NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_da
     transaction_data(move(_transaction_data)),
     ctx(),
     session_tenant(),
+    session_profile(),
     uuid()
 {
     try {
@@ -65,10 +63,10 @@ NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_da
     auto decoder = makeVirtualContainer<HexDecoder<'%'>>(transaction_data.getURI());
     string decoded_url(decoder.begin(), decoder.end());
     auto question_mark_location = decoded_url.find('?');
-    if (question_mark_location != string::npos) {
+    if (question_mark_location != string::npos && (question_mark_location + 1) <= decoded_url.size()) {
         ctx.registerValue(HttpTransactionData::uri_query_decoded, decoded_url.substr(question_mark_location + 1));
     }
-    ctx.registerValue(HttpTransactionData::uri_path_decoded, decoded_url.substr(0, question_mark_location));
+    ctx.registerValue(HttpTransactionData::uri_path_decoded, decoded_url);
 }
 
 NginxAttachmentOpaque::~NginxAttachmentOpaque()
@@ -85,10 +83,14 @@ NginxAttachmentOpaque::prototype()
 // LCOV_EXCL_STOP
 
 void
-NginxAttachmentOpaque::setSessionTenant(const string &tenant)
+NginxAttachmentOpaque::setSessionTenantAndProfile(const string &tenant, const string &profile)
 {
     session_tenant = tenant;
-    Singleton::Consume<I_Environment>::by<NginxAttachmentOpaque>()->setActiveTenant(session_tenant);
+    session_profile = profile;
+    Singleton::Consume<I_Environment>::by<NginxAttachmentOpaque>()->setActiveTenantAndProfile(
+        session_tenant,
+        session_profile
+    );
 }
 
 void
@@ -117,5 +119,3 @@ NginxAttachmentOpaque::setSavedData(const string &name, const string &data, EnvK
     saved_data[name] = data;
     ctx.registerValue(name, data, log_ctx);
 }
-
-SASAL_END

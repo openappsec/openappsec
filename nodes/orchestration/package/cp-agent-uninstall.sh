@@ -162,7 +162,6 @@ cp_exec "rm -f $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED}"
 if [ "$is_smb" = "1" ]; then
     cp_print "Removing SMB specific dirs..."
     cp_exec "rm -rf /storage/nano_agent/"
-    cp_exec "rm -rf /var/log/nano_agent/"
     cp_exec "rm -f /pfrm2.0/etc/nano-egg-args"
 
     cp_print "Done."

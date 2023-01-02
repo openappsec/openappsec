@@ -207,9 +207,6 @@ private:
         }
 
         set<ReportIS::Tags> tags;
-        string agent_uid =
-            (Report::isPlaygroundEnv() ? "playground-" : "") +
-            Singleton::Consume<I_AgentDetails>::by<SignalHandler>()->getAgentId();
         Report message_to_fog(
             "Nano service startup after crash",
             curr_time,
@@ -221,7 +218,7 @@ private:
             Severity::HIGH,
             Priority::HIGH,
             chrono::seconds(0),
-            LogField("agentId", agent_uid),
+            LogField("agentId", Singleton::Consume<I_AgentDetails>::by<SignalHandler>()->getAgentId()),
             tags,
             Tags::INFORMATIONAL
         );
@@ -262,7 +259,12 @@ private:
                 << ", Error: "
                 << strerror(errno_copy);
         }
+        setHandlerPerSignalNum();
+    }
 
+    void
+    setHandlerPerSignalNum()
+    {
         static const vector<int> signals = {
             SIGABRT,
             SIGKILL,
@@ -302,6 +304,9 @@ private:
     {
         const char *signal_name = "";
         char signal_num[3];
+
+        reset_signal_handler = true;
+
         switch(_signal) {
             case SIGABRT: {
                 signal_name = "SIGABRT";
@@ -445,6 +450,9 @@ private:
             [&] ()
             {
                 while (true) {
+                    if (reset_signal_handler) {
+                        setHandlerPerSignalNum();
+                    }
                     if (reload_settings_flag == true) {
                         reload_settings_flag = false;
                         if (reloadConfiguration("")) {
@@ -462,11 +470,13 @@ private:
 
     static string trace_file_path;
     static bool reload_settings_flag;
+    static bool reset_signal_handler;
     static int out_trace_file_fd;
 };
 
 string SignalHandler::Impl::trace_file_path;
 bool SignalHandler::Impl::reload_settings_flag = false;
+bool SignalHandler::Impl::reset_signal_handler = false;
 int SignalHandler::Impl::out_trace_file_fd = -1;
 
 SignalHandler::SignalHandler() : Component("SignalHandler"), pimpl(make_unique<Impl>()) {}

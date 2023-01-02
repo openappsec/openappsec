@@ -153,6 +153,29 @@ genHeaders(const Buffer &raw_data)
     return headers;
 }
 
+static vector<string>
+getActivetenantAndProfile(const string &str, const string &deli = ",")
+{
+    vector<string> elems;
+    elems.reserve(2);
+
+    int start = 0;
+    int end = str.find(deli);
+    while (end != -1) {
+        elems.push_back(str.substr(start, end - start));
+        start = end + deli.size();
+        end = str.find(deli, start);
+    }
+
+    elems.push_back(str.substr(start, end - start));
+
+    if (elems.size() == 1) {
+        elems.push_back("");
+    }
+
+    return elems;
+}
+
 Maybe<vector<HttpHeader>>
 NginxParser::parseRequestHeaders(const Buffer &data)
 {
@@ -182,8 +205,8 @@ NginxParser::parseRequestHeaders(const Buffer &data)
                 << ", Value: "
                 << dumpHex(header.getValue());
 
-            string active_tenant(static_cast<string>(header.getValue()));
-            opaque.setSessionTenant(active_tenant);
+            auto active_tenant_and_profile = getActivetenantAndProfile(header.getValue());
+            opaque.setSessionTenantAndProfile(active_tenant_and_profile[0], active_tenant_and_profile[1]);
         } else if (proxy_ip_header_key == header.getKey()) {
             source_identifiers.setXFFValuesToOpaqueCtx(header, UsersAllIdentifiersConfig::ExtractType::PROXYIP);
         }

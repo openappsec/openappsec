@@ -29,6 +29,7 @@
 class I_Telemetry;
 class I_DeepAnalyzer;
 class I_WaapAssetStatesManager;
+
 class I_Messaging;
 class I_AgentDetails;
 class I_Encryptor;

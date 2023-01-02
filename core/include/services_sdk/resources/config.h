@@ -91,7 +91,11 @@ std::string getConfigurationFlagWithDefault(const std::string &default_val, cons
 const std::string & getFilesystemPathConfig();
 const std::string & getLogFilesPathConfig();
 
-std::string getPolicyConfigPath(const std::string &name, Config::ConfigFileType type, const std::string &tenant = "");
+std::string getPolicyConfigPath(
+    const std::string &name,
+    Config::ConfigFileType type,
+    const std::string &tenant = "",
+    const std::string &profile = "");
 
 void registerExpectedConfigFile(const std::string &config_name, Config::ConfigFileType type);
 

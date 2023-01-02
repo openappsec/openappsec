@@ -14,9 +14,6 @@
 #include "http_manager_opaque.h"
 
 #include "config.h"
-#include "sasal.h"
-
-SASAL_START // HTTP Manager - Transaction data
 
 using namespace std;
 
@@ -99,5 +96,3 @@ HttpManagerOpaque::updatePayloadSize(const uint curr_payload_size)
 {
     aggregated_payload_size += curr_payload_size;
 }
-
-SASAL_END

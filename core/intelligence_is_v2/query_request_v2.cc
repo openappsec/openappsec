@@ -22,6 +22,27 @@ using namespace Intelligence_IS_V2;
 
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
+BulkQueryRequest::BulkQueryRequest(QueryRequest &_request, int _index)
+        :
+    request(_request),
+    index(_index)
+{}
+
+QueryRequest
+BulkQueryRequest::getQueryRequest() const
+{
+    return request;
+}
+
+void
+BulkQueryRequest::save(cereal::JSONOutputArchive &ar) const
+{
+    ar(
+        cereal::make_nvp("query", getQueryRequest()),
+        cereal::make_nvp("index",  index)
+    );
+}
+
 QueryRequest::QueryRequest(
     Condition condition_type,
     const string &key,
@@ -36,6 +57,20 @@ QueryRequest::QueryRequest(
 
 void
 QueryRequest::saveToJson(cereal::JSONOutputArchive &ar) const
+{
+    ar(
+        cereal::make_nvp("limit", assets_limit),
+        cereal::make_nvp("fullResponse", full_response),
+        cereal::make_nvp("query", query)
+    );
+
+    if (cursor.ok()) ar(cereal::make_nvp("cursor", cursor.unpack().second));
+    requested_attributes.save(ar);
+    query_types.save(ar);
+}
+
+void
+QueryRequest::save(cereal::JSONOutputArchive &ar) const
 {
     ar(
         cereal::make_nvp("limit", assets_limit),

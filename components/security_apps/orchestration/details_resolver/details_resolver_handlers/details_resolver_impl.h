@@ -23,8 +23,20 @@
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
-#endif //gaia
+#endif //gaia || smb
 
+#if defined(smb)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtParentObjectName",
+    "cpsdwan get_data | jq -r .cluster_name",
+    getMgmtParentObjName
+)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtParentObjectUid",
+    "cpsdwan get_data | jq -r .cluster_uuid",
+    getMgmtParentObjUid
+)
+#endif//smb
 #endif // SHELL_CMD_HANDLER
 
 
@@ -39,6 +51,19 @@ SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
 // use FILE_CONTENT_HANDLER(key as string, path to file as string, ptr to Maybe<string> handler(ifstream&))
 // to return a string value for an attribute key based on a logic executed in a handler that receives file as input
 #ifdef FILE_CONTENT_HANDLER
+
+#if defined(gaia)
+FILE_CONTENT_HANDLER(
+    "cpProductIntegrationMgmtParentObjectUid",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getMgmtParentObjUid
+)
+FILE_CONTENT_HANDLER(
+    "cpProductIntegrationMgmtParentObjectName",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getMgmtParentObjName
+)
+#endif //gaia
 
 #if defined(alpine)
 FILE_CONTENT_HANDLER("alpine_tag", "/usr/share/build/cp-alpine-tag", getCPAlpineTag)
@@ -55,16 +80,7 @@ FILE_CONTENT_HANDLER(
     (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",
     getMgmtObjName
 )
-FILE_CONTENT_HANDLER(
-    "cpProductIntegrationMgmtParentObjectUid",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getMgmtParentObjUid
-)
-FILE_CONTENT_HANDLER(
-    "cpProductIntegrationMgmtParentObjectName",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getMgmtParentObjName
-)
+
 #else // !(gaia || smb)
 FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 #endif // gaia || smb

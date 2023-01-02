@@ -30,7 +30,10 @@ public:
 
     MOCK_CONST_METHOD2(
         downloadVirtualFileFromFog,
-        Maybe<std::map<std::string, std::string>>(const GetResourceFile &, Package::ChecksumTypes)
+        Maybe<std::map<std::pair<std::string, std::string>, std::string>>(
+            const GetResourceFile &,
+            Package::ChecksumTypes
+        )
     );
 
     MOCK_CONST_METHOD4(

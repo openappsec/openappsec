@@ -101,15 +101,19 @@ public:
         return true;
     }
 
+
     void
     doEncrypt()
     {
         Maybe<string> err = genError("No file exist");
         EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/user-cred.json")).WillOnce(Return(err));
 
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a")).WillOnce(Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a")).WillOnce(Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a")).WillOnce(Return(true));
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a")).WillOnce(
+            Return(true));
+        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a")).WillOnce(
+            Return(true));
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a")).WillOnce(
+            Return(true));
     }
 
     void
@@ -526,12 +530,12 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).WillOnce(Return(true));
 
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(new_policy_path, "", expected_data_types, "")
+        updateServiceConfiguration(new_policy_path, "", expected_data_types, "", "")
     ).WillOnce(Return(true));
 
     EXPECT_CALL(
@@ -629,7 +633,7 @@ TEST_F(OrchestrationTest, startOrchestrationPoliceWithFailures)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).Times(2).WillRepeatedly(Return(true));
 
     EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
@@ -749,7 +753,7 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
@@ -883,7 +887,7 @@ TEST_F(OrchestrationTest, manifestUpdate)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
@@ -1033,7 +1037,7 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).Times(2).WillRepeatedly(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
@@ -1114,7 +1118,7 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
 
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(string("policy path"), "", expected_data_types, "")).WillOnce(Return(false)
+        updateServiceConfiguration(string("policy path"), "", expected_data_types, "", "")).WillOnce(Return(false)
     );
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
@@ -1179,7 +1183,7 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
@@ -1397,7 +1401,7 @@ TEST_P(OrchestrationTest, orchestrationFirstRun)
     vector<string> expected_data_types = {};
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "")
     ).WillOnce(Return(true));
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
@@ -1578,13 +1582,13 @@ TEST_F(OrchestrationTest, dataUpdate)
     vector<string> expected_empty_data_types = {};
     ExpectationSet expectation_set = EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "")
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "")
     ).WillOnce(Return(true));
 
     vector<string> expected_ips_data_types = { "ips" };
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration("", "", expected_ips_data_types, "")
+        updateServiceConfiguration("", "", expected_ips_data_types, "", "")
     ).After(expectation_set).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));

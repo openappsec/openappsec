@@ -170,9 +170,6 @@ string GenericMetric::getListenerName() const { return metric_name; }
 void
 GenericMetric::generateLog()
 {
-    string agent_uid =
-        (Report::isPlaygroundEnv() ? "playground-" : "") +
-        Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getAgentId();
     set<ReportIS::Tags> tags;
     Report metric_to_fog(
         metric_name,
@@ -185,7 +182,7 @@ GenericMetric::generateLog()
         Severity::INFO,
         Priority::LOW,
         report_interval,
-        LogField("agentId", agent_uid),
+        LogField("agentId", Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getAgentId()),
         tags,
         Tags::INFORMATIONAL,
         issuing_engine

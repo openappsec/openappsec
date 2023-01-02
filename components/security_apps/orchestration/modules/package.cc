@@ -15,10 +15,6 @@
 
 #include <map>
 
-#include "sasal.h"
-
-SASAL_START // Orchestration - Modules
-
 using namespace std;
 using namespace cereal;
 
@@ -129,5 +125,3 @@ Package::serialize(JSONInputArchive & in_archive)
     }
     package_type = package_type_value->second;
 }
-
-SASAL_END

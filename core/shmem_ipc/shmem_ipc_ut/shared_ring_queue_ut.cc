@@ -6,8 +6,7 @@ using namespace std;
 using namespace testing;
 
 const static string bad_shmem_path = "/root/sadsadsadad/444";
-const static string valid_shmem_file_name = "shmem_ut";
-const static string valid_shmem_path = "/dev/shm/" + valid_shmem_file_name;
+const static string valid_shmem_path = "shmem_ut";
 const uint16_t max_num_of_data_segments = sizeof(DataSegment)/sizeof(uint16_t);
 const static uint16_t num_of_shmem_elem = 11;
 
@@ -16,11 +15,8 @@ class SharedRingQueueTest : public Test
 public:
     SharedRingQueueTest()
     {
-        // remove old fd from prev tests
-        unlink(valid_shmem_path.c_str());
-
-        owners_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), num_of_shmem_elem, 1, 1);
-        users_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), num_of_shmem_elem, 0, 0);
+        owners_queue = createSharedRingQueue(valid_shmem_path.c_str(), num_of_shmem_elem, 1, 1);
+        users_queue = createSharedRingQueue(valid_shmem_path.c_str(), num_of_shmem_elem, 0, 0);
     }
 
     ~SharedRingQueueTest()
@@ -326,14 +322,12 @@ TEST_F(SharedRingQueueTest, ilegal_queue)
     ASSERT_NE(users_queue, nullptr);
 
     destroySharedRingQueue(users_queue, 0, 1);
-    users_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), max_num_of_data_segments + 1, 0, 0);
+    users_queue = createSharedRingQueue(valid_shmem_path.c_str(), max_num_of_data_segments + 1, 0, 0);
     EXPECT_EQ(users_queue, nullptr);
 
     users_queue = createSharedRingQueue(bad_shmem_path.c_str(), max_num_of_data_segments, 0, 0);
     EXPECT_EQ(users_queue, nullptr);
 
-    ASSERT_NE(owners_queue, nullptr);
-    destroySharedRingQueue(owners_queue, 1, 1);
-    owners_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), max_num_of_data_segments, 1, 1);
+    owners_queue = createSharedRingQueue(valid_shmem_path.c_str(), max_num_of_data_segments, 1, 1);
     EXPECT_NE(owners_queue, nullptr);
 }

@@ -7,6 +7,7 @@ INSTALLATION_TIME=$(date)
 
 WAAP_POLICY_FOLDER_PATH=/etc/cp/conf/waap
 IPS_POLICY_FOLDER_PATH=/etc/cp/conf/ips
+DATA_FOLDER_PATH=/etc/cp/conf/data
 
 DEFAULT_HTTP_TRANSACTION_HANDLER_EVENT_BUFFER=/var/log/nano_agent/event_buffer/HTTP_TRANSACTION_HANDLER_events
 
@@ -82,13 +83,33 @@ install_waap()
     cp_exec "mkdir -p /var/waf2_engine/waf2_engine"
     cp_exec "mkdir -p /usr/share/waf2_engine"
     # /etc/cp/conf/waap/ is created in install_policy
-    cp_exec "cp -f resources/1.data /etc/cp/conf/waap/"
-    cp_exec "cp -f resources/2.data /etc/cp/conf/waap/"
-    cp_exec "cp -f resources/8.data /etc/cp/conf/waap/"
+    cp_exec "cp -f resources/waap.data /etc/cp/conf/waap/"
     cp_exec "cp -f resources/cp-ab.js /etc/cp/conf/waap/"
     cp_exec "cp -f resources/cp-csrf.js /etc/cp/conf/waap/"
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-ab.js"
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-csrf.js"
+}
+
+install_file_security()
+{
+    cp_exec "cp -f conf/cp-nano-file-security-file-type.json /etc/cp/conf/data/fileSecurity.data"
+    cp_exec "chmod 666 /etc/cp/conf/data/fileSecurity.data"
+
+    echo "Installing package dependencies"
+    if [ `which apt | wc -l` -ne 0 ]; then
+        apt -y update
+        DEBIAN_FRONTEND=noninteractive apt -y install bsdtar gzip bzip2
+    fi
+
+    if [ `which apk | wc -l` -ne 0 ]; then
+        apk update
+        apk add libarchive-tools gzip bzip2
+    fi
+
+    if [ `which yum | wc -l` -ne 0 ]; then
+        yum makecache --refresh
+        yum -y install bsdtar gzip bzip2
+    fi
 }
 
 set_debug_configuration()
@@ -191,6 +212,7 @@ run_installation()
 
     cp_exec "mkdir -p $WAAP_POLICY_FOLDER_PATH"
     cp_exec "mkdir -p $IPS_POLICY_FOLDER_PATH"
+    cp_exec "mkdir -p $DATA_FOLDER_PATH"
 
     cp_exec "mkdir -p $HTTP_TRANSACTION_HANDLER_PATH"
     cp_exec "install bin/cp-nano-http-transaction-handler $HTTP_TRANSACTION_HANDLER_PATH/$HTTP_TRANSACTION_HANDLER_FILE"
@@ -211,6 +233,7 @@ run_installation()
 
     install_policy $is_debug_mode "$var_certs_dir"
     install_waap
+    install_file_security
 
     ${INSTALL_COMMAND} lib/libshmem_ipc.so /usr/lib/cpnano/
     ${INSTALL_COMMAND} lib/libcompression_utils.so /usr/lib/

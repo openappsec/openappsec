@@ -19,7 +19,6 @@ class I_LocalPolicyMgmtGen
 public:
     enum class LocalPolicyEnv { LINUX, K8S, COUNT };
 
-
     virtual std::string parsePolicy(const std::string &policy_version) = 0;
     virtual const std::string & getPolicyPath(void) const = 0;
     virtual LocalPolicyEnv getEnvType() const = 0;

@@ -12,9 +12,7 @@
 // limitations under the License.
 
 #include "pm_adaptor.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 int kiss_debug_err_flag = 0;
 
 void
@@ -100,4 +98,3 @@ kiss_pm_error_set_details(KissPMError *error,
     error->error_string = error_string;
     return;
 }
-SASAL_END

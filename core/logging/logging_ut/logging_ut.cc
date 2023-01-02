@@ -9,6 +9,7 @@
 #include "mock/mock_messaging.h"
 #include "mock/mock_time_get.h"
 #include "mock/mock_rest_api.h"
+#include "mock/mock_logging.h"
 #include "config.h"
 #include "config_component.h"
 #include "instance_awareness.h"
@@ -1330,4 +1331,58 @@ TEST_F(LogTest, ObfuscationTest)
     for (const string &str : capture_syslog_cef_data) {
         EXPECT_THAT(str, AnyOf(HasSubstr("String='Another string'"), HasSubstr("String=Another string")));
     }
+}
+
+TEST(OfflineLog, OfflineLog)
+{
+    AgentDetails agent_details;
+    StrictMock<MockTimeGet> mock_timer;
+    StrictMock<MockLogging> mock_logger;
+
+    EXPECT_CALL(mock_timer, getWalltimeStr(_)).WillOnce(Return("0:0:0"));
+    EXPECT_CALL(mock_timer, getWalltime()).WillOnce(Return(chrono::microseconds(0)));
+    EXPECT_CALL(mock_logger, getCurrentLogId()).WillOnce(Return(1));
+
+    LogGen log(
+        "Install policy",
+        Audience::INTERNAL,
+        Severity::INFO,
+        Priority::LOW,
+        Tags::POLICY_INSTALLATION,
+        Tags::ACCESS_CONTROL,
+        Enreachments::BEAUTIFY_OUTPUT
+    );
+    log << LogField("String", "Another string");
+
+    string expected_log(
+        "{\n"
+        "    \"eventTime\": \"0:0:0\",\n"
+        "    \"eventName\": \"Install policy\",\n"
+        "    \"eventSeverity\": \"Info\",\n"
+        "    \"eventPriority\": \"Low\",\n"
+        "    \"eventType\": \"Event Driven\",\n"
+        "    \"eventLevel\": \"Log\",\n"
+        "    \"eventLogLevel\": \"info\",\n"
+        "    \"eventAudience\": \"Internal\",\n"
+        "    \"eventAudienceTeam\": \"\",\n"
+        "    \"eventFrequency\": 0,\n"
+        "    \"eventTags\": [\n"
+        "        \"Access Control\",\n"
+        "        \"Policy Installation\"\n"
+        "    ],\n"
+        "    \"eventSource\": {\n"
+        "        \"agentId\": \"Unknown\",\n"
+        "        \"eventTraceId\": \"\",\n"
+        "        \"eventSpanId\": \"\",\n"
+        "        \"issuingEngineVersion\": \"\",\n"
+        "        \"serviceName\": \"Unnamed Nano Service\"\n"
+        "    },\n"
+        "    \"eventData\": {\n"
+        "        \"logIndex\": 1,\n"
+        "        \"String\": \"Another string\"\n"
+        "    }\n"
+        "}"
+    );
+
+    EXPECT_EQ(log.getLogInsteadOfSending(), expected_log);
 }

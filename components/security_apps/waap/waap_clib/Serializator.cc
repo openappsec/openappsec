@@ -53,7 +53,7 @@ isGZipped(const std::string &stream)
 
 bool RestGetFile::loadJson(const std::string& json)
 {
-    std::string json_str = json;     
+    std::string json_str = json;
     if (isGZipped(json_str) == 0)
     {
         return ClientRest::loadJson(json_str);
@@ -251,12 +251,6 @@ void SerializeToFileBase::restore()
 {
     loadFromFile(m_filePath);
 }
-
-void SerializeToFileBase::setFilePath(const std::string& new_file_path)
-{
-    m_filePath = new_file_path;
-}
-
 
 RemoteFilesList::RemoteFilesList() : files(), filesPathsList()
 {

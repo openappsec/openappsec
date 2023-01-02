@@ -50,7 +50,11 @@ public:
     virtual const string & getFilesystemPathConfig() const = 0;
     virtual const string & getLogFilesPathConfig() const = 0;
 
-    virtual string getPolicyConfigPath(const string &policy, ConfigFileType type, const string &tenant) const = 0;
+    virtual string getPolicyConfigPath(
+        const string &policy,
+        ConfigFileType type,
+        const string &tenant,
+        const string &profile) const = 0;
 
     virtual bool setConfiguration(TypeWrapper &&value, const std::vector<std::string> &paths) = 0;
     virtual bool setResource(TypeWrapper &&value, const std::vector<std::string> &paths) = 0;

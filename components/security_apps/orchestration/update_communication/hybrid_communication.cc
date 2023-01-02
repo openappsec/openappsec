@@ -18,13 +18,10 @@
 #include "log_generator.h"
 #include "agent_details.h"
 #include "version.h"
-#include "sasal.h"
 
 #include <algorithm>
 #include <map>
 #include <vector>
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 using HTTPMethod = I_Messaging::Method;
@@ -138,10 +135,9 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         << "Downloading attribute file on hybrid mode, file name: "
         << resourse_file.getFileName();
 
-    if (resourse_file.getFileName() == "policy") {
+    if (resourse_file.getFileName() =="policy") {
         return declarative_policy_utils.getCurrPolicy();
     }
-
     if (resourse_file.getFileName() == "manifest") {
         if (!access_token.ok()) return genError("Acccess Token not available.");
 
@@ -156,7 +152,6 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         );
         return attribute_file;
     }
-
     dbgTrace(D_ORCHESTRATOR) << "Unnecessary attribute files downloading on hybrid mode";
     return string("");
 }
@@ -168,5 +163,3 @@ HybridCommunication::sendPolicyVersion(const string &policy_version) const
     policy_version.empty();
     return Maybe<void>();
 }
-
-SASAL_END

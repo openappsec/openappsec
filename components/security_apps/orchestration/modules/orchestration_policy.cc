@@ -13,10 +13,6 @@
 
 #include "orchestration_policy.h"
 
-#include "sasal.h"
-
-SASAL_START // Orchestration - Modules
-
 using namespace std;
 using namespace cereal;
 
@@ -60,5 +56,3 @@ OrchestrationPolicy::operator!=(const OrchestrationPolicy &other) const
 {
     return !((*this) == other);
 }
-
-SASAL_END

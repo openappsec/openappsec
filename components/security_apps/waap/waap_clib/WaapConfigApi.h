@@ -18,6 +18,7 @@
 #include <set>
 
 #include "WaapConfigBase.h"
+
 #include "log_generator.h"
 #include "debug.h"
 

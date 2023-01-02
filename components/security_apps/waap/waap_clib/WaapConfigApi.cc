@@ -66,7 +66,7 @@ WaapConfigAPI::WaapConfigAPI(
     string              practiceName,
     string              ruleId,
     string              ruleName,
-    bool                schemaValidation) :
+    bool                     schemaValidation) :
     WaapConfigBase(
         autonomousSecurity,
         autonomousSecurityLevel,
@@ -84,6 +84,7 @@ WaapConfigAPI::WaapConfigAPI(
 void WaapConfigAPI::load(cereal::JSONInputArchive& ar)
 {
     // order has affect - we need to call base last because of triggers and overrides
+
     readJSONByCereal(ar);
 
     WaapConfigBase::load(ar);
@@ -111,4 +112,3 @@ const string& WaapConfigAPI::get_PracticeSubType() const
 {
     return s_PracticeSubType;
 }
-

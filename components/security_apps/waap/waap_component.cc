@@ -52,7 +52,6 @@ WaapComponent::preload()
     // TODO:: call stuff like registerExpectedCofiguration here..
     registerExpectedConfiguration<WaapConfigApplication>("WAAP", "WebApplicationSecurity");
     registerExpectedConfiguration<WaapConfigAPI>("WAAP", "WebAPISecurity");
-    registerExpectedConfiguration<std::string>("WAAP", "Sigs score file path");
     registerExpectedConfiguration<std::string>("WAAP", "Sigs file path");
     registerExpectedConfigFile("waap", Config::ConfigFileType::Policy);
     registerConfigLoadCb(

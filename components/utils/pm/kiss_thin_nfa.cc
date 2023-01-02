@@ -32,9 +32,7 @@
 
 // ********************* INCLUDES **************************
 #include "kiss_thin_nfa_impl.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 // Internal execution flags passed to kiss_dfa_exec_one_buf:
 #define KISS_PM_EXEC_LAST_BUFF 0x00000001    // This is the last buffer (preset buffer or the last buffer in vbuf)
 
@@ -459,4 +457,3 @@ kiss_thin_nfa_exec(KissThinNFA *nfa_h, const Buffer& buf, std::vector<std::pair<
 
     return;
 }
-SASAL_END

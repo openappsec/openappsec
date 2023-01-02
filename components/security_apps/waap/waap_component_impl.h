@@ -55,13 +55,13 @@ public:
     EventVerdict respond(const EndTransactionEvent &) override;
 
 private:
-    void init(const std::string &sigs_file_path, const std::string &sigs_scores_file_path);
+    void init(const std::string &waapDataFileName);
 
     EventVerdict waapDecisionAfterHeaders(IWaf2Transaction& waf2Transaction);
     EventVerdict waapDecision(IWaf2Transaction& waf2Transaction);
     void finishTransaction(IWaf2Transaction& waf2Transaction);
 
-    bool waf2_proc_start(const std::string& sigsFname, const std::string& scoresFname);
+    bool waf2_proc_start(const std::string& waapDataFileName);
     void waf2_proc_exit();
     void validateFirstRequestForAsset(const ReportIS::Severity severity);
     void sendNotificationForFirstRequest(

@@ -18,11 +18,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "enum_array.h"
-#include "sasal.h"
 #include "buffer.h"
 #include "nginx_attachment_common.h"
-
-SASAL_START // HTTP Manager - Transaction data
 
 using namespace std;
 
@@ -261,5 +258,3 @@ HttpTransactionData::print(ostream &out_stream) const
         << ")"
         << endl;
 }
-
-SASAL_END

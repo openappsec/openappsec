@@ -53,6 +53,10 @@ enum DccpPacketType {
     DCCP_PKT_INVALID,
 };
 
+struct net_device {
+    int ifindex;
+};
+
 struct sk_buff {
     uint16_t protocol;
     union {
@@ -67,10 +71,13 @@ struct sk_buff {
         struct sctphdr  *sctp_header;
         struct dccphdr  *dccp_header;
     } transport_header;
-    unsigned char    *tail;
-    unsigned char    *data;
-    unsigned char    *head;
-    unsigned int      len;
+    unsigned char *tail;
+    unsigned char *data;
+    unsigned char *head;
+    unsigned int  len;
+    struct sock   *sk;
+    void          (*destructor)(struct sk_buff *);
+    struct net_device *dev;
 };
 
 struct geneve_opt {

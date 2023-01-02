@@ -87,7 +87,7 @@ public:
     const boost::regex wbxml_data_kw_filter;
 
 private:
-    picojson::value::object loadSource(const std::string& sigsFname);
+    picojson::value::object loadSource(const std::string& waapDataFileName);
 };
 
 #endif

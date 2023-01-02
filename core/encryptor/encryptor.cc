@@ -35,6 +35,8 @@ class Encryptor::Impl : Singleton::Provide<I_Encryptor>::From<Encryptor>
     // Obfuscating
     string obfuscateXor(const string &input) override;
     string obfuscateXorBase64(const string &input) override;
+
+private:
 };
 
 string
