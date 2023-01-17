@@ -24,6 +24,7 @@
 #include "AutonomousSecurityDecision.h"
 #include <iterator>
 
+
 std::ostream& operator<<(std::ostream& os, const std::list<std::shared_ptr<SingleDecision>>& decisions);
 std::ostream& operator<<(std::ostream& os, const DecisionsArr& decisions);
 typedef std::list<std::shared_ptr<SingleDecision>> decision_list;

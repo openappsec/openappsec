@@ -16,9 +16,7 @@
 #include "kiss_hash.h"
 #include "kiss_thin_nfa_impl.h"
 #include "kiss_patterns.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 // Flag for a Thin NFA state
 typedef enum {
     THIN_NFA_STATE_FULL =                0x01,   // We want a full state table for this state
@@ -2229,4 +2227,3 @@ finish:
     }
     return nfa;
 }
-SASAL_END

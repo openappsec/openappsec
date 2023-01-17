@@ -83,3 +83,4 @@ TEST_F(EncryptorTest, XORBase64Encrypt)
         i_encryptor->obfuscateXorBase64(string("\x0b\x2d\x29\x2f\x24\x70\x18\x26\x3c\x38\x27\x69")), "SGVsbG8gV29ybGQh"
     );
 }
+

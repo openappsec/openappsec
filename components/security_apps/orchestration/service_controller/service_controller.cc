@@ -20,7 +20,6 @@
 
 #include "config.h"
 #include "debug.h"
-#include "sasal.h"
 #include "rest.h"
 #include "connkey.h"
 #include "i_messaging.h"
@@ -28,8 +27,6 @@
 #include "log_generator.h"
 #include "i_orchestration_tools.h"
 #include "customized_cereal_map.h"
-
-SASAL_START // Orchestration - Updates Control
 
 using namespace std;
 using namespace ReportIS;
@@ -117,10 +114,36 @@ ServiceDetails::isServiceActive() const
     I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<ServiceController>();
     Maybe<string> service_status = shell_cmd->getExecOutput(watchdog_status_cmd.str());
 
+    int max_retry_attempts = getConfigurationWithDefault<int>(
+        5,
+        "orchestration",
+        "service controller attempts before timeout"
+    );
+
+    uint default_ms_tmout = 200;
+    uint ms_tmout = default_ms_tmout;
+
+    for (int current_attempt = 0; current_attempt < max_retry_attempts; ++current_attempt) {
+        if (service_status.ok() || service_status.getErr().find("Reached timeout") == string::npos) break;
+
+        dbgWarning(D_ORCHESTRATOR)
+            << "Retrying to execute service status check via watchdog API after getting timeout. Service name: "
+            << service_name
+            << ", Watchdog command: "
+            << watchdog_status_cmd.str()
+            << ", retry number: "
+            << (current_attempt + 1);
+
+        ms_tmout = default_ms_tmout*(current_attempt + 2);
+        service_status = shell_cmd->getExecOutput(watchdog_status_cmd.str(), ms_tmout);
+    }
+
     if (!service_status.ok()) {
         dbgWarning(D_ORCHESTRATOR)
             << "Changing service status to inactive after failure to its status from watchdog. Service name: "
-            << service_name;
+            << service_name
+            << ", Watchdog output: "
+            << service_status.getErr();
         return false;
     }
 
@@ -248,7 +271,8 @@ public:
         const string &new_policy_path,
         const string &new_settings_path,
         const vector<string> &new_data_files,
-        const string &tenant_id
+        const string &tenant_id,
+        const string &profile_id
     ) override;
 
     bool isServiceInstalled(const string &service_name) override;
@@ -567,7 +591,8 @@ ServiceController::Impl::updateServiceConfiguration(
     const string &new_policy_path,
     const string &new_settings_path,
     const vector<string> &new_data_files,
-    const string &tenant_id)
+    const string &tenant_id,
+    const string &profile_id)
 {
     dbgFlow(D_ORCHESTRATOR)
         << "new_policy_path: "
@@ -577,7 +602,9 @@ ServiceController::Impl::updateServiceConfiguration(
         << ", new_data_files: "
         << makeSeparatedStr(new_data_files, ",")
         << ". tenant_id: "
-        << tenant_id;
+        << tenant_id
+        << ". profile_id: "
+        << profile_id;
 
     if (!new_settings_path.empty()) {
         settings_path = new_settings_path;
@@ -622,7 +649,7 @@ ServiceController::Impl::updateServiceConfiguration(
         return false;
     }
 
-    auto all_security_policies = orchestration_tools->jsonObjectSplitter(loaded_json.unpack(), tenant_id);
+    auto all_security_policies = orchestration_tools->jsonObjectSplitter(loaded_json.unpack(), tenant_id, profile_id);
 
     if (!all_security_policies.ok()) {
         dbgWarning(D_ORCHESTRATOR)
@@ -655,7 +682,7 @@ ServiceController::Impl::updateServiceConfiguration(
         );
 
         if (tenant_id != "") {
-            dir = dir + "/tenant_" + tenant_id;
+            dir = dir + "/tenant_" + tenant_id + "_profile_" + profile_id;
             if (!orchestration_tools->doesDirectoryExist(dir)) {
                 if (orchestration_tools->createDirectory(dir)) {
                     dbgTrace(D_ORCHESTRATOR) << "Created new configuration directory for tenant " << tenant_id;
@@ -666,7 +693,13 @@ ServiceController::Impl::updateServiceConfiguration(
             }
         }
 
-        string policy_file_path = getPolicyConfigPath(single_policy.first, Config::ConfigFileType::Policy, tenant_id);
+        string policy_file_path =
+            getPolicyConfigPath(
+                single_policy.first,
+                Config::ConfigFileType::Policy,
+                tenant_id,
+                profile_id
+            );
 
         auto update_config_result = updateServiceConfigurationFile(
             single_policy.first,
@@ -690,7 +723,10 @@ ServiceController::Impl::updateServiceConfiguration(
         );
 
         if (tenant_id != "") {
-            auto instances = Singleton::Consume<I_TenantManager>::by<ServiceController>()->getInstances(tenant_id);
+            auto instances = Singleton::Consume<I_TenantManager>::by<ServiceController>()->getInstances(
+                tenant_id,
+                profile_id
+            );
             for (const auto &instance_id: instances) {
                 auto relevant_service = registered_services.find(instance_id);
                 if (relevant_service == registered_services.end()) {
@@ -716,7 +752,9 @@ ServiceController::Impl::updateServiceConfiguration(
 
     if (was_policy_updated) {
         string config_file_path;
-        string base_path = filesystem_prefix + "/conf/" + (tenant_id != "" ? "tenant_" + tenant_id + "/" : "");
+        string base_path =
+            filesystem_prefix + "/conf/" +
+            (tenant_id != "" ? "tenant_" + tenant_id + "_profile_" + profile_id + "/" : "");
         config_file_path = getConfigurationWithDefault<string>(
             base_path + "policy.json",
             "orchestration",
@@ -793,7 +831,15 @@ ServiceController::Impl::sendSignalForServices(
         }
     }
 
-    int reconf_timeout = getConfigurationWithDefault(600, "orchestration", "Reconfiguration timeout seconds");
+    int profile_tmo_conf = getProfileAgentSettingWithDefault<int>(
+        600,
+        "orchestration.configTimeoutSeconds"
+    );
+    int reconf_timeout = getConfigurationWithDefault<int>(
+        profile_tmo_conf,
+        "orchestration",
+        "Reconfiguration timeout seconds"
+    );
     auto timer = Singleton::Consume<I_TimeGet>::by<ServiceController>();
     auto current_timeout = timer->getMonotonicTime() + chrono::seconds(reconf_timeout);
     while(timer->getMonotonicTime() < current_timeout) {
@@ -933,5 +979,3 @@ ServiceController::Impl::startReconfStatus(
     services_reconf_names.emplace(id, service_name);
     services_reconf_ids.emplace(id, service_id);
 }
-
-SASAL_END

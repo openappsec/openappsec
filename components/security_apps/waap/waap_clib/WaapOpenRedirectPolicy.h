@@ -30,6 +30,10 @@ struct Policy {
     enable(false),
     enforce(false)
     {
+        bool web_attack_on;
+        ar(cereal::make_nvp("webAttackMitigation", web_attack_on));
+        if (!web_attack_on) return;
+
         std::string level;
         ar(cereal::make_nvp("openRedirect", level));
         level = boost::algorithm::to_lower_copy(level);

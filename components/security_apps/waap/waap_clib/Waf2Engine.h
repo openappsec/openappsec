@@ -184,6 +184,7 @@ public:
     void handleSecurityHeadersInjection(std::vector<std::pair<std::string, std::string>>& injectHeaderStrs);
     void disableShouldInjectSecurityHeaders();
 
+
     bool shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger::Log> &trigger_log) const;
 
     // query
@@ -236,6 +237,7 @@ private:
     std::string getUserReputationStr(double relativeReputation) const;
     bool isTrustedSource() const;
 
+
     void setCurrentAssetState(IWaapConfig* sitePolicy);
     bool setCurrentAssetContext();
     bool checkIsScanningRequired();
@@ -254,7 +256,7 @@ private:
     size_t getViolatingUserLimitSize() const;
 
     // Internal
-    void processUri(const char *uri, const std::string &scanStage);
+    void processUri(const std::string &uri, const std::string &scanStage);
     void parseContentType(const char* value, int value_len);
     void parseCookie(const char* value, int value_len);
     void parseReferer(const char* value, int value_len);

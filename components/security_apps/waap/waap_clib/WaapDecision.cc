@@ -13,6 +13,7 @@
 
 #include "WaapDecision.h"
 #include "OpenRedirectDecision.h"
+
 #include "debug.h"
 #include <algorithm>
 #include <type_traits>

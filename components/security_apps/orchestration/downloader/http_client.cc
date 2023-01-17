@@ -18,7 +18,6 @@
 #include "debug.h"
 #include "i_encryptor.h"
 #include "url_parser.h"
-#include "sasal.h"
 #include "config.h"
 #include "i_environment.h"
 #include "orchestration_comp.h"
@@ -31,8 +30,6 @@
 
 using boost::asio::ip::tcp;
 using namespace std;
-
-SASAL_START // Orchestration - Communication
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 USE_DEBUG_FLAG(D_HTTP_REQUEST);
@@ -272,5 +269,3 @@ HTTPClient::getFileHttp(const URLParser &url, ofstream &out_file, const string &
     return Maybe<void>();
 }
 // LCOV_EXCL_STOP
-
-SASAL_END

@@ -43,6 +43,7 @@ public:
     void setMultipartBoundary(const std::string &boundary);
     const std::string &getMultipartBoundary() const;
     bool isBinaryData() const;
+    const std::string getLastParser() const;
     bool isWBXmlData() const;
     Maybe<std::string> getSplitType() const;
     std::vector<std::pair<std::string, std::string> > kv_pairs;
@@ -114,13 +115,14 @@ private:
     // note: This function calls onKv(), and the call can be recursive!
     // TODO:: maybe convert this splitter to Parser-derived class?!
     bool splitByRegex(const std::string &val, const Regex &r, const char *keyPrefix);
-    void createInternalParser(std::string& cur_val,
+    void createInternalParser(const char *k, size_t k_len, std::string& cur_val,
         const ValueStatsAnalyzer &valueStats,
         bool isBodyPayload,
         bool isRefererPayload,
         bool isRefererParamPayload,
         bool isUrlPayload,
-        bool isUrlParamPayload);
+        bool isUrlParamPayload,
+        int flags);
     int pushValueToTopParser(std::string& cur_val, int flags, bool base64ParamFound);
     int parseBuffer(ValueStatsAnalyzer& valueStats, const std::string &cur_val, bool base64ParamFound,
         bool shouldUpdateKeyStack);

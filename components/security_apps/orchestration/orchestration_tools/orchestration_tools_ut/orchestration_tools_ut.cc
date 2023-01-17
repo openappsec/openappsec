@@ -158,7 +158,7 @@ TEST_F(OrchestrationToolsTest, jsonObjectSplitter)
                     "           ]"
                     "       }";
 
-    Maybe<map<string, string>> parsed = i_orchestration_tools->jsonObjectSplitter(update_text, "");
+    Maybe<map<string, string>> parsed = i_orchestration_tools->jsonObjectSplitter(update_text, "", "");
     EXPECT_TRUE(parsed.ok());
     cleanSpaces(manifest);
     EXPECT_EQ(manifest, parsed.unpack().find("manifest")->second);
@@ -174,7 +174,7 @@ TEST_F(OrchestrationToolsTest, jsonObjectSplitter)
                                 "           \"download-options\": ["
                                 "               \"http://172.23.92.135/manifest_file.txt\""
                                 "            ]";
-    parsed = i_orchestration_tools->jsonObjectSplitter(invalid_json, "");
+    parsed = i_orchestration_tools->jsonObjectSplitter(invalid_json, "", "");
     EXPECT_FALSE(parsed.ok());
 }
 

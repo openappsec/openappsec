@@ -92,8 +92,9 @@ public:
         auto res_json = obj.loadJson(res.unpack());
         if (!res_json) {
             dbgWarning(D_COMMUNICATION) << "Failed to parse response body. Content: " << res.unpack();
+        } else {
+            dbgTrace(D_COMMUNICATION) << "Successfully parsed response body";
         }
-        dbgTrace(D_COMMUNICATION) << "Successfully parsed response body";
         return res_json;
     }
 

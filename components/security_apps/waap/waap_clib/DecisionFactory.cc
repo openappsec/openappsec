@@ -95,6 +95,7 @@ void DecisionFactory::initCsrfDecision()
     }
 }
 
+
 void DecisionFactory::initOpenRedirectDecision()
 {
     DecisionType type = DecisionType::OPEN_REDIRECT_DECISION;

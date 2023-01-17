@@ -44,9 +44,9 @@ public:
     MOCK_CONST_METHOD1(removeFile,           bool(const std::string &));
     MOCK_CONST_METHOD2(copyFile,             bool(const std::string &, const std::string &));
     MOCK_CONST_METHOD2(calculateChecksum,    Maybe<std::string>(Package::ChecksumTypes, const std::string &));
-    MOCK_CONST_METHOD2(
+    MOCK_CONST_METHOD3(
         jsonObjectSplitter,
-        Maybe<std::map<std::string, std::string>>(const std::string &, const std::string &)
+        Maybe<std::map<std::string, std::string>>(const std::string &, const std::string &, const std::string &)
     );
     MOCK_CONST_METHOD1(doesFileExist,        bool(const std::string &));
     MOCK_CONST_METHOD1(createDirectory,      bool(const std::string &));

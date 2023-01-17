@@ -28,11 +28,9 @@
 #include "i_encryptor.h"
 #include "scope_exit.h"
 #include "url_parser.h"
-#include "sasal.h"
 
 USE_DEBUG_FLAG(D_HTTP_REQUEST);
 
-SASAL_START // Orchestration - Communication
 // LCOV_EXCL_START Reason: Depends on real download server.
 
 enum class HTTP_VERSION
@@ -111,5 +109,3 @@ public:
 private:
     std::string ca_path;
 };
-
-SASAL_END

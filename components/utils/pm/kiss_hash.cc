@@ -12,9 +12,7 @@
 // limitations under the License.
 
 #include "general_adaptor.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 #ifndef KERNEL
 
 #if defined(VXWORKS) || defined(freebsd) || defined (solaris2)
@@ -1780,4 +1778,3 @@ kiss_hash_intcmp(const void* vv1, const void* vv2, CP_MAYBE_UNUSED void *info)
 #ifdef KERNEL
 #undef herror
 #endif
-SASAL_END

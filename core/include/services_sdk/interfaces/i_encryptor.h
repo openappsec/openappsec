@@ -37,6 +37,7 @@ public:
     virtual std::string obfuscateXor(const std::string &input)          = 0;
     virtual std::string obfuscateXorBase64(const std::string &input)    = 0;
 
+
 protected:
     virtual ~I_Encryptor() {}
 };

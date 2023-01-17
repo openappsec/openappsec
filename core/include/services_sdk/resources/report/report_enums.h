@@ -54,6 +54,7 @@ enum class Tags {
     REVERSE_PROXY,
     HTTP_GEO_FILTER,
     FILE_UPLOAD,
+    IDENTITY_AWARENESS,
 
     COUNT
 };
@@ -66,6 +67,7 @@ enum class AudienceTeam
     AGENT_INTELLIGENCE,
     CPVIEW_MONITORING,
     SIGNATURE_DEVELOPERS,
+    IDENTITY_AWARENESS,
     NONE,
 
     COUNT
@@ -125,7 +127,6 @@ enum class Notification {
     POLICY_UPDATE,
     FIRST_REQUEST_FOR_ASSET,
     UPSTREAM_STATUS,
-    IOT_POLICY_UPDATE,
     SYNC_LEARNING,
     SDWAN_POLICY_UPDATE,
     SDWAN_POLICY_UPDATE_ERROR,
@@ -136,7 +137,8 @@ enum class Notification {
 enum class IssuingEngine {
     AGENT_CORE,
     IOT_NEXT,
-    SDWAN
+    SDWAN,
+    IDA_NEXT
 };
 
 } // namespace ReportIS

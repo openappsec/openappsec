@@ -19,7 +19,6 @@
 #include "i_encryptor.h"
 #include "downloader.h"
 #include "config.h"
-#include "sasal.h"
 #include "boost/uuid/uuid.hpp"
 #include "boost/uuid/uuid_generators.hpp"
 #include <boost/asio/deadline_timer.hpp>
@@ -38,8 +37,6 @@
 using namespace boost::placeholders;
 using boost::asio::ip::tcp;
 using namespace std;
-
-SASAL_START // Orchestration - Communication
 
 USE_DEBUG_FLAG(D_COMMUNICATION);
 USE_DEBUG_FLAG(D_HTTP_REQUEST);
@@ -615,5 +612,3 @@ HTTPClient::curlGetFileOverSSL(const URLParser &url, ofstream &out_file, const s
 }
 
 // LCOV_EXCL_STOP
-
-SASAL_END

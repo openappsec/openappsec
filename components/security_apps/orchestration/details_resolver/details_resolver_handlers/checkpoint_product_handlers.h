@@ -17,7 +17,51 @@
 #include <algorithm>
 #include <boost/regex.hpp>
 
+#if defined(gaia)
+
+Maybe<string>
+checkHasSupportedBlade(const string &command_output)
+{
+    string supportedBlades[3] = {"identityServer", "vpn", "cvpn"};
+    for(const string &blade : supportedBlades) {
+        if (command_output.find(blade) != string::npos) {
+            return string("true");
+        }
+    }
+
+    return genError("Current host does not have IDA capability");
+}
+
+Maybe<string>
+checkSamlPortal(const string &command_output)
+{
+    if (command_output.find("Portal is running") != string::npos) {
+        return string("true");
+    }
+
+    return genError("Current host does not have SAML Portal configured");
+}
+
+Maybe<string>
+checkIDP(shared_ptr<istream> file_stream)
+{
+    string line;
+    while (getline(*file_stream, line)) {
+        if (line.find("<identity_portal/>") != string::npos) {
+            return string("false");
+        }
+        if (line.find("identity_provider") != string::npos) {
+            return string("true");
+        }
+    }
+
+    return genError("Identity Provider was not found");
+}
+
+#endif // gaia
+
 #if defined(gaia) || defined(smb)
+
 Maybe<string>
 checkHasSDWan(const string &command_output)
 {
@@ -73,6 +117,23 @@ getMgmtObjName(shared_ptr<istream> file_stream)
 }
 
 Maybe<string>
+getSmbObjectName(const string &command_output)
+{
+    static const char centrally_managed_comd_output = '0';
+
+    if (command_output.empty() || command_output[0] != centrally_managed_comd_output) {
+        return genError("Object name was not found");
+    }
+    
+    static const string obj_path = (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C";
+    auto ifs = std::make_shared<std::ifstream>(obj_path);
+    if (!ifs->is_open()) {
+        return genError("Failed to open the object file");
+    }
+    return getMgmtObjAttr(ifs, "name ");
+}
+
+Maybe<string>
 getMgmtParentObjAttr(shared_ptr<istream> file_stream, const string &parent_obj, const string &attr)
 {
     string line;
@@ -89,7 +150,9 @@ getMgmtParentObjAttr(shared_ptr<istream> file_stream, const string &parent_obj, 
     }
     return genError("Parent object attribute was not found. Attr: " + attr);
 }
+#endif // gaia || smb
 
+#if defined(gaia)
 Maybe<string>
 getMgmtParentObjUid(shared_ptr<istream> file_stream)
 {
@@ -117,7 +180,26 @@ getMgmtParentObjName(shared_ptr<istream> file_stream)
     const string &unparsed_name = maybe_unparsed_name.unpack();
     return chopHeadAndTail(unparsed_name, "(", ")");
 }
-#endif // gaia || smb
+
+#elif defined(smb)
+Maybe<string>
+getMgmtParentObjUid(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+    return genError("Parent object uuid was not found.");
+}
+
+Maybe<string>
+getMgmtParentObjName(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+    return genError("Parent object name was not found.");
+}
+#endif // end if gaia/smb
 
 Maybe<string>
 getOsRelease(shared_ptr<istream> file_stream)

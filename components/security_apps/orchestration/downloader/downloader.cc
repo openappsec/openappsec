@@ -19,15 +19,12 @@
 #include "debug.h"
 #include "config.h"
 #include "rest.h"
-#include "sasal.h"
 #include "cereal/external/rapidjson/document.h"
 
 #include <fstream>
 
 using namespace std;
 using namespace rapidjson;
-
-SASAL_START // Orchestration - Communication
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -42,7 +39,7 @@ public:
         const GetResourceFile &resourse_file
     ) const override;
 
-    Maybe<map<string, string>> downloadVirtualFileFromFog(
+    Maybe<map<pair<string, string>, string>> downloadVirtualFileFromFog(
         const GetResourceFile &resourse_file,
         Package::ChecksumTypes checksum_type
     ) const override;
@@ -114,18 +111,19 @@ Downloader::Impl::downloadFileFromFog(
     return file_path;
 }
 
-Maybe<map<string, string>>
+Maybe<map<pair<string, string>, string>>
 Downloader::Impl::downloadVirtualFileFromFog(
     const GetResourceFile &resourse_file,
     Package::ChecksumTypes) const
 {
-    static const string tenand_id_key = "tenantId";
-    static const string policy_key = "policy";
-    static const string settings_key = "settings";
-    static const string tenants_key = "tenants";
-    static const string error_text = "error";
+    static const string tenand_id_key  = "tenantId";
+    static const string profile_id_key = "profileId";
+    static const string policy_key     = "policy";
+    static const string settings_key   = "settings";
+    static const string tenants_key    = "tenants";
+    static const string error_text     = "error";
 
-    map<string, string> res;
+    map<pair<string, string>, string> res;
     I_UpdateCommunication *update_communication = Singleton::Consume<I_UpdateCommunication>::by<Downloader>();
     auto downloaded_data = update_communication->downloadAttributeFile(resourse_file);
     if (!downloaded_data.ok()) return downloaded_data.passErr();
@@ -146,7 +144,14 @@ Downloader::Impl::downloadVirtualFileFromFog(
         if (artifact_data == itr->MemberEnd()) artifact_data = itr->FindMember(settings_key.c_str());
 
         if (artifact_data != itr->MemberEnd()) {
-            string file_path = dir_path + "/" + resourse_file.getFileName() + "_" + tenant_id + ".download";
+            auto profile_id_obj = itr->FindMember(profile_id_key.c_str());
+            if (profile_id_obj == itr->MemberEnd()) continue;
+
+            string profile_id =  profile_id_obj->value.GetString();
+
+            string file_path =
+                dir_path + "/" + resourse_file.getFileName() + "_" +
+                tenant_id + "_profile_" + profile_id + ".download";
 
             rapidjson::StringBuffer buffer;
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -154,7 +159,7 @@ Downloader::Impl::downloadVirtualFileFromFog(
 
             I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<Downloader>();
             if (orchestration_tools->writeFile(buffer.GetString(), file_path)) {
-                res.insert({tenant_id, file_path});
+                res.insert({{tenant_id, profile_id}, file_path});
             }
             continue;
         }
@@ -383,5 +388,3 @@ Downloader::preload()
     registerExpectedConfiguration<string>("orchestration", "Self signed certificates acceptable");
     registerExpectedConfiguration<bool>("orchestration", "Add tenant suffix");
 }
-
-SASAL_END

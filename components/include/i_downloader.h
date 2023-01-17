@@ -28,7 +28,7 @@ public:
         const GetResourceFile &resourse_file
     ) const = 0;
 
-    virtual Maybe<std::map<std::string, std::string>>downloadVirtualFileFromFog(
+    virtual Maybe<std::map<std::pair<std::string, std::string>, std::string>>downloadVirtualFileFromFog(
         const GetResourceFile &resourse_file,
         Package::ChecksumTypes checksum_type
     ) const = 0;

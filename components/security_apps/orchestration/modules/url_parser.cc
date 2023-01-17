@@ -18,11 +18,8 @@
 #include "singleton.h"
 #include "common.h"
 #include "maybe_res.h"
-#include "sasal.h"
 
 using namespace std;
-
-SASAL_START // Orchestration - Modules
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -145,5 +142,3 @@ URLParser::toString() const
     s_build << protocol << base_url << query << ":" << port;
     return s_build.str();
 }
-
-SASAL_END

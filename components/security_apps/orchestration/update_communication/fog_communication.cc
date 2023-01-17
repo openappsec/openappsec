@@ -17,13 +17,10 @@
 #include "log_generator.h"
 #include "agent_details.h"
 #include "version.h"
-#include "sasal.h"
 
 #include <algorithm>
 #include <map>
 #include <vector>
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 using namespace cereal;
@@ -133,5 +130,3 @@ FogCommunication::sendPolicyVersion(const string &policy_version) const
     }
     return genError("Failed to patch policy version");
 }
-
-SASAL_END

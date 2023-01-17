@@ -757,7 +757,8 @@ inline char convertFromUnicodeHalfAndFullWidthRange(uint32_t code) {
 inline bool isSpecialUnicode(uint32_t code) {
     return isUnicodeHalfAndFullWidthRange(code)
             || 0x2028 == code || 0x2029 == code
-            || 0x2216 == code || 0xEFC8 == code || 0xF025 == code;
+            || 0x2215 == code || 0x2216 == code
+            || 0xEFC8 == code || 0xF025 == code;
 }
 
 inline char convertSpecialUnicode(uint32_t code) {
@@ -767,6 +768,10 @@ inline char convertSpecialUnicode(uint32_t code) {
     else if (0x2216 == code || 0xEFC8 == code || 0xF025 == code)
     {
         return '\\';
+    }
+    else if (0x2215 == code)
+    {
+        return '/';
     }
     // assuming 0x2028 == code || 0x2029 == code
     else
@@ -968,6 +973,7 @@ namespace Util {
         CONTENT_TYPE_UNKNOWN,
         CONTENT_TYPE_XML,
         CONTENT_TYPE_JSON,
+        CONTENT_TYPE_GQL,
         CONTENT_TYPE_HTML,
         CONTENT_TYPE_MULTIPART_FORM,
         CONTENT_TYPE_URLENCODED,
@@ -1037,8 +1043,10 @@ namespace Util {
     // based on invalid utf-8 evasion from here: https://www.cgisecurity.com/lib/URLEmbeddedAttacks.html
     std::string unescapeInvalidUtf8(const std::string &text);
 
-    bool containsBrokenUtf8(const std::string &payload);
+    Maybe<std::string> containsBrokenUtf8(const std::string &payload, const std::string &unquoted_payload);
     std::string unescapeBrokenUtf8(const std::string &text);
+
+    bool containsCspReportPolicy(const std::string &payload);
 
     bool testUrlBareUtf8Evasion(const std::string &line);
     bool testUrlBadUtf8Evasion(const std::string &line);

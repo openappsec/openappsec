@@ -200,8 +200,8 @@ fromStringToNumeric(const string &value_str, const string &name, const int max_v
         }
         return static_cast<Num>(value);
     } catch (const invalid_argument &e) {
-        dbgError(D_CONFIG) << name << " resived is invalid. Error: " << e.what();
-        return genError(name + " recived is invalid. Error: " + e.what());
+        dbgError(D_CONFIG) << name << " received is invalid. Error: " << e.what();
+        return genError(name + " received is invalid. Error: " + e.what());
     }
     return genError("Error in creating numeric value of " + name);
 }
@@ -233,7 +233,7 @@ ConnKeyUtil::fromString(const string &ip_str, IPAddr &ip_address)
 {
     Maybe<IPAddr> ip_addr = IPAddr::createIPAddr(ip_str);
     if (!ip_addr.ok()) {
-        dbgError(D_CONFIG) << "Ip address resived is invalid: " << ip_addr.getErr();
+        dbgError(D_CONFIG) << "Ip address received is invalid: " << ip_addr.getErr();
         return false;
     }
     ip_address = ip_addr.unpack();

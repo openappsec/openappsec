@@ -18,6 +18,7 @@
 #include <set>
 
 #include "WaapConfigBase.h"
+
 #include "log_generator.h"
 #include "debug.h"
 
@@ -49,6 +50,7 @@ public:
 
 private:
     void readJSONByCereal(cereal::JSONInputArchive&ar);
+
 
     std::string m_schemaValidationPoicyStatusMessage;
 

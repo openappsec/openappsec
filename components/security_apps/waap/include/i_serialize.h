@@ -15,7 +15,6 @@
 #include <chrono>
 #include <fstream>
 #include "i_time_get.h"
-#include "i_encryptor.h"
 #include "rest.h"
 #include "i_messaging.h"
 #include "i_mainloop.h"
@@ -92,7 +91,6 @@ public:
 
     virtual void saveData();
     virtual void restore();
-    virtual void setFilePath(const std::string &new_file_path);
 
 protected:
     // saved file name for testing

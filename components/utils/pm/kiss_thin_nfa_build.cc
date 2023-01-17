@@ -18,9 +18,7 @@
 // The code allows allocating and releasing the Thin NFA structure, as well as serializing and deserializing it.
 
 #include "kiss_thin_nfa_impl.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 // Allocate and fill in a pattern ID structure
 kiss_ret_val
 kiss_thin_nfa_add_pattern_id(kiss_thin_nfa_pattern_list_t **pat_list_p, const kiss_thin_nfa_pattern_t *new_pat)
@@ -239,4 +237,3 @@ kiss_thin_nfa_create(u_int match_state_num, kiss_bnfa_offset_t min_offset, kiss_
 
     return nfa;
 }
-SASAL_END

@@ -41,7 +41,8 @@ public:
         const std::string &new_policy_path,
         const std::string &new_settings_path,
         const std::vector<std::string> &new_data_files = {},
-        const std::string &tenant_id = ""
+        const std::string &tenant_id = "",
+        const std::string &profile_id = ""
     ) = 0;
 
     virtual bool isServiceInstalled(const std::string &service_name) = 0;

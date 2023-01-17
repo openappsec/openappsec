@@ -22,7 +22,6 @@
 #include "debug.h"
 #include "rest_conn.h"
 #include "i_rest_invoke.h"
-#include "sasal.h"
 
 #include <syslog.h>
 
@@ -32,8 +31,6 @@ USE_DEBUG_FLAG(D_API);
 
 static const int listen_limit = 100;
 static const chrono::milliseconds bind_retry_interval_msec = chrono::milliseconds(500);
-
-SASAL_START // REST Server
 
 #include <iostream>
 
@@ -257,5 +254,3 @@ RestServer::preload()
     registerExpectedConfiguration<uint>("connection", "Nano service API Port Range start");
     registerExpectedConfiguration<uint>("connection", "Nano service API Port Range end");
 }
-
-SASAL_END

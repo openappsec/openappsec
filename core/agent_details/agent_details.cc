@@ -20,9 +20,6 @@
 
 #include "config.h"
 #include "debug.h"
-#include "sasal.h"
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 
@@ -303,5 +300,3 @@ AgentDetails::registerMachineType()
     );
     dbgInfo(D_ORCHESTRATOR) << "Setting machine type " << static_cast<int>(machine_type.unpack());
 }
-
-SASAL_END

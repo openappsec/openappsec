@@ -129,7 +129,7 @@ void Waf2Transaction::add_response_hdr(const char* name, int name_len, const cha
     dbgTrace(D_WAAP) << "[transaction:" << this << "] add_response_hdr(name='" << std::string(name, name_len) <<
         "', value='" << std::string(value, value_len) << "')";
 
-    // Detect location header and remember its value
+    // Detect location header and remember it's value
     static const char location[] = "location";
 
     auto openRedirectPolicy = m_siteConfig ? m_siteConfig->get_OpenRedirectPolicy() : NULL;
@@ -259,6 +259,7 @@ void Waf2Transaction::end_response()
 {
     dbgTrace(D_WAAP) << "[transaction:" << this << "] end_response";
 }
+
 
 void Waf2Transaction::setCurrentAssetState(IWaapConfig* sitePolicy)
 {
@@ -593,10 +594,14 @@ bool Waf2Transaction::setCurrentAssetContext()
     return result;
 }
 
-void Waf2Transaction::processUri(const char* uri, const std::string& scanStage) {
+void Waf2Transaction::processUri(const std::string &uri, const std::string& scanStage) {
     m_processedUri = true;
-    const char* p = uri;
+    size_t uriSize = uri.length();
+    const char* p = uri.c_str();
+    const char* uriEnd = p+uriSize;
     std::string baseUri;
+    char querySep = '?';
+    char paramSep = '&';
 
     // TODO:: refactor out this block to method, and the next block (parsing url parameters), too.
     {
@@ -606,27 +611,40 @@ void Waf2Transaction::processUri(const char* uri, const std::string& scanStage) 
         // Parse URL
         ParserRaw urlParser(m_deepParserReceiver, scanStage);
 
-        // Scan the uri until '?' character found (or until end of the uri string).
+        // Scan the uri until '?' or ';' character found, whichever comes first (or until end of the uri string),
+        // Do not account for last character as valid separator
         do {
-            const char* q = strchr(p, '?');
+            const char* q = strpbrk(p, "?;");
 
-            if (q == NULL) {
-                // Handle special case found in customer traffic where instead of '?' there was ';' character.
-                q = strchr(p, ';');
-                if (q) {
+            if (q != NULL && q < uriEnd-1) {
+                querySep = *q;
+
+                // Handle special case found in customer traffic where instead of '?' there was a ';' character.
+                if (querySep == ';') {
                     // Check that after ';' the parameter name is valid and terminated with '='. This would normally be
                     // the case in legit traffic, but not in attacks. This covers a case of "sap login".
                     const char *qq;
-                    for (qq = q + 1; isalpha(*qq) || isdigit(*qq) || *qq=='-' || *qq=='_' || *qq=='*'; ++qq);
+                    for (qq = q + 1;
+                            qq < uriEnd && (isalpha(*qq) || isdigit(*qq) || *qq=='-' || *qq=='_' || *qq=='*');
+                            ++qq);
                     if (*qq != '=') {
                         // Assume it might be attack and cancel the separation by the ';' character (scan whole URL)
                         q = NULL;
+                    }
+                    else {
+                        const char *qqSep = strpbrk(qq, "&;");
+                        // Handle special case (deprecated standard) where instead of '&' there was a ';' separator,
+                        // Do not account for last character as valid separator
+                        if (qqSep && qqSep < uriEnd-1) {
+                            paramSep = *qqSep;
+                        }
                     }
                 }
             }
 
             if (q == NULL) {
-                baseUri = std::string(p);
+                dbgTrace(D_WAAP) << "Query separator not found, use entire uri as baseUri";
+                baseUri = std::string(uri);
                 if (scanStage == "url") {
                     m_uriPath = baseUri;
                 }
@@ -637,7 +655,7 @@ void Waf2Transaction::processUri(const char* uri, const std::string& scanStage) 
 
                 // Push the last piece to URL scanner
                 pushed = true;
-                std::string url(p, strlen(p));
+                std::string url(uri);
 
                 Waap::Util::decodePercentEncoding(url);
                 urlParser.push(url.data(), url.size());
@@ -670,7 +688,7 @@ void Waf2Transaction::processUri(const char* uri, const std::string& scanStage) 
             // parameters from the character next to '?'
             p = q + 1;
             break;
-        } while (1);
+        } while (p && p < uriEnd);
 
         if (pushed) {
             urlParser.finish();
@@ -721,7 +739,7 @@ void Waf2Transaction::processUri(const char* uri, const std::string& scanStage) 
     // at this point, p can either be NULL (if there are no URL parameters),
     // or point to the parameters string (right after the '?' character)
 
-    if (p && *p) {
+    if (p && p < uriEnd && *p) {
         // Decode URLEncoded data and send decoded key/value pairs to deep inspection
         dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the " << scanStage.c_str() << " parameters";
 
@@ -729,10 +747,12 @@ void Waf2Transaction::processUri(const char* uri, const std::string& scanStage) 
             m_uriQuery = std::string(p);
         }
 
+        dbgTrace(D_WAAP) << "Query separator='" << querySep << "', " << "Param separator='" << paramSep << "'";
+
         std::string tag = scanStage + "_param";
         m_deepParser.m_key.push(tag.data(), tag.size());
-        size_t buff_len = strlen(p);
-        ParserUrlEncode up(m_deepParserReceiver, '&', checkUrlEncoded(p, buff_len));
+        size_t buff_len = uriEnd - p;
+        ParserUrlEncode up(m_deepParserReceiver, paramSep, checkUrlEncoded(p, buff_len));
         up.push(p, buff_len);
         up.finish();
         m_deepParser.m_key.pop(tag.c_str());
@@ -807,7 +827,7 @@ void Waf2Transaction::parseReferer(const char* value, int value_len)
     // Parse referer value as if it was a URL
     if (value_len > 0)
     {
-        processUri(std::string(value, value_len).c_str(), "referer");
+        processUri(std::string(value, value_len), "referer");
     }
 }
 
@@ -1011,12 +1031,13 @@ void Waf2Transaction::end_request_hdrs() {
     }
     // Scan URL and url query
     if (m_isScanningRequired && !m_processedUri) {
-        processUri(m_uriStr.c_str(), "url");
+        processUri(m_uriStr, "url");
     }
     // Scan relevant headers for attacks
     if (m_isScanningRequired && !m_processedHeaders) {
         scanHeaders();
     }
+
 
     if(m_siteConfig != NULL) {
         // Create rate limiting policy (lazy, on first request)
@@ -1058,6 +1079,7 @@ void Waf2Transaction::start_request_body() {
     dbgTrace(D_WAAP) << "[transaction:" << this << "] start_request_body: m_contentType=" << m_contentType;
 
     clearRequestParserState();
+
 
     m_requestBodyParser = new ParserRaw(m_deepParserReceiver, "body");
 
@@ -1362,13 +1384,14 @@ Waf2Transaction::checkShouldInject()
     {
         dbgTrace(D_WAAP) << "Waf2Transaction::checkShouldInject(): Should not inject CSRF scripts.";
     }
-
+    
     if(csrf) {
         dbgTrace(D_WAAP) << "Waf2Transaction::checkShouldInject(): Should inject CSRF script";
         m_responseInjectReasons.setCsrf(true);
     }
     return;
 }
+
 
 bool
 Waf2Transaction::decideAfterHeaders()
@@ -1544,7 +1567,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     const auto& autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
         m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
     bool send_extended_log = shouldSendExtendedLog(triggerLog);
-    if (send_extended_log || triggerLog->webUrlPath || autonomousSecurityDecision->getOverridesLog()) {
+    if (triggerLog->webUrlPath || autonomousSecurityDecision->getOverridesLog()) {
         std::string httpUriPath = m_uriPath;
 
         if (httpUriPath.length() > MAX_LOG_FIELD_SIZE)
@@ -1554,7 +1577,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
 
         waapLog << LogField("httpUriPath", httpUriPath, LogFieldOption::XORANDB64);
     }
-    if (send_extended_log || triggerLog->webUrlQuery || autonomousSecurityDecision->getOverridesLog()) {
+    if (triggerLog->webUrlQuery || autonomousSecurityDecision->getOverridesLog()) {
         std::string uriQuery = m_uriQuery;
         if (uriQuery.length() > MAX_LOG_FIELD_SIZE)
         {
@@ -1562,7 +1585,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
         }
         waapLog << LogField("httpUriQuery", uriQuery, LogFieldOption::XORANDB64);
     }
-    if (send_extended_log || triggerLog->webHeaders || autonomousSecurityDecision->getOverridesLog()) {
+    if (triggerLog->webHeaders || autonomousSecurityDecision->getOverridesLog()) {
         waapLog << LogField("httpRequestHeaders", logHeadersStr(), LogFieldOption::XORANDB64);
     }
     // Log http response code if it is known
@@ -1626,6 +1649,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
         waapLog.addToOrigin(LogField("exceptionIdList", vOverrideIds));
     }
 }
+
 
 void
 Waf2Transaction::sendLog()
@@ -1840,6 +1864,7 @@ Waf2Transaction::sendLog()
 
         appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType);
 
+
         waap_log << LogField("waapIncidentDetails", incidentDetails);
         if (grace_period) {
             dbgTrace(D_WAAP)
@@ -1871,7 +1896,7 @@ Waf2Transaction::sendLog()
                 << max_grace_logs;
         }
         break;
-    }    
+    }
     case AUTONOMOUS_SECURITY_DECISION: {
         if (triggerLog->webRequests ||
             send_extended_log ||
@@ -1929,7 +1954,7 @@ Waf2Transaction::decideAutonomousSecurity(
         if (!m_processedUri) {
             dbgWarning(D_WAAP) << "decideAutonomousSecurity(): processing URI although is was supposed "
                 "to be processed earlier ...";
-            processUri(m_uriStr.c_str(), "url");
+            processUri(m_uriStr, "url");
         }
 
         if (!m_processedHeaders) {
@@ -2020,6 +2045,8 @@ Waf2Transaction::decideAutonomousSecurity(
         }
     }
 
+
+
     if(decision->getThreatLevel() <= ThreatLevel::THREAT_INFO) {
         decision->setLog(false);
     } else {
@@ -2103,7 +2130,6 @@ bool Waf2Transaction::decideResponse()
             << "Setting flag for collection of respond content logging to: "
             << (should_send_extended_log ? "True": "False");
         m_responseInspectReasons.setCollectResponseForLog(should_send_extended_log);
-
     }
 
     dbgTrace(D_WAAP) << "Waf2Transaction::decideResponse: returns true (accept)";
@@ -2126,8 +2152,6 @@ Waf2Transaction::reportScanResult(const Waf2ScanResult &res) {
 
 bool
 Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
-    dbgTrace(D_WAAP) << "reading exceptions";
-
     auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
     if (!exceptions.ok()) return false;
 
@@ -2146,6 +2170,9 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
 
         // collect param value
         exceptions_dict["paramValue"].insert(res.unescaped_line);
+
+        // collect param location
+        exceptions_dict["paramLocation"].insert(res.location);
 
         ScopedContext ctx;
         ctx.registerValue<std::string>("paramValue", res.unescaped_line);

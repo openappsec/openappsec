@@ -33,9 +33,9 @@ void WaapAssetStatesManager::preload()
     registerExpectedConfiguration<std::string>("waap data", "base folder");
 }
 
-bool WaapAssetStatesManager::initBasicWaapSigs(const std::string& sigsFname, const std::string& sigScoresFname)
+bool WaapAssetStatesManager::initBasicWaapSigs(const std::string& waapDataFileName)
 {
-    return pimpl->initBasicWaapSigs(sigsFname, sigScoresFname);
+    return pimpl->initBasicWaapSigs(waapDataFileName);
 }
 
 std::shared_ptr<WaapAssetState> WaapAssetStatesManager::getWaapAssetStateGlobal()
@@ -65,7 +65,7 @@ WaapAssetStatesManager::Impl::~Impl()
 {
 }
 
-bool WaapAssetStatesManager::Impl::initBasicWaapSigs(const std::string& sigsFname, const std::string& sigScoresFname)
+bool WaapAssetStatesManager::Impl::initBasicWaapSigs(const std::string& waapDataFileName)
 {
     if (m_signatures && !m_signatures->fail() && m_basicWaapSigs)
     {
@@ -73,18 +73,18 @@ bool WaapAssetStatesManager::Impl::initBasicWaapSigs(const std::string& sigsFnam
         return true;
     }
     try {
-        m_signatures = std::make_shared<Signatures>(sigsFname);
+        m_signatures = std::make_shared<Signatures>(waapDataFileName);
         m_basicWaapSigs = std::make_shared<WaapAssetState>(
             m_signatures,
-            sigScoresFname,
+            waapDataFileName,
             SIGS_APPLY_CLEAN_CACHE_CAPACITY,
             SIGS_APPLY_SUSPICIOUS_CACHE_CAPACITY);
     }
     catch (std::runtime_error & e) {
         // TODO:: properly handle component initialization failure
         dbgTrace(D_WAAP) <<
-            "WaapAssetStatesManager::initBasicWaapSigs(): " << e.what() << ". Failed to read signature files"
-            " "<< sigsFname << " and " << sigScoresFname << ".";
+            "WaapAssetStatesManager::initBasicWaapSigs(): " << e.what() << ". Failed to read data file '" <<
+            waapDataFileName << "'";
         m_basicWaapSigs.reset();
         return false;
     }
@@ -178,7 +178,7 @@ WaapAssetStatesManager::Impl::CreateWaapSigsForAsset(const std::shared_ptr<WaapA
 
     }
 
-    std::string basePath = pWaapAssetState->getSignaturesScoresFilePath();
+    std::string basePath = pWaapAssetState->getWaapDataFileName();
     size_t lastSlash = basePath.find_last_of('/');
     std::string assetScoresPath = assetPath +
         ((lastSlash == std::string::npos) ? basePath : basePath.substr(lastSlash));

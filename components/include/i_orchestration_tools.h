@@ -102,7 +102,8 @@ public:
 
     virtual Maybe<std::map<packageName, packageDetails>> jsonObjectSplitter(
         const std::string &json,
-        const std::string &tenant_id = "") const = 0;
+        const std::string &tenant_id = "",
+        const std::string &profile_id = "") const = 0;
 
     virtual bool isNonEmptyFile(const std::string &path) const = 0;
     virtual Maybe<std::string> readFile(const std::string &path) const = 0;

@@ -15,9 +15,7 @@
 #include "pm_adaptor.h"
 #include "kiss_thin_nfa_impl.h"
 #include "kiss_hash.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 #define hash_t kiss_hash_t
 #define hash_intcreate_ex(sz, kmem_flags) \
     kiss_hash_create(sz, (hkeyfunc_t)kiss_hash_intvalue, (hcmpfunc_t)kiss_hash_intcmp, NULL)
@@ -1496,4 +1494,3 @@ kiss_thin_nfa_dump(const KissThinNFA *nfa, enum kiss_pm_dump_format_e format)
 
     return thin_nfa_dump(nfa, format_cbs);
 }
-SASAL_END

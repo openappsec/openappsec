@@ -265,6 +265,8 @@ ParserBase* Waf2Transaction::getRequestBodyParser()
 {
     return m_requestBodyParser;
 }
+
+
 const std::string Waf2Transaction::getMethod() const
 {
     return m_methodStr;

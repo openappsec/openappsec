@@ -18,11 +18,9 @@
 #include <algorithm>
 #include "kiss_patterns.h"
 #include "kiss_thin_nfa_impl.h"
-#include "sasal.h"
 
 using namespace std;
 
-SASAL_START // Multiple Pattern Matcher
 USE_DEBUG_FLAG(D_PM_COMP);
 USE_DEBUG_FLAG(D_PM_EXEC);
 USE_DEBUG_FLAG(D_PM);
@@ -162,4 +160,3 @@ PMPattern::operator==(const PMPattern &other) const
         match_start == other.match_start &&
         match_end == other.match_end;
 }
-SASAL_END

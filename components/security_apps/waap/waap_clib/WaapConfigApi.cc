@@ -66,7 +66,7 @@ WaapConfigAPI::WaapConfigAPI(
     string              practiceName,
     string              ruleId,
     string              ruleName,
-    bool                schemaValidation) :
+    bool                     schemaValidation) :
     WaapConfigBase(
         autonomousSecurity,
         autonomousSecurityLevel,
@@ -84,7 +84,9 @@ WaapConfigAPI::WaapConfigAPI(
 void WaapConfigAPI::load(cereal::JSONInputArchive& ar)
 {
     // order has affect - we need to call base last because of triggers and overrides
+
     readJSONByCereal(ar);
+
 
     WaapConfigBase::load(ar);
     assets_ids_aggregation.insert(m_assetId);
@@ -93,6 +95,7 @@ void WaapConfigAPI::load(cereal::JSONInputArchive& ar)
 void WaapConfigAPI::readJSONByCereal(cereal::JSONInputArchive &ar)
 {
 }
+
 
 bool WaapConfigAPI::operator==(const WaapConfigAPI& other) const
 {

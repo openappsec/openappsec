@@ -21,7 +21,7 @@ extern void (*debug_int)(int is_error, const char *func, const char *file, int l
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #endif
 
-enum debugLevel { TraceLevel = 0, WarningLevel = 3 };
+enum debugLevel { TraceLevel = 0, DebugLevel = 1, WarningLevel = 3 };
 
 #define writeDebug(debug_level, fmt, ...)                                             \
     {                                                                                 \

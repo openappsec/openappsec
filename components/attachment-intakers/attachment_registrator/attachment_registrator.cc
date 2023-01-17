@@ -154,6 +154,10 @@ private:
         stringstream handler_path;
         handler_path << handler_path_format;
         switch(type) {
+            case (AttachmentType::SQUID_ATT_ID): {
+                handler_path << "squid-http-transaction-handler-";
+                break;
+            }
             case (AttachmentType::NGINX_ATT_ID): {
                 handler_path << "http-transaction-handler-";
                 break;
@@ -177,7 +181,8 @@ private:
         stringstream registration_command;
         registration_command<< registration_format;
         switch(type) {
-            case (AttachmentType::NGINX_ATT_ID): {
+            case (AttachmentType::SQUID_ATT_ID):
+            case (AttachmentType::NGINX_ATT_ID):{
                 registration_command << "/etc/cp/HttpTransactionHandler/cp-nano-http-transaction-handler";
                 break;
             }

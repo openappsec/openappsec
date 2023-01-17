@@ -312,7 +312,7 @@ LoggingComp::preload()
     registerExpectedConfiguration<bool>("Logging", "Enable CEF");
     registerExpectedConfiguration<bool>("Logging", "Enable Log skipping");
     registerExpectedConfiguration<string>("Logging", "Log file name");
-    registerExpectedConfiguration<string>("Logging", "Log file line seperator");
+    registerExpectedConfiguration<string>("Logging", "Log file line separator");
     registerExpectedConfiguration<string>("Logging", "Fog Log URI");
     registerExpectedConfiguration<string>("Logging", "Syslog IP");
     registerExpectedConfiguration<uint>("Logging", "Syslog port");

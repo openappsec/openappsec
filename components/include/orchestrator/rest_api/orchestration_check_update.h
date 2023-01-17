@@ -17,7 +17,39 @@
 #include <string>
 
 #include "rest.h"
+#include "debug.h"
 #include "maybe_res.h"
+
+USE_DEBUG_FLAG(D_ORCHESTRATOR);
+
+class TenantError : public ClientRest
+{
+public:
+    TenantError() = default;
+
+    bool
+    operator==(const TenantError &other) const
+    {
+        return
+            messageId.get() == other.messageId.get() &&
+            message.get() == other.message.get() &&
+            referenceId.get() == other.referenceId.get() &&
+            severity.get() == other.severity.get();
+    }
+
+    const std::string & getMessageID() const { return messageId.get(); }
+    const std::string & getMessage() const { return message.get(); }
+// LCOV_EXCL_START Reason: Will be covered in INXT-33277
+    const std::string & getReferenceID() const { return referenceId.get(); }
+// LCOV_EXCL_STOP
+    const std::string & getSeverity() const { return severity.get(); }
+
+private:
+    BOTH_LABEL_PARAM(std::string, messageId, "messageId");
+    BOTH_LABEL_PARAM(std::string, message,  "message");
+    BOTH_LABEL_PARAM(std::string, referenceId, "referenceId");
+    BOTH_LABEL_PARAM(std::string, severity, "severity");
+};
 
 class CheckUpdateRequest : public ClientRest
 {
@@ -30,13 +62,20 @@ public:
         Tenants(const Tenants &other)
         {
             tenant_id = other.tenant_id;
+            profile_id = other.profile_id;
             checksum = other.checksum;
             version = other.version;
+            error = other.error;
         }
 
-        Tenants(const std::string &_tenant_id, const std::string &_checksum, const std::string &_version)
+        Tenants(
+            const std::string &_tenant_id,
+            const std::string &_profile_id,
+            const std::string &_checksum,
+            const std::string &_version)
                 :
             tenant_id(_tenant_id),
+            profile_id(_profile_id),
             checksum(_checksum),
             version(_version)
         {
@@ -47,18 +86,24 @@ public:
         {
             return
                 tenant_id.get() == other.tenant_id.get() &&
+                profile_id.get() == other.profile_id.get() &&
                 checksum.get() == other.checksum.get() &&
-                version.get() == other.version.get();
+                version.get() == other.version.get() &&
+                error.get() == other.error.get();
         }
 
         const std::string & getTenantID() const { return tenant_id.get(); }
-        const std::string & getChecksum() const { return checksum.get();  }
-        const std::string & getVersion() const  { return version.get();   }
+        const std::string & getProfileID() const { return profile_id.get(); }
+        const std::string & getChecksum() const { return checksum.get(); }
+        const std::string & getVersion() const { return version.get(); }
+        const TenantError & getError() const { return error.get(); }
 
     private:
-        BOTH_LABEL_PARAM(std::string, tenant_id, "tenantId");
-        BOTH_LABEL_PARAM(std::string, checksum,  "checksum");
-        BOTH_LABEL_PARAM(std::string, version, "version");
+        BOTH_LABEL_OPTIONAL_PARAM(std::string, tenant_id, "tenantId");
+        BOTH_LABEL_OPTIONAL_PARAM(std::string, profile_id, "profileId");
+        BOTH_LABEL_OPTIONAL_PARAM(std::string, checksum,  "checksum");
+        BOTH_LABEL_OPTIONAL_PARAM(std::string, version, "version");
+        BOTH_LABEL_OPTIONAL_PARAM(TenantError, error, "error");
     };
 
     CheckUpdateRequest(
@@ -157,7 +202,26 @@ private:
             tenants.get().emplace_back(std::forward<Args>(args)...);
         }
 
-        const std::vector<Tenants> & getTenants() const { return tenants.get(); }
+        const std::vector<Tenants>
+        getTenants() const
+        {
+            std::vector<Tenants> tenants_to_return;
+            for (const auto &tenant : tenants.get()) {
+                if (tenant.getError().getMessage().empty()) {
+                    tenants_to_return.push_back(tenant);
+                    continue;
+                }
+
+                dbgError(D_ORCHESTRATOR)
+                    << "Error getting the tenant information. Tenant ID: "
+                    << tenant.getTenantID()
+                    << ", Error message: "
+                    << tenant.getError().getMessage()
+                    << ", Reference ID: "
+                    << tenant.getError().getReferenceID();
+            }
+            return tenants_to_return;
+        }
 
     private:
         BOTH_LABEL_PARAM(std::vector<Tenants>, tenants, "tenants");
