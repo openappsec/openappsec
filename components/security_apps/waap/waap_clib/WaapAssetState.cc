@@ -75,21 +75,38 @@ static void print_found_patterns(const Waap::Util::map_of_stringlists_t& m) {
 #endif
 
 static bool err_hex = false;
+static const std::string path_traversal_chars_regex = "[\\w.%?*\\/\\\\]";
+static const std::string evasion_hex_regex_unallowed_prefix_helper =
+        "(?:(?<!(?<!0x|%u)[0-9a-f][0-9a-f])|(?<!(?<!%)[0-9a-f][0-9a-f]))";
+static const std::string evasion_hex_regex_helper = "(0x[0-9a-f][0-9a-f])";
 static const SingleRegex evasion_hex_regex(
-    "(0x[0-9a-f][0-9a-f])[\\w.%?*\\/\\\\]|[\\w.%?*\\/\\\\](0x[0-9a-f][0-9a-f])",
+    evasion_hex_regex_unallowed_prefix_helper + evasion_hex_regex_helper + path_traversal_chars_regex +
+    "|" + path_traversal_chars_regex + evasion_hex_regex_unallowed_prefix_helper + evasion_hex_regex_helper,
     err_hex,
     "evasion_hex_regex");
-static const boost::regex bad_hex_regex = boost::regex("%[cC]1%[19][cC]");
+static const std::string bad_hex_regex_helper = "(%[cC]1%(([19][cC])|([pP][cC])|(8[sS])))";
+static const boost::regex bad_hex_regex(bad_hex_regex_helper);
 static const SingleRegex evasion_bad_hex_regex(
-    "(%[cC]1%[19][cC])[\\w.%?*\\/\\\\]|[\\w.%?*\\/\\\\](%[cC]1%[19][cC])",
+    bad_hex_regex_helper + path_traversal_chars_regex +
+    "|" + path_traversal_chars_regex + bad_hex_regex_helper,
     err_hex,
     "evasion_bad_hex_regex");
+static const std::string utf_evasion_for_dot_helper =
+    "(%[cC]0%[562aAfFeE][eE])";
+static const SingleRegex utf_evasion_for_dot(
+    utf_evasion_for_dot_helper + path_traversal_chars_regex +
+    "|" + path_traversal_chars_regex + utf_evasion_for_dot_helper,
+    err_hex,
+    "utf_evasion_for_dot");
+static const boost::regex utf_evasion_for_dot_regex(utf_evasion_for_dot_helper);
+static const std::string sqli_comma_evasion_regex_helper = "\"\\s*,\\s*\"";
+static const boost::regex sqli_comma_evasion_regex(sqli_comma_evasion_regex_helper);
 
 WaapAssetState::WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAssetState,
-    const std::string& sigScoresFname,
+    const std::string& waapDataFileName,
     const std::string& id) :
     WaapAssetState(pWaapAssetState->m_Signatures,
-        sigScoresFname,
+        waapDataFileName,
         pWaapAssetState->m_cleanValuesCache.capacity(),
         pWaapAssetState->m_suspiciousValuesCache.capacity(),
         pWaapAssetState->m_sampleTypeCache.capacity(),
@@ -110,20 +127,22 @@ WaapAssetState::WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAsset
 }
 
 WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
-    const std::string& sigScoresFname,
+    const std::string& waapDataFileName,
     size_t cleanValuesCacheCapacity,
     size_t suspiciousValuesCacheCapacity,
     size_t sampleTypeCacheCapacity,
     const std::string& assetId) :
     m_Signatures(signatures),
-    m_SignaturesScoresFilePath(sigScoresFname),
+    m_waapDataFileName(waapDataFileName),
     m_assetId(assetId),
     scoreBuilder(this),
     m_rateLimitingState(nullptr),
     m_errorLimitingState(nullptr),
     m_securityHeadersState(nullptr),
+
+
     m_filtersMngr(nullptr),
-    m_typeValidator(getSignaturesFilterDir() + "/8.data"),
+    m_typeValidator(getWaapDataDir() + "/waap.data"),
     m_cleanValuesCache(cleanValuesCacheCapacity),
     m_suspiciousValuesCache(suspiciousValuesCacheCapacity),
     m_sampleTypeCache(sampleTypeCacheCapacity)
@@ -1039,7 +1058,7 @@ WaapAssetState::apply(
             if (found != std::string::npos)
             {
                 unescaped += res.unescaped_line.substr(pos, found-pos);
-                if (found < res.unescaped_line.size() - 3 &&
+                if (found + 3 < res.unescaped_line.size() &&
                     res.unescaped_line[found+1] == res.unescaped_line[found+2] && res.unescaped_line[found+3] == ']')
                 {
                     unescaped += res.unescaped_line[found+1];
@@ -1145,16 +1164,11 @@ WaapAssetState::apply(
         }
     }
 
-    std::string *utf8_broken_line_ptr = nullptr;
-    if (Waap::Util::containsBrokenUtf8(unquote_line)) {
-            utf8_broken_line_ptr = &unquote_line;
-    } else if (Waap::Util::containsBrokenUtf8(line)) {
-        utf8_broken_line_ptr = (std::string*)&line;
-    }
+    Maybe<std::string> broken_utf8_line = Waap::Util::containsBrokenUtf8(line, unquote_line);
 
-    if (utf8_broken_line_ptr) {
+    if (broken_utf8_line.ok()) {
         dbgTrace(D_WAAP_EVASIONS) << "broken-down utf-8 evasion found";
-        std::string unescaped = Waap::Util::unescapeBrokenUtf8(*utf8_broken_line_ptr);
+        std::string unescaped = Waap::Util::unescapeBrokenUtf8(broken_utf8_line.unpack());
         size_t kwCount = res.keyword_matches.size();
 
         unescaped = unescape(unescaped);
@@ -1283,6 +1297,35 @@ WaapAssetState::apply(
         }
     }
 
+    boost::cmatch what;
+    if (boost::regex_search(res.unescaped_line.c_str(), what, sqli_comma_evasion_regex)) {
+        // Possible SQLi evasion detected (","): - clean up and scan with regexes again.
+        dbgTrace(D_WAAP_EVASIONS) << "Possible SQLi evasion detected (\",\"): - clean up and scan with regexes again.";
+
+        std::string unescaped = res.unescaped_line;
+        unescaped = boost::regex_replace(unescaped, sqli_comma_evasion_regex, "");
+        unescaped = unescape(unescaped);
+
+        if (res.unescaped_line != unescaped) {
+            SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+            checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
+                    res.found_patterns, longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->words_regex, res.keyword_matches, res.found_patterns,
+                    longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->pattern_regex, res.regex_matches, res.found_patterns,
+                    longTextFound, binaryDataFound);
+        }
+
+
+        // Recalculate repetition and/or probing indicators
+        unsigned int newWordsCount = 0;
+        calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                newWordsCount);
+        // Take minimal words count because empirically it means evasion was probably succesfully decoded
+        wordsCount = std::min(wordsCount, newWordsCount);
+
+    }
+
     if ((res.unescaped_line.find("0x") != std::string::npos) && evasion_hex_regex.hasMatch(res.unescaped_line)) {
         dbgTrace(D_WAAP_EVASIONS) << "hex evasion found (in unescaped line)";
 
@@ -1306,9 +1349,10 @@ WaapAssetState::apply(
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
             for (const auto &kw : res.keyword_matches) {
                 if (kw.size() < 2 || str_contains(kw, "os_cmd_high_acuracy_fast_reg") ||
+                        kw == "os_cmd_sep_medium_acuracy" ||   str_contains(kw, "regex_code_execution") ||
                         str_contains(kw, "regex_code_execution") || kw == "character_encoding" ||
-                    str_contains(kw, "quotes_ev_fast_reg") || str_contains(kw, "encoded_") ||
-                    str_contains(kw, "medium_acuracy") || str_contains(kw, "high_acuracy_fast_reg_xss"))
+                        str_contains(kw, "quotes_ev_fast_reg") || str_contains(kw, "encoded_") ||
+                        str_contains(kw, "medium_acuracy") || str_contains(kw, "high_acuracy_fast_reg_xss"))
                 {
                     keywordsToRemove.push_back(kw);
                 }
@@ -1333,7 +1377,7 @@ WaapAssetState::apply(
 
         size_t kwCount = res.keyword_matches.size();
 
-        if (res.unescaped_line != unescaped) {
+        if (line != unescaped) {
             SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
             checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
                 res.found_patterns, false, binaryDataFound);
@@ -1346,9 +1390,10 @@ WaapAssetState::apply(
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
             for (const auto &kw : res.keyword_matches) {
                 if (kw.size() < 2 || str_contains(kw, "os_cmd_high_acuracy_fast_reg") ||
+                        kw == "os_cmd_sep_medium_acuracy" ||   str_contains(kw, "regex_code_execution") ||
                         str_contains(kw, "regex_code_execution") || kw == "character_encoding" ||
-                    str_contains(kw, "quotes_ev_fast_reg") || str_contains(kw, "encoded_") ||
-                    str_contains(kw, "medium_acuracy") || str_contains(kw, "high_acuracy_fast_reg_xss"))
+                        str_contains(kw, "quotes_ev_fast_reg") || str_contains(kw, "encoded_") ||
+                        str_contains(kw, "medium_acuracy") || str_contains(kw, "high_acuracy_fast_reg_xss"))
                 {
                     keywordsToRemove.push_back(kw);
                 }
@@ -1405,6 +1450,37 @@ WaapAssetState::apply(
 
         size_t kwCount = res.keyword_matches.size();
 
+        if (line != unescaped) {
+            SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+            checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
+                    res.found_patterns, longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->words_regex, res.keyword_matches, res.found_patterns,
+                    longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->pattern_regex, res.regex_matches, res.found_patterns,
+                    longTextFound, binaryDataFound);
+        }
+
+        if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            // Recalculate repetition and/or probing indicators
+            unsigned int newWordsCount = 0;
+            calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                    newWordsCount);
+            // Take minimal words count because empirically it means evasion was probably succesfully decoded
+            wordsCount = std::min(wordsCount, newWordsCount);
+        }
+    }
+
+    if ((res.unescaped_line.find("%") != std::string::npos) && utf_evasion_for_dot.hasMatch(res.unescaped_line)) {
+        dbgTrace(D_WAAP_EVASIONS) <<
+            "UTF evasion for dot found (%c0%*e) in unescaped line";
+        std::string unescaped = res.unescaped_line;
+
+        unescaped = boost::regex_replace(unescaped, utf_evasion_for_dot_regex, ".");
+        unescaped = unescape(unescaped);
+        dbgTrace(D_WAAP_EVASIONS) << "unescaped == '" << unescaped << "'";
+
+        size_t kwCount = res.keyword_matches.size();
+
         if (res.unescaped_line != unescaped) {
             SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
             checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
@@ -1424,6 +1500,38 @@ WaapAssetState::apply(
             wordsCount = std::min(wordsCount, newWordsCount);
         }
     }
+
+
+    if ((line.find("%") != std::string::npos) && utf_evasion_for_dot.hasMatch(line)) {
+        dbgTrace(D_WAAP_EVASIONS) << "UTF evasion for dot found (%c0%*e) in raw line";
+        std::string unescaped = line;
+
+        unescaped = boost::regex_replace(unescaped, utf_evasion_for_dot_regex, ".");
+        unescaped = unescape(unescaped);
+        dbgTrace(D_WAAP_EVASIONS) << "unescaped == '" << unescaped << "'";
+
+        size_t kwCount = res.keyword_matches.size();
+
+        if (line != unescaped) {
+            SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+            checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
+                    res.found_patterns, longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->words_regex, res.keyword_matches, res.found_patterns,
+                    longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->pattern_regex, res.regex_matches, res.found_patterns,
+                    longTextFound, binaryDataFound);
+        }
+
+        if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            // Recalculate repetition and/or probing indicators
+            unsigned int newWordsCount = 0;
+            calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                    newWordsCount);
+            // Take minimal words count because empirically it means evasion was probably succesfully decoded
+            wordsCount = std::min(wordsCount, newWordsCount);
+        }
+    }
+
 
     // python: escape ='hi_acur_fast_reg_evasion' in found_patterns
     bool escape = Waap::Util::find_in_map_of_stringlists_keys("evasion", res.found_patterns);
@@ -1690,8 +1798,8 @@ void WaapAssetState::updateScores()
     scoreBuilder.snap();
 }
 
-std::string WaapAssetState::getSignaturesScoresFilePath() const {
-    return m_SignaturesScoresFilePath;
+std::string WaapAssetState::getWaapDataFileName() const {
+    return m_waapDataFileName;
 }
 
 std::map<std::string, std::vector<std::string>>& WaapAssetState::getFilterVerbose()
@@ -1699,10 +1807,10 @@ std::map<std::string, std::vector<std::string>>& WaapAssetState::getFilterVerbos
     return m_filtered_keywords_verbose;
 }
 
-std::string WaapAssetState::getSignaturesFilterDir() const {
-    size_t lastSlash = m_SignaturesScoresFilePath.find_last_of('/');
+std::string WaapAssetState::getWaapDataDir() const {
+    size_t lastSlash = m_waapDataFileName.find_last_of('/');
     std::string sigsFilterDir = ((lastSlash == std::string::npos) ?
-        m_SignaturesScoresFilePath : m_SignaturesScoresFilePath.substr(0, lastSlash));
+        m_waapDataFileName : m_waapDataFileName.substr(0, lastSlash));
     dbgTrace(D_WAAP_ASSET_STATE) << " signatures filters directory: " << sigsFilterDir;
     return sigsFilterDir;
 }
@@ -1947,6 +2055,7 @@ std::shared_ptr<Waap::SecurityHeaders::State>& WaapAssetState::getSecurityHeader
 {
     return m_securityHeadersState;
 }
+
 
 void WaapAssetState::clearRateLimitingState()
 {

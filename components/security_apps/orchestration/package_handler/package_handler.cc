@@ -13,13 +13,10 @@
 
 #include "package_handler.h"
 #include "config.h"
-#include "sasal.h"
 #include "i_shell_cmd.h"
 
 #include <sys/stat.h>
 #include <vector>
-
-SASAL_START // Orchestration - Updates Control
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -504,5 +501,3 @@ PackageHandler::Impl::updateSavedPackage(const string &package_name, const strin
 PackageHandler::PackageHandler() : Component("PackageHandler"), pimpl(make_unique<Impl>()) {}
 
 PackageHandler::~PackageHandler() {}
-
-SASAL_END

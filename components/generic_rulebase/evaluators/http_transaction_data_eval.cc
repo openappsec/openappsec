@@ -20,9 +20,6 @@
 #include "environment/evaluator_templates.h"
 #include "i_environment.h"
 #include "singleton.h"
-#include "sasal.h"
-
-SASAL_START // HTTP Manager - Transaction data
 
 using namespace std;
 using namespace EnvironmentHelper;
@@ -121,5 +118,3 @@ BeginWithUri::evalVariable() const
 
     return lower_uri_ctx.find(lower_uri_prefix) == 0;
 }
-
-SASAL_END

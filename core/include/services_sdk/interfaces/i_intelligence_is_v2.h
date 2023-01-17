@@ -69,6 +69,44 @@ public:
         return intelligence_query.getData();
     }
 
+    template<typename Data>
+    Maybe<std::vector<Maybe<std::vector<AssetReply<Data>>>>>
+    queryIntelligence(std::vector<QueryRequest> &query_requests)
+    {
+        static const uint upper_assets_limit = 50;
+        static const uint upper_confidence_limit = 1000;
+        for (QueryRequest &query_request : query_requests) {
+            uint assets_limit = query_request.getAssetsLimit();
+            if (assets_limit == 0 || assets_limit > upper_assets_limit) {
+                dbgTrace(D_INTELLIGENCE)
+                    << "Assets limit for request is "
+                    << upper_assets_limit
+                    << ", requests assets: "
+                    << assets_limit;
+                return genError("Assets limit valid range is of [1, " + std::to_string(upper_assets_limit) + "]");
+            }
+
+            bool min_conf_res = query_request.checkMinConfidence(upper_confidence_limit);
+            if (!min_conf_res) {
+                dbgTrace(D_INTELLIGENCE) << "Illegal confidence value";
+                return genError(
+                    "Minimum confidence value valid range is of [1, " + std::to_string(upper_confidence_limit) + "]"
+                );
+            }
+        }
+        IntelligenceQuery<Data> intelligence_query(query_requests);
+        static const std::string query_uri = "/api/v2/intelligence/assets/queries";
+
+        dbgTrace(D_INTELLIGENCE) << "Sending intelligence bulk request with " << query_requests.size() << " items";
+        bool res = getIsOfflineOnly() ? false : sendQueryObject(intelligence_query, query_uri, upper_assets_limit);
+        if (!res) {
+            dbgTrace(D_INTELLIGENCE) << "Could not message fog, bulk request failed.";
+            return genError("Could not query intelligence");
+        }
+
+        return intelligence_query.getBulkData();
+    }
+
 private:
     template<typename Data>
     bool
@@ -138,7 +176,7 @@ private:
         std::chrono::seconds seconds_since_start = std::chrono::seconds(0);
         std::chrono::seconds seconds_since_last_lap = std::chrono::seconds(0);
 
-        bool res= true;
+        bool res = true;
         while (res &&
             intelligence_query.getResponseStatus() == ResponseStatus::IN_PROGRESS &&
             seconds_since_start < request_overall_timeout &&

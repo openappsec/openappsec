@@ -19,15 +19,12 @@
 
 #include "debug.h"
 #include "config.h"
-#include "sasal.h"
 
 using namespace cereal;
 using namespace std;
 using namespace chrono;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
-
-SASAL_START // Orchestration - Modules
 
 class RegistrationDetails
 {
@@ -681,5 +678,3 @@ OrchestrationStatus::init() { pimpl->init(); }
 OrchestrationStatus::OrchestrationStatus() : Component("OrchestrationStatus"), pimpl(make_unique<Impl>()) {}
 
 OrchestrationStatus::~OrchestrationStatus() {}
-
-SASAL_END

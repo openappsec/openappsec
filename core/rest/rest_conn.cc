@@ -16,7 +16,6 @@
 #include <unistd.h>
 #include <sstream>
 #include <sys/socket.h>
-#include <boost/algorithm/string.hpp>
 
 #include "debug.h"
 
@@ -33,6 +32,18 @@ RestConn::RestConn(int _fd, I_MainLoop *_mainloop, const I_RestInvoke *_invoke)
 
 RestConn::~RestConn()
 {
+}
+
+static bool
+compareStringCaseInsensitive(const string &s1, const string &s2)
+{
+    if (s1.size() != s2.size()) return false;
+
+    for (size_t index = 0; index < s1.size(); ++index) {
+        if (tolower(s1[index]) != tolower(s2[index])) return false;
+    }
+
+    return true;
 }
 
 void
@@ -69,7 +80,7 @@ RestConn::parseConn() const
         os.str(line);
         string head, data;
         os >> head >> data;
-        if (boost::iequals(head, "Content-Length:")) {
+        if (compareStringCaseInsensitive(head, "Content-Length:")) {
             try {
                 len = stoi(data, nullptr);
             } catch (...) {

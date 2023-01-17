@@ -38,8 +38,10 @@ SerializableAssetSource<UserSerializableReplyAttr>::load(cereal::JSONInputArchiv
     UserSerializableReplyAttr raw_attribute;
     try {
         ar(cereal::make_nvp("attributes", raw_attribute));
+        attributes.clear();
+        attributes.push_back(raw_attribute);
     } catch(const std::exception &e) {}
-    attributes.push_back(raw_attribute);
+
 }
 
 #endif //__ASSET_SOURCE_V2_IMPL_H__

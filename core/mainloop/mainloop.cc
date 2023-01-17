@@ -174,9 +174,6 @@ MainloopComponent::Impl::reportStartupEvent()
     auto team = i_env->get<ReportIS::AudienceTeam>("Audience Team");
     if (team.ok()) audience_team = *team;
 
-    string agent_uid =
-        (Report::isPlaygroundEnv() ? "playground-" : "") +
-        Singleton::Consume<I_AgentDetails>::by<MainloopComponent>()->getAgentId();
     Report startup_message(
         "Nano service successfully started",
         curr_time,
@@ -188,7 +185,7 @@ MainloopComponent::Impl::reportStartupEvent()
         ReportIS::Severity::INFO,
         ReportIS::Priority::HIGH,
         chrono::seconds(0),
-        LogField("agentId", agent_uid),
+        LogField("agentId", Singleton::Consume<I_AgentDetails>::by<MainloopComponent>()->getAgentId()),
         ReportIS::Tags::INFORMATIONAL
     );
 
@@ -290,7 +287,7 @@ MainloopComponent::Impl::run()
                     "Ending execution of corutine. Routine named: " <<
                     curr_iter->second.getRoutineName();
                 if (getTimer()->getMonotonicTime() > stop_time + large_exceeding) {
-                    dbgError(D_MAINLOOP)
+                    dbgWarning(D_MAINLOOP)
                         << "Routine execution exceeded run time. Routine name: "
                         << curr_iter->second.getRoutineName();
                 }

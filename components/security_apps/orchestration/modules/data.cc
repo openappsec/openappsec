@@ -15,10 +15,6 @@
 
 #include <map>
 
-#include "sasal.h"
-
-SASAL_START // Orchestration - Modules
-
 using namespace std;
 using namespace cereal;
 
@@ -48,5 +44,3 @@ Data::serialize(JSONInputArchive &in_archive)
         make_nvp("version", version)
     );
 }
-
-SASAL_END

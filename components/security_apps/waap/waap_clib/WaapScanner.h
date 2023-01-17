@@ -32,7 +32,8 @@ namespace Waap {
             m_bIgnoreOverride(false)
         {
         }
-        bool suspiciousHit(Waf2ScanResult &res, const std::string &location, const std::string &param_name);
+        bool suspiciousHit(Waf2ScanResult &res, DeepParser &dp,
+                const std::string &location, const std::string &param_name, const std::string &key);
         int onKv(const char* k, size_t k_len, const char* v, size_t v_len, int flags) override;
 
         const std::string &getAntibotCookie() const { return m_antibotCookie; }
@@ -41,6 +42,7 @@ namespace Waap {
     private:
         double getScoreData(Waf2ScanResult& res, const std::string &poolName);
         bool shouldIgnoreOverride(const Waf2ScanResult &res);
+        bool isKeyCspReport(const std::string &key, Waf2ScanResult &res, DeepParser &dp);
         
         Waf2ScanResult m_lastScanResult;
         IWaf2Transaction *m_transaction;

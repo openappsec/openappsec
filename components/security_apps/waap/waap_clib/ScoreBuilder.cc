@@ -99,10 +99,10 @@ void KeywordsScorePool::mergeScores(const KeywordsScorePool& baseScores)
 
 
 ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState) :
-    SerializeToFilePeriodically(duration_cast<seconds>(minutes(10)), pWaapAssetState->getSignaturesScoresFilePath()),
     m_scoreTrigger(0),
     m_fpStore(),
-    m_keywordsScorePools(),
+    m_serializedData(),
+    m_keywordsScorePools(m_serializedData.m_keywordsScorePools),
     m_falsePositivesSetsIntersection(),
     m_pWaapAssetState(pWaapAssetState)
 {
@@ -110,10 +110,10 @@ ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState) :
 }
 
 ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& baseScores) :
-    SerializeToFilePeriodically(duration_cast<seconds>(minutes(10)), pWaapAssetState->getSignaturesScoresFilePath()),
     m_scoreTrigger(0),
     m_fpStore(),
-    m_keywordsScorePools(),
+    m_serializedData(),
+    m_keywordsScorePools(m_serializedData.m_keywordsScorePools),
     m_falsePositivesSetsIntersection(),
     m_pWaapAssetState(pWaapAssetState)
 {
@@ -123,44 +123,52 @@ ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& base
     mergeScores(baseScores);
 }
 
-void ScoreBuilder::serialize(std::ostream& stream) {
-    cereal::JSONOutputArchive archive(stream);
-    static const size_t version = 1;
-    archive(
-        cereal::make_nvp("version", version),
-        cereal::make_nvp("scorePools", m_keywordsScorePools)
-    );
-}
+void ScoreBuilder::restore()
+{
+    const std::string filePath = this->m_pWaapAssetState->getWaapDataFileName();
 
-void ScoreBuilder::deserialize(std::istream& stream) {
-    cereal::JSONInputArchive iarchive(stream);
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "loadFromFile() file: " << filePath;
+    std::fstream filestream;
 
-    size_t version = 0;
-    try {
-        iarchive(cereal::make_nvp("version", version));
+    filestream.open(filePath, std::fstream::in);
+
+    if (filestream.is_open() == false) {
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "failed to open file: " << filePath << " Error: " << errno;
+        return;
+    }
+
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "loading from file: " << filePath;
+
+    int length;
+    filestream.seekg(0, std::ios::end);    // go to the end
+    length = filestream.tellg();           // report location (this is the length)
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "file length: " << length;
+    assert(length >= 0); // length -1 really happens if filePath is a directory (!)
+    char* buffer = new char[length];       // allocate memory for a buffer of appropriate dimension
+    filestream.seekg(0, std::ios::beg);    // go back to the beginning
+    if (!filestream.read(buffer, length))  // read the whole file into the buffer
+    {
+        filestream.close();
+        delete[] buffer;
+        dbgWarning(D_WAAP_SCORE_BUILDER) << "Failed to read file, file: " << filePath;
+        return;
+    }
+    filestream.close();
+
+
+    std::stringstream ss(std::string(buffer, length));
+    delete[] buffer;
+
+    try
+    {
+        cereal::JSONInputArchive iarchive(ss);
+        iarchive(
+            cereal::make_nvp("waap_scores", m_serializedData)
+        );
     }
     catch (std::runtime_error & e) {
-        iarchive.setNextName(nullptr);
-        version = 0;
-        dbgDebug(D_WAAP_SCORE_BUILDER) << "ScoreBuilder version absent, using version " << version <<
-            " e.what() is " << e.what();
-    }
-
-    dbgDebug(D_WAAP_SCORE_BUILDER) << "Loading scores from file version " << version << "...";
-
-    switch (version)
-    {
-        case 1: {
-            iarchive(cereal::make_nvp("scorePools", m_keywordsScorePools));
-            break;
-        }
-        case 0: {
-            m_keywordsScorePools[KEYWORDS_SCORE_POOL_BASE] = KeywordsScorePool(iarchive);
-            break;
-        }
-        default: {
-            dbgDebug(D_WAAP_SCORE_BUILDER) << "Unknown scores file version: " << version;
-        }
+        dbgWarning(D_WAAP_SCORE_BUILDER) << "failed to deserialize file: " << filePath << ", error: " <<
+            e.what();
     }
 }
 
@@ -279,7 +287,6 @@ void ScoreBuilder::pumpKeywordScore(ScoreBuilderData& data, const std::string &p
         {
             m_pWaapAssetState->updateScores();
         }
-        backupWorker();
     }
 }
 

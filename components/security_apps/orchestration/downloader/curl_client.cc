@@ -33,14 +33,12 @@
 #include "config.h"
 #include "url_parser.h"
 #include "debug.h"
-#include "sasal.h"
 #include "scope_exit.h"
 
 USE_DEBUG_FLAG(D_HTTP_REQUEST);
 
 using namespace std;
 
-SASAL_START // Orchestration - Communication
 // LCOV_EXCL_START Reason: Depends on real download server.
 
 class CurlGlobalInit
@@ -434,5 +432,3 @@ TraceIdGenerator::generateTraceId()
     string part5 = generateRandomString(12);
     return string(part1 + "-" + part2 + "-" + part3 + "-" + part4 + "-" + part5);
 }
-
-SASAL_END

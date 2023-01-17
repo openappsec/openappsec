@@ -63,6 +63,7 @@ DeepParser::~DeepParser()
 {
 }
 
+
 void DeepParser::setWaapAssetState(std::shared_ptr<WaapAssetState> pWaapAssetState)
 {
     m_pWaapAssetState = pWaapAssetState;
@@ -284,18 +285,21 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
 
     if (flags & BUFFERED_RECEIVER_F_FIRST)
     {
-        createInternalParser(orig_val,
+        createInternalParser(k, k_len, orig_val,
             valueStats,
             isBodyPayload,
             isRefererPayload,
             isRefererParamPayload,
             isUrlPayload,
-            isUrlParamPayload);
+            isUrlParamPayload,
+            flags);
     }
 
     // If there's a parser in parsers stack, push the value to the top parser
     if (!m_parsersDeque.empty() && !m_parsersDeque.front()->getRecursionFlag())
     {
+        ScopedContext ctx;
+        ctx.registerValue<IWaf2Transaction*>("waap_transaction", m_pTransaction);
         rc = pushValueToTopParser(cur_val, flags, base64ParamFound);
         if (rc != CONTINUE_PARSING)
         {
@@ -680,13 +684,32 @@ int DeepParser::pushValueToTopParser(std::string& cur_val, int flags, bool base6
     return CONTINUE_PARSING;
 }
 
-void DeepParser::createInternalParser(std::string& cur_val,
+class StubParserReceiver : public IParserReceiver {
+    int
+    onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags)
+    {
+        return 0;
+    }
+};
+
+static bool
+validateJson(const char *v, size_t v_len)
+{
+    StubParserReceiver rcvr;
+    ParserJson jsParser(rcvr);
+    jsParser.push(v, v_len);
+    dbgTrace(D_WAAP_DEEP_PARSER) << "json validation: " << (jsParser.error() ? "invalid" : "valid");
+    return !jsParser.error();
+}
+
+void DeepParser::createInternalParser(const char *k, size_t k_len, std::string& cur_val,
     const ValueStatsAnalyzer &valueStats,
     bool isBodyPayload,
     bool isRefererPayload,
     bool isRefererParamPayload,
     bool isUrlPayload,
-    bool isUrlParamPayload)
+    bool isUrlParamPayload,
+    int flags)
 {
     bool isPipesType = false, isSemicolonType = false, isAsteriskType = false,
         isCommaType = false, isAmperType = false;
@@ -795,12 +818,31 @@ void DeepParser::createInternalParser(std::string& cur_val,
     }
 
     // This flag is enabled when current value is either top level (depth==1), or one-level inside multipart-encoded
-    // container (depth==2 and type of top parser is )
+    // container (depth==2 and type of top parser is "ParserMultipartForm")
     bool isTopData = m_depth == 1
         || (m_depth == 2 && !m_parsersDeque.empty() && m_parsersDeque.front()->name() == "ParserMultipartForm");
 
+    // GQL query can potentially be in one of three places in HTTP request:
+    // 1. In url parameter named "query"
+    // 2. In the body when Content-Type is "application/graphql"
+    // 3. In the JSON contained in body, where top-level JSON parameter is named "query"
+    // Note: we consider decoding Graphql format only if it is contained whole within the MAX_VALUE_SIZE (64k) buffer
+    // size (you can find the value of MAX_VALUE_SIZE defined in ParserBase.cc).
+    Waap::Util::ContentType requestContentType = m_pTransaction->getContentType();
+    bool isPotentialGqlQuery = false;
+    if (flags == BUFFERED_RECEIVER_F_BOTH) { // TODO:: should we limit ourselves to the 64k buffer?
+        static std::string strQuery("query");
+        bool isParamQuery = strQuery.size() == k_len && std::equal(k, k + k_len, strQuery.begin());
+        isPotentialGqlQuery |= isParamQuery && m_depth == 1 && (isUrlParamPayload || isRefererParamPayload);
+        isPotentialGqlQuery |= m_depth == 1 && isBodyPayload && requestContentType == Waap::Util::CONTENT_TYPE_GQL;
+        isPotentialGqlQuery |= isParamQuery && m_depth == 2 && isBodyPayload &&
+            requestContentType == Waap::Util::CONTENT_TYPE_JSON;
+    }
+
     dbgTrace(D_WAAP_DEEP_PARSER)
-        << "isTopData="
+        << "isPotentialGqlQuery="
+        << isPotentialGqlQuery
+        << ";isTopData="
         << isTopData
         << ";depth="
         << m_depth
@@ -838,6 +880,8 @@ void DeepParser::createInternalParser(std::string& cur_val,
             // JSON value detected
             dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a JSON file";
             // Send openApiReceiver as secondary receiver, but only if the JSON is passed in body and on the top level.
+
+
             m_parsersDeque.push_front(std::make_shared<BufferedParser<ParserJson>>(*this));
         }
     }
@@ -1018,6 +1062,16 @@ bool DeepParser::isBinaryData() const
         if (parser->name() == "binary") return true;
     }
     return false;
+}
+
+const std::string DeepParser::getLastParser() const
+{
+    if (m_parsersDeque.empty()) {
+        return "";
+    }
+    else {
+        return m_parsersDeque.front()->name();
+    }
 }
 
 bool DeepParser::isWBXmlData() const

@@ -19,7 +19,7 @@ extern const string unnamed_service;
 
 LogGen::~LogGen()
 {
-    Singleton::Consume<I_Logging>::by<LogGen>()->sendLog(log);
+    if (send_log) Singleton::Consume<I_Logging>::by<LogGen>()->sendLog(log);
 }
 
 LogGen &
@@ -55,6 +55,18 @@ LogGen::getAudienceTeam() const
         if (team.ok()) return *team;
     }
     return ReportIS::AudienceTeam::NONE;
+}
+
+string
+LogGen::getLogInsteadOfSending()
+{
+    send_log = false;
+    stringstream output;
+    {
+        cereal::JSONOutputArchive ar(output);
+        log.serialize(ar);
+    }
+    return output.str();
 }
 
 void

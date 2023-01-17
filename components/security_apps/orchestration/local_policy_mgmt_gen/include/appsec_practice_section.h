@@ -14,10 +14,7 @@
 #ifndef __APPSEC_PRACTICE_SECTION_H__
 #define __APPSEC_PRACTICE_SECTION_H__
 
-#include <list>
-
 #include <cereal/archives/json.hpp>
-#include <cereal/types/list.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -119,9 +116,9 @@ public:
     load(cereal::JSONInputArchive &archive_in)
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSec Web Attack Protections";
-        parseAppsecJSONKey<std::string>("csrf-enabled", csrf_protection, archive_in, "inactive");
-        parseAppsecJSONKey<std::string>("error-disclosure-enabled", error_disclosure, archive_in, "inactive");
-        parseAppsecJSONKey<std::string>("open-redirect-enabled", open_redirect, archive_in, "inactive");
+        parseAppsecJSONKey<std::string>("csrf-protection", csrf_protection, archive_in, "Inactive");
+        parseAppsecJSONKey<std::string>("error-disclosure", error_disclosure, archive_in, "Inactive");
+        parseAppsecJSONKey<std::string>("open-redirect", open_redirect, archive_in, "Inactive");
         parseAppsecJSONKey<bool>("non-valid-http-methods", non_valid_http_methods, archive_in, false);
     }
 
@@ -185,12 +182,8 @@ public:
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSec practice spec";
         parseAppsecJSONKey<AppSecWebAttackProtections>("protections", protections, archive_in);
+        parseAppsecJSONKey<std::string>("minimum-confidence", minimum_confidence, archive_in, "critical");
         parseAppsecJSONKey<std::string>("override-mode", mode, archive_in, "Unset");
-        if (getMode() == "Prevent") {
-            parseAppsecJSONKey<std::string>("minimum-confidence", minimum_confidence, archive_in, "critical");
-        } else {
-            minimum_confidence = "Transparent";
-        }
         parseAppsecJSONKey<int>("max-body-size-kb", max_body_size_kb, archive_in, 1000000);
         parseAppsecJSONKey<int>("max-header-size-bytes", max_header_size_bytes, archive_in, 102400);
         parseAppsecJSONKey<int>("max-object-depth", max_object_depth, archive_in, 40);
@@ -219,8 +212,8 @@ private:
     int max_header_size_bytes;
     int max_object_depth;
     int max_url_size_bytes;
-    std::string minimum_confidence;
     std::string mode;
+    std::string minimum_confidence;
     AppSecWebAttackProtections protections;
 };
 
@@ -253,7 +246,7 @@ public:
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSec Snort Signatures practice";
         parseAppsecJSONKey<std::string>("override-mode", override_mode, archive_in, "Inactive");
-        parseAppsecJSONKey<std::vector<std::string>>("files", config_map, archive_in);
+        parseAppsecJSONKey<std::vector<std::string>>("configmap", config_map, archive_in);
     }
 
     const std::string & getOverrideMode() const { return override_mode; }
@@ -285,7 +278,7 @@ public:
     {
         dbgTrace(D_K8S_POLICY) << "Loading AppSecPracticeOpenSchemaAPI practice";
         parseAppsecJSONKey<std::string>("override-mode", override_mode, archive_in, "Inactive");
-        parseAppsecJSONKey<std::vector<std::string>>("files", config_map, archive_in);
+        parseAppsecJSONKey<std::vector<std::string>>("configmap", config_map, archive_in);
     }
 
     const std::string & getOverrideMode() const { return override_mode; }
@@ -700,9 +693,7 @@ public:
 
     const std::string & getMode() const { return mode; }
 
-    void setHost(const std::string &_host) { host = _host; }
-
-    void setMode(const std::string &_mode) { mode = _mode; }
+    void setMode(const std::string &_mode) { mode = _mode; };
 
     const std::string & getCustomResponse() const { return custom_response; }
 
@@ -754,18 +745,16 @@ public:
         if (default_mode_annot.ok() && !default_mode_annot.unpack().empty() && default_rule.getMode().empty()) {
             default_rule.setMode(default_mode_annot.unpack());
         }
-        default_rule.setHost("*");
-        parseAppsecJSONKey<std::list<ParsedRule>>("specific-rules", specific_rules, archive_in);
-        specific_rules.push_front(default_rule);
+        parseAppsecJSONKey<std::vector<ParsedRule>>("specific-rules", specific_rules, archive_in);
     }
 
     const ParsedRule & getDefaultRule() const { return default_rule; }
 
-    const std::list<ParsedRule> & getSpecificRules() const { return specific_rules; }
+    const std::vector<ParsedRule> & getSpecificRules() const { return specific_rules; }
 
 private:
     ParsedRule default_rule;
-    std::list<ParsedRule> specific_rules;
+    std::vector<ParsedRule> specific_rules;
 };
 
 class AppsecLinuxPolicy : Singleton::Consume<I_Environment>
@@ -777,12 +766,12 @@ public:
         dbgTrace(D_K8S_POLICY) << "Loading AppSec policy spec";
         parseAppsecJSONKey<AppsecPolicySpec>("policies", policies, archive_in);
         parseAppsecJSONKey<std::vector<AppSecPracticeSpec>>("practices", practices, archive_in);
-        parseAppsecJSONKey<std::vector<AppsecTriggerSpec>>("log-triggers", log_triggers, archive_in);
-        parseAppsecJSONKey<std::vector<AppSecCustomResponseSpec>>("custom-responses", custom_responses, archive_in);
+        parseAppsecJSONKey<std::vector<AppsecTriggerSpec>>("logtriggers", log_triggers, archive_in);
+        parseAppsecJSONKey<std::vector<AppSecCustomResponseSpec>>("customresponses", custom_responses, archive_in);
         parseAppsecJSONKey<std::vector<AppsecExceptionSpec>>("exceptions", exceptions, archive_in);
-        parseAppsecJSONKey<std::vector<TrustedSourcesSpec>>("trusted-sources", trusted_sources, archive_in);
+        parseAppsecJSONKey<std::vector<TrustedSourcesSpec>>("trustedsources", trusted_sources, archive_in);
         parseAppsecJSONKey<std::vector<SourceIdentifierSpecWrapper>>(
-            "source-identifier",
+            "sourceidentifiers",
             sources_identifier,
             archive_in
         );

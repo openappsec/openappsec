@@ -42,8 +42,8 @@ public:
 
     void preload();
 
-    void setActiveTenant(const string &tenant_id) override;
-    void unsetActiveTenant() override;
+    void setActiveTenantAndProfile(const string &tenant_id, const string &profile_id) override;
+    void unsetActiveTenantAndProfile() override;
 
     void registerContext(Context *ptr) override;
     void unregisterContext(Context *ptr) override;
@@ -145,17 +145,19 @@ Environment::Impl::fini()
 }
 
 void
-Environment::Impl::setActiveTenant(const string &tenant_id)
+Environment::Impl::setActiveTenantAndProfile(const string &tenant_id, const string &profile_id)
 {
     if (tenant_manager == nullptr) tenant_manager = Singleton::Consume<I_TenantManager>::by<Environment>();
-    tenant_manager->addActiveTenant(tenant_id);
+    tenant_manager->addActiveTenantAndProfile(tenant_id, profile_id);
     registerValue<string>("ActiveTenantId", tenant_id);
+    registerValue<string>("ActiveProfileId", profile_id);
 }
 
 void
-Environment::Impl::unsetActiveTenant()
+Environment::Impl::unsetActiveTenantAndProfile()
 {
     getConfigurationContext().unregisterKey<string>("ActiveTenantId");
+    getConfigurationContext().unregisterKey<string>("ActiveProfileId");
 }
 
 map<string, string>

@@ -15,11 +15,8 @@
 
 #include "debug.h"
 #include "config.h"
-#include "sasal.h"
 
 using namespace std;
-
-SASAL_START // Orchestration - Manifest Handler
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -140,5 +137,3 @@ ManifestDiffCalculator::buildInstallationQueue(
     installation_queue.push_back(updated_package);
     return true;
 }
-
-SASAL_END

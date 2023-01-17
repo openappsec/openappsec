@@ -68,6 +68,7 @@ calcCombinations(
     std::vector<std::string>& keyword_combinations)
 {
     keyword_combinations.clear();
+    static const double max_combi_score = 1.0f;
 
     for (size_t i = 0; i < keyword_matches.size(); ++i) {
         std::vector<std::string> combinations;
@@ -79,6 +80,8 @@ calcCombinations(
             // from signature_scores database.
             std::sort(combinations.begin(), combinations.end());
             std::string combination;
+            double default_score = 0.0f;
+
             // note that std::set<> container output sorted data when iterated.
             for (auto it = combinations.begin(); it != combinations.end(); it++) {
                 // add space between all items, except the first one
@@ -86,8 +89,11 @@ calcCombinations(
                     combination += " ";
                 }
                 combination += *it;
+                default_score += scoreBuilder.getSnapshotKeywordScore(*it, 0.0f, poolName);
             }
-            addKeywordScore(scoreBuilder, poolName, combination, 1.0f, scoresArray);
+            // set default combination score to be the sum of its keywords, bounded by 1
+            default_score = std::min(default_score, max_combi_score);
+            addKeywordScore(scoreBuilder, poolName, combination, default_score, scoresArray);
             keyword_combinations.push_back(combination);
         }
     }

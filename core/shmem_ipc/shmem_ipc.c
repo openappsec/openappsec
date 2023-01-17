@@ -50,7 +50,6 @@ debugInitial(int is_error, const char *func, const char *file, int line_num, con
     va_start(args, fmt);
     vprintf(fmt, args);
     va_end(args);
-    printf("\n");
 }
 
 void (*debug_int)(int is_error, const char *func, const char *file, int line_num, const char *fmt, ...) = debugInitial;
@@ -101,7 +100,7 @@ createOneWayIPCQueue(
         return NULL;
     }
 
-    if (is_owner && chown(shmem_path, user_id, group_id) == -1) {
+    if (is_owner && chmod(shmem_path, 0666) == -1) {
         writeDebug(WarningLevel, "Failed to set the permissions");
         destroySharedRingQueue(ring_queue, is_owner, isTowardsOwner(is_owner, is_tx_queue));
         return NULL;

@@ -77,14 +77,13 @@ enum class Service {
     SDWAN,
     SDWAN_LOGGER,
     IOT_ENFORCE,
+    IOT_DOCTOR,
     IOT_GW_SENSOR,
     IOT_SNMP,
     IOT_MS_DHCP,
     IOT_UNIX_DHCP,
     IOT_SYSLOG_DHCP,
     IOT_INFOBLOX_DHCP,
-    IOT_NETFLOWS,
-    IOT_DNS,
     IOT_CISCO_ISE,
     IOT_WLP,
     ATTACHMENT_REGISTRATOR,
@@ -93,6 +92,8 @@ enum class Service {
     DEDICATED_NETWORK_HANDLER,
     MESSAGING_PROXY,
     HELLO_WORLD,
+    IDA,
+    IOT_ACCESS_CONTROL,
 
     COUNT
 };
@@ -150,14 +151,13 @@ getServiceString(const Service service)
         case (Service::REVERSE_PROXY_MANAGER): return "reverse-proxy-manager";
         case (Service::CAPSULE8): return "capsule8";
         case (Service::IOT_ENFORCE): return "iot-enforce";
+        case (Service::IOT_DOCTOR): return "iot-doctor";
         case (Service::IOT_GW_SENSOR): return "iot-gw-sensor";
         case (Service::IOT_SNMP): return "iot-snmp";
         case (Service::IOT_MS_DHCP): return "iot-ms-dhcp";
         case (Service::IOT_UNIX_DHCP): return "iot-unix-dhcp";
         case (Service::IOT_SYSLOG_DHCP): return "iot-syslog-dhcp";
         case (Service::IOT_INFOBLOX_DHCP): return "iot-infoblox-dhcp";
-        case (Service::IOT_NETFLOWS): return "iot-netflows";
-        case (Service::IOT_DNS): return "iot-dns";
         case (Service::IOT_CISCO_ISE): return "iot-cisco-ise";
         case (Service::ATTACHMENT_REGISTRATOR): return "attachment-registrator";
         case (Service::CPVIEW_METRIC_PROVIDER): return "cpview-metric-provider";
@@ -167,6 +167,8 @@ getServiceString(const Service service)
         case (Service::SDWAN_LOGGER): return "sdwan-logger";
         case (Service::IOT_WLP): return "workload-protection";
         case (Service::HELLO_WORLD): return "hello-world";
+        case (Service::IDA): return "identity-awareness";
+        case (Service::IOT_ACCESS_CONTROL): return "iot-access-control";
         default:
             cerr
                 << "Internal Error: the provided service ("
@@ -260,6 +262,11 @@ getServiceConfig (const Service service)
                 filesystem_path + "/conf/cp-nano-iot-enforce-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-iot-enforce.dbg"
             );
+        case (Service::IOT_DOCTOR):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-iot-doctor-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-iot-doctor.dbg"
+            );
         case (Service::IOT_GW_SENSOR):
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-iot-gw-sensor-debug-conf.json",
@@ -290,16 +297,6 @@ getServiceConfig (const Service service)
                 filesystem_path + "/conf/cp-nano-iot-infoblox-dhcp-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-iot-infoblox-dhcp.dbg"
             );
-        case (Service::IOT_NETFLOWS):
-            return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-iot-netflows-debug-conf.json",
-                log_files_path + "/nano_agent/cp-nano-iot-netflows.dbg"
-            );
-        case (Service::IOT_DNS):
-            return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-iot-dns-debug-conf.json",
-                log_files_path + "/nano_agent/cp-nano-iot-dns.dbg"
-            );
         case (Service::IOT_CISCO_ISE):
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-iot-cisco-ise-debug-conf.json",
@@ -327,8 +324,8 @@ getServiceConfig (const Service service)
             );
         case (Service::SDWAN_LOGGER):
             return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-sdwan-logger-debug-conf.json",
-                log_files_path + "/nano_agent/cp-nano-sdwan-logger.dbg"
+                filesystem_path + "/conf/cp-nano-logger-sdwan-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-logger-sdwan.dbg"
             );
         case (Service::IOT_WLP):
             return ServiceConfig(
@@ -340,10 +337,20 @@ getServiceConfig (const Service service)
                 filesystem_path + "/conf/cp-nano-cpview-metric-provider-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-cpview-metric-provider.dbg"
             );
+        case (Service::IDA):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-ida-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-ida.dbg"
+            );
         case (Service::HELLO_WORLD):
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-hello-world-conf.json",
                 log_files_path + "/nano_agent/cp-nano-hello-world.dbg"
+            );
+        case (Service::IOT_ACCESS_CONTROL):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-iot-access-control-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-iot-access-control.dbg"
             );
         default:
             cerr
@@ -1086,6 +1093,7 @@ DebugCli::changeFlags(const string &output, const vector<string> &flags, bool is
         size_t delim = maybe_flag.find('=');
         if (delim == string::npos || delim == 0 || delim == flags.size() - 1) {
             cerr << "Ignoring illegal flag: \"" << maybe_flag << "\" (syntax is <flag>=<level>)." << endl;
+            continue;
         }
         string flag = maybe_flag.substr(0, delim);
         if (us_debug_flags.count(flag) == 0 && kernel_debug_flags.count(flag) == 0) {
@@ -1107,6 +1115,7 @@ DebugCli::changeFlags(const string &output, const vector<string> &flags, bool is
                 << DebugCli::caller
                 << "--show available-flags to get list of possible debug levels)."
                 << endl;
+            continue;
         }
 
         if (us_debug_flags.count(flag) > 0) {
@@ -1235,6 +1244,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::CAPSULE8);
         } else if (getServiceString(Service::IOT_ENFORCE).find(maybe_service) == 0) {
             services.push_back(Service::IOT_ENFORCE);
+        } else if (getServiceString(Service::IOT_DOCTOR).find(maybe_service) == 0) {
+            services.push_back(Service::IOT_DOCTOR);
         } else if (getServiceString(Service::IOT_GW_SENSOR).find(maybe_service) == 0) {
             services.push_back(Service::IOT_GW_SENSOR);
         } else if (getServiceString(Service::IOT_SNMP).find(maybe_service) == 0) {
@@ -1247,10 +1258,6 @@ extractServices(const vector<string> &args)
             services.push_back(Service::IOT_SYSLOG_DHCP);
         } else if (getServiceString(Service::IOT_INFOBLOX_DHCP).find(maybe_service) == 0) {
             services.push_back(Service::IOT_INFOBLOX_DHCP);
-        } else if (getServiceString(Service::IOT_NETFLOWS).find(maybe_service) == 0) {
-            services.push_back(Service::IOT_NETFLOWS);
-        } else if (getServiceString(Service::IOT_DNS).find(maybe_service) == 0) {
-            services.push_back(Service::IOT_DNS);
         } else if (getServiceString(Service::IOT_CISCO_ISE).find(maybe_service) == 0) {
             services.push_back(Service::IOT_CISCO_ISE);
         } else if (getServiceString(Service::ATTACHMENT_REGISTRATOR).find(maybe_service) == 0) {
@@ -1267,6 +1274,10 @@ extractServices(const vector<string> &args)
             services.push_back(Service::SDWAN_LOGGER);
         } else if (getServiceString(Service::IOT_WLP).find(maybe_service) == 0) {
             services.push_back(Service::IOT_WLP);
+        } else if (getServiceString(Service::IDA).find(maybe_service) == 0) {
+            services.push_back(Service::IDA);
+        } else if (getServiceString(Service::IOT_ACCESS_CONTROL).find(maybe_service) == 0) {
+            services.push_back(Service::IOT_ACCESS_CONTROL);
         } else {
             break;
         }

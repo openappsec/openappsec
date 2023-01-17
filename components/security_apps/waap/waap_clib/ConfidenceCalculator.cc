@@ -642,7 +642,11 @@ void ConfidenceCalculator::calculateInterval()
         double factor = 1.0;
         if (m_tuning != nullptr)
         {
-            std::string param_name = key.substr(key.find("#") + 1); // not always accurate but good enough
+            std::string param_name = key;
+            auto param_name_pos = key.find("#");
+            if (param_name_pos != std::string::npos && (param_name_pos + 1) <= key.size()) {
+                param_name = key.substr(param_name_pos + 1); // not always accurate but good enough
+            }
             if (m_tuning->getDecision(param_name, PARAM_NAME) == BENIGN)
             {
                 factor = BENIGN_PARAM_FACTOR;

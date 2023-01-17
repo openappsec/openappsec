@@ -124,7 +124,7 @@ cptestGenerateHex(const std::vector<u_char> &vec, bool print_offsets)
 std::string
 cptestFnameInExeDir(const std::string &name)
 {
-    auto bin_path = ::testing::internal::GetArgvs()[0];    // Internal ugly API.
+    auto const &bin_path = ::testing::internal::GetArgvs()[0];    // Internal ugly API.
     auto slash = bin_path.rfind('/');
     if (slash==string::npos) {
         // bin_path contains no dir. So return name with no dir

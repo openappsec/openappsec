@@ -22,14 +22,11 @@
 #include "log_generator.h"
 #include "agent_details.h"
 #include "version.h"
-#include "sasal.h"
 #include "i_encryptor.h"
 #include "fog_authenticator.h"
 #include "fog_communication.h"
 #include "local_communication.h"
 #include "hybrid_communication.h"
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 
@@ -145,5 +142,3 @@ UpdateCommunication::fini()
 {
     pimpl->fini();
 }
-
-SASAL_END

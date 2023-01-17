@@ -24,6 +24,7 @@
 #include <cereal/archives/json.hpp>
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/string.hpp>
+#include "WaapDefines.h"
 
 struct ScoreBuilderData {
     std::string m_sourceIdentifier;
@@ -131,7 +132,7 @@ struct KeywordsScorePool {
     void mergeScores(const KeywordsScorePool& baseScores);
 };
 
-class ScoreBuilder : public SerializeToFilePeriodically {
+class ScoreBuilder {
 public:
     ScoreBuilder(I_WaapAssetState* pWaapAssetState);
     ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& baseScores);
@@ -152,12 +153,42 @@ public:
     keywords_set getUaItemKeywordsSet(std::string userAgent);
     unsigned int getFpStoreCount();
 
-    virtual void serialize(std::ostream& stream);
-    virtual void deserialize(std::istream& stream);
+    void restore();
 
     void mergeScores(const ScoreBuilder& baseScores);
 protected:
     typedef std::map<std::string, double> KeywordScoreMap;
+
+    struct SerializedData {
+        template <class Archive>
+        void serialize(Archive& ar) {
+            size_t version = 0;
+            try {
+                ar(cereal::make_nvp("version", version));
+            }
+            catch (std::runtime_error & e) {
+                ar.setNextName(nullptr);
+                version = 0;
+            }
+
+            switch (version)
+            {
+                case 1: {
+                    ar(cereal::make_nvp("scorePools", m_keywordsScorePools));
+                    break;
+                }
+                case 0: {
+                    m_keywordsScorePools[KEYWORDS_SCORE_POOL_BASE] = KeywordsScorePool(ar);
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+        }
+
+        std::map<std::string, KeywordsScorePool> m_keywordsScorePools; // live data continuously updated during traffic
+    };
 
     void pumpKeywordScorePerKeyword(ScoreBuilderData& data,
         const std::string& keyword,
@@ -166,7 +197,8 @@ protected:
 
     unsigned int m_scoreTrigger;
     FalsePoisitiveStore m_fpStore;
-    std::map<std::string, KeywordsScorePool> m_keywordsScorePools; // live data continuously updated during traffic
+    SerializedData m_serializedData;
+    std::map<std::string, KeywordsScorePool> &m_keywordsScorePools; // live data continuously updated during traffic
     std::map<std::string, KeywordScoreMap> m_snapshotKwScoreMap; // the snapshot is updated only by a call to snap()
     std::list<std::string> m_falsePositivesSetsIntersection;
     I_WaapAssetState* m_pWaapAssetState;

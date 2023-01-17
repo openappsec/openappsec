@@ -16,13 +16,13 @@
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/unordered_set.hpp>
 #include "debug.h"
-#include "Waf2Util.h"
 
 USE_DEBUG_FLAG(D_WAAP);
 
 KeywordTypeValidator::KeywordTypeValidator(const std::string& mapFilePath) :
     SerializeToFileBase(mapFilePath),
-    m_keywordTypeMap()
+    m_serializedData(),
+    m_keywordTypeMap(m_serializedData.m_keywordTypeMap)
 {
     restore();
 }
@@ -44,25 +44,22 @@ void KeywordTypeValidator::saveData()
 
 void KeywordTypeValidator::deserialize(std::istream& stream)
 {
-    cereal::JSONInputArchive archive(stream);
-
-    std::unordered_map<std::string, std::unordered_set<std::string>> typesStrToKeysMap;
-
-    archive(cereal::make_nvp("keywordsTypeMap", typesStrToKeysMap));
-
-    for (auto typeStrItr : typesStrToKeysMap)
+    try
     {
-        ParamType type = Waap::Util::convertTypeStrToEnum(typeStrItr.first);
-        for (auto keyword : typeStrItr.second)
-        {
-            if (m_keywordTypeMap.find(keyword) == m_keywordTypeMap.end())
-            {
-                // initialize type set
-                m_keywordTypeMap[keyword];
-            }
-            m_keywordTypeMap[keyword].insert(type);
-        }
+        cereal::JSONInputArchive archive(stream);
+
+        archive(
+            cereal::make_nvp("waap_kw_type_map", m_serializedData)
+        );
     }
+    catch (std::runtime_error & e) {
+        dbgWarning(D_WAAP) << "failed to deserialize keyword types validator file. Error: " << e.what();
+    }
+
+}
+
+void KeywordTypeValidator::operator=(const KeywordTypeValidator &other) {
+    m_serializedData.m_keywordTypeMap = other.m_serializedData.m_keywordTypeMap;
 }
 
 bool KeywordTypeValidator::isKeywordOfType(const std::string& keyword, ParamType type) const

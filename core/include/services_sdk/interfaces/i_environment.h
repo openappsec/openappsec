@@ -74,8 +74,8 @@ public:
     template <typename ... Attr>
     std::map<std::string, bool> getAllBools(Attr ... attr) const { return getAllBools(Param(attr ...)); }
 
-    virtual void setActiveTenant(const std::string &tenant_id) = 0;
-    virtual void unsetActiveTenant() = 0;
+    virtual void setActiveTenantAndProfile(const std::string &tenant_id, const std::string &profile_id = "") = 0;
+    virtual void unsetActiveTenantAndProfile() = 0;
 
     virtual std::string getCurrentTrace() const = 0;
     virtual std::string getCurrentSpan() const = 0;

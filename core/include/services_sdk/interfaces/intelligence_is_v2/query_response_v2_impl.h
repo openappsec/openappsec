@@ -100,6 +100,24 @@ IntelligenceQueryResponse<UserSerializableReplyAttr>::loadFromJson(cereal::JSONI
     } catch(...) {}
 }
 
+template<typename UserSerializableReplyAttr>
+template<class Archive>
+void
+IntelligenceQueryResponse<UserSerializableReplyAttr>::serialize(Archive &ar)
+{
+    std::string raw_data;
+    ar(
+        cereal::make_nvp("status", raw_data),
+        cereal::make_nvp("totalNumAssets", total_num_assets),
+        cereal::make_nvp("assetCollections", asset_collections)
+    );
+    status = Intelligence_IS_V2::convertStringToResponseStatus(raw_data);
+
+    try {
+        ar(cereal::make_nvp("cursor", cursor));
+    } catch(...) {}
+}
+
 template <typename UserSerializableReplyAttr>
 Intelligence_IS_V2::ResponseStatus
 IntelligenceQueryResponse<UserSerializableReplyAttr>::getResponseStatus() const
@@ -133,6 +151,20 @@ const std::vector<AssetReply<UserSerializableReplyAttr>> &
 IntelligenceQueryResponse<UserSerializableReplyAttr>::getData() const
 {
     return asset_collections;
+}
+
+template <typename UserSerializableReplyAttr>
+bool
+IntelligenceQueryResponse<UserSerializableReplyAttr>::isValidInBulk() const
+{
+    return !partial_fail_in_bulk;
+}
+
+template <typename UserSerializableReplyAttr>
+void
+IntelligenceQueryResponse<UserSerializableReplyAttr>::setFailInBulk()
+{
+    partial_fail_in_bulk = true;
 }
 
 #endif // __QUERY_RESPONSE_V2_IMPL_H_

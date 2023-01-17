@@ -65,7 +65,7 @@ public:
 
         EXPECT_CALL(rest, mockRestCall(RestAction::SHOW, "orchestration-status", _)).WillOnce(
             WithArg<2>(Invoke(this, &OrchestrationMultitenancyTest::setRestStatus)));
-
+            
         doEncrypt();
         orchestration_comp.init();
     }
@@ -83,9 +83,12 @@ public:
         Maybe<string> err = genError("No file exist");
         EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/user-cred.json")).WillOnce(Return(err));
 
-	EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a")).WillOnce(Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a")).WillOnce(Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a")).WillOnce(Return(true));
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a")).WillOnce(
+            Return(true));
+        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a")).WillOnce(
+            Return(true));
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a")).WillOnce(
+            Return(true));
     }
 
     void
@@ -182,7 +185,8 @@ private:
         return true;
     }
 
-    bool setRestStatus(const unique_ptr<RestInit> &p)
+    bool
+    setRestStatus(const unique_ptr<RestInit> &p)
     {
         rest_status = p->getRest();
         return true;
@@ -256,23 +260,38 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     vector<string> active_tenants = { "1236", "1235" };
     EXPECT_CALL(tenant_manager, fetchActiveTenants()).WillOnce(Return(active_tenants));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1236/policy.json"))
+    EXPECT_CALL(tenant_manager, addActiveTenantAndProfile("1235", "2311"));
+    EXPECT_CALL(tenant_manager, addActiveTenantAndProfile("1236", "2611"));
+
+    vector<string> first_tenant_profiles = { "2611" };
+    vector<string> second_tenant_profiles = { "2311"};
+    EXPECT_CALL(
+        tenant_manager,
+        fetchProfileIds("1236")).WillRepeatedly(Return(first_tenant_profiles)
+    );
+
+    EXPECT_CALL(
+        tenant_manager,
+        fetchProfileIds("1235")).WillRepeatedly(Return(second_tenant_profiles)
+    );
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1236_profile_2611/policy.json"))
         .WillOnce(Return(string("checksum_policy_tenant_1236")));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1235/policy.json"))
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1235_profile_2311/policy.json"))
         .WillOnce(Return(string("checksum_policy_tenant_1235")));
 
-    EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/tenant_1236/policy.json"))
+    EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/tenant_1236_profile_2611/policy.json"))
         .WillOnce(Return(string("{}")));
 
-    EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/tenant_1235/policy.json"))
+    EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/tenant_1235_profile_2311/policy.json"))
         .WillOnce(Return(string("{}")));
 
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1236_settings.json"))
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1236_profile_2611_settings.json"))
         .WillOnce(Return(string("checksum_settings_tenant_1236")));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1235_settings.json"))
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, "/etc/cp/conf/tenant_1235_profile_2311_settings.json"))
         .WillOnce(Return(string("checksum_settings_tenant_1235")));
 
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
@@ -294,11 +313,13 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
                     "        \"tenants\": [\n"
                     "            {\n"
                     "                \"tenantId\": \"1236\",\n"
+                    "                \"profileId\": \"2611\",\n"
                     "                \"checksum\": \"new_checksum_policy_tenant_1236\",\n"
                     "                \"version\": \"1\"\n"
                     "            },\n"
                     "            {\n"
                     "                \"tenantId\": \"1235\",\n"
+                    "                \"profileId\": \"2311\",\n"
                     "                \"checksum\": \"new_checksum_policy_tenant_1235\",\n"
                     "                \"version\": \"1\"\n"
                     "            }\n"
@@ -308,11 +329,13 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
                     "        \"tenants\": [\n"
                     "            {\n"
                     "                \"tenantId\": \"1236\",\n"
+                    "                \"profileId\": \"2611\",\n"
                     "                \"checksum\": \"new_checksum_settings_tenant_1236\",\n"
                     "                \"version\": \"1\"\n"
                     "            },\n"
                     "            {\n"
                     "                \"tenantId\": \"1235\",\n"
+                    "                \"profileId\": \"2311\",\n"
                     "                \"checksum\": \"new_checksum_settings_tenant_1235\",\n"
                     "                \"version\": \"1\"\n"
                     "            }\n"
@@ -328,21 +351,21 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     );
 
     GetResourceFile policy_file(GetResourceFile::ResourceFileType::VIRTUAL_POLICY);
-    policy_file.addTenant("1236", "1", "new_checksum_policy_tenant_1236");
-    policy_file.addTenant("1235", "1", "new_checksum_policy_tenant_1235");
+    policy_file.addTenant("1236", "2611", "1", "new_checksum_policy_tenant_1236");
+    policy_file.addTenant("1235", "2311", "1", "new_checksum_policy_tenant_1235");
 
-    map<string, string> download_policy_res = {
-        { "1236", "/tmp/orchestration_downloads/virtualPolicy_1236.download" },
-        { "1235", "/tmp/orchestration_downloads/virtualPolicy_1235.download" }
+    map<pair<string, string>, string> download_policy_res = {
+        { {"1236", "2611" }, "/tmp/orchestration_downloads/virtualPolicy_1236_profile_2611.download" },
+        { {"1235", "2311" }, "/tmp/orchestration_downloads/virtualPolicy_1235_profile_2311.download" }
     };
 
     GetResourceFile settings_file(GetResourceFile::ResourceFileType::VIRTUAL_SETTINGS);
-    settings_file.addTenant("1236", "1", "new_checksum_settings_tenant_1236");
-    settings_file.addTenant("1235", "1", "new_checksum_settings_tenant_1235");
+    settings_file.addTenant("1236", "2611", "1", "new_checksum_settings_tenant_1236");
+    settings_file.addTenant("1235", "2311", "1", "new_checksum_settings_tenant_1235");
 
-    map<string, string> download_settings_res = {
-        { "1236", "/tmp/orchestration_downloads/virtualSettings_1236.download" },
-        { "1235", "/tmp/orchestration_downloads/virtualSettings_1235.download" }
+    map<pair<string, string>, string> download_settings_res = {
+        { {"1236", "2611" }, "/tmp/orchestration_downloads/virtualSettings_1236_profile_2611.download" },
+        { {"1235", "2311" }, "/tmp/orchestration_downloads/virtualSettings_1235_profile_2311.download" }
     };
 
     EXPECT_CALL(
@@ -373,16 +396,16 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(
-            "/tmp/orchestration_downloads/virtualSettings_1236.download",
-            "/etc/cp/conf/tenant_1236_settings.json"
+            "/tmp/orchestration_downloads/virtualSettings_1236_profile_2611.download",
+            "/etc/cp/conf/tenant_1236_profile_2611_settings.json"
         )
     ).WillOnce(Return(true));
 
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(
-            "/tmp/orchestration_downloads/virtualSettings_1235.download",
-            "/etc/cp/conf/tenant_1235_settings.json"
+            "/tmp/orchestration_downloads/virtualSettings_1235_profile_2311.download",
+            "/etc/cp/conf/tenant_1235_profile_2311_settings.json"
         )
     ).WillOnce(Return(true));
 
@@ -393,6 +416,7 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "/etc/cp/conf/policy.json",
             "/etc/cp/conf/settings.json",
             expected_data_types,
+            "",
             ""
         )
     ).WillOnce(Return(true));
@@ -400,20 +424,22 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     EXPECT_CALL(
         mock_service_controller,
         updateServiceConfiguration(
-            "/tmp/orchestration_downloads/virtualPolicy_1236.download",
-            "/etc/cp/conf/tenant_1236_settings.json",
+            "/tmp/orchestration_downloads/virtualPolicy_1236_profile_2611.download",
+            "/etc/cp/conf/tenant_1236_profile_2611_settings.json",
             expected_data_types,
-            "1236"
+            "1236",
+            "2611"
         )
     ).WillOnce(Return(true));
 
     EXPECT_CALL(
         mock_service_controller,
         updateServiceConfiguration(
-            "/tmp/orchestration_downloads/virtualPolicy_1235.download",
-            "/etc/cp/conf/tenant_1235_settings.json",
+            "/tmp/orchestration_downloads/virtualPolicy_1235_profile_2311.download",
+            "/etc/cp/conf/tenant_1235_profile_2311_settings.json",
             expected_data_types,
-            "1235"
+            "1235",
+            "2311"
         )
     ).WillOnce(Return(true));
 

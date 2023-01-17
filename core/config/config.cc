@@ -26,6 +26,7 @@
 #include "include/profile_settings.h"
 #include "enum_range.h"
 #include "rest.h"
+#include "tenant_profile_pair.h"
 
 using namespace std;
 using namespace cereal;
@@ -103,7 +104,11 @@ public:
     const string & getFilesystemPathConfig() const override;
     const string & getLogFilesPathConfig() const override;
 
-    string getPolicyConfigPath(const string &name, ConfigFileType type, const string &tenant = "") const override;
+    string getPolicyConfigPath(
+        const string &name,
+        ConfigFileType type,
+        const string &tenant = "",
+        const string &profile = "") const override;
 
     bool setConfiguration(TypeWrapper &&value, const std::vector<std::string> &paths) override;
     bool setResource(TypeWrapper &&value, const std::vector<std::string> &paths) override;
@@ -126,7 +131,7 @@ public:
 
 private:
     void clearOldTenants();
-    bool isTenantActive(const string &name) const;
+    bool areTenantAndProfileActive(const TenantProfilePair &tenant_profile) const;
     void periodicRegistrationRefresh();
 
     bool loadConfiguration(vector<shared_ptr<JSONInputArchive>> &file_archives, bool is_async);
@@ -141,6 +146,14 @@ private:
         auto active_id = Singleton::Consume<I_Environment>::by<ConfigComponent>()->get<string>("ActiveTenantId");
 
         return active_id.ok() ? *active_id : default_tenant_id;
+    }
+
+    string
+    getActiveProfile() const
+    {
+        auto active_id = Singleton::Consume<I_Environment>::by<ConfigComponent>()->get<string>("ActiveProfileId");
+
+        return active_id.ok() ? *active_id : default_profile_id;
     }
 
     bool
@@ -234,14 +247,14 @@ private:
         }
     }
 
-    unordered_map<string, map<vector<string>, PerContextValue>> configuration_nodes;
-    unordered_map<string, map<vector<string>, TypeWrapper>> settings_nodes;
+    unordered_map<TenantProfilePair, map<vector<string>, PerContextValue>> configuration_nodes;
+    unordered_map<TenantProfilePair, map<vector<string>, TypeWrapper>> settings_nodes;
     map<string, string> profile_settings;
     unordered_map<string, string> config_flags;
 
     map<vector<string>, TypeWrapper> new_resource_nodes;
-    unordered_map<string, map<vector<string>, PerContextValue>> new_configuration_nodes;
-    unordered_map<string, map<vector<string>, TypeWrapper>> new_settings_nodes;
+    unordered_map<TenantProfilePair, map<vector<string>, PerContextValue>> new_configuration_nodes;
+    unordered_map<TenantProfilePair, map<vector<string>, TypeWrapper>> new_settings_nodes;
     unordered_map<string, string> new_config_flags;
 
     set<unique_ptr<GenericConfig<true>>> expected_configs;
@@ -257,7 +270,8 @@ private:
     vector<ConfigCb> configuration_abort_cbs;
 
     bool is_continuous_report = false;
-    const string default_tenant_id = "default_tenant_id_value";
+    const string default_tenant_id = "";
+    const string default_profile_id = "";
     string executable_name = "";
     string filesystem_prefix = "/etc/cp";
     string log_files_prefix = "/var/log";
@@ -331,7 +345,7 @@ checkContext(const shared_ptr<EnvironmentEvaluator<bool>> &ctx)
 const TypeWrapper &
 ConfigComponent::Impl::getConfiguration(const vector<string> &paths) const
 {
-    auto curr_configs = configuration_nodes.find(getActiveTenant());
+    auto curr_configs = configuration_nodes.find(TenantProfilePair(getActiveTenant(), getActiveProfile()));
 
     if (curr_configs != configuration_nodes.end()) {
         auto requested_config = curr_configs->second.find(paths);
@@ -342,7 +356,7 @@ ConfigComponent::Impl::getConfiguration(const vector<string> &paths) const
         }
     }
 
-    auto global_config = configuration_nodes.find(default_tenant_id);
+    auto global_config = configuration_nodes.find(TenantProfilePair(default_tenant_id, default_profile_id));
     if (global_config != configuration_nodes.end()) {
         auto requested_config = global_config->second.find(paths);
         if (requested_config != global_config->second.end()) {
@@ -358,14 +372,14 @@ ConfigComponent::Impl::getConfiguration(const vector<string> &paths) const
 vector<pair<shared_ptr<EnvironmentEvaluator<bool>>, TypeWrapper>>
 ConfigComponent::Impl::getAllConfiguration(const vector<string> &paths) const
 {
-    auto curr_configs = configuration_nodes.find(getActiveTenant());
+    auto curr_configs = configuration_nodes.find(TenantProfilePair(getActiveTenant(), getActiveProfile()));
 
     if (curr_configs != configuration_nodes.end()) {
         auto requested_config = curr_configs->second.find(paths);
         if (requested_config != curr_configs->second.end()) return requested_config->second;
     }
 
-    auto global_config = configuration_nodes.find(default_tenant_id);
+    auto global_config = configuration_nodes.find(TenantProfilePair(default_tenant_id, default_profile_id));
     if (global_config != configuration_nodes.end()) {
         auto requested_config = global_config->second.find(paths);
         if (requested_config != global_config->second.end()) return requested_config->second;
@@ -386,13 +400,13 @@ ConfigComponent::Impl::getResource(const vector<string> &paths) const
 const TypeWrapper &
 ConfigComponent::Impl::getSetting(const vector<string> &paths) const
 {
-    auto curr_configs = settings_nodes.find(getActiveTenant());
+    auto curr_configs = settings_nodes.find(TenantProfilePair(getActiveTenant(), getActiveProfile()));
     if (curr_configs != settings_nodes.end()) {
         auto requested_config = curr_configs->second.find(paths);
         if (requested_config != curr_configs->second.end()) return requested_config->second;
     }
 
-    auto global_config = settings_nodes.find(default_tenant_id);
+    auto global_config = settings_nodes.find(TenantProfilePair(default_tenant_id, default_profile_id));
     if (global_config != settings_nodes.end()) {
         auto requested_config = global_config->second.find(paths);
         if (requested_config != global_config->second.end()) return requested_config->second;
@@ -448,15 +462,20 @@ ConfigComponent::Impl::getLogFilesPathConfig() const
 }
 
 string
-ConfigComponent::Impl::getPolicyConfigPath(const string &config_name, ConfigFileType type, const string &tenant) const
+ConfigComponent::Impl::getPolicyConfigPath(
+    const string &config_name,
+    ConfigFileType type,
+    const string &tenant,
+    const string &profile) const
 {
     static const string policy_suffix = ".policy";
     static const string data_suffix = ".data";
     static const string tenant_prefix = "tenant_";
+    static const string profile_prefix = "_profile_";
 
     string base_path =
         getConfigurationWithDefault(config_directory_path, "Config Component", "configuration path") +
-        (tenant.empty() ? "" : tenant_prefix + tenant + "/");
+        (tenant.empty() ? "" : tenant_prefix + tenant + profile_prefix + profile +"/");
 
     switch (type) {
         case ConfigFileType::Data: return base_path + "data/" + config_name + data_suffix;
@@ -472,13 +491,14 @@ ConfigComponent::Impl::getPolicyConfigPath(const string &config_name, ConfigFile
 bool
 ConfigComponent::Impl::setConfiguration(TypeWrapper &&value, const vector<string> &paths)
 {
-    for (auto &tennant : configuration_nodes) {
-        tennant.second.erase(paths);
+    for (auto &tenant : configuration_nodes) {
+        tenant.second.erase(paths);
     }
 
     PerContextValue value_vec;
+    TenantProfilePair default_tenant_profile(default_tenant_id, default_profile_id);
     value_vec.emplace_back(nullptr, move(value));
-    configuration_nodes[default_tenant_id][paths] = move(value_vec);
+    configuration_nodes[default_tenant_profile][paths] = move(value_vec);
     return true;
 }
 
@@ -492,7 +512,8 @@ ConfigComponent::Impl::setResource(TypeWrapper &&value, const vector<string> &pa
 bool
 ConfigComponent::Impl::setSetting(TypeWrapper &&value, const vector<string> &paths)
 {
-    settings_nodes[default_tenant_id][paths] = move(value);
+    TenantProfilePair default_tenant_profile(default_tenant_id, default_profile_id);
+    settings_nodes[default_tenant_profile][paths] = move(value);
     return true;
 }
 
@@ -635,20 +656,21 @@ ConfigComponent::Impl::clearOldTenants()
     for (
         auto iter = configuration_nodes.begin();
         iter != configuration_nodes.end();
-        !isTenantActive(iter->first) ? iter = configuration_nodes.erase(iter) : ++iter
+        !areTenantAndProfileActive(iter->first) ? iter = configuration_nodes.erase(iter) : ++iter
     );
 
     for (
         auto iter = settings_nodes.begin();
         iter != settings_nodes.end();
-        !isTenantActive(iter->first) ? iter = settings_nodes.erase(iter) : ++iter
+        !areTenantAndProfileActive(iter->first) ? iter = settings_nodes.erase(iter) : ++iter
     );
 }
 
 bool
-ConfigComponent::Impl::isTenantActive(const string &name) const
+ConfigComponent::Impl::areTenantAndProfileActive(const TenantProfilePair &tenant_profile) const
 {
-    return name == default_tenant_id || tenant_mananger->isTenantActive(name);
+    return (tenant_profile.getTenantId() == default_tenant_id && tenant_profile.getPfofileId() == default_profile_id)
+        || tenant_mananger->areTenantAndProfileActive(tenant_profile.getTenantId(), tenant_profile.getPfofileId());
 }
 
 void
@@ -697,20 +719,25 @@ ConfigComponent::Impl::loadConfiguration(vector<shared_ptr<JSONInputArchive>> &f
         }
 
         for (auto &archive : file_archives) {
-            string curr_tennat = default_tenant_id;
+            string curr_tenant = default_tenant_id;
+            string curr_profile = default_profile_id;
             try {
-                (*archive)(cereal::make_nvp("tenantID", curr_tennat));
+                (*archive)(cereal::make_nvp("tenantID", curr_tenant));
+                (*archive)(cereal::make_nvp("profileID", curr_profile));
             } catch (cereal::Exception &e) {
             }
 
+            dbgTrace(D_CONFIG) <<
+                "Loading configuration for tenant: " << curr_tenant << " and profile: " << curr_profile;
+            TenantProfilePair tenant_profile(curr_tenant, curr_profile);
             for (auto &config : expected_configs) {
                 auto loaded = config->loadConfiguration(*archive);
-                if (!loaded.empty()) new_configuration_nodes[curr_tennat][config->getPath()] = move(loaded);
+                if (!loaded.empty()) new_configuration_nodes[tenant_profile][config->getPath()] = move(loaded);
                 if (is_async) mainloop->yield();
             }
             for (auto &setting : expected_settings) {
                 auto loaded = setting->loadConfiguration(*archive);
-                if (loaded.ok()) new_settings_nodes[curr_tennat][setting->getPath()] = move(loaded);
+                if (loaded.ok()) new_settings_nodes[tenant_profile][setting->getPath()] = move(loaded);
                 if (is_async) mainloop->yield();
             }
         }
@@ -783,7 +810,8 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
         files.emplace(fullpath, make_shared<ifstream>(fullpath));
     }
 
-    const vector<string> &active_tenants = tenant_mananger ? tenant_mananger->fetchActiveTenants() : vector<string>();
+    const auto &active_tenants = tenant_mananger ? tenant_mananger->fetchAllActiveTenants() : vector<string>();
+
     for (const auto &config_file : expected_configuration_files) {
         for (const auto &type : config_file.second) {
             if (type == ConfigFileType::RawData) continue;
@@ -793,15 +821,29 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
             }
 
             for (auto &tenant : active_tenants) {
-                auto tenant_path = getPolicyConfigPath(config_file.first, type, tenant);
-                files.emplace(tenant_path, make_shared<ifstream>(tenant_path));
+                const vector<string> &profile_ids =
+                    tenant_mananger ? tenant_mananger->fetchProfileIds(tenant) : vector<string>();
+                for (auto &profile_id : profile_ids) {
+                    auto tenant_path = getPolicyConfigPath(config_file.first, type, tenant, profile_id);
+                    files.emplace(tenant_path, make_shared<ifstream>(tenant_path));
+                }
             }
+        }
+    }
+
+    for (const string &tenant : active_tenants) {
+        const vector<string> &profile_ids =
+            tenant_mananger ? tenant_mananger->fetchProfileIds(tenant) : vector<string>();
+        for (auto &profile_id : profile_ids) {
+            string settings_path = config_directory_path + "tenant_" + tenant + "_" + profile_id + "_settings.json";
+            files.emplace(settings_path, make_shared<ifstream>(settings_path));
         }
     }
 
     vector<shared_ptr<JSONInputArchive>> archives;
     for (const auto &file : files) {
         if (file.second->is_open()) {
+            dbgDebug(D_CONFIG) << "Succesfully opened configuration file. File: " << file.first;
             archives.push_back(make_shared<JSONInputArchive>(*file.second));
         } else {
             dbgDebug(D_CONFIG) << "Could not open configuration file. Path: " << file.first;

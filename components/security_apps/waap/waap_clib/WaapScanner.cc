@@ -105,7 +105,22 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     return Waap::Scores::calcArrayScore(res.scoreArray);
 }
 
-bool Waap::Scanner::suspiciousHit(Waf2ScanResult& res, const std::string& location, const std::string& param_name) {
+// Ignore scan results from specific fields on csp-report json in case those are not filtered by learning
+bool Waap::Scanner::isKeyCspReport(const std::string &key, Waf2ScanResult &res, DeepParser &dp)
+{
+    if (res.score < 8.0f && res.location == "body" && dp.getLastParser() == "jsonParser") {
+        if (key == "csp-report.blocked-uri" || key == "csp-report.script-sample" ||
+                (key == "csp-report.original-policy" && Waap::Util::containsCspReportPolicy(res.unescaped_line)) ) {
+            dbgTrace(D_WAAP_SCANNER) << "CSP report detected, ignoring.";
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Waap::Scanner::suspiciousHit(Waf2ScanResult& res, DeepParser &dp,
+        const std::string& location, const std::string& param_name, const std::string& key)
+{
     dbgTrace(D_WAAP_SCANNER) << "suspiciousHit processing for parameter: " << param_name << " at " << location <<
         " num of keywords " << res.keyword_matches.size();
 
@@ -130,7 +145,7 @@ bool Waap::Scanner::suspiciousHit(Waf2ScanResult& res, const std::string& locati
         );
     }
 
-    if (m_transaction->shouldIgnoreOverride(res)) {
+    if (isKeyCspReport(key, res, dp) || m_transaction->shouldIgnoreOverride(res)) {
         dbgTrace(D_WAAP_SCANNER) << "Ignoring parameter key/value " << res.param_name <<
             " due to ignore action in override";
         m_bIgnoreOverride = true;
@@ -180,6 +195,15 @@ int Waap::Scanner::onKv(const char* k, size_t k_len, const char* v, size_t v_len
             fullKeyStr.find("__fn1522082288") != std::string::npos ||
             fullKeyStr.find("_fn_nsess") != std::string::npos)) {
         dbgTrace(D_WAAP_SCANNER) << "Waap::Scanner::onKv: skip scanning our own anti-bot cookie, by name";
+        return 0;
+    }
+
+    // Do not scan google analytics cookie
+    if (isCookiePayload &&
+        (fullKeyStr.find("_ga") != std::string::npos ||
+        fullKeyStr.find("_gid") != std::string::npos ||
+        fullKeyStr.find("_gat") != std::string::npos)) {
+        dbgTrace(D_WAAP_SCANNER) << "Waap::Scanner::onKv: skip scanning google analytics cookie";
         return 0;
     }
     // scan for csrf token.
@@ -263,7 +287,7 @@ int Waap::Scanner::onKv(const char* k, size_t k_len, const char* v, size_t v_len
 
         // Deep-scan parameter names
         if (m_transaction->getAssetState()->apply(key, res, dp.m_key.first())) {
-            if (suspiciousHit(res, dp.m_key.first(), dp.m_key.str())) {
+            if (suspiciousHit(res, dp, dp.m_key.first(), dp.m_key.str(), key)) {
                 // Scanner found enough evidence to report this res
                 dbgTrace(D_WAAP_SCANNER) << "Waap::Scanner::onKv: SUSPICIOUS PARAM NAME: k='" <<
                     key << "' v='" << value << "'";
@@ -295,7 +319,7 @@ int Waap::Scanner::onKv(const char* k, size_t k_len, const char* v, size_t v_len
             res.mergeFrom(param_name_res);
         }
 
-        if (suspiciousHit(res, dp.m_key.first(), dp.m_key.str())) {
+        if (suspiciousHit(res, dp, dp.m_key.first(), dp.m_key.str(), key)) {
             // Scanner found enough evidence to report this res
             dbgTrace(D_WAAP_SCANNER) << "Waap::Scanner::onKv: SUSPICIOUS VALUE: k='" << key <<
                 "' v='" << value << "'";

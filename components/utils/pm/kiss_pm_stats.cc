@@ -12,12 +12,10 @@
 // limitations under the License.
 
 #include "general_adaptor.h"
-#include "sasal.h"
 // ********************* INCLUDES **************************
 #include "kiss_pm_stats.h"
 // ********************* INCLUDES **************************
 
-SASAL_START // Multiple Pattern Matcher
 // ********************* FUNCTIONS **************************
 
 
@@ -426,4 +424,3 @@ kiss_pm_stats_common_deserialize(
 }
 
 // ******************** FUNCTIONS *************************
-SASAL_END

@@ -16,13 +16,9 @@
 #include <algorithm>
 #include <iostream>
 
-#include "sasal.h"
-
 using namespace std;
 
 USE_DEBUG_FLAG(D_HTTP_REQUEST);
-
-SASAL_START // Communication
 
 HTTPHeaders::HTTPHeaders(const string &http_data)
 {
@@ -109,5 +105,3 @@ HTTPHeaders::createHTTPHeader(const string &http_data)
     // To justify the compiler
     return HTTPHeaders();
 }
-
-SASAL_END

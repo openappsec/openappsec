@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "Signatures.h"
-#include "i_encryptor.h"
 #include "waap.h"
 #include <fstream>
 
@@ -242,13 +241,13 @@ bool Signatures::fail()
     return error;
 }
 
-picojson::value::object Signatures::loadSource(const std::string& sigsFname)
+picojson::value::object Signatures::loadSource(const std::string& waapDataFileName)
 {
     picojson::value doc;
-    std::ifstream f(sigsFname.c_str());
+    std::ifstream f(waapDataFileName);
 
     if (f.fail()) {
-        dbgError(D_WAAP) << "Failed to open json data file '" << sigsFname << "'!";
+        dbgError(D_WAAP) << "Failed to open json data file '" << waapDataFileName << "'!";
         error = true;  // flag an error
         return picojson::value::object();
     }
@@ -264,15 +263,18 @@ picojson::value::object Signatures::loadSource(const std::string& sigsFname)
     std::string dataObfuscated(buffer, length);
 
     delete[] buffer;
+
+
     std::stringstream ss(dataObfuscated);
+
     ss >> doc;
 
     if (!picojson::get_last_error().empty()) {
-        dbgError(D_WAAP) << "WaapAssetState::loadSource('" << sigsFname << "') failed (parse error: '" <<
+        dbgError(D_WAAP) << "WaapAssetState::loadSource('" << waapDataFileName << "') failed (parse error: '" <<
             picojson::get_last_error() << "').";
         error = true;  // flag an error
         return picojson::value::object();
     }
 
-    return doc.get<picojson::value::object>();
+    return doc.get<picojson::value::object>()["waap_signatures"].get<picojson::value::object>();
 }

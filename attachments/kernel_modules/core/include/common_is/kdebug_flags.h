@@ -30,5 +30,6 @@ DEFINE_KDEBUG_FLAG(assetResolver)
 DEFINE_KDEBUG_FLAG(statefulValidation)
 DEFINE_KDEBUG_FLAG(statelessValidation)
 DEFINE_KDEBUG_FLAG(kernelMetric)
+DEFINE_KDEBUG_FLAG(tproxy)
 
 #endif // DEFINE_KDEBUG_FLAG

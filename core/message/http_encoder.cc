@@ -13,11 +13,8 @@
 
 #include "http_encoder.h"
 #include "debug.h"
-#include "sasal.h"
 
 using namespace std;
-
-SASAL_START // Communication
 
 USE_DEBUG_FLAG(D_COMMUNICATION);
 
@@ -172,5 +169,3 @@ HTTPEncoder::isOverSSL()
     over_ssl = true;
     return *this;
 };
-
-SASAL_END

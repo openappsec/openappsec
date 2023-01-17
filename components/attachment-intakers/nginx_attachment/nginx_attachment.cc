@@ -44,7 +44,6 @@
 #include "buffer.h"
 #include "enum_array.h"
 #include "shmem_ipc.h"
-#include "sasal.h"
 #include "i_http_manager.h"
 #include "http_transaction_common.h"
 #include "nginx_attachment_common.h"
@@ -67,8 +66,6 @@
 #define DELAY_IF_NEEDED(type)
 
 #endif // FAILURE_TEST
-
-SASAL_START // HTTP Manager main
 
 USE_DEBUG_FLAG(D_NGINX_ATTACHMENT);
 USE_DEBUG_FLAG(D_COMPRESSION);
@@ -1781,5 +1778,3 @@ NginxAttachment::preload()
     BasicRuleConfig::preload();
     WebTriggerConf::preload();
 }
-
-SASAL_END

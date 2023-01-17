@@ -6,8 +6,7 @@ using namespace std;
 using namespace testing;
 
 const static string bad_shmem_path = "/root/sadsadsadad/444";
-const static string valid_shmem_file_name = "shmem_ut";
-const static string valid_shmem_path = "/dev/shm/" + valid_shmem_file_name;
+const static string valid_shmem_path = "shmem_ut";
 const uint16_t max_num_of_data_segments = sizeof(DataSegment)/sizeof(uint16_t);
 const static uint16_t num_of_shmem_elem = 11;
 
@@ -16,11 +15,8 @@ class SharedRingQueueTest : public Test
 public:
     SharedRingQueueTest()
     {
-        // remove old fd from prev tests
-        unlink(valid_shmem_path.c_str());
-
-        owners_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), num_of_shmem_elem, 1, 1);
-        users_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), num_of_shmem_elem, 0, 0);
+        owners_queue = createSharedRingQueue(valid_shmem_path.c_str(), num_of_shmem_elem, 1, 1);
+        users_queue = createSharedRingQueue(valid_shmem_path.c_str(), num_of_shmem_elem, 0, 0);
     }
 
     ~SharedRingQueueTest()
@@ -194,7 +190,7 @@ TEST_F(SharedRingQueueTest, write_read_pop_over_multiple_segments)
     }
 
     vector<char> no_more_space_data(SHARED_MEMORY_SEGMENT_ENTRY_SIZE*2, '6');
-    EXPECT_EQ(pushToQueue(users_queue, no_more_space_data.data(), no_more_space_data.size()), -1);
+    EXPECT_EQ(pushToQueue(users_queue, no_more_space_data.data(), no_more_space_data.size()), -3);
 
     const char *read_data = nullptr;
     uint16_t read_bytes = 0;
@@ -217,7 +213,7 @@ TEST_F(SharedRingQueueTest, write_element_that_fills_the_entire_queue)
     vector<char> long_data(SHARED_MEMORY_SEGMENT_ENTRY_SIZE*(num_of_shmem_elem - 1), '2');
 
     EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), 0);
-    EXPECT_EQ(pushToQueue(users_queue, short_data.data(), short_data.size()), -1);
+    EXPECT_EQ(pushToQueue(users_queue, short_data.data(), short_data.size()), -3);
 
     const char *data_to_read = nullptr;
     uint16_t read_bytes = 0;
@@ -225,7 +221,7 @@ TEST_F(SharedRingQueueTest, write_element_that_fills_the_entire_queue)
     EXPECT_EQ(read_bytes, long_data.size());
     EXPECT_EQ(popFromQueue(owners_queue), 0);
 
-    EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), -1);
+    EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), -3);
     EXPECT_EQ(pushToQueue(users_queue, short_data.data(), short_data.size()), 0);
 
     EXPECT_EQ(peekToQueue(owners_queue, &data_to_read, &read_bytes), 0);
@@ -244,11 +240,11 @@ TEST_F(SharedRingQueueTest, not_enought_space_to_push_on_end_but_enought_on_star
     for (uint i = 0; i < num_of_shmem_elem - 1; i++) {
         EXPECT_EQ(pushToQueue(users_queue, short_data.data(), short_data.size()), 0);
     }
-    EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), -1);
+    EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), -3);
 
     for (uint i = 0; i < 3; i++) {
         EXPECT_EQ(popFromQueue(owners_queue), 0);
-        EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), -1);
+        EXPECT_EQ(pushToQueue(users_queue, long_data.data(), long_data.size()), -3);
     }
 
     EXPECT_EQ(popFromQueue(owners_queue), 0);
@@ -264,7 +260,7 @@ TEST_F(SharedRingQueueTest, attempt_write_to_full_queue)
     for (uint i = 0; i < num_of_shmem_elem - 1; i ++) {
         EXPECT_EQ(pushToQueue(users_queue, reinterpret_cast<char *>(&data_to_write), sizeof(data_to_write)), 0);
     }
-    EXPECT_EQ(pushToQueue(users_queue, reinterpret_cast<char *>(&data_to_write), sizeof(data_to_write)), -1);
+    EXPECT_EQ(pushToQueue(users_queue, reinterpret_cast<char *>(&data_to_write), sizeof(data_to_write)), -3);
 
     const char *data_to_read = nullptr;
     uint16_t read_bytes = 0;
@@ -278,7 +274,7 @@ TEST_F(SharedRingQueueTest, attempt_write_to_full_queue)
     );
     EXPECT_EQ(
         pushToQueue(users_queue, reinterpret_cast<char *>(&data_to_write), sizeof(data_to_write)),
-        -1
+        -3
     );
 
     int popped_items_count = 0;
@@ -326,14 +322,12 @@ TEST_F(SharedRingQueueTest, ilegal_queue)
     ASSERT_NE(users_queue, nullptr);
 
     destroySharedRingQueue(users_queue, 0, 1);
-    users_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), max_num_of_data_segments + 1, 0, 0);
+    users_queue = createSharedRingQueue(valid_shmem_path.c_str(), max_num_of_data_segments + 1, 0, 0);
     EXPECT_EQ(users_queue, nullptr);
 
     users_queue = createSharedRingQueue(bad_shmem_path.c_str(), max_num_of_data_segments, 0, 0);
     EXPECT_EQ(users_queue, nullptr);
 
-    ASSERT_NE(owners_queue, nullptr);
-    destroySharedRingQueue(owners_queue, 1, 1);
-    owners_queue = createSharedRingQueue(valid_shmem_file_name.c_str(), max_num_of_data_segments, 1, 1);
+    owners_queue = createSharedRingQueue(valid_shmem_path.c_str(), max_num_of_data_segments, 1, 1);
     EXPECT_NE(owners_queue, nullptr);
 }

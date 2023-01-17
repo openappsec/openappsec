@@ -97,7 +97,8 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"CPView Monitoring", ReportIS::Tags::CPVIEW_METRICS},
         {"Reverse Proxy", ReportIS::Tags::REVERSE_PROXY},
         {"Http Geo Filter", ReportIS::Tags::HTTP_GEO_FILTER},
-        {"File Upload", ReportIS::Tags::FILE_UPLOAD}
+        {"File Upload", ReportIS::Tags::FILE_UPLOAD},
+        {"Identity Awareness", ReportIS::Tags::IDENTITY_AWARENESS}
     };
 
     auto report_is_tag = strings_to_tags.find(tag);
@@ -236,7 +237,6 @@ TagAndEnumManagement::convertToString(const Notification &notification)
         case Notification::POLICY_UPDATE: return "c0516360-a0b1-4246-af4c-2b6c586958e0";
         case Notification::FIRST_REQUEST_FOR_ASSET: return "a53a7091-5d7a-4881-9e64-0fa3a1fc5a93";
         case Notification::UPSTREAM_STATUS: return "46e5af4e-db29-444a-8f6b-2a6bd8f2e131";
-        case Notification::IOT_POLICY_UPDATE: return "92b57541-77ec-4dc4-8d46-dd9de71a602d";
         case Notification::SYNC_LEARNING: return "b9b9ab04-2e2a-4cd1-b7e5-2c956861fb69";
         case Notification::SDWAN_POLICY_UPDATE: return "2b18f5a0-5503-4c6b-967f-aa71dbced1aa";
         case Notification::SDWAN_POLICY_UPDATE_ERROR: return "8d2db6ea-30b7-11ec-8d3d-0242ac130003";
@@ -255,6 +255,7 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::AGENT_CORE: return "Agent Core";
         case IssuingEngine::IOT_NEXT: return "iotNext";
         case IssuingEngine::SDWAN: return "sdwanGwSharing";
+        case IssuingEngine::IDA_NEXT: return "quantumMetaNotifyIdn";
     }
 
     dbgAssert(false) << "Reached impossible engine value of: " << static_cast<int>(issuing_engine);
@@ -305,7 +306,8 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "CPView Monitoring",
     "Reverse Proxy",
     "Http Geo Filter",
-    "File Upload"
+    "File Upload",
+    "Identity Awareness"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {
@@ -314,5 +316,6 @@ EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation 
     "WAAP",
     "Agent Intelligence",
     "cpviewMonitoring",
-    "Signature Developers"
+    "Signature Developers",
+    "Identity Awareness"
 };

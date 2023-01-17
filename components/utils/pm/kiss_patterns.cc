@@ -16,9 +16,7 @@
 #include <ctype.h>
 #include "general_adaptor.h"
 #include "pm_adaptor.h"
-#include "sasal.h"
 
-SASAL_START // Multiple Pattern Matcher
 // Add a character's printable representation to a buffer.
 // Returns the number of bytes written.
 static u_int
@@ -131,4 +129,3 @@ kiss_pmglob_string_get_flags(const kiss_pmglob_string_s *pm_string)
     KISS_ASSERT(pm_string != nullptr, "Illegal arguments");
     return pm_string->flags;
 }
-SASAL_END

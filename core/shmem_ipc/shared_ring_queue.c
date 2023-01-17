@@ -140,14 +140,13 @@ createSharedRingQueue(const char *shared_location_name, uint16_t num_of_data_seg
 
     g_num_of_data_segments = num_of_data_segments;
 
-    fd = shm_open(shared_location_name, shmem_fd_flags, S_IRUSR | S_IWUSR);
+    fd = shm_open(shared_location_name, shmem_fd_flags, S_IRWXU | S_IRWXG | S_IRWXO);
     if (fd == -1) {
         writeDebug(
             WarningLevel,
-            "createSharedRingQueue: Failed to open shared memory for '%s'. Errno: %d (%s)\n",
+            "createSharedRingQueue: Failed to open shared memory for '%s'. Errno: %d\n",
             shared_location_name,
-            errno,
-            strerror(errno)
+            errno
         );
         return NULL;
     }
@@ -384,7 +383,7 @@ pushBuffersToQueue(
                 large_total_elem_size,
                 max_write_size
             );
-            return -1;
+            return -2;
         }
     }
     total_elem_size = (uint16_t)large_total_elem_size;
@@ -400,18 +399,18 @@ pushBuffersToQueue(
 
 
     if (!isThereEnoughMemoryInQueue(write_pos, read_pos, num_of_segments_to_write)) {
-        writeDebug(WarningLevel, "Cannot write to a full queue\n");
-        return -1;
+        writeDebug(DebugLevel, "Cannot write to a full queue");
+        return -3;
     }
 
     if (write_pos >= g_num_of_data_segments) {
         writeDebug(
-            WarningLevel,
+            DebugLevel,
             "Cannot write to a location outside the queue. Write index: %u, number of queue elements: %u",
             write_pos,
             g_num_of_data_segments
         );
-        return -1;
+        return -4;
     }
 
     if (write_pos + num_of_segments_to_write > g_num_of_data_segments) {
@@ -488,16 +487,14 @@ popFromQueue(SharedRingQueue *queue)
     }
     num_of_read_segments = getNumOfDataSegmentsNeeded(buffer_mgmt[read_pos]);
 
-    end_pos = read_pos + num_of_read_segments;
+    if (read_pos + num_of_read_segments > g_num_of_data_segments) {
+        for ( ; read_pos < g_num_of_data_segments; ++read_pos ) {
+            buffer_mgmt[read_pos] = empty_buff_mgmt_magic;
+        }
+        read_pos = 0;
+    }
 
-    writeDebug(
-        TraceLevel,
-        "Size of data to remove: %u, number of queue elements to free: %u, current read index: %u, end index: %u",
-        buffer_mgmt[read_pos],
-        num_of_read_segments,
-        read_pos,
-        end_pos
-    );
+    end_pos = read_pos + num_of_read_segments;
 
     for ( ; read_pos < end_pos; ++read_pos ) {
         buffer_mgmt[read_pos] = empty_buff_mgmt_magic;
@@ -508,6 +505,15 @@ popFromQueue(SharedRingQueue *queue)
             buffer_mgmt[read_pos] = empty_buff_mgmt_magic;
         }
     }
+
+    writeDebug(
+        TraceLevel,
+        "Size of data to remove: %u, number of queue elements to free: %u, current read index: %u, end index: %u",
+        buffer_mgmt[read_pos],
+        num_of_read_segments,
+        read_pos,
+        end_pos
+    );
 
     if (read_pos == g_num_of_data_segments) read_pos = 0;
 

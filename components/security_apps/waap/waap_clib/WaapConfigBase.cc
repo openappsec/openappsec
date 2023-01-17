@@ -79,6 +79,7 @@ void WaapConfigBase::readJSONByCereal(cereal::JSONInputArchive& ar)
     m_blockingLevel = blockingLevelBySensitivityStr(m_autonomousSecurityLevel);
 }
 
+
 void WaapConfigBase::loadCsrfPolicy(cereal::JSONInputArchive& ar)
 {
     std::string failMessage = "Failed to load the CSRF policy of the current rule: " +
@@ -240,6 +241,7 @@ void WaapConfigBase::loadOpenRedirectPolicy(cereal::JSONInputArchive& ar)
     }
 }
 
+
 void WaapConfigBase::loadErrorDisclosurePolicy(cereal::JSONInputArchive& ar)
 {
     std::string failMessage = "Failed to load the WAAP Information Disclosure policy";
@@ -386,6 +388,7 @@ const std::shared_ptr<Waap::TrustedSources::TrustedSourcesParameter>& WaapConfig
     return m_trustedSourcesPolicy;
 }
 
+
 const std::shared_ptr<Waap::Csrf::Policy>& WaapConfigBase::get_CsrfPolicy() const
 {
     return m_csrfPolicy;
@@ -410,6 +413,7 @@ const std::shared_ptr<Waap::OpenRedirect::Policy>& WaapConfigBase::get_OpenRedir
 {
     return m_openRedirectPolicy;
 }
+
 
 const std::shared_ptr<Waap::ErrorDisclosure::Policy>& WaapConfigBase::get_ErrorDisclosurePolicy() const
 {

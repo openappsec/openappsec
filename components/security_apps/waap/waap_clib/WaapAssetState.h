@@ -24,7 +24,6 @@
 #include <set>
 #include <boost/noncopyable.hpp>
 #include "ScoreBuilder.h"
-#include "i_encryptor.h"
 #include "i_waap_asset_state.h"
 #include "RateLimiting.h"
 #include "SecurityHeadersPolicy.h"
@@ -41,7 +40,7 @@ class WaapAssetState : public boost::noncopyable, public I_WaapAssetState
 {
 private: //ugly but needed for build
     std::shared_ptr<Signatures> m_Signatures;
-    std::string m_SignaturesScoresFilePath;
+    std::string m_waapDataFileName;
     std::map<std::string, std::vector<std::string>> m_filtered_keywords_verbose;
 
     void checkRegex(const SampleValue &sample, const Regex & pattern, std::vector<std::string>& keyword_matches,
@@ -51,13 +50,13 @@ private: //ugly but needed for build
 
 public:
     // Load and compile signatures from file
-    explicit WaapAssetState(std::shared_ptr<Signatures> signatures, const std::string& sigScoresFname,
+    explicit WaapAssetState(std::shared_ptr<Signatures> signatures, const std::string& waapDataFileName,
         size_t cleanCacheCapacity = SIGS_APPLY_CLEAN_CACHE_CAPACITY,
         size_t suspiciousCacheCapacity = SIGS_APPLY_SUSPICIOUS_CACHE_CAPACITY,
         size_t sampleTypeCacheCapacity = SIGS_SAMPLE_TYPE_CACHE_CAPACITY,
         const std::string& assetId = "");
-    explicit WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAssetState, const std::string& sigScoresFname,
-        const std::string& assetId);
+    explicit WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAssetState,
+        const std::string& waapDataFileName, const std::string& assetId);
     virtual ~WaapAssetState();
 
     std::shared_ptr<Signatures> getSignatures() const;
@@ -76,8 +75,8 @@ public:
         const Maybe<std::string> splitType=genError("not splitted")) const;
 
     virtual void updateScores();
-    virtual std::string getSignaturesScoresFilePath() const;
-    virtual std::string getSignaturesFilterDir() const;
+    virtual std::string getWaapDataFileName() const;
+    virtual std::string getWaapDataDir() const;
     std::map<std::string, std::vector<std::string>>& getFilterVerbose();
 
     void updateFilterManagerPolicy(IWaapConfig* pConfig);
@@ -104,6 +103,7 @@ public:
     void clearRateLimitingState();
     void clearErrorLimitingState();
     void clearSecurityHeadersState();
+
 
     std::shared_ptr<Waap::RateLimiting::State>& getRateLimitingState();
     std::shared_ptr<Waap::RateLimiting::State>& getErrorLimitingState();

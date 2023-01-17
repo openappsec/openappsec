@@ -60,16 +60,10 @@ WaapComponent::Impl::~Impl()
 void
 WaapComponent::Impl::init()
 {
-    std::string sigs_file_path = getConfigurationWithDefault<string>(
-        "/etc/cp/conf/waap/1.data",
+    std::string waapDataFileName = getConfigurationWithDefault<string>(
+        "/etc/cp/conf/waap/waap.data",
         "WAAP",
         "Sigs file path"
-    );
-
-    std::string sigs_score_file_path = getConfigurationWithDefault<string>(
-        "/etc/cp/conf/waap/2.data",
-        "WAAP",
-        "Sigs score file path"
     );
 
     assets_metric.init(
@@ -84,18 +78,20 @@ WaapComponent::Impl::init()
     registerListener();
     waap_metric.registerListener();
 
-    init(sigs_file_path, sigs_score_file_path);
+    init(waapDataFileName);
 }
 
 void
-WaapComponent::Impl::init(const std::string &sigs_file_path, const std::string &sigs_scores_file_path)
+WaapComponent::Impl::init(const std::string &waapDataFileName)
 {
     //waf2_set_log_target(WAF2_LOGTARGET_STDERR);
     dbgTrace(D_WAAP) << "WaapComponent::Impl::init() ...";
 
     reputationAggregator.init();
 
-    bool success = waf2_proc_start(sigs_file_path, sigs_scores_file_path);
+    waapStateTable = Singleton::Consume<I_Table>::by<WaapComponent>();
+
+    bool success = waf2_proc_start(waapDataFileName);
     if (!success) {
         dbgWarning(D_WAAP) << "WAF2 engine FAILED to initialize (probably failed to load signatures). Aborting!";
         waf2_proc_exit();
@@ -107,8 +103,6 @@ WaapComponent::Impl::init(const std::string &sigs_file_path, const std::string &
     I_StaticResourcesHandler *static_resources = Singleton::Consume<I_StaticResourcesHandler>::by<WaapComponent>();
     static_resources->registerStaticResource("cp-ab.js", "/etc/cp/conf/waap/cp-ab.js");
     static_resources->registerStaticResource("cp-csrf.js", "/etc/cp/conf/waap/cp-csrf.js");
-
-    waapStateTable = Singleton::Consume<I_Table>::by<WaapComponent>();
 }
 
 // Called when component is shut down
@@ -730,7 +724,7 @@ void WaapComponent::Impl::sendNotificationForFirstRequest(
 }
 
 bool
-WaapComponent::Impl::waf2_proc_start(const std::string& sigsFname, const std::string& scoresFname)
+WaapComponent::Impl::waf2_proc_start(const std::string& waapDataFileName)
 {
     // WAAP uses libxml library, which requires process-level initialization when process starts
 #if 0 // TODO:: silence the error messages printed by libxml2
@@ -740,7 +734,7 @@ WaapComponent::Impl::waf2_proc_start(const std::string& sigsFname, const std::st
     ::xmlInitParser();
 
     return
-        Singleton::Consume<I_WaapAssetStatesManager>::by<WaapComponent>()->initBasicWaapSigs(sigsFname, scoresFname);
+        Singleton::Consume<I_WaapAssetStatesManager>::by<WaapComponent>()->initBasicWaapSigs(waapDataFileName);
 }
 
 void

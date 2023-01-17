@@ -15,11 +15,6 @@ public:
     MOCK_METHOD1(obfuscateXor, std::string(const std::string &));
     MOCK_METHOD1(obfuscateXorBase64, std::string(const std::string &));
 
-    // AES256
-    MOCK_METHOD1(decryptAES256obfuscateXorBase64,   Maybe<std::string>(const std::string &));
-    MOCK_METHOD1(encryptAES256obfuscateXorBase64,   std::string(const std::string &));
-    MOCK_METHOD1(aes256EncryptWithSizePad,          std::string(const std::string &));
-    MOCK_METHOD1(aes256DecryptWithSizePad,          Maybe<std::string>(const std::string &));
 
 };
 

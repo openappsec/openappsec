@@ -29,7 +29,6 @@
 #include "manifest_controller.h"
 #include "url_parser.h"
 #include "i_messaging.h"
-#include "sasal.h"
 #include "agent_details_report.h"
 #include "maybe_res.h"
 #include "customized_cereal_map.h"
@@ -38,8 +37,7 @@
 #include "get_status_rest.h"
 #include "hybrid_mode_telemetry.h"
 #include "telemetry.h"
-
-SASAL_START // Orchestration - Main
+#include "tenant_profile_pair.h"
 
 using namespace std;
 using namespace chrono;
@@ -596,10 +594,6 @@ private:
                 auto team = i_env->get<AudienceTeam>("Audience Team");
                 if (team.ok()) audience_team = *team;
 
-                string agent_uid =
-                    (Report::isPlaygroundEnv() ? "playground-" : "") +
-                    Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId();
-
                 Report policy_update_message(
                     "Agent's policy has been updated",
                     curr_time,
@@ -611,7 +605,7 @@ private:
                     Severity::INFO,
                     Priority::LOW,
                     chrono::seconds(0),
-                    LogField("agentId", agent_uid),
+                    LogField("agentId", Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId()),
                     Tags::ORCHESTRATOR
                 );
                 policy_update_message.addToOrigin(LogField("policyVersion", new_policy_version));
@@ -808,14 +802,22 @@ private:
         auto greedy_update = getProfileAgentSettingWithDefault<bool>(false, "orchestration.multitenancy.greedymode");
         greedy_update = getConfigurationWithDefault<bool>(greedy_update, "orchestration", "Multitenancy Greedy mode");
 
-        if (!greedy_update) {
-            auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
-            for (auto const &active_tenant: tenant_manager->fetchActiveTenants()) {
-                auto virtual_policy_data = getPolicyTenantData(active_tenant);
+        auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
+        for (auto const &active_tenant: tenant_manager->fetchActiveTenants()) {
+            for (auto const &profile_id: tenant_manager->fetchProfileIds(active_tenant)) {
+                auto virtual_policy_data = getPolicyTenantData(active_tenant, profile_id);
                 request.addTenantPolicy(virtual_policy_data);
-                request.addTenantSettings(getSettingsTenantData(active_tenant, virtual_policy_data.getVersion()));
+                request.addTenantSettings(
+                    getSettingsTenantData(
+                        active_tenant,
+                        profile_id,
+                        virtual_policy_data.getVersion()
+                    )
+                );
             }
-        } else {
+        }
+
+        if (greedy_update) {
             request.setGreedyMode();
         }
 
@@ -980,10 +982,11 @@ private:
         const Maybe<vector<CheckUpdateRequest::Tenants>> &updated_policy_tenants,
         const vector<string> &new_data_files)
     {
+        dbgFlow(D_ORCHESTRATOR) << "Hanlding virtual files";
         if (!updated_policy_tenants.ok()) return;
 
         // Sorting files by tenant id;
-        unordered_map<string, vector<string>> sorted_files;
+        unordered_map<TenantProfilePair, vector<string>> sorted_files;
 
         // Download virtual policy
         bool is_empty = true;
@@ -991,7 +994,17 @@ private:
         for (const auto &tenant: *updated_policy_tenants) {
             if (!tenant.getVersion().empty()) {
                 is_empty = false;
-                resource_v_policy_file.addTenant(tenant.getTenantID(), tenant.getVersion(), tenant.getChecksum());
+                dbgTrace(D_ORCHESTRATOR)
+                    << "Adding a tenant to the multi-tenant list. Tenant: "
+                    << tenant.getTenantID();
+                auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
+                tenant_manager->addActiveTenantAndProfile(tenant.getTenantID(), tenant.getProfileID());
+                resource_v_policy_file.addTenant(
+                    tenant.getTenantID(),
+                    tenant.getProfileID(),
+                    tenant.getVersion(),
+                    tenant.getChecksum()
+                );
             }
         }
 
@@ -1003,7 +1016,8 @@ private:
                 );
             if (new_virtual_policy_files.ok()) {
                 for (const auto &tenant_file: *new_virtual_policy_files) {
-                    sorted_files[tenant_file.first].push_back(tenant_file.second);
+                    auto tenant_profile = TenantProfilePair(tenant_file.first.first, tenant_file.first.second);
+                    sorted_files[tenant_profile].push_back(tenant_file.second);
                 }
             }
         }
@@ -1017,6 +1031,7 @@ private:
                     is_empty = false;
                     resource_v_settings_file.addTenant(
                         tenant.getTenantID(),
+                        tenant.getProfileID(),
                         tenant.getVersion(),
                         tenant.getChecksum()
                     );
@@ -1031,7 +1046,8 @@ private:
                     );
                 if (new_virtual_settings_files.ok()) {
                     for (const auto &tenant_file: *new_virtual_settings_files) {
-                        sorted_files[tenant_file.first].push_back(tenant_file.second);
+                        auto tenant_profile = TenantProfilePair(tenant_file.first.first, tenant_file.first.second);
+                        sorted_files[tenant_profile].push_back(tenant_file.second);
                     }
                 }
             }
@@ -1043,7 +1059,11 @@ private:
             string setting_file = "";
             if (files.size() > 1) {
                 setting_file = files[1];
-                auto handled_settings = updateSettingsFile(setting_file, downloade_files.first);
+                auto handled_settings = updateSettingsFile(
+                    setting_file,
+                    downloade_files.first.getTenantId(),
+                    downloade_files.first.getPfofileId()
+                );
                 if (handled_settings.ok()) setting_file = *handled_settings;
             }
 
@@ -1051,21 +1071,23 @@ private:
                 policy_file,
                 setting_file,
                 new_data_files,
-                downloade_files.first
+                downloade_files.first.getTenantId(),
+                downloade_files.first.getPfofileId()
             );
         }
     }
 
     Maybe<string>
-    updateSettingsFile(const string &new_settings_file, const string &tenant_id = "")
+    updateSettingsFile(const string &new_settings_file, const string &tenant_id = "",  const string &profile_id = "")
     {
         // Handling settings update.
         auto conf_dir = getConfigurationWithDefault<string>(
             filesystem_prefix + "/conf/",
             "orchestration",
             "Conf dir"
-        ) + (tenant_id != "" ? "tenant_" + tenant_id  + "_" : "");
+        ) + (tenant_id != "" ? "tenant_" + tenant_id  + "_profile_" + profile_id + "_"  : "");
 
+        dbgTrace(D_ORCHESTRATOR) << "The settings directory is " << conf_dir;
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
         string settings_file_path = conf_dir + "settings.json";
         if (!orchestration_tools->copyFile(new_settings_file, settings_file_path)) {
@@ -1077,7 +1099,7 @@ private:
     }
 
     CheckUpdateRequest::Tenants
-    getPolicyTenantData(const string &tenant_id)
+    getPolicyTenantData(const string &tenant_id, const string &profile_id)
     {
         string dir = getConfigurationWithDefault<string>(
             filesystem_prefix + "/conf",
@@ -1085,16 +1107,16 @@ private:
             "Configuration directory"
         );
 
-        string policy_file = dir + "/tenant_" + tenant_id + "/policy.json";
+        string policy_file = dir + "/tenant_" + tenant_id + "_profile_" + profile_id + "/policy.json";
 
         string policy_file_checksum = getChecksum(policy_file);
         string policy_file_version= getVersion(policy_file);
 
-        return CheckUpdateRequest::Tenants(tenant_id, policy_file_checksum, policy_file_version);
+        return CheckUpdateRequest::Tenants(tenant_id, profile_id, policy_file_checksum, policy_file_version);
     }
 
     CheckUpdateRequest::Tenants
-    getSettingsTenantData(const string &tenant_id, const string &policy_version)
+    getSettingsTenantData(const string &tenant_id, const string &profile_id, const string &policy_version)
     {
         string dir = getConfigurationWithDefault<string>(
             filesystem_prefix + "/conf",
@@ -1102,10 +1124,10 @@ private:
             "Configuration directory"
         );
 
-        string settings_file = dir + "/tenant_" + tenant_id + "_settings.json";
+        string settings_file = dir + "/tenant_" + tenant_id + "_profile_" + profile_id + "_settings.json";
         string settings_file_checksum = getChecksum(settings_file);
 
-        return CheckUpdateRequest::Tenants(tenant_id, settings_file_checksum, policy_version);
+        return CheckUpdateRequest::Tenants(tenant_id, profile_id, settings_file_checksum, policy_version);
     }
 
     string
@@ -1629,5 +1651,3 @@ OrchestrationComp::preload()
     registerExpectedSetting<string>("upgradeMode");
     registerExpectedConfigFile("orchestration", Config::ConfigFileType::Policy);
 }
-
-SASAL_END

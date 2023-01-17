@@ -21,6 +21,13 @@
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
 template <typename UserSerializableReplyAttr>
+QueryRequest IntelligenceQuery<UserSerializableReplyAttr>::dummy_query_request = QueryRequest();
+
+template <typename UserSerializableReplyAttr>
+std::vector<QueryRequest> IntelligenceQuery<UserSerializableReplyAttr>::dummy_query_requests =
+    std::vector<QueryRequest>();
+
+template <typename UserSerializableReplyAttr>
 Maybe<std::string>
 IntelligenceQuery<UserSerializableReplyAttr>::genJson() const
 {
@@ -28,7 +35,16 @@ IntelligenceQuery<UserSerializableReplyAttr>::genJson() const
         std::stringstream out;
         {
             cereal::JSONOutputArchive out_ar(out);
-            request.saveToJson(out_ar);
+            if (is_bulk) {
+                std::vector<BulkQueryRequest> bulk_requests;
+                int index = 0;
+                for (QueryRequest &request : requests) {
+                    bulk_requests.push_back(BulkQueryRequest(request, index++));
+                }
+                out_ar(cereal::make_nvp("queries", bulk_requests));
+            } else {
+                request.saveToJson(out_ar);
+            }
         }
         return out.str();
     }
@@ -58,14 +74,45 @@ template <typename UserSerializableReplyAttr>
 void
 IntelligenceQuery<UserSerializableReplyAttr>::load(cereal::JSONInputArchive &ar)
 {
-    response.loadFromJson(ar);
+    if (is_bulk) {
+        IntelligenceQueryBulkResponse<UserSerializableReplyAttr> bulk_response;
+        bulk_response.serialize(ar);
+        unsigned int error_idx = 0;
+        unsigned int valid_idx = 0;
+        const auto &valid_response = bulk_response.getValid();
+        const auto &errors = bulk_response.getErrors();
+        responses.reserve(requests.size());
+        dbgTrace(D_INTELLIGENCE) << "Received response for bulk request with " << requests.size() << " items";
+        for (unsigned int query_idx = 0; query_idx < requests.size(); query_idx++) {
+            if (valid_response[valid_idx].getIndex() == query_idx) {
+                responses.push_back(valid_response[valid_idx].getResponse());
+                dbgTrace(D_INTELLIGENCE) << "Item #" << query_idx << " is valid";
+                valid_idx++;
+            } else if (error_idx < errors.size() && errors[error_idx].getIndex() == query_idx) {
+                responses.emplace_back();
+                responses[query_idx].setFailInBulk();
+                dbgTrace(D_INTELLIGENCE) << "Item #" << query_idx << " is invalid";
+                error_idx++;
+            } else {
+                dbgWarning(D_INTELLIGENCE)
+                    << "Query index was not found neither in valid nor error responses, assuming error";
+                responses[query_idx].setFailInBulk();
+            }
+        }
+    } else {
+        response.loadFromJson(ar);
+    }
 }
 
 template <typename UserSerializableReplyAttr>
 void
 IntelligenceQuery<UserSerializableReplyAttr>::save(cereal::JSONOutputArchive &ar) const
 {
-    request.saveToJson(ar);
+    if (!is_bulk) {
+        request.saveToJson(ar);
+    } else {
+        ar(cereal::make_nvp("queries", requests));
+    }
 }
 
 template <typename UserSerializableReplyAttr>
@@ -73,6 +120,27 @@ std::vector<AssetReply<UserSerializableReplyAttr>>
 IntelligenceQuery<UserSerializableReplyAttr>::getData()
 {
     return response.getData();
+}
+
+template <typename UserSerializableReplyAttr>
+std::vector<Maybe<std::vector<AssetReply<UserSerializableReplyAttr>>>>
+IntelligenceQuery<UserSerializableReplyAttr>::getBulkData()
+{
+    std::vector<Maybe<std::vector<AssetReply<UserSerializableReplyAttr>>>> bulk_data;
+    bulk_data.reserve(responses.size());
+    int index = 0;
+    for (const auto &res: responses) {
+        if (!res.isValidInBulk()) {
+            dbgTrace(D_INTELLIGENCE) << "Request #" << index << " in bulk failed";
+            bulk_data.push_back(genError("Received error for request in bulk"));
+            index++;
+        } else {
+            dbgTrace(D_INTELLIGENCE) << "Request #" << index << " in bulk received valid response";
+            bulk_data.push_back(res.getData());
+            index++;
+        }
+    }
+    return bulk_data;
 }
 
 template <typename UserSerializableReplyAttr>
@@ -86,8 +154,25 @@ template <typename UserSerializableReplyAttr>
 Maybe<Intelligence_IS_V2::CursorState>
 IntelligenceQuery<UserSerializableReplyAttr>::getPagingStatus()
 {
+    if (is_bulk) return genError("Paging not activated in bulk mode");
     if (!request.isPagingActivated()) return genError("Paging not activated");
     return request.getCursorState();
+}
+
+template <typename UserSerializableReplyAttr>
+ResponseStatus
+IntelligenceQuery<UserSerializableReplyAttr>::getResponseStatus()
+{
+    if (!is_bulk) return response.getResponseStatus();
+
+    if (responses.size() == 0) return ResponseStatus::IN_PROGRESS;
+    for (const auto &response_itr : responses) {
+        if (response_itr.isValidInBulk() && response_itr.getResponseStatus() == ResponseStatus::IN_PROGRESS) {
+            return ResponseStatus::IN_PROGRESS;
+        }
+    }
+
+    return ResponseStatus::DONE;
 }
 
 template <typename UserSerializableReplyAttr>

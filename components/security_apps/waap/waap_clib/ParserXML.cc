@@ -15,6 +15,8 @@
 #include "Waf2Util.h"
 #include "debug.h"
 #include <assert.h>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <string>
 
 USE_DEBUG_FLAG(D_WAAP_PARSER_XML);
 
@@ -33,6 +35,15 @@ void ParserXML::onStartElementNs(
 {
     ParserXML* p = (ParserXML*)ctx;
     dbgTrace(D_WAAP_PARSER_XML) << "XML OPEN: '" << localname << "'";
+
+    std::string aux_localname((const char*)localname, xmlStrlen(localname));
+
+    boost::algorithm::to_lower(aux_localname);
+
+    if (aux_localname == "script") {
+        dbgTrace(D_WAAP_PARSER_XML) << "Failing parser on <script> tag";
+        p->m_state = s_error;
+    }
 
     p->m_key.push((const char*)localname, xmlStrlen(localname));
 

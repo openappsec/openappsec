@@ -35,6 +35,9 @@ class Encryptor::Impl : Singleton::Provide<I_Encryptor>::From<Encryptor>
     // Obfuscating
     string obfuscateXor(const string &input) override;
     string obfuscateXorBase64(const string &input) override;
+
+
+private:
 };
 
 string
@@ -67,6 +70,7 @@ Encryptor::Impl::obfuscateXorBase64(const string &input)
     string obfuscated = obfuscateXor(input);
     return base64Encode(obfuscated);
 }
+
 
 void
 Encryptor::preload()

@@ -17,13 +17,10 @@
 #include "log_generator.h"
 #include "agent_details.h"
 #include "version.h"
-#include "sasal.h"
 
 #include <algorithm>
 #include <map>
 #include <vector>
-
-SASAL_START // Orchestration - Communication
 
 using namespace std;
 using namespace cereal;
@@ -319,6 +316,7 @@ FogAuthenticator::saveCredentialsToFile(const UserCredentials &user_credentials)
         return false;
     }
 
+
     return orchestration_tools->writeFile(cred_str.unpack(), data_path + user_cred_file_name);
 }
 
@@ -347,6 +345,7 @@ FogAuthenticator::getCredentialsFromFile() const
     if (!encrypted_cred.ok()) return genError(encrypted_cred.getErr());
 
     dbgTrace(D_ORCHESTRATOR) << "Read the user credentials from the file";
+
     return orchestration_tools->jsonStringToObject<UserCredentials>(encrypted_cred.unpack());
 }
 
@@ -568,5 +567,3 @@ FogAuthenticator::init()
     loadRequiredSecurityApps();
     initRestAPI();
 }
-
-SASAL_END

@@ -82,9 +82,7 @@ install_waap()
     cp_exec "mkdir -p /var/waf2_engine/waf2_engine"
     cp_exec "mkdir -p /usr/share/waf2_engine"
     # /etc/cp/conf/waap/ is created in install_policy
-    cp_exec "cp -f resources/1.data /etc/cp/conf/waap/"
-    cp_exec "cp -f resources/2.data /etc/cp/conf/waap/"
-    cp_exec "cp -f resources/8.data /etc/cp/conf/waap/"
+    cp_exec "cp -f resources/waap.data /etc/cp/conf/waap/"
     cp_exec "cp -f resources/cp-ab.js /etc/cp/conf/waap/"
     cp_exec "cp -f resources/cp-csrf.js /etc/cp/conf/waap/"
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-ab.js"

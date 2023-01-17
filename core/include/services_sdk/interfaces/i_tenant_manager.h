@@ -25,22 +25,30 @@ public:
     using newTenantCB = std::function<void(const std::vector<std::string> &)>;
 
     virtual void uponNewTenants(const newTenantCB &cb) = 0;
-    virtual bool isTenantActive(const std::string &tenant_id) const = 0;
+    virtual bool areTenantAndProfileActive(const std::string &tenant_id, const std::string &profile_id) const = 0;
 
     virtual std::vector<std::string> fetchActiveTenants() const = 0;
-    virtual std::vector<std::string> getInstances(const std::string &tenant_id) const = 0;
+    virtual std::vector<std::string> fetchAllActiveTenants() const = 0;
+    virtual std::vector<std::string> getInstances(
+        const std::string &tenant_id,
+        const std::string &profile_id
+    ) const = 0;
+    virtual std::vector<std::string> fetchProfileIds(const std::string &tenant_id) const = 0;
 
-    virtual void addActiveTenant(const std::string &tenant_id) = 0;
-    virtual void addActiveTenants(const std::vector<std::string> &tenants_id) = 0;
+    virtual void deactivateTenant(const std::string &tenant_id, const std::string &profile_id) = 0;
 
-    virtual void deactivateTenant(const std::string &tenant_id) = 0;
-    virtual void deactivateTenants(const std::vector<std::string> &tenants_id) = 0;
+    virtual void addActiveTenantAndProfile(const std::string &tenant_id, const std::string &profile_id) = 0;
 
     virtual std::chrono::microseconds getTimeoutVal() const = 0;
 
 private:
     friend class LoadNewTenants;
-    virtual void addInstance(const std::string &tenant_id, const std::string &instace_id) = 0;
+    friend class LoadNewTenantsAndProfiles;
+    virtual void addInstance(
+        const std::string &tenant_id,
+        const std::string &profile_id,
+        const std::string &instace_id
+    ) = 0;
 
 protected:
     virtual ~I_TenantManager() {}

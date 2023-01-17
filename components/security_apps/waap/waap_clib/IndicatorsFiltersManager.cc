@@ -23,13 +23,13 @@
 IndicatorsFiltersManager::IndicatorsFiltersManager(const std::string& remotePath, const std::string &assetId,
     I_WaapAssetState* pWaapAssetState)
     :
-    SerializeToFileBase(pWaapAssetState->getSignaturesFilterDir() + "/6.data"),
-    m_ignoreSources(pWaapAssetState->getSignaturesFilterDir(), remotePath, assetId),
+    SerializeToFileBase(pWaapAssetState->getWaapDataDir() + "/6.data"),
+    m_ignoreSources(pWaapAssetState->getWaapDataDir(), remotePath, assetId),
     m_tuning(remotePath)
 {
     restore();
     m_keywordsFreqFilter = std::make_unique<KeywordIndicatorFilter>(
-        pWaapAssetState->getSignaturesFilterDir(),
+        pWaapAssetState->getWaapDataDir(),
         remotePath,
         assetId,
         &m_ignoreSources,
@@ -206,7 +206,7 @@ std::string IndicatorsFiltersManager::extractUri(const std::string& referer, con
     std::string url;
 
     size_t pos = referer.find("://");
-    if (pos == std::string::npos)
+    if (pos == std::string::npos || (pos + 3) > referer.size())
     {
         url = referer;
     }

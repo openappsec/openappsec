@@ -210,7 +210,6 @@ public:
         parseAppsecJSONKey<int>("http-response-code", httpResponseCode, archive_in, 403);
         parseAppsecJSONKey<std::string>("mode", mode, archive_in, "block-page");
         parseAppsecJSONKey<std::string>("name", name, archive_in);
-
         if (mode == "block-page") {
             parseAppsecJSONKey<std::string>(
                 "message-body",
