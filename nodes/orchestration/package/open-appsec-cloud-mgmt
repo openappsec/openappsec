@@ -63,7 +63,7 @@ send_notification_to_the_fog()
         \"eventFrequency\": 0,\"eventSource\": {\"serviceName\": \"Orchestration\",\"agentId\": \"$agent_id\",
         \"tenantId\": \"$tenant_id\",\"serviceId\": \"1\",\"issuingEngineVersion\": \"1.2229.123456\",
         \"issuingEngine\": \"onboardingInfoProvider\"},\"eventData\": {\"eventObject\": {\"onboardingInfo\":
-        {\"policyVersion\": $((AGENT_POLICY+1)),\"profileId\": \"$profile_id\"}}},
+        {\"policyVersion\": $((AGENT_POLICY+1)),\"profileId\": \"$profile_id\",\"agentId\": \"$agent_id\"}}},
         \"eventTags\": [\"Orchestration\"]}, \"tenantId\": \"$tenant_id\", \"id\": 1}]}")
 
     if test "$upload_res" != "200"; then
@@ -78,7 +78,7 @@ send_notification_to_the_fog()
             \"eventSource\": {\"serviceName\": \"Orchestration\",\"agentId\": \"$agent_id\",\"tenantId\":
             \"$tenant_id\",\"serviceId\": \"1\",\"issuingEngineVersion\": \"1.2229.123456\",\"issuingEngine\":
             \"onboardingInfoProvider\"},\"eventData\": {\"eventObject\": {\"onboardingInfo\": {\"policyVersion\":
-            $((AGENT_POLICY+1)),\"profileId\": \"$profile_id\"}}},
+            $((AGENT_POLICY+1)),\"profileId\": \"$profile_id\",\"agentId\": \"$agent_id\"}}},
             \"eventTags\": [\"Orchestration\"]}, \"tenantId\": \"$tenant_id\", \"id\": 1}]}")
         if test "$upload_res" != "200"; then
             echo "Failed to notify the FOG on the new policy: Failed Error code ${upload_res}"

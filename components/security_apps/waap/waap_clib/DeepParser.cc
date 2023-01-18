@@ -36,7 +36,7 @@ USE_DEBUG_FLAG(D_WAAP_ULIMITS);
 #define DONE_PARSING 0
 #define FAILED_PARSING -1
 #define CONTINUE_PARSING 1
-#define MAX_DEPTH 5
+#define MAX_DEPTH 7
 
 DeepParser::DeepParser(
     std::shared_ptr<WaapAssetState> pWaapAssetState,
@@ -228,36 +228,48 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
     std::string cur_val = std::string(v, v_len);
 
     // Detect and decode potential base64 chunks in the value before further processing
-    int b64DecodedCount = 0;
-    int b64DeletedCount = 0;
-    std::string base64_decoded_val;
-    Waap::Util::b64Decode(cur_val,
-        b64DecodeChunk,
-        b64DecodedCount,
-        b64DeletedCount,
-        base64_decoded_val);
 
-    // Add #base64 prefix to param name only if at least one Base64 replacement was done
-    bool base64ParamFound = (b64DecodedCount > 0 || b64DeletedCount > 0);
+    bool base64ParamFound = false;
+    dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
+    std::string base64_decoded_val, base64_key;
+    base64_variants base64_status = Waap::Util::b64Test (cur_val,
+            base64_key,
+            base64_decoded_val);
 
-    if (base64ParamFound) {
-        dbgTrace(D_WAAP_DEEP_PARSER)
-            << "DeepParser::onKv(): base64 decoded "
-            << b64DecodedCount
-            << " replacements, "
-            << b64DeletedCount
-            << " deletions.";
-        // replace cur_val with new value where base64 pieces are decoded and/or deleted.
+    dbgTrace(D_WAAP_DEEP_PARSER) << " status = " << base64_status
+            << " key = " << base64_key
+            << " value = " << base64_decoded_val;
+
+    switch (base64_status) {
+    case SINGLE_B64_CHUNK_CONVERT:
         cur_val = base64_decoded_val;
+        base64ParamFound = true;
+        break;
+    case KEY_VALUE_B64_PAIR:
+        // going deep with new pair in case value is not empty
+        if (base64_decoded_val.size() > 0) {
+            cur_val = base64_decoded_val;
+            base64ParamFound = true;
+            rc = onKv(base64_key.c_str(), base64_key.size(), cur_val.data(), cur_val.size(), flags);
+            dbgTrace(D_WAAP_DEEP_PARSER) << " rc = " << rc;
+            if (rc != CONTINUE_PARSING) {
+                return rc;
+            }
+        }
+        break;
+    case CONTINUE_AS_IS:
+        break;
+    default:
+        break;
     }
-
-    // cur_val is later passed through some filters (such as urldecode) before JSON, XML or HTML is detected/decoded
-    std::string orig_val = cur_val;
 
     if (base64ParamFound) {
         dbgTrace(D_WAAP_DEEP_PARSER) << "DeepParser::onKv(): pushing #base64 prefix to the key.";
         m_key.push("#base64", 7, false);
     }
+
+    // cur_val is later passed through some filters (such as urldecode) before JSON, XML or HTML is detected/decoded
+    std::string orig_val = cur_val;
 
     // Escape HTML entities such as &nbsp; before running heuristic stats analyzer
     std::string cur_val_html_escaped = orig_val;
