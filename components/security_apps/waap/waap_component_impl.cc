@@ -89,8 +89,6 @@ WaapComponent::Impl::init(const std::string &waapDataFileName)
 
     reputationAggregator.init();
 
-    waapStateTable = Singleton::Consume<I_Table>::by<WaapComponent>();
-
     bool success = waf2_proc_start(waapDataFileName);
     if (!success) {
         dbgWarning(D_WAAP) << "WAF2 engine FAILED to initialize (probably failed to load signatures). Aborting!";
@@ -103,6 +101,8 @@ WaapComponent::Impl::init(const std::string &waapDataFileName)
     I_StaticResourcesHandler *static_resources = Singleton::Consume<I_StaticResourcesHandler>::by<WaapComponent>();
     static_resources->registerStaticResource("cp-ab.js", "/etc/cp/conf/waap/cp-ab.js");
     static_resources->registerStaticResource("cp-csrf.js", "/etc/cp/conf/waap/cp-csrf.js");
+
+    waapStateTable = Singleton::Consume<I_Table>::by<WaapComponent>();
 }
 
 // Called when component is shut down

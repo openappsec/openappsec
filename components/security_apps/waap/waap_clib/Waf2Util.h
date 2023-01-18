@@ -32,6 +32,9 @@
 
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 
+enum base64_variants {SINGLE_B64_CHUNK_CONVERT, KEY_VALUE_B64_PAIR, CONTINUE_AS_IS};
+enum base64_stage {BEFORE_EQUAL, EQUAL, DONE, MISDETECT};
+
 // This is portable version of stricmp(), which is non-standard function (not even in C).
 // Contrary to stricmp(), for a slight optimization, s2 is ASSUMED to be already in lowercase.
 // s1 can be in mixed case and is convetred using tolower() before comparing to s2.
@@ -831,6 +834,13 @@ void unescapeUnicode(std::string &text);
 std::string filterUTF7(const std::string &text);
 
 bool
+decodeBase64Chunk(
+    const std::string &value,
+    std::string::const_iterator it,
+    std::string::const_iterator end,
+    std::string &decoded);
+
+bool
 b64DecodeChunk(
     const std::string &value,
     std::string::const_iterator it,
@@ -854,6 +864,11 @@ namespace Util {
             int &decodedCount,
             int &deletedCount,
             std::string &outStr);
+
+    base64_variants b64Test (
+            const std::string &s,
+            std::string &key,
+            std::string &value);
 
     // The original stdlib implementation of isalpha() supports locale settings which we do not really need.
     // It is also proven to contribute to slow performance in some of the algorithms using it.

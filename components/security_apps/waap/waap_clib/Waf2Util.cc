@@ -40,6 +40,7 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_EVASIONS);
+USE_DEBUG_FLAG(D_WAAP_BASE64);
 
 #define MIN_HEX_LENGTH 6
 #define charToDigit(c) (c - '0')
@@ -504,6 +505,8 @@ const char* g_htmlTags[] = {
     "h6"
 };
 
+static const string b64_prefix("base64,");
+
 const size_t g_htmlTagsCount = sizeof(g_htmlTags) / sizeof(g_htmlTags[0]);
 
 bool startsWithHtmlTagName(const char* text) {
@@ -956,12 +959,11 @@ string filterUTF7(const string& text) {
 //  4. percent of non-printable characters (!isprint())
 //     in decoded data is less than 10% (statistical garbage detection).
 // Returns false above checks fail.
-bool
-b64DecodeChunk(
-    const string& value,
-    string::const_iterator it,
-    string::const_iterator end,
-    string& decoded)
+bool decodeBase64Chunk(
+        const string& value,
+        string::const_iterator it,
+        string::const_iterator end,
+        string& decoded)
 {
     decoded.clear();
     uint32_t acc = 0;
@@ -969,15 +971,147 @@ b64DecodeChunk(
     int terminatorCharsSeen = 0; // whether '=' character was seen, and how many of them.
     uint32_t nonPrintableCharsCount = 0;
 
-    dbgTrace(D_WAAP) << "b64DecodeChunk: value='" << value << "' match='" << string(it, end) << "'";
+    dbgTrace(D_WAAP) << "decodeBase64Chunk: value='" << value << "' match='" << string(it, end) << "'";
+
+    // The encoded data length (without the "base64," prefix) should be exactly divisible by 4
+    // len % 4 is not 0 i.e. this is not base64
+        if ((end - it) % 4 != 0) {
+            dbgTrace(D_WAAP_BASE64) <<
+                "b64DecodeChunk: (leave as-is) because encoded data length should be exactly divisible by 4.";
+            return false;
+        }
+
+        while (it != end) {
+            unsigned char c = *it;
+
+            if (terminatorCharsSeen) {
+                // terminator characters must all be '=', until end of match.
+                if (c != '=') {
+                    dbgTrace(D_WAAP_BASE64) <<
+                        "decodeBase64Chunk: (leave as-is) because terminator characters must all be '='," <<
+                        "until end of match.";
+                    return false;
+                }
+
+                // We should see 0, 1 or 2 (no more) terminator characters
+                terminatorCharsSeen++;
+
+                if (terminatorCharsSeen > 2) {
+                    dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (leave as-is) because terminatorCharsSeen > 2";
+                    return false;
+                }
+
+                // allow for more terminator characters
+                it++;
+                continue;
+            }
+
+            unsigned char val = 0;
+
+            if (c >= 'A' && c <= 'Z') {
+                val = c - 'A';
+            }
+            else if (c >= 'a' && c <= 'z') {
+                val = c - 'a' + 26;
+            }
+            else if (isdigit(c)) {
+                val = c - '0' + 52;
+            }
+            else if (c == '+') {
+                val = 62;
+            }
+            else if (c == '/') {
+                val = 63;
+            }
+            else if (c == '=') {
+                // Start tracking terminator characters
+                terminatorCharsSeen++;
+                it++;
+                continue;
+            }
+            else {
+                dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (leave as-is) because of non-base64 character ('" <<
+                        c << "', ASCII " << (unsigned int)c << ")";
+                return false; // non-base64 character
+            }
+
+            acc = (acc << 6) | val;
+            acc_bits += 6;
+
+            if (acc_bits >= 8) {
+                int code = (acc >> (acc_bits - 8)) & 0xFF;
+                // only leave low "acc_bits-8" bits, clear all higher bits
+                uint32_t mask = ~(1 << (acc_bits - 8));
+                acc &= mask;
+                acc_bits -= 8;
+
+                // Count non-printable characters seen
+                if (!isprint(code)) {
+                    nonPrintableCharsCount++;
+                }
+
+                decoded += (char)code;
+            }
+
+            it++;
+        }
+
+        // end of encoded sequence decoded.
+
+        dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: decoded.size=" << decoded.size() <<
+                ", nonPrintableCharsCount=" << nonPrintableCharsCount << "; decoded='" << decoded << "'";
+
+        // Return success only if decoded.size>=5 and there are less than 10% of non-printable
+        // characters in output.
+        if (decoded.size() >= 5) {
+            if (nonPrintableCharsCount * 10 < decoded.size()) {
+                dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (decode/replace) decoded.size=" << decoded.size() <<
+                        ", nonPrintableCharsCount=" << nonPrintableCharsCount << ": replacing with decoded data";
+            }
+            else {
+                dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (delete) because decoded.size=" << decoded.size() <<
+                        ", nonPrintableCharsCount=" << nonPrintableCharsCount;
+                decoded.clear();
+            }
+            return true; // successfully decoded. Returns decoded data in "decoded" parameter
+        }
+
+        // If decoded size is too small - leave the encoded value (return false)
+        decoded.clear(); // discard partial data
+        dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (leave as-is) because decoded too small. decoded.size=" <<
+                decoded.size() <<
+                ", nonPrintableCharsCount=" << nonPrintableCharsCount;
+        return false;
+}
+
+// Attempts to detect and validate base64 chunk.
+// Value is the full value inside which potential base64-encoded chunk was found,
+// it and end point to start and end of that chunk.
+// Returns true if succesful (and fills the "decoded" string with decoded data).
+// Success criterias:
+//  0. encoded sequence covers the whole value (doesn't have any characters around it)
+//  1. encoded sequence consist of base64 alphabet (may end with zero, one or two '=' characters')
+//  2. length of encoded sequence is exactly divisible by 4.
+//  3. length of decoded is minimum 5 characters.
+//  4. percent of non-printable characters (!isprint())
+//     in decoded data is less than 10% (statistical garbage detection).
+// Returns false above checks fail.
+bool
+b64DecodeChunk(
+    const string& value,
+    string::const_iterator it,
+    string::const_iterator end,
+    string& decoded)
+{
+
+    dbgTrace(D_WAAP_BASE64) << "b64DecodeChunk: value='" << value << "' match='" << string(it, end) << "'";
 
     // skip "base64," prefix if the line is starting with it.
-    if (end - it >= 7 &&
-        *it == 'b' &&
-        *(it + 1) == 'a' &&
-        *(it + 2) == 's' &&
-        string(it, it + 7) == "base64,") {
-        it += 7; // skip the prefix
+    unsigned int len = end - it;
+    if (len >= b64_prefix.size() &&
+        it[0] == 'b' && it[1] == 'a' && it[2] == 's' && it[3] ==
+        'e' && it[4] == '6' && it[5] == '4' && it[6] == ',') {
+        it = it + b64_prefix.size(); // skip the prefix
     }
     else {
         // If the base64 candidate match within value is surrounded by other dat
@@ -986,119 +1120,12 @@ b64DecodeChunk(
         // Note that this purposedly doesn't include matches starting with "base64,"
         // prefix: we do want those prefixed matches to be decoded!
         if (it != value.begin() || end != value.end()) {
-            dbgTrace(D_WAAP) << "b64DecodeChunk: (leave as-is) because match is surrounded by other data.";
+            dbgTrace(D_WAAP_BASE64) << "b64DecodeChunk: (leave as-is) because match is surrounded by other data.";
             return false;
         }
     }
 
-    // The encoded data length (without the "base64," prefix) should be exactly divisible by 4
-    // to be considered valid base64.
-    if ((end - it) % 4 != 0) {
-        dbgTrace(D_WAAP) <<
-            "b64DecodeChunk: (leave as-is) because encoded data length should be exactly divisible by 4.";
-        return false;
-    }
-
-    while (it != end) {
-        unsigned char c = *it;
-
-        if (terminatorCharsSeen) {
-            // terminator characters must all be '=', until end of match.
-            if (c != '=') {
-                dbgTrace(D_WAAP) <<
-                    "b64DecodeChunk: (leave as-is) because terminator characters must all be '=', until end of match.";
-                return false;
-            }
-
-            // We should see 0, 1 or 2 (no more) terminator characters
-            terminatorCharsSeen++;
-
-            if (terminatorCharsSeen > 2) {
-                dbgTrace(D_WAAP) << "b64DecodeChunk: (leave as-is) because terminatorCharsSeen > 2";
-                return false;
-            }
-
-            // allow for more terminator characters
-            it++;
-            continue;
-        }
-
-        unsigned char val = 0;
-
-        if (c >= 'A' && c <= 'Z') {
-            val = c - 'A';
-        }
-        else if (c >= 'a' && c <= 'z') {
-            val = c - 'a' + 26;
-        }
-        else if (isdigit(c)) {
-            val = c - '0' + 52;
-        }
-        else if (c == '+') {
-            val = 62;
-        }
-        else if (c == '/') {
-            val = 63;
-        }
-        else if (c == '=') {
-            // Start tracking terminator characters
-            terminatorCharsSeen++;
-            it++;
-            continue;
-        }
-        else {
-            dbgTrace(D_WAAP) << "b64DecodeChunk: (leave as-is) because of non-base64 character ('" << c <<
-                "', ASCII " << (unsigned int)c << ")";
-            return false; // non-base64 character
-        }
-
-        acc = (acc << 6) | val;
-        acc_bits += 6;
-
-        if (acc_bits >= 8) {
-            int code = (acc >> (acc_bits - 8)) & 0xFF;
-            // only leave low "acc_bits-8" bits, clear all higher bits
-            uint32_t mask = ~(1 << (acc_bits - 8));
-            acc &= mask;
-            acc_bits -= 8;
-
-            // Count non-printable characters seen
-            if (!isprint(code)) {
-                nonPrintableCharsCount++;
-            }
-
-            decoded += (char)code;
-        }
-
-        it++;
-    }
-
-    // end of encoded sequence decoded.
-
-    dbgTrace(D_WAAP) << "b64DecodeChunk: decoded.size=" << decoded.size() << ", nonPrintableCharsCount=" <<
-        nonPrintableCharsCount << "; decoded='" << decoded << "'";
-
-    // Return success only if decoded.size>=5 and there are less than 10% of non-printable
-    // characters in output.
-    if (decoded.size() >= 5) {
-        if (nonPrintableCharsCount * 10 < decoded.size()) {
-            dbgTrace(D_WAAP) << "b64DecodeChunk: (decode/replace) decoded.size=" << decoded.size() <<
-                ", nonPrintableCharsCount=" << nonPrintableCharsCount << ": replacing with decoded data";
-        }
-        else {
-            dbgTrace(D_WAAP) << "b64DecodeChunk: (delete) because decoded.size=" << decoded.size() <<
-                ", nonPrintableCharsCount=" << nonPrintableCharsCount;
-            // If percentage of non-printable characters in decoded is high, filter them out to prevent false alarms.
-            decoded.clear();
-        }
-        return true; // successfully decoded. Returns decoded data in "decoded" parameter
-    }
-
-    // If decoded size is too small - leave the encoded value (return false)
-    decoded.clear(); // discard partial data
-    dbgTrace(D_WAAP) << "b64DecodeChunk: (leave as-is) because decoded too small. decoded.size=" << decoded.size() <<
-        ", nonPrintableCharsCount=" << nonPrintableCharsCount;
-    return false;
+    return decodeBase64Chunk(value, it, end, decoded);
 }
 
 vector<string> split(const string& s, char delim) {
@@ -1115,7 +1142,7 @@ namespace Waap {
 namespace Util {
 
 #define B64_TRAILERCHAR '='
-static const string b64_prefix("base64,");
+
 static bool err = false;
 
 static const SingleRegex invalid_hex_evasion_re(
@@ -1133,6 +1160,18 @@ static const SingleRegex csp_report_policy_re(
     err,
     "csp_report_policy"
 );
+static const SingleRegex base64_key_value_detector_re(
+        "^[^<>;&\\?|=\\s]+={1}\\s*.+",
+        err,
+        "base64_key_value");
+static const SingleRegex base64_key_detector_re(
+        "^[^<>;&\\?|=\\s]+={1}",
+        err,
+        "base64_key");
+static const SingleRegex base64_prefix_detector_re(
+        "data:\\S*;base64,\\S+|base64,\\S+",
+        err,
+        "base64_prefix");
 
 static void b64TestChunk(const string &s,
         string::const_iterator chunkStart,
@@ -1169,6 +1208,199 @@ static void b64TestChunk(const string &s,
         size_t from = chunkStart - s.begin();
         size_t len = chunkEnd - chunkStart;
         outStr += s.substr(from, len);
+    }
+}
+
+bool detectBase64Chunk(
+        const string &s,
+        string::const_iterator &start,
+        string::const_iterator &end)
+{
+    dbgTrace(D_WAAP_BASE64) << " ===detectBase64Chunk===:  starting with = '" << s << "'";
+    string::const_iterator it = s.begin();
+
+    //detect "base64," prefix to start search after this
+    for (; it != s.end()-7; it++) {
+        if (it[0] == 'b' && it[1] == 'a' && it[2] == 's' && it[3] ==
+                'e' && it[4] == '6' && it[5] == '4' && it[6] == ',') {
+            it = it + 7;
+            dbgTrace(D_WAAP_BASE64) << " ===detectBase64Chunk===:  prefix skipped = '" << *it << "'";
+            break;
+        }
+    }
+
+    //look for start of encoded string
+    dbgTrace(D_WAAP_BASE64) << " ===detectBase64Chunk===:  B64 itself = '" << *it << "'";
+    bool isB64AlphaChar = Waap::Util::isAlphaAsciiFast(*it) || isdigit(*it) || *it=='/' || *it=='+';
+
+    if (isB64AlphaChar) {
+        // start tracking potential b64 chunk - just check its size
+        dbgTrace(D_WAAP_BASE64) << " ===detectBase64Chunk===:  isB64AlphaChar = true, '" << *it << "'";
+        start = it;
+        end = s.end();
+        if ((end - start) % 4 == 0) {
+            return true;
+        }
+    }
+    // non base64 before supposed chunk - will not process
+    return false;
+}
+
+bool isBase64PrefixProcessingOK (
+        const string &s,
+        string &value)
+{
+    string::const_iterator start, end;
+    bool retVal = false;
+    dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: before regex for prefix for string '" << s << "'";
+    if (base64_prefix_detector_re.hasMatch(s)) {
+        dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: prefix detected on string '" << s << "'";
+        if (detectBase64Chunk(s, start, end)) {
+            dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: chunk detected";
+            if ((start != s.end()) && (end == s.end())) {
+                retVal = decodeBase64Chunk(s, start, end, value);
+            }
+        }
+    }
+    return retVal;
+}
+
+base64_variants b64Test (
+        const string &s,
+        string &key,
+        string &value)
+{
+
+    key.clear();
+    bool retVal;
+
+    dbgTrace(D_WAAP_BASE64) << " ===b64Test===: string =  " << s
+            << " key = " << key << " value = " << value;
+    // Minimal length
+    if (s.size() < 8) {
+        return CONTINUE_AS_IS;
+    }
+    dbgTrace(D_WAAP_BASE64) << " ===b64Test===: minimal lenght test passed";
+
+    std::string prefix_decoded_val;
+    string::const_iterator it = s.begin();
+
+    // 1st check if we have key candidate
+    if (base64_key_value_detector_re.hasMatch(s)) {
+        base64_stage state = BEFORE_EQUAL;
+        dbgTrace(D_WAAP_BASE64) << " ===b64Test===: testB64Key test passed - looking for key";
+        for (; (it != s.end()) && (state != DONE) && (state != MISDETECT); ++it) {
+            switch(state) {
+            case BEFORE_EQUAL:
+                if (*it != '=') {
+                    key += string(1, *it);
+                } else {
+                    key += string(1, *it);
+                    state = EQUAL;
+                }
+                break;
+            case EQUAL:
+                if (*it == '=') {
+                    it = s.begin();
+                    state=MISDETECT;
+                    continue;
+                }
+                if (*it == ' ') {
+                    //skip whitespaces - we don't need them in key
+                    continue;
+                } else {
+                    state = DONE;
+                }
+                break;
+            case DONE:
+                continue;
+            default:
+                break;
+            }
+
+        }
+        dbgTrace(D_WAAP_BASE64) << " ===b64Test===: detected key = " << key;
+        if (it == s.end() || state == MISDETECT) {
+            dbgTrace(D_WAAP_BASE64) << " ===b64Test===: detected  *it = s.end()" << *it;
+            if (key.size() > 0) {
+                it = s.begin();
+                key.clear();
+            }
+        } else {
+            it--;
+
+            dbgTrace(D_WAAP_BASE64) << " ===b64Test===: Key is OK  *it = " << *it;
+        }
+    }
+
+    dbgTrace(D_WAAP_BASE64) << " ===b64Test===: after processing key = '" << key << "'";
+    bool found = isBase64PrefixProcessingOK(s, prefix_decoded_val);
+    dbgTrace(D_WAAP_BASE64) << " ===b64Test===: after prefix test found = "
+            << found << " new value is '" << prefix_decoded_val << "' - done";
+    if (found) {
+        value = prefix_decoded_val;
+        if (key.empty()) {
+            return SINGLE_B64_CHUNK_CONVERT;
+        } else {
+            key.pop_back();
+            return KEY_VALUE_B64_PAIR;
+        }
+    }
+
+    string::const_iterator start = s.end();
+    dbgTrace(D_WAAP_BASE64) << " ===b64Test===:  B64 itself = " << *it << " =======";
+    bool isB64AlphaChar = Waap::Util::isAlphaAsciiFast(*it) || isdigit(*it) || *it=='/' || *it=='+';
+    if (isB64AlphaChar) {
+        // 1st char is potential b64, let's try to convert this
+        dbgTrace(D_WAAP_BASE64) <<
+            " ===b64Test===:  Start tracking potential b64 chunk = " << *it << " =======";
+        start = it;
+        if ((s.end() - start) % 4 != 0) {
+            key.clear();
+            value.clear();
+            return CONTINUE_AS_IS;;
+        }
+    }
+    else {
+        dbgTrace(D_WAAP_BASE64) <<
+            " ===b64Test===: Non base64 before supposed chunk - will not process = " << *it << " =======";
+        return CONTINUE_AS_IS;
+    }
+
+    if (start != s.end()) {
+        // key is not empty, it should be tested for correct format (i.e. key=b64val and not splittable)
+        // else leave it as is
+        dbgTrace(D_WAAP_BASE64) << " ===b64Test===:BEFORE TESTING KEY key = '" << key << "'";
+        if (!key.empty()) {
+            if (!base64_key_detector_re.hasMatch(key)) {
+                dbgTrace(D_WAAP_BASE64) << " ===b64Test===: Key is NOT GOOD regex key = '" << key << "'";
+                return CONTINUE_AS_IS;
+            }
+            // remove '=' as last char in key - we don't need it
+            key.pop_back();
+            dbgTrace(D_WAAP_BASE64) << " ===b64Test===: FINAL key = '" << key << "'";
+        }
+        retVal = decodeBase64Chunk(s, start, s.end(), value);
+        dbgTrace(D_WAAP_BASE64) << " ===b64Test===: After testing and conversion value = "
+                << value << "retVal = '" << retVal <<"'";
+        if (!retVal) {
+            key.clear();
+            value.clear();
+            return CONTINUE_AS_IS;
+        }
+        dbgTrace(D_WAAP_BASE64) << " ===b64Test===: After tpassed retVal check = "
+            << value << "retVal = '" << retVal <<"'" << "key = '" << key << "'";
+        if (key.empty()) {
+            return SINGLE_B64_CHUNK_CONVERT;
+        } else {
+            return KEY_VALUE_B64_PAIR;
+        }
+
+    } else {
+        // There are symbols after base64 chunk - leave as is, may be it will be splitted no next step
+        key.clear();
+        value.clear();
+        return CONTINUE_AS_IS;
     }
 }
 
