@@ -1,5 +1,1 @@
-file(
-    DOWNLOAD
-    https://github.com/mikefarah/yq/releases/download/v4.26.1/yq_linux_amd64
-    ${CMAKE_INSTALL_PREFIX}/orchestration/scripts/yq
-)
+install(FILES yq_linux_amd64 DESTINATION orchestration/scripts RENAME yq PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
