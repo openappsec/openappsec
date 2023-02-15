@@ -67,8 +67,6 @@ using namespace ReportIS;
 // Score threshold below which the match won't be considered
 #define SCORE_THRESHOLD (1.4f)
 
-static const ParameterBehavior action_ignore(BehaviorKey::ACTION, BehaviorValue::IGNORE);
-
 void Waf2Transaction::learnScore(ScoreBuilderData& data, const std::string &poolName)
 {
     m_pWaapAssetState->scoreBuilder.analyzeFalseTruePositive(data, poolName, !m_ignoreScore);
@@ -1372,7 +1370,7 @@ Waf2Transaction::checkShouldInject()
     std::string uri = m_uriPath;
     std::string low_method = m_methodStr;
     std::transform(low_method.begin(), low_method.end(), low_method.begin(), ::tolower);
-    
+
     auto csrfPolicy = m_siteConfig ? m_siteConfig->get_CsrfPolicy() : NULL;
     bool csrf = false;
     dbgTrace(D_WAAP) << "Waf2Transaction::checkShouldInject(): received the relevant Application configuration "
@@ -1384,7 +1382,7 @@ Waf2Transaction::checkShouldInject()
     {
         dbgTrace(D_WAAP) << "Waf2Transaction::checkShouldInject(): Should not inject CSRF scripts.";
     }
-    
+
     if(csrf) {
         dbgTrace(D_WAAP) << "Waf2Transaction::checkShouldInject(): Should inject CSRF script";
         m_responseInjectReasons.setCsrf(true);
@@ -1554,6 +1552,8 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     const std::string& incidentType) const
 {
     auto env = Singleton::Consume<I_Environment>::by<WaapComponent>();
+    auto active_id = env->get<std::string>("ActiveTenantId");
+    if (active_id.ok()) waapLog.addToOrigin(LogField("tenantId", *active_id));
     auto proxy_ip = env->get<std::string>(HttpTransactionData::proxy_ip_ctx);
     if (proxy_ip.ok() && m_remote_addr != proxy_ip.unpack())
     {
@@ -2155,7 +2155,7 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
     if (!exceptions.ok()) return false;
 
-    dbgTrace(D_WAAP) << "matching exceptions";
+    dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions";
 
     std::unordered_map<std::string, std::set<std::string>> exceptions_dict;
 
@@ -2184,11 +2184,16 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
         exceptions_dict["url"].insert(getUriStr());
         exceptions_dict["hostName"].insert(m_hostStr);
 
+        for (auto &keyword : res.keyword_matches) {
+            exceptions_dict["indicator"].insert(keyword);
+        }
+
         // calling behavior and check if there is a behavior that match to this specific param name.
-        auto behaviors = exceptions.unpack().getBehavior(exceptions_dict);
+        auto behaviors = exceptions.unpack().getBehavior(exceptions_dict,
+                getAssetState()->m_filtersMngr->getMatchedOverrideKeywords());
         for (auto const &behavior : behaviors) {
             if (behavior == action_ignore) {
-                dbgTrace(D_WAAP) << "matched exceptions for " << res.param_name << " should ignore.";
+                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for " << res.param_name << " should ignore.";
                 std::string overrideId = behavior.getId();
                 if (!overrideId.empty()) {
                     m_matchedOverrideIds.insert(overrideId);

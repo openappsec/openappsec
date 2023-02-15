@@ -19,9 +19,13 @@
 
 #include "WaapConfigBase.h"
 #include "log_generator.h"
+#include "i_environment.h"
 #include "debug.h"
 
-class WaapConfigApplication : public WaapConfigBase
+class WaapConfigApplication
+        :
+    public WaapConfigBase,
+    Singleton::Consume<I_Environment>
 {
 public:
     WaapConfigApplication();

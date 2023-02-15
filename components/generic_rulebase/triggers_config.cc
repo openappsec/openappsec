@@ -124,14 +124,34 @@ setTriggersFlag(const string &key, cereal::JSONInputArchive &ar, EnumClass flag,
 }
 
 static void
-setLogConfiguration(const ReportIS::StreamType &log_type, const string &log_server_url = "")
+setLogConfiguration(
+    const ReportIS::StreamType &log_type,
+    const string &log_server_url = "",
+    const string &protocol = ""
+)
 {
     dbgTrace(D_RULEBASE_CONFIG) << "log server url:" << log_server_url;
-    if (log_server_url != "") {
-        Singleton::Consume<I_Logging>::by<LogTriggerConf>()->addStream(log_type, log_server_url);
+    if (log_server_url != "" && protocol != "") {
+        Singleton::Consume<I_Logging>::by<LogTriggerConf>()->addStream(log_type, log_server_url, protocol);
     } else {
         Singleton::Consume<I_Logging>::by<LogTriggerConf>()->addStream(log_type);
     }
+}
+
+static string
+parseProtocolWithDefault(
+    const std::string &default_value,
+    const std::string &key_name,
+    cereal::JSONInputArchive &archive_in
+)
+{
+    string value;
+    try {
+        archive_in(cereal::make_nvp(key_name, value));
+    } catch (const cereal::Exception &e) {
+        return default_value;
+    }
+    return value;
 }
 
 void
@@ -142,6 +162,9 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
         parseJSONKey<string>("verbosity", verbosity, archive_in);
         parseJSONKey<string>("urlForSyslog", url_for_syslog, archive_in);
         parseJSONKey<string>("urlForCef", url_for_cef, archive_in);
+        parseJSONKey<string>("syslogProtocol", syslog_protocol, archive_in);
+        syslog_protocol = parseProtocolWithDefault("UDP", "syslogProtocol", archive_in);
+        cef_protocol = parseProtocolWithDefault("UDP", "cefProtocol", archive_in);
 
         setTriggersFlag("webBody",  archive_in, WebLogFields::webBody, log_web_fields);
         setTriggersFlag("webHeaders", archive_in, WebLogFields::webHeaders, log_web_fields);
@@ -197,11 +220,14 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
                 case ReportIS::StreamType::JSON_LOG_FILE:
                     setLogConfiguration(ReportIS::StreamType::JSON_LOG_FILE);
                     break;
+                case ReportIS::StreamType::JSON_K8S_SVC:
+                    setLogConfiguration(ReportIS::StreamType::JSON_K8S_SVC);
+                    break;
                 case ReportIS::StreamType::SYSLOG:
-                    setLogConfiguration(ReportIS::StreamType::SYSLOG, getUrlForSyslog());
+                    setLogConfiguration(ReportIS::StreamType::SYSLOG, getUrlForSyslog(), syslog_protocol);
                     break;
                 case ReportIS::StreamType::CEF:
-                    setLogConfiguration(ReportIS::StreamType::CEF, getUrlForCef());
+                    setLogConfiguration(ReportIS::StreamType::CEF, getUrlForCef(), cef_protocol);
                     break;
                 case ReportIS::StreamType::NONE: break;
                 case ReportIS::StreamType::COUNT: break;

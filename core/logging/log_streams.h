@@ -80,10 +80,24 @@ private:
     I_Messaging *i_msg = nullptr;
 };
 
+class K8sSvcStream : public Stream
+{
+public:
+    K8sSvcStream();
+    ~K8sSvcStream();
+
+    void sendLog(const Report &log) override;
+    void sendLog(const LogBulkRest &logs, bool persistance_only) override;
+
+private:
+    std::string genHeader();
+    I_Messaging *i_msg = nullptr;
+};
+
 class SyslogStream : public Stream
 {
 public:
-    SyslogStream(const std::string &_ip_address, int _port);
+    SyslogStream(const std::string &_address, int _port, I_Socket::SocketType protocol);
     ~SyslogStream();
 
     void sendLog(const Report &log) override;
@@ -93,8 +107,9 @@ private:
 
     I_Socket *i_socket = nullptr;
     I_MainLoop *mainloop = nullptr;
-    std::string ip_address;
+    std::string address;
     int port;
+    I_Socket::SocketType protocol = I_Socket::SocketType::UDP;
     I_MainLoop::RoutineID log_send_routine = -1;
     Maybe<I_Socket::socketFd> socket = genError("Not set yet");
 };
@@ -102,7 +117,7 @@ private:
 class CefStream : public Stream
 {
 public:
-    CefStream(const std::string &_ip_address, int _port);
+    CefStream(const std::string &_address, int _port, I_Socket::SocketType _protocol);
     ~CefStream();
 
     void sendLog(const Report &log) override;
@@ -111,8 +126,9 @@ private:
     void connect();
 
     I_Socket *i_socket = nullptr;
-    std::string ip_address;
+    std::string address;
     int port;
+    I_Socket::SocketType protocol = I_Socket::SocketType::UDP;
     Maybe<I_Socket::socketFd> socket = genError("Not set yet");
 };
 

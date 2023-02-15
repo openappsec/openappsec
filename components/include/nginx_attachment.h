@@ -21,6 +21,9 @@
 #include "i_http_manager.h"
 #include "i_static_resources_handler.h"
 #include "i_socket_is.h"
+#include "i_environment.h"
+#include "i_shell_cmd.h"
+#include "i_tenant_manager.h"
 #include "transaction_table_metric.h"
 #include "nginx_attachment_metric.h"
 #include "nginx_intaker_metric.h"
@@ -38,7 +41,10 @@ class NginxAttachment
     Singleton::Consume<I_HttpManager>,
     Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_Socket>,
-    Singleton::Consume<I_InstanceAwareness>
+    Singleton::Consume<I_InstanceAwareness>,
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<I_ShellCmd>,
+    Singleton::Consume<I_TenantManager>
 {
 public:
     NginxAttachment();

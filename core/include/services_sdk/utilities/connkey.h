@@ -199,21 +199,6 @@ private:
     RangeType end;
 };
 
-class IPAddressConfig
-{
-public:
-    IPAddressConfig() = default;
-    IPAddressConfig(const std::string &ip_string);
-
-    void load(cereal::JSONInputArchive &ar);
-    const IPAddr & getAddress() const { return address; }
-
-    operator IPAddr() const { return address; }
-
-private:
-    IPAddr address;
-};
-
 // Specialization of std::hash<> for IPAddr
 namespace std
 {

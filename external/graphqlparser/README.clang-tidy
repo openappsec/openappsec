@@ -1,0 +1,7 @@
+* readability-implicit-bool is disabled because I disagree with it.
+
+* cppcoreguidelines-pro-type-reinterpret-cast is disabled because we use it
+  to implement our C API.
+  
+* cppcoreguidelines-pro-bounds-array-to-pointer-decay is disabled
+  because it fires a false positive on every use of assert().

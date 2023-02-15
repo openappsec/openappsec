@@ -27,24 +27,9 @@ USE_DEBUG_FLAG(D_K8S_POLICY);
 class AgentSettingsSection
 {
 public:
-    AgentSettingsSection(std::string _key, std::string _value) : key(_key), value(_value)
-    {
-        try {
-            id = to_string(boost::uuids::random_generator()());
-        } catch (const boost::uuids::entropy_error &e) {
-            dbgWarning(D_K8S_POLICY) << "Failed to generate agent setting UUID. Error: " << e.what();
-        }
-    }
+    AgentSettingsSection(std::string _key, std::string _value);
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("id",    id),
-            cereal::make_nvp("key",   key),
-            cereal::make_nvp("value", value)
-        );
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::string id;
@@ -57,20 +42,7 @@ class IpsSnortSigsRulebase
 public:
     IpsSnortSigsRulebase(std::vector<AgentSettingsSection> _agentSettings) : agentSettings(_agentSettings) {}
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        std::string profile_type = "KubernetesProfile";
-        std::string upgrade_mode = "automatic";
-        out_ar(
-            cereal::make_nvp("agentSettings",                agentSettings),
-            cereal::make_nvp("agentType",                    profile_type),
-            cereal::make_nvp("allowOnlyDefinedApplications", false),
-            cereal::make_nvp("anyFog",                       true),
-            cereal::make_nvp("maxNumberOfAgents",            10),
-            cereal::make_nvp("upgradeMode",                  upgrade_mode)
-        );
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::vector<AgentSettingsSection> agentSettings;

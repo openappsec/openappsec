@@ -1993,7 +1993,7 @@ void WaapAssetState::filterKeywordsByParameters(
     }
     else
     {
-        dbgTrace(D_WAAP_ASSET_STATE) << "No keywords need to be filter for this parameter";
+        dbgTrace(D_WAAP_ASSET_STATE) << "No keywords need to be filtered for this parameter";
     }
 }
 

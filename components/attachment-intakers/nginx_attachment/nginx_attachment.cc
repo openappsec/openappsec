@@ -149,12 +149,37 @@ public:
     {
         dbgFlow(D_NGINX_ATTACHMENT) << "Initializing NGINX attachment";
 
+        i_env = Singleton::Consume<I_Environment>::by<NginxAttachment>();
         timer = Singleton::Consume<I_TimeGet>::by<NginxAttachment>();
         i_socket = Singleton::Consume<I_Socket>::by<NginxAttachment>();
         mainloop = Singleton::Consume<I_MainLoop>::by<NginxAttachment>();
         http_manager = Singleton::Consume<I_HttpManager>::by<NginxAttachment>();
         i_transaction_table = Singleton::Consume<I_TableSpecific<SessionID>>::by<NginxAttachment>();
         inst_awareness = Singleton::Consume<I_InstanceAwareness>::by<NginxAttachment>();
+
+        auto agent_type = getSetting<string>("agentType");
+        bool is_nsaas_env = false;
+        if (agent_type.ok() && (*agent_type == "CloudNative" || *agent_type == "VirtualNSaaS")) {
+            is_nsaas_env = true;
+        }
+
+        if (is_nsaas_env && inst_awareness->getFamilyID().ok()) {
+            mainloop->addOneTimeRoutine(
+                I_MainLoop::RoutineType::Offline,
+                [this] ()
+                {
+                    while (true) {
+                        if (!setActiveTenantAndProfile()) {
+                            mainloop->yield(std::chrono::seconds(2));
+                        } else {
+                            break;
+                        }
+                    }
+                },
+                "Setting active tenant and profile for an NGINX based security app",
+                false
+            );
+        }
 
         metric_report_interval = chrono::seconds(
             getConfigurationWithDefault<uint>(
@@ -235,6 +260,73 @@ public:
         }
 
         dbgInfo(D_NGINX_ATTACHMENT) << "Successfully initialized NGINX Attachment";
+    }
+
+    bool
+    setActiveTenantAndProfile()
+    {
+        string container_id = inst_awareness->getFamilyID().unpack();
+        dbgTrace(D_NGINX_ATTACHMENT) << "Found a family ID: " << container_id;
+
+        I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<NginxAttachment>();
+
+        string cmd =
+            "docker inspect --format='{{.Name}}' " + container_id  +
+            " | awk -F'cp_nginx_gaia' '{print substr($2, index($2, \" \"))}'";
+        auto maybe_tenant_id = shell_cmd->getExecOutput(cmd, 1000, false);
+
+        if (maybe_tenant_id.ok()) {
+
+            string tenant_id = *maybe_tenant_id;
+            tenant_id.erase(remove(tenant_id.begin(), tenant_id.end(), '\n'), tenant_id.end());
+            dbgTrace(D_NGINX_ATTACHMENT) << "The tenant ID found is :" << tenant_id;
+
+            static string region;
+            if (region.empty()) {
+                const char *env_region = getenv("CP_NSAAS_REGION");
+                if (env_region) {
+                    region = env_region;
+                } else {
+                    region = getProfileAgentSettingWithDefault<string>("eu-west-1", "accessControl.region");
+                }
+                dbgInfo(D_NGINX_ATTACHMENT) << "Resolved region is " << region;
+            }
+
+            string profile_id = Singleton::Consume<I_TenantManager>::by<NginxAttachment>()->getProfileId(
+                tenant_id,
+                region
+            );
+
+            if (!profile_id.empty()) {
+                i_env->setActiveTenantAndProfile(tenant_id, profile_id);
+                dbgTrace(D_NGINX_ATTACHMENT)
+                    << "NGINX attachment setting active context. Tenant ID: "
+                    << tenant_id
+                    << ", Profile ID: "
+                    << profile_id
+                    << ", Region: "
+                    << region;
+                return true;
+            } else {
+                dbgWarning(D_NGINX_ATTACHMENT)
+                    << "Received an empty profile ID. Tenant ID: "
+                    << tenant_id
+                    << ", Region: "
+                    << region;
+
+                return false;
+            }
+        } else {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Failed getting the tenant ID: "
+                << cmd
+                << ". Error :"
+                << maybe_tenant_id.getErr();
+
+            return false;
+        }
+
+        return true;
     }
 
     void
@@ -1714,6 +1806,7 @@ private:
     I_Socket *i_socket                              = nullptr;
     I_TimeGet *timer                                = nullptr;
     I_MainLoop *mainloop                            = nullptr;
+    I_Environment *i_env                            = nullptr;
     I_HttpManager *http_manager                     = nullptr;
     I_InstanceAwareness *inst_awareness             = nullptr;
     I_TableSpecific<SessionID> *i_transaction_table = nullptr;
@@ -1750,6 +1843,7 @@ void
 NginxAttachment::preload()
 {
     pimpl->preload();
+    registerExpectedSetting<string>("agentType");
     registerExpectedConfiguration<bool>("HTTP manager", "Container mode");
     registerExpectedConfiguration<uint>("HTTP manager", "Shared memory segment size in KB");
     registerExpectedConfiguration<string>("HTTP manager", "Nginx permission");

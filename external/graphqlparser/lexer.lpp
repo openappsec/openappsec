@@ -1,0 +1,324 @@
+/**
+ * Copyright 2019-present, GraphQL Foundation
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+%{
+#include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <climits>
+#include <cstdio>
+#include <string>
+#include <vector>
+#include "location.hh"
+#include "position.hh"
+#include "parser.tab.hpp"
+#include "syntaxdefs.h"
+
+// Keep track of token lengths.
+#define YY_USER_ACTION yyextra->loc.columns(yyleng);
+
+static void escape(char c, char *buf);
+
+static std::string clean_up_block_string(const std::string &str);
+
+%}
+
+%option bison-bridge bison-locations
+%option noyywrap batch noinput nounput
+%option reentrant
+%option extra-type="struct LexerExtra *"
+
+%x STRING_STATE
+%x BLOCK_STRING_STATE
+%x C_COMMENT_STATE
+%x LINE_COMMENT_STATE
+
+FLOAT -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
+INTEGER -?(0|[1-9][0-9]*)
+IDENTIFIER [_A-Za-z][_0-9A-Za-z]*
+VARIABLE $[_0-9A-Za-z]+
+BOM \xef\xbb\xbf
+CRLF \r\n
+BADCHAR [\x00-\x08\x0b\x0c\x0e-\x1f]
+GOODCHAR [^\x00-\x08\x0b\x0c\x0e-\x1f]
+STRINGCHAR [^\x00-\x1f\\\x22]
+
+blank [ \t,]
+newline [\n\r]
+notnewline [^\n\r]
+
+%%
+
+%{
+  yyextra->loc.step();
+%}
+
+<STRING_STATE>{
+  \"    {
+    BEGIN(INITIAL);
+    yylval->str = yyextra->str.c_str();
+    *yylloc = yyextra->loc;
+    return yy::GraphQLParserImpl::token::TOK_STRING;
+  }
+
+  {newline} {
+    throw make_error(yyextra->loc, "Unterminated string");
+  }
+
+  <<EOF>> {
+    throw make_error(yyextra->loc, "Unterminated string at EOF");
+  }
+
+  {STRINGCHAR}+  {
+    char *p = yytext;
+    while (*p) {
+      yyextra->str.push_back(*p++);
+    }
+  }
+
+  \\\" { yyextra->str.push_back('"'); }
+  \\\\ { yyextra->str.push_back('\\'); }
+  \\\/ { yyextra->str.push_back('/'); }
+  \\n { yyextra->str.push_back('\n'); }
+  \\t { yyextra->str.push_back('\t'); }
+  \\r { yyextra->str.push_back('\r'); }
+  \\b { yyextra->str.push_back('\b'); }
+  \\f { yyextra->str.push_back('\f'); }
+
+  \\u[0-9A-Fa-f]{4} {
+    int ch;
+    sscanf(yytext + 2, "%x", &ch);
+    yyextra->str.push_back(ch);
+  }
+
+  \\u { throw make_error(yyextra->loc, "bad Unicode escape sequence"); }
+  \\. { throw make_error(yyextra->loc, std::string("bad escape sequence \\") + yytext[1]); }
+
+}
+
+<BLOCK_STRING_STATE>{
+  <<EOF>> {
+     throw make_error(yyextra->loc, "Unterminated block string at EOF");
+  }
+
+  {BADCHAR} {
+     throw make_error(yyextra->loc, std::string("Invalid character ") + yytext[0]);
+  }
+
+  {GOODCHAR} {
+    /* Can't use {GOODCHAR}+ because that would be a better match for
+       """ than the explicit rule! */
+    yyextra->str.push_back(*yytext);
+  }
+
+  \\\"\"\" {
+    yyextra->str.append(3, '"');
+  }
+
+  \"\"\" {
+    BEGIN(INITIAL);
+    yyextra->str = clean_up_block_string(yyextra->str);
+    yylval->str = yyextra->str.c_str();
+    *yylloc = yyextra->loc;
+    return yy::GraphQLParserImpl::token::TOK_STRING;
+  }
+}
+
+<LINE_COMMENT_STATE>{
+  {CRLF} { yyextra->loc.lines(yyleng / 2); yyextra->loc.step(); BEGIN(INITIAL); }
+  {newline} { yyextra->loc.lines(yyleng); yyextra->loc.step(); BEGIN(INITIAL); }
+  {notnewline}+ /* eat comment character */
+}
+
+<INITIAL>{
+  {blank}+ { yyextra->loc.step(); }
+  {BOM}+ { yyextra->loc.step(); yyextra->loc.step(); yyextra->loc.step(); }
+  {CRLF}+ { yyextra->loc.lines(yyleng / 2); yyextra->loc.step(); }
+  {newline}+ { yyextra->loc.lines(yyleng); yyextra->loc.step(); }
+
+  # {yyextra->loc.step(); BEGIN(LINE_COMMENT_STATE); }
+
+  directive   { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_DIRECTIVE; }
+  enum   { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_ENUM; }
+  extend   { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_EXTEND; }
+  false   { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_FALSE; }
+  fragment { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_FRAGMENT; }
+  implements { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_IMPLEMENTS; }
+  input { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_INPUT; }
+  interface { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_INTERFACE; }
+  mutation { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_MUTATION; }
+  null { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_NULL; }
+  on { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_ON; }
+  query { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_QUERY; }
+  scalar { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_SCALAR; }
+  schema { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_SCHEMA; }
+  subscription { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_SUBSCRIPTION; }
+  true { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_TRUE; }
+  type { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_TYPE; }
+  union { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_UNION; }
+
+  {INTEGER} { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_INTEGER; }
+  {FLOAT} { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_FLOAT; }
+  {IDENTIFIER} { yylval->str = yytext; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_IDENTIFIER; }
+  {VARIABLE} { yylval->str = yytext + 1; *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_VARIABLE; }
+
+  "!" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_BANG; }
+  "(" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_LPAREN; }
+  ")" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_RPAREN; }
+  "..." { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_ELLIPSIS; }
+  ":" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_COLON; }
+  "=" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_EQUAL; }
+  "@" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_AT; }
+  "[" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_LBRACKET; }
+  "]" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_RBRACKET; }
+  "{" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_LBRACE; }
+  "|" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_PIPE; }
+  "}" { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_RBRACE; }
+
+
+  <<EOF>> { *yylloc = yyextra->loc; return yy::GraphQLParserImpl::token::TOK_EOF; }
+
+  \"\"\" {
+    BEGIN(BLOCK_STRING_STATE);
+    yyextra->str.clear();
+  }
+
+  \"   {
+    BEGIN(STRING_STATE);
+    yyextra->str.clear();
+  }
+}
+
+<INITIAL,STRING_STATE,LINE_COMMENT_STATE>. {
+  char buf[6];
+  escape(yytext[0], buf);
+  throw make_error(
+    yyextra->loc,
+    std::string("unrecognized character ") + buf);
+}
+
+%%
+
+static void escape(char c, char *buf) {
+  if (std::isgraph(c)) {
+    *buf = c;
+    buf[1] = '\0';
+  } else {
+    buf[0] = '\\';
+    buf[2] = '\0';
+    switch (c) {
+    case '\a':
+      buf[1] = 'a';
+      break;
+    case '\b':
+      buf[1] = 'b';
+      break;
+    case '\f':
+      buf[1] = 'f';
+      break;
+    case '\n':
+      buf[1] = 'n';
+      break;
+    case '\r':
+      buf[1] = 'r';
+      break;
+    case '\t':
+      buf[1] = 't';
+      break;
+    case '\v':
+      buf[1] = 'v';
+      break;
+    default:
+      buf[1] = 'x';
+      std::snprintf(buf + 2, 3, "%x", ((int)c & 0xFF));
+      break;
+    }
+  }
+}
+
+static std::vector<std::string> splitLines(const std::string &str) {
+  std::vector<std::string> lines;
+  auto it = str.begin();
+  while (it != str.end()) {
+    static char terminators[2] = {'\r', '\n'};
+    auto nextIt = std::find_first_of(it, str.end(), terminators, terminators + sizeof(terminators));
+    lines.emplace_back(str.data() + (it - str.begin()), nextIt - it);
+    if (nextIt != str.end()) {
+      auto advancedIt = nextIt + 1;
+      if (advancedIt != str.end()) {
+        if (*nextIt == '\r' && *advancedIt == '\n') {
+          ++advancedIt;
+        }
+      }
+      nextIt = std::move(advancedIt);
+    }
+    it = std::move(nextIt);
+  }
+  return lines;
+}
+
+static int count_leading_whitespace(const std::string &str) {
+  auto pos = str.find_first_not_of(" \t", 0, strlen(" \t"));
+  if (pos == std::string::npos) {
+    return str.length();
+  }
+  return pos;
+}
+
+static bool is_all_whitespace(const std::string &str) {
+  return count_leading_whitespace(str) == str.length();
+}
+
+static std::string clean_up_block_string(const std::string &str) {
+  auto lines = splitLines(str);
+  bool first = true;
+  int commonIndent = INT_MAX;
+  for (const auto &line : lines) {
+    if (first) {
+      first = false;
+      continue;
+    }
+    const auto indent = count_leading_whitespace(line);
+    if (indent < line.length()) {
+      if (indent < commonIndent) {
+        commonIndent = indent;
+      }
+    }
+  }
+  if (commonIndent != INT_MAX) {
+    first = true;
+    for (auto &line : lines) {
+      if (first) {
+        first = false;
+        continue;
+      }
+      line.erase(0, commonIndent);
+    }
+  }
+
+  const auto firstNonBlankIt = std::find_if(lines.begin(), lines.end(), [](const std::string &line) {
+      return !is_all_whitespace(line);
+  });
+  lines.erase(lines.begin(), firstNonBlankIt);
+
+  const auto firstNonBlankReverseIt = std::find_if(lines.rbegin(), lines.rend(), [](const std::string &line) {
+      return !is_all_whitespace(line);
+  });
+  lines.erase(lines.end() - (firstNonBlankReverseIt - lines.rbegin()), lines.end());
+
+  std::string formatted;
+  first = true;
+  for (const auto &line: lines) {
+    if (first) {
+      first = false;
+    } else {
+      formatted.push_back('\n');
+    }
+    formatted.append(line);
+  }
+  return formatted;
+}

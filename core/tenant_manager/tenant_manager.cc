@@ -49,6 +49,8 @@ public:
 
     chrono::microseconds getTimeoutVal() const override;
 
+    string getProfileId(const string &tenant_id, const string &region) const override;
+
     void
     addInstance(const string &tenant_id, const string &profile_id, const string &instace_id)
     {
@@ -183,7 +185,7 @@ TenantManager::Impl::init()
         auto rest = Singleton::Consume<I_RestApi>::by<TenantManager>();
         rest->addRestCall<LoadNewTenants>(RestAction::SET, "tenant-id");
         rest->addRestCall<FetchActiveTenants>(RestAction::SHOW, "active-tenants");
-        rest->addRestCall<FetchActiveTenants>(RestAction::SHOW, "profile-ids");
+        rest->addRestCall<FetchProfileIds>(RestAction::SHOW, "profile-ids");
     }
 
     if (type == TenantManagerType::CLIENT) {
@@ -307,14 +309,14 @@ TenantManager::Impl::getAllTenants() const
 }
 
 vector<string>
-TenantManager::Impl::getProfileIds(const string &tenant_id) const
+TenantManager::Impl::getProfileIds(const string &_tenant_id) const
 {
-    dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a client. Requesting the active tenants";
+    dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a client. Requesting the active profiles";
 
-    GetProfileIds profile_id(tenant_id);
+    GetProfileIds tenant_id(_tenant_id);
 
     auto res = i_messaging->sendObject(
-        profile_id,
+        tenant_id,
         I_Messaging::Method::POST,
         "127.0.0.1",
         7777,
@@ -324,7 +326,7 @@ TenantManager::Impl::getProfileIds(const string &tenant_id) const
 
     if (!res) {
         i_messaging->sendObject(
-            profile_id,
+            tenant_id,
             I_Messaging::Method::POST,
             "127.0.0.1",
             7778,
@@ -333,7 +335,53 @@ TenantManager::Impl::getProfileIds(const string &tenant_id) const
         );
     }
 
-    return profile_id.profile_ids.get();
+    return tenant_id.profile_ids.get();
+}
+
+string
+TenantManager::Impl::getProfileId(const string &tenant_id, const string &region) const
+{
+    if (region.empty()) {
+        dbgWarning(D_TENANT_MANAGER) << "Can't find the profile ID. Region is empty";
+        return "";
+    }
+
+    vector<string> profile_ids = fetchProfileIds(tenant_id);
+
+    dbgTrace(D_TENANT_MANAGER) << "Fetched " << profile_ids.size() << " profiles";
+
+    auto i_env = Singleton::Consume<I_Environment>::by<TenantManager>();
+    auto unset_tenant_on_exit = make_scope_exit([&]() { i_env->unsetActiveTenantAndProfile(); });
+    for (const string &profile_id : profile_ids) {
+        dbgDebug(D_TENANT_MANAGER)
+            << "Checking if the profile ID: "
+            << profile_id
+            << " corresponds to the tenant ID:  "
+            << tenant_id
+            << " and the region "
+            << region;
+
+        i_env->setActiveTenantAndProfile(tenant_id, profile_id);
+
+        auto maybe_region = getSetting<string>("region");
+        if (maybe_region.ok() && region == maybe_region.unpack()) {
+            dbgDebug(D_TENANT_MANAGER) << "The region corresponds to profile ID " << profile_id;
+            return profile_id;
+        } else {
+            if (maybe_region.ok()) {
+                dbgTrace(D_TENANT_MANAGER)
+                    << "The region does not corresponds to profile ID "
+                    << profile_id
+                    << " region "
+                    << *maybe_region;
+            } else {
+                dbgDebug(D_TENANT_MANAGER) << "Failed to get region for profile ID " << profile_id;
+            }
+        }
+    }
+
+    dbgWarning(D_TENANT_MANAGER) << "Found no profile ID for tenant " << tenant_id << " and region " << region;
+    return "";
 }
 
 void
@@ -351,7 +399,16 @@ TenantManager::Impl::areTenantAndProfileActive(const string &tenant_id, const st
 void
 TenantManager::Impl::addActiveTenantAndProfile(const string &tenant_id, const string &profile_id)
 {
+    if (tenant_id.empty() || profile_id.empty()) {
+        dbgWarning(D_TENANT_MANAGER) << "Tenant ID and Profile ID should not be empty.";
+        return;
+    }
     auto tenant_profile = TenantProfilePair(tenant_id, profile_id);
+    dbgTrace(D_TENANT_MANAGER)
+        << "Adding an active tenant and profile. Tenant ID: "
+        << tenant_id
+        << ", Profile ID: "
+        << profile_id;
     active_tenants.createEntry(tenant_profile);
     if (type == TenantManagerType::CLIENT) {
         sendTenantAndProfile(tenant_id, profile_id);
@@ -410,7 +467,8 @@ TenantManager::Impl::fetchAllProfileIds(const string &tenant_id) const
 
     for (auto iter = begin(active_tenants); iter != end(active_tenants); iter++) {
         if (iter->first.getTenantId() == tenant_id) {
-            tenant_profile_ids.push_back(iter->first.getPfofileId());
+            dbgTrace(D_TENANT_MANAGER) << "Returning a fetched profile ID: " << iter->first.getProfileId();
+            tenant_profile_ids.push_back(iter->first.getProfileId());
         }
     }
     return tenant_profile_ids;
@@ -419,7 +477,7 @@ TenantManager::Impl::fetchAllProfileIds(const string &tenant_id) const
 vector<string>
 TenantManager::Impl::fetchProfileIds(const string &tenant_id) const
 {
-    dbgFlow(D_TENANT_MANAGER) << "Fetching all profile ids for tenant " << tenant_id;
+    dbgFlow(D_TENANT_MANAGER) << "Fetching all profile IDs for tenant " << tenant_id;
     return (type == TenantManagerType::CLIENT) ? getProfileIds(tenant_id) : fetchAllProfileIds(tenant_id);
 }
 
@@ -462,4 +520,5 @@ TenantManager::preload()
 {
     registerExpectedConfiguration<uint32_t>("Tenant Manager", "Tenant timeout");
     registerExpectedConfiguration<string>("Tenant Manager", "Tenant manager type");
+    registerExpectedSetting<string>("region");
 }

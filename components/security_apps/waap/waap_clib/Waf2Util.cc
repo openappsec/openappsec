@@ -41,6 +41,7 @@ using namespace std;
 USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_EVASIONS);
 USE_DEBUG_FLAG(D_WAAP_BASE64);
+USE_DEBUG_FLAG(D_WAAP_JSON);
 
 #define MIN_HEX_LENGTH 6
 #define charToDigit(c) (c - '0')
@@ -1144,6 +1145,8 @@ namespace Util {
 #define B64_TRAILERCHAR '='
 
 static bool err = false;
+// based on malicious JSON "{1:\x00}"
+static const int minimal_legal_json_size = 8;
 
 static const SingleRegex invalid_hex_evasion_re(
     "%([g-zG-Z][0-9a-zA-Z]|[0-9a-zA-Z][g-zG-Z])",
@@ -1161,17 +1164,59 @@ static const SingleRegex csp_report_policy_re(
     "csp_report_policy"
 );
 static const SingleRegex base64_key_value_detector_re(
-        "^[^<>;&\\?|=\\s]+={1}\\s*.+",
+        "^[^<>{};,&\\?|=\\s]+={1}\\s*.+",
         err,
         "base64_key_value");
+static const SingleRegex json_key_value_detector_re(
+        "^[^<>{};,&\\?|=\\s]+={.+:.+}\\z",
+        err,
+        "json_key_value");
 static const SingleRegex base64_key_detector_re(
-        "^[^<>;&\\?|=\\s]+={1}",
+        "^[^<>{};,&\\?|=\\s]+={1}",
         err,
         "base64_key");
 static const SingleRegex base64_prefix_detector_re(
         "data:\\S*;base64,\\S+|base64,\\S+",
         err,
         "base64_prefix");
+
+// looks for combination <param>={<some text>*:<some text>*}
+//used to allow parsing param=JSON to reduce false positives
+bool detectJSONasParameter(const string &string_buffer,
+        string &key,
+        string &value)
+{
+    key.clear();
+    value.clear();
+    bool is_json_candidate_detected = json_key_value_detector_re.hasMatch(string_buffer);
+
+    if (is_json_candidate_detected) {
+        dbgTrace(D_WAAP_JSON) << "===JSONdetect===:  json_key_value_detector_re test passed - looking for key";
+        string::const_iterator it = string_buffer.begin();
+        for (; it != string_buffer.end(); ++it) {
+            if (*it != '{') {
+                continue;
+            }
+            // candidate should have size 8 or more - minimum for JSON with attack
+            if ((string_buffer.end() - it) < minimal_legal_json_size) {
+                dbgTrace(D_WAAP_JSON)
+                    << "===JSONdetect===: candidate is shorter then the length"
+                    "of the shortest known json attack which is: " << minimal_legal_json_size;
+                return false;
+            }
+
+            key = std::string(string_buffer.begin(), it-1);
+            value = std::string(it, string_buffer.end());
+            break;
+        }
+    }
+    dbgTrace(D_WAAP_JSON)
+    << "===JSONdetect===:  key = '"
+    << key
+    << "', value = '"
+    << value <<"'";
+    return is_json_candidate_detected;
+}
 
 static void b64TestChunk(const string &s,
         string::const_iterator chunkStart,
@@ -2115,6 +2160,8 @@ string convertParamTypeToStr(ParamType type)
         return "urls";
     case FREE_TEXT_PARAM_TYPE:
         return "free_text";
+    case FREE_TEXT_FRENCH_PARAM_TYPE:
+        return "free_text_french";
     case PIPE_PARAM_TYPE:
         return "pipes";
     case LONG_RANDOM_TEXT_PARAM_TYPE:
@@ -2148,6 +2195,7 @@ ParamType convertTypeStrToEnum(const string& typeStr)
     {"administration_config", ParamType::ADMINISTRATOR_CONFIG_PARAM_TYPE},
     {"base64", ParamType::BASE64_PARAM_TYPE },
     {"free_text", ParamType::FREE_TEXT_PARAM_TYPE},
+    {"free_text_french", ParamType::FREE_TEXT_FRENCH_PARAM_TYPE},
     {"html_input", ParamType::HTML_PARAM_TYPE},
     {"long_random_text", ParamType::LONG_RANDOM_TEXT_PARAM_TYPE},
     {"pipes", ParamType::PIPE_PARAM_TYPE},

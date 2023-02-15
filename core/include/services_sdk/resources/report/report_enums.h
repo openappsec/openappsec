@@ -23,6 +23,7 @@ enum class StreamType {
     JSON_DEBUG,
     JSON_FOG,
     JSON_LOG_FILE,
+    JSON_K8S_SVC,
     SYSLOG,
     CEF,
 
@@ -55,6 +56,7 @@ enum class Tags {
     HTTP_GEO_FILTER,
     FILE_UPLOAD,
     IDENTITY_AWARENESS,
+    RATE_LIMIT,
 
     COUNT
 };

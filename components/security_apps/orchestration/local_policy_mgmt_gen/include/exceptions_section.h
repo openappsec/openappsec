@@ -30,34 +30,22 @@ USE_DEBUG_FLAG(D_K8S_POLICY);
 class AppsecExceptionSpec
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading AppSec exception spec";
-        parseAppsecJSONKey<std::string>("action", action, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("countryCode", country_code, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("countryName", country_name, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("hostName", host_name, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("paramName", param_name, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("paramValue", param_value, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("protectionName", protection_name, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("sourceIdentifier", source_identifier, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("sourceIp", source_ip, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("url", url, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getAction() const { return action; }
-    const std::vector<std::string> & getCountryCode() const { return country_code; }
-    const std::vector<std::string> & getCountryName() const { return country_name; }
-    const std::vector<std::string> & getHostName() const { return host_name; }
-    const std::vector<std::string> & getParamName() const { return param_name; }
-    const std::vector<std::string> & getParamValue() const { return param_value; }
-    const std::vector<std::string> & getProtectionName() const { return protection_name; }
-    const std::vector<std::string> & getSourceIdentifier() const { return source_identifier; }
-    const std::vector<std::string> & getSourceIp() const { return source_ip; }
-    const std::vector<std::string> & getUrl() const { return url; }
+    const std::string & getName() const;
+    const std::string & getAction() const;
+    const std::vector<std::string> & getCountryCode() const;
+    const std::vector<std::string> & getCountryName() const;
+    const std::vector<std::string> & getHostName() const;
+    const std::vector<std::string> & getParamName() const;
+    const std::vector<std::string> & getParamValue() const;
+    const std::vector<std::string> & getProtectionName() const;
+    const std::vector<std::string> & getSourceIdentifier() const;
+    const std::vector<std::string> & getSourceIp() const;
+    const std::vector<std::string> & getUrl() const;
 
 private:
+    std::string name;
     std::string action;
     std::vector<std::string> country_code;
     std::vector<std::string> country_name;
@@ -70,71 +58,11 @@ private:
     std::vector<std::string> url;
 };
 
-std::ostream &
-operator<<(std::ostream &os, const AppsecExceptionSpec &obj)
-{
-    os
-        << "action: "
-        << makeSeparatedStr(obj.getAction(), ",")
-        << "countryCode: "
-        << makeSeparatedStr(obj.getCountryCode(), ",")
-        << "countryName: "
-        << makeSeparatedStr(obj.getCountryName(), ",")
-        << "hostName: "
-        << makeSeparatedStr(obj.getHostName(), ",")
-        << "paramName: "
-        << makeSeparatedStr(obj.getParamName(), ",")
-        << "paramValue: "
-        << makeSeparatedStr(obj.getParamValue(), ",")
-        << "protectionName: "
-        << makeSeparatedStr(obj.getProtectionName(), ",")
-        << "sourceIdentifier: "
-        << makeSeparatedStr(obj.getSourceIdentifier(), ",")
-        << "sourceIp: "
-        << makeSeparatedStr(obj.getSourceIp(), ",")
-        << "url: "
-        << makeSeparatedStr(obj.getUrl(), ",");
-
-    return os;
-}
-
 class ExceptionMatch
 {
 public:
-    ExceptionMatch(const AppsecExceptionSpec &parsed_exception)
-            :
-        match_type(MatchType::Operator),
-        op("and")
-    {
-        if (!parsed_exception.getCountryCode().empty()) {
-            items.push_back(ExceptionMatch("countryCode", parsed_exception.getCountryCode()));
-        }
-        if (!parsed_exception.getCountryName().empty()) {
-            items.push_back(ExceptionMatch("countryName", parsed_exception.getCountryName()));
-        }
-        if (!parsed_exception.getHostName().empty()) {
-            items.push_back(ExceptionMatch("hostName", parsed_exception.getHostName()));
-        }
-        if (!parsed_exception.getParamName().empty()) {
-            items.push_back(ExceptionMatch("paramName", parsed_exception.getParamName()));
-        }
-        if (!parsed_exception.getParamValue().empty()) {
-            items.push_back(ExceptionMatch("paramValue", parsed_exception.getParamValue()));
-        }
-        if (!parsed_exception.getProtectionName().empty()) {
-            items.push_back(ExceptionMatch("protectionName", parsed_exception.getProtectionName()));
-        }
-        if (!parsed_exception.getSourceIdentifier().empty()) {
-            items.push_back(ExceptionMatch("sourceIdentifier", parsed_exception.getSourceIdentifier()));
-        }
-        if (!parsed_exception.getSourceIp().empty()) {
-            items.push_back(ExceptionMatch("sourceIp", parsed_exception.getSourceIp()));
-        }
-        if (!parsed_exception.getUrl().empty()) {
-            items.push_back(ExceptionMatch("url", parsed_exception.getUrl()));
-        }
-    }
-
+    ExceptionMatch() {}
+    ExceptionMatch(const AppsecExceptionSpec &parsed_exception);
     ExceptionMatch(const std::string &_key, const std::vector<std::string> &_value)
             :
         match_type(MatchType::Condition),
@@ -143,34 +71,7 @@ public:
         value(_value)
     {}
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        switch (match_type) {
-            case (MatchType::Condition): {
-                std::string type_str = "condition";
-                out_ar(
-                    cereal::make_nvp("key",   key),
-                    cereal::make_nvp("op",    op),
-                    cereal::make_nvp("type",  type_str),
-                    cereal::make_nvp("value", value)
-                );
-                break;
-            }
-            case (MatchType::Operator): {
-                std::string type_str = "operator";
-                out_ar(
-                    cereal::make_nvp("op",    op),
-                    cereal::make_nvp("type",  type_str),
-                    cereal::make_nvp("items", items)
-                );
-                break;
-            }
-            default: {
-                dbgError(D_K8S_POLICY) << "No match for exception match type: " << static_cast<int>(match_type);
-            }
-        }
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     MatchType match_type;
@@ -183,31 +84,14 @@ private:
 class ExceptionBehavior
 {
 public:
+    ExceptionBehavior() {}
     ExceptionBehavior(
         const std::string &_key,
-        const std::string &_value)
-            :
-        key(_key),
-        value(_value)
-    {
-        try {
-            id = to_string(boost::uuids::random_generator()());
-        } catch (const boost::uuids::entropy_error &e) {
-            dbgWarning(D_K8S_POLICY) << "Failed to generate exception behavior UUID. Error: " << e.what();
-        }
-    }
+        const std::string &_value
+    );
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("key",   key),
-            cereal::make_nvp("value", value),
-            cereal::make_nvp("id",    id)
-        );
-    }
-
-    const std::string getBehaviorId() const { return id; }
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::string getBehaviorId() const;
 
 private:
     std::string key;
@@ -218,6 +102,7 @@ private:
 class InnerException
 {
 public:
+    InnerException() {}
     InnerException(
         ExceptionBehavior _behavior,
         ExceptionMatch _match)
@@ -225,22 +110,9 @@ public:
         behavior(_behavior),
         match(_match) {}
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("behavior", behavior),
-            cereal::make_nvp("match",    match)
-        );
-    }
-
-    const std::string getBehaviorId() const { return behavior.getBehaviorId(); }
-
-    bool
-    operator<(const InnerException &other) const
-    {
-        return getBehaviorId() < other.getBehaviorId();
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::string getBehaviorId() const;
+    bool operator<(const InnerException &other) const;
 
 private:
     ExceptionBehavior behavior;
@@ -250,28 +122,8 @@ private:
 class ExceptionsRulebase
 {
 public:
-    ExceptionsRulebase(
-        std::vector<InnerException> _exceptions)
-            :
-        exceptions(_exceptions)
-    {
-        std::string context_id_str = "";
-        for (const InnerException exception : exceptions) {
-            std::string curr_id = "parameterId(" + exception.getBehaviorId() + "), ";
-            context_id_str += curr_id;
-        }
-        context_id_str = context_id_str.substr(0, context_id_str.size() - 2);
-        context = "Any(" + context_id_str + ")";
-    }
-
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("context",    context),
-            cereal::make_nvp("exceptions", exceptions)
-        );
-    }
+    ExceptionsRulebase(std::vector<InnerException> _exceptions);
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::string context;
@@ -286,11 +138,7 @@ public:
     public:
         Exception(const std::vector<ExceptionsRulebase> &_exception) : exception(_exception) {}
 
-        void
-        serialize(cereal::JSONOutputArchive &out_ar) const
-        {
-            out_ar(cereal::make_nvp("exception", exception));
-        }
+        void save(cereal::JSONOutputArchive &out_ar) const;
 
     private:
         std::vector<ExceptionsRulebase> exception;
@@ -298,13 +146,7 @@ public:
     ExceptionsWrapper(const std::vector<ExceptionsRulebase> &_exception) : exception_rulebase(Exception(_exception))
     {}
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("rulebase", exception_rulebase)
-        );
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     Exception exception_rulebase;

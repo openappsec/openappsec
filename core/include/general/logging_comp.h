@@ -24,6 +24,7 @@
 #include "i_socket_is.h"
 #include "component.h"
 #include "i_agent_details.h"
+#include "i_shell_cmd.h"
 
 class LoggingComp
         :
@@ -35,7 +36,8 @@ class LoggingComp
     Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_Logging>,
     Singleton::Consume<I_Socket>,
-    Singleton::Consume<I_AgentDetails>
+    Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_ShellCmd>
 {
 public:
     LoggingComp();

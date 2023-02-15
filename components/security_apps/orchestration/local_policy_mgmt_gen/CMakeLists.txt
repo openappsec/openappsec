@@ -1,1 +1,3 @@
-add_library(local_policy_mgmt_gen local_policy_mgmt_gen.cc)
+include_directories(include)
+
+add_library(local_policy_mgmt_gen appsec_practice_section.cc exceptions_section.cc ingress_data.cc local_policy_mgmt_gen.cc policy_maker_utils.cc rules_config_section.cc settings_section.cc snort_section.cc triggers_section.cc trusted_sources_section.cc)

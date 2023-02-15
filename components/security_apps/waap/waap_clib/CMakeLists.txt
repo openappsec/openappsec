@@ -82,6 +82,7 @@ add_library(waap_clib
     SyncLearningNotification.cc
     LogGenWrapper.cc
     WaapSampleValue.cc
+    ParserGql.cc
 )
 
 add_definitions("-Wno-unused-function")

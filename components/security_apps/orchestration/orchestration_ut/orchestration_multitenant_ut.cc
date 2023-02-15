@@ -65,7 +65,12 @@ public:
 
         EXPECT_CALL(rest, mockRestCall(RestAction::SHOW, "orchestration-status", _)).WillOnce(
             WithArg<2>(Invoke(this, &OrchestrationMultitenancyTest::setRestStatus)));
-            
+
+        EXPECT_CALL(
+            rest,
+            mockRestCall(RestAction::SET, "agent-uninstall", _)
+        ).WillOnce(Return(true));
+
         doEncrypt();
         orchestration_comp.init();
     }
@@ -417,7 +422,8 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "/etc/cp/conf/settings.json",
             expected_data_types,
             "",
-            ""
+            "",
+            false
         )
     ).WillOnce(Return(true));
 
@@ -428,7 +434,8 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "/etc/cp/conf/tenant_1236_profile_2611_settings.json",
             expected_data_types,
             "1236",
-            "2611"
+            "2611",
+            false
         )
     ).WillOnce(Return(true));
 
@@ -439,7 +446,8 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "/etc/cp/conf/tenant_1235_profile_2311_settings.json",
             expected_data_types,
             "1235",
-            "2311"
+            "2311",
+            true
         )
     ).WillOnce(Return(true));
 

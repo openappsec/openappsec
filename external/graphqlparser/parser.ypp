@@ -1,0 +1,693 @@
+/**
+ * Copyright 2019-present, GraphQL Foundation
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+%require "3"
+
+%skeleton "lalr1.cc"
+
+%defines
+%define parser_class_name {GraphQLParserImpl}
+
+%define api.token.prefix {TOK_}
+
+%define parse.error verbose
+
+%code requires
+{
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include "Ast.h"
+
+using facebook::graphql::ast::Node;
+using facebook::graphql::ast::Name;
+using facebook::graphql::ast::Definition;
+using facebook::graphql::ast::Document;
+using facebook::graphql::ast::OperationDefinition;
+using facebook::graphql::ast::VariableDefinition;
+using facebook::graphql::ast::Variable;
+using facebook::graphql::ast::SelectionSet;
+using facebook::graphql::ast::Selection;
+using facebook::graphql::ast::Field;
+using facebook::graphql::ast::Argument;
+using facebook::graphql::ast::FragmentSpread;
+using facebook::graphql::ast::InlineFragment;
+using facebook::graphql::ast::FragmentDefinition;
+using facebook::graphql::ast::Value;
+using facebook::graphql::ast::IntValue;
+using facebook::graphql::ast::FloatValue;
+using facebook::graphql::ast::StringValue;
+using facebook::graphql::ast::BooleanValue;
+using facebook::graphql::ast::NullValue;
+using facebook::graphql::ast::EnumValue;
+using facebook::graphql::ast::ListValue;
+using facebook::graphql::ast::ObjectValue;
+using facebook::graphql::ast::ObjectField;
+using facebook::graphql::ast::Directive;
+using facebook::graphql::ast::Type;
+using facebook::graphql::ast::NamedType;
+using facebook::graphql::ast::ListType;
+using facebook::graphql::ast::NonNullType;
+
+// Experimental schema support.
+using facebook::graphql::ast::SchemaDefinition;
+using facebook::graphql::ast::ScalarTypeDefinition;
+using facebook::graphql::ast::ObjectTypeDefinition;
+using facebook::graphql::ast::InterfaceTypeDefinition;
+using facebook::graphql::ast::UnionTypeDefinition;
+using facebook::graphql::ast::EnumTypeDefinition;
+using facebook::graphql::ast::InputObjectTypeDefinition;
+using facebook::graphql::ast::TypeExtensionDefinition;
+using facebook::graphql::ast::DirectiveDefinition;
+using facebook::graphql::ast::SchemaDefinition;
+using facebook::graphql::ast::OperationTypeDefinition;
+using facebook::graphql::ast::ScalarTypeDefinition;
+using facebook::graphql::ast::ObjectTypeDefinition;
+using facebook::graphql::ast::FieldDefinition;
+using facebook::graphql::ast::InputValueDefinition;
+using facebook::graphql::ast::InterfaceTypeDefinition;
+using facebook::graphql::ast::UnionTypeDefinition;
+using facebook::graphql::ast::EnumTypeDefinition;
+using facebook::graphql::ast::EnumValueDefinition;
+using facebook::graphql::ast::InputObjectTypeDefinition;
+using facebook::graphql::ast::TypeExtensionDefinition;
+using facebook::graphql::ast::DirectiveDefinition;
+
+union yystype {                                         \
+    const char *str;                                    \
+    const char *heapStr;                                \
+    Name *name;                                         \
+    Definition *definition;                             \
+    Document *document;                                 \
+    OperationDefinition *operationDefinition;           \
+    VariableDefinition *variableDefinition;             \
+    Variable *variable;                                 \
+    SelectionSet *selectionSet;                     \
+    Selection *selection;                           \
+    Field *field;                                   \
+    Argument *argument;                             \
+    FragmentSpread *fragmentSpread;                 \
+    InlineFragment *inlineFragment;                 \
+    FragmentDefinition *fragmentDefinition;         \
+    Value *value;                                   \
+    IntValue *intValue;                             \
+    FloatValue *floatValue;                         \
+    StringValue *stringValue;                       \
+    BooleanValue *booleanValue;                     \
+    NullValue *nullValue;                           \
+    EnumValue *enumValue;                           \
+    ListValue *arrayValue;                          \
+    ObjectValue *objectValue;                       \
+    ObjectField *objectField;                       \
+    Directive *directive;                           \
+    Type *type;                                     \
+    NamedType *namedType;                           \
+    ListType *listType;                             \
+    NonNullType *nonNullType;                       \
+    \
+    std::vector<std::unique_ptr<Definition>> *definitionList;       \
+    std::vector<std::unique_ptr<VariableDefinition>> *variableDefinitionList; \
+    std::vector<std::unique_ptr<Selection>> *selectionList;         \
+    std::vector<std::unique_ptr<Field>> *fieldList;                 \
+    std::vector<std::unique_ptr<Argument>> *argumentList;           \
+    std::vector<std::unique_ptr<Value>> *valueList;                 \
+    std::vector<std::unique_ptr<ObjectField>> *objectFieldList;     \
+    std::vector<std::unique_ptr<Directive>> *directiveList;         \
+                                                                    \
+    SchemaDefinition *schemaDefinition;                             \
+    ScalarTypeDefinition *scalarTypeDefinition;                     \
+    ObjectTypeDefinition *objectTypeDefinition;                     \
+    InterfaceTypeDefinition *interfaceTypeDefinition;               \
+    UnionTypeDefinition *unionTypeDefinition;                       \
+    EnumTypeDefinition *enumTypeDefinition;                         \
+    InputObjectTypeDefinition *inputObjectTypeDefinition;           \
+    TypeExtensionDefinition *typeExtensionDefinition;               \
+    DirectiveDefinition *directiveDefinition;                       \
+    OperationTypeDefinition *operationTypeDefinition;               \
+    InputValueDefinition *inputValueDefinition;                     \
+    FieldDefinition *fieldDefinition;                               \
+    EnumValueDefinition *enumValueDefinition;                       \
+    \
+    std::vector<std::unique_ptr<OperationTypeDefinition>> *operationTypeDefinitionList; \
+    std::vector<std::unique_ptr<NamedType>> *typeNameList;          \
+    std::vector<std::unique_ptr<InputValueDefinition>> *inputValueDefinitionList; \
+    std::vector<std::unique_ptr<FieldDefinition>> *fieldDefinitionList; \
+    std::vector<std::unique_ptr<Name>> *nameList;          \
+    std::vector<std::unique_ptr<EnumValueDefinition>> *enumValueDefinitionList; \
+};
+
+#define YYSTYPE union yystype
+#define YYLTYPE yy::location
+
+}
+
+%lex-param { void *scanner }
+%parse-param { bool enableSchema } { Node **outAST } { const char **outError } { void *scanner }
+
+%locations
+
+%code
+{
+#include "lexer.h"
+#include "syntaxdefs.h"
+}
+
+%token EOF 0
+%token <str> DIRECTIVE "directive"
+%token <str> ENUM "enum"
+%token <str> EXTEND "extend"
+%token <str> FALSE "false"
+%token <str> FRAGMENT "fragment"
+%token <str> IMPLEMENTS "implements"
+%token <str> INPUT "input"
+%token <str> INTERFACE "interface"
+%token <str> MUTATION "mutation"
+%token <str> NULL "null"
+%token <str> QUERY "query"
+%token <str> ON "on"
+%token <str> SCALAR "scalar"
+%token <str> SCHEMA "schema"
+%token <str> SUBSCRIPTION "subscription"
+%token <str> TRUE "true"
+%token <str> TYPE "type"
+%token <str> UNION "union"
+%token BANG "!"
+%token LPAREN "("
+%token RPAREN ")"
+%token ELLIPSIS "..."
+%token COLON ":"
+%token EQUAL "="
+%token AT "@"
+%token LBRACKET "["
+%token RBRACKET "]"
+%token LBRACE "{"
+%token PIPE "|"
+%token RBRACE "}"
+
+%token <str> VARIABLE
+%token <str> INTEGER
+%token <str> FLOAT
+%token <str> STRING
+%token <str> IDENTIFIER
+
+%type <variable> variable
+%type <intValue> int_value
+%type <floatValue> float_value
+%type <stringValue> string_value
+
+%type <document> start
+%type <document> document
+%type <name> fragment_name
+%type <name> name
+%type <name> name_opt
+
+%type <definitionList> definition_list
+%type <definition> definition
+%type <definition> schema_gate
+
+%type <operationDefinition> operation_definition
+%type <variableDefinitionList> variable_definitions
+%type <variableDefinitionList> variable_definition_list
+%type <variableDefinition> variable_definition
+%type <value> default_value_opt
+%type <value> default_value
+%type <selectionSet> selection_set
+%type <selectionSet> selection_set_opt
+%type <selectionList> selection_list
+%type <selection> selection
+%type <field> field
+%type <argumentList> arguments_opt
+%type <argumentList> arguments
+%type <argumentList> argument_list
+%type <argument> argument
+
+%type <fragmentSpread> fragment_spread
+%type <inlineFragment> inline_fragment
+%type <fragmentDefinition> fragment_definition
+%type <namedType> type_condition
+
+%type <value> value
+%type <value> value_const
+%type <booleanValue> boolean_value
+%type <nullValue> null_value
+%type <enumValue> enum_value
+%type <arrayValue> list_value
+%type <arrayValue> list_value_const
+%type <valueList> value_list
+%type <valueList> value_const_list
+%type <objectValue> object_value
+%type <objectValue> object_value_const
+%type <objectFieldList> object_field_list
+%type <objectFieldList> object_field_const_list
+%type <objectField> object_field
+%type <objectField> object_field_const
+
+
+%type <directiveList> directives
+%type <directiveList> directives_opt
+%type <directiveList> directive_list
+%type <directive> directive
+
+%type <type> type
+%type <namedType> type_name
+%type <listType> list_type
+%type <nonNullType> non_null_type
+
+%type <heapStr> operation_type
+
+%type <schemaDefinition> schema_definition;
+%type <scalarTypeDefinition> scalar_type_definition;
+%type <objectTypeDefinition> object_type_definition;
+%type <interfaceTypeDefinition> interface_type_definition;
+%type <unionTypeDefinition> union_type_definition;
+%type <enumTypeDefinition> enum_type_definition;
+%type <inputObjectTypeDefinition> input_object_type_definition;
+%type <typeExtensionDefinition> type_extension_definition;
+%type <directiveDefinition> directive_definition;
+%type <operationTypeDefinition> operation_type_definition;
+%type <operationTypeDefinitionList> operation_type_definition_list;
+%type <typeNameList> type_name_list;
+%type <typeNameList> implements_interfaces_opt;
+%type <typeNameList> union_members;
+%type <fieldDefinition> field_definition;
+%type <fieldDefinitionList> field_definition_list;
+%type <inputValueDefinitionList> arguments_definition_opt; 
+%type <inputValueDefinitionList> arguments_definition;
+%type <inputValueDefinitionList> input_value_definition_list;
+%type <inputValueDefinition> input_value_definition;
+%type <enumValueDefinition> enum_value_definition;
+%type <nameList> directive_locations;
+%type <enumValueDefinitionList> enum_value_definition_list;
+
+%destructor { } <str>
+%destructor { free((void *)$$); } <heapStr>
+%destructor { } <document>  /* we steal it and put it in outAST, don't free! */
+%destructor { delete $$; } <*>
+
+%printer { yyoutput << $$; } <str>
+
+%%
+
+start:          document  { *outAST = $1; }
+        ;
+
+/* All of the non-identifier tokens are to accommodate various flavors
+   of name that don't include those tokens. */
+fragment_name:  DIRECTIVE { $$ = new Name(@1, strdup($1)); }
+        |       ENUM { $$ = new Name(@1, strdup($1)); }
+        |       EXTEND { $$ = new Name(@1, strdup($1)); }
+        |       FALSE { $$ = new Name(@1, strdup($1)); }
+        |       FRAGMENT { $$ = new Name(@1, strdup($1)); }
+        |       IDENTIFIER { $$ = new Name(@1, strdup($1)); }
+        |       IMPLEMENTS { $$ = new Name(@1, strdup($1)); }
+        |       INPUT { $$ = new Name(@1, strdup($1)); }
+        |       INTERFACE { $$ = new Name(@1, strdup($1)); }
+        |       MUTATION { $$ = new Name(@1, strdup($1)); }
+        |       NULL { $$ = new Name(@1, strdup($1)); }
+        |       QUERY { $$ = new Name(@1, strdup($1)); }
+        |       SCALAR { $$ = new Name(@1, strdup($1)); }
+        |       SCHEMA { $$ = new Name(@1, strdup($1)); }
+        |       SUBSCRIPTION { $$ = new Name(@1, strdup($1)); }
+        |       TRUE { $$ = new Name(@1, strdup($1)); }
+        |       TYPE { $$ = new Name(@1, strdup($1)); }
+        |       UNION { $$ = new Name(@1, strdup($1)); }
+        ;
+
+name: fragment_name
+        |       ON { $$ = new Name(@1, strdup($1)); }
+        ;
+
+name_opt:
+                %empty {$$ = nullptr;}
+        |       name
+        ;
+
+/* 2.2 Document */
+
+document:       definition_list { $$ = new Document(@$, $1); }
+        ;
+                
+definition_list:definition { $$ = new std::vector<std::unique_ptr<Definition>>(); $$->emplace_back($1); }
+        |       definition_list definition { $1->emplace_back($2); $$ = $1; }
+        ;
+
+definition:     operation_definition { $$ = static_cast<Definition *>($1); }
+        |       fragment_definition { $$ = static_cast<Definition *>($1); }
+        |       schema_gate {
+            if (!enableSchema) {
+              error(@$, "schema support disabled");
+              // %destructor doesn't work with YYERROR. See
+              // https://www.gnu.org/software/bison/manual/html_node/Destructor-Decl.html
+              delete $$;
+              YYERROR;
+            }
+            $$ = static_cast<Definition *>($1);
+          }
+        ;
+
+schema_gate:    schema_definition { $$ = static_cast<Definition *>($1); }
+        |       scalar_type_definition { $$ = static_cast<Definition *>($1); }
+        |       object_type_definition { $$ = static_cast<Definition *>($1); }
+        |       interface_type_definition { $$ = static_cast<Definition *>($1); }
+        |       union_type_definition { $$ = static_cast<Definition *>($1); }
+        |       enum_type_definition { $$ = static_cast<Definition *>($1); }
+        |       input_object_type_definition { $$ = static_cast<Definition *>($1); }
+        |       type_extension_definition { $$ = static_cast<Definition *>($1); }
+        |       directive_definition { $$ = static_cast<Definition *>($1); }
+        ;
+
+
+/* 2.2.1 Operations */
+operation_definition:
+                selection_set { $$ = new OperationDefinition(@$, strdup("query"), nullptr, nullptr, nullptr, $1); }
+        |       operation_type name_opt selection_set { $$ = new OperationDefinition(@$, $1, $2, nullptr, nullptr, $3); }
+        |       operation_type name_opt variable_definitions selection_set { $$ = new OperationDefinition(@$, $1, $2, $3, nullptr, $4); }
+        |       operation_type name_opt directives selection_set { $$ = new OperationDefinition(@$, $1, $2, nullptr, $3, $4); }
+        |       operation_type name_opt variable_definitions directives selection_set { $$ = new OperationDefinition(@$, $1, $2, $3, $4, $5); }
+        ;
+
+operation_type: QUERY { $$ = strdup($1); }
+        |       MUTATION { $$ = strdup($1); }
+        |       SUBSCRIPTION { $$ = strdup($1); }
+        ;
+
+variable_definitions:
+                "(" variable_definition_list ")" { $$ = $2; }
+        ;
+
+variable_definition_list:
+                variable_definition { $$ = new std::vector<std::unique_ptr<VariableDefinition>>(); $$->emplace_back($1); }
+        |       variable_definition_list variable_definition { $1->emplace_back($2); $$ = $1; }
+        ;
+
+variable:       VARIABLE { $$ = new Variable(@$, new Name(@1, strdup($1))); }
+        ;
+
+variable_definition:
+                variable ":" type default_value_opt { $$ = new VariableDefinition(@$, $1, $3, $4); }
+        ;
+
+default_value_opt:
+                %empty { $$ = nullptr; }
+        |       default_value
+        ;
+
+default_value:  "=" value_const { $$ = $2; }
+        ;
+
+selection_set:
+                  "{" selection_list "}" { $$ = new SelectionSet(@$, $2); }
+        ;
+
+selection_set_opt:
+                %empty { $$ = nullptr; }
+        |       selection_set
+        ;
+selection_list: selection { $$ = new std::vector<std::unique_ptr<Selection>>(); $$->emplace_back($1); }
+        |       selection_list selection { $1->emplace_back($2); $$ = $1; }
+        ;
+
+selection:      field { $$ = static_cast<Selection *>($1); }
+        |       fragment_spread { $$ = static_cast<Selection *>($1); }
+        |       inline_fragment { $$ = static_cast<Selection *>($1); }
+        ;
+
+field:          name arguments_opt directives_opt selection_set_opt { $$ = new Field(@$, nullptr, $1, $2, $3, $4); }
+        |       name ":" name arguments_opt directives_opt selection_set_opt { $$ = new Field(@$, $1, $3, $4, $5, $6); }
+        ;
+
+arguments:      "(" argument_list ")" { $$ = $2; }
+        ;
+
+arguments_opt:  %empty { $$ = nullptr; }
+        |       arguments { $$ = $1; }
+        ;
+
+argument_list:  argument { $$ = new std::vector<std::unique_ptr<Argument>>(); $$->emplace_back($1); }
+        |       argument_list argument { $1->emplace_back($2); $$ = $1; }
+        ;
+
+argument:       name ":" value { $$ = new Argument(@$, $1, $3); }
+        ;
+
+/* 2.2.6 Fragments */
+fragment_spread:
+                "..." fragment_name directives_opt { $$ = new FragmentSpread(@$, $2, $3); }
+        ;
+
+inline_fragment:
+                "..." "on" type_condition directives_opt selection_set { $$ = new InlineFragment(@$, $3, $4, $5); }
+        |       "..." directives_opt selection_set { $$ = new InlineFragment(@$, nullptr, $2, $3); }
+        ;
+
+fragment_definition:
+                "fragment" fragment_name "on" type_condition directives_opt selection_set { $$ = new FragmentDefinition(@$, $2, $4, $5, $6); }
+        ;
+
+type_condition: type_name
+        ;
+
+/* 2.2.7 Input Values */
+value:          variable { $$ = static_cast<Value *>($1); }
+        |       int_value { $$ = static_cast<Value *>($1); }
+        |       float_value { $$ = static_cast<Value *>($1); }
+        |       string_value { $$ = static_cast<Value *>($1); }
+        |       boolean_value { $$ = static_cast<Value *>($1); }
+        |       null_value { $$ = static_cast<Value *>($1); }
+        |       enum_value { $$ = static_cast<Value *>($1); }
+        |       list_value { $$ = static_cast<Value *>($1); }
+        |       object_value { $$ = static_cast<Value *>($1); }
+        ;
+
+int_value:      INTEGER { $$ = new IntValue(@$, strdup($1)); }
+        ;
+
+float_value:    FLOAT { $$ = new FloatValue(@$, strdup($1)); }
+        ;
+
+string_value:   STRING { $$ = new StringValue(@$, strdup($1)); }
+        ;
+
+value_const:    int_value { $$ = static_cast<Value *>($1); }
+        |       float_value { $$ = static_cast<Value *>($1); }
+        |       string_value { $$ = static_cast<Value *>($1); }
+        |       boolean_value { $$ = static_cast<Value *>($1); }
+        |       null_value { $$ = static_cast<Value *>($1); }
+        |       enum_value { $$ = static_cast<Value *>($1); }
+        |       list_value_const { $$ = static_cast<Value *>($1); }
+        |       object_value_const { $$ = static_cast<Value *>($1); }
+        ;
+
+boolean_value:  TRUE { $$ = new BooleanValue(@$, true); }
+        |       FALSE { $$ = new BooleanValue(@$, false); }
+        ;
+
+null_value:     NULL { $$ = new NullValue(@$); }
+        ;
+
+enum_value:     DIRECTIVE { $$ = new EnumValue(@$, strdup($1)); }
+        |       ENUM { $$ = new EnumValue(@$, strdup($1)); }
+        |       EXTEND { $$ = new EnumValue(@$, strdup($1)); }
+        |       FRAGMENT { $$ = new EnumValue(@$, strdup($1)); }
+        |       IDENTIFIER { $$ = new EnumValue(@$, strdup($1)); }
+        |       IMPLEMENTS { $$ = new EnumValue(@$, strdup($1)); }
+        |       INPUT { $$ = new EnumValue(@$, strdup($1)); }
+        |       INTERFACE { $$ = new EnumValue(@$, strdup($1)); }
+        |       MUTATION { $$ = new EnumValue(@$, strdup($1)); }
+        |       ON { $$ = new EnumValue(@$, strdup($1)); }
+        |       QUERY { $$ = new EnumValue(@$, strdup($1)); }
+        |       SCALAR { $$ = new EnumValue(@$, strdup($1)); }
+        |       SCHEMA { $$ = new EnumValue(@$, strdup($1)); }
+        |       SUBSCRIPTION { $$ = new EnumValue(@$, strdup($1)); }
+        |       TYPE { $$ = new EnumValue(@$, strdup($1)); }
+        |       UNION { $$ = new EnumValue(@$, strdup($1)); }
+        ;
+
+/* 2.2.7.6 List Value */
+
+/* REVIEW: the empty case is inefficient; consider implementing
+   ListValue manually. Don't forget to also do list_value_const. */
+list_value:    "[" "]" { $$ = new ListValue(@$, new std::vector<std::unique_ptr<Value>>()); }
+        |       "[" value_list "]" { $$ = new ListValue(@$, $2); }
+        ;
+
+value_list:     value { $$ = new std::vector<std::unique_ptr<Value>>(); $$->emplace_back($1); }
+        |       value_list value { $1->emplace_back($2); $$ = $1; }
+        ;
+
+list_value_const:
+                "[" "]" { $$ = new ListValue(@$, new std::vector<std::unique_ptr<Value>>()); }
+        |       "[" value_const_list "]" { $$ = new ListValue(@$, $2); }
+        ;
+
+value_const_list:
+                value_const { $$ = new std::vector<std::unique_ptr<Value>>(); $$->emplace_back($1); }
+        |       value_const_list value_const { $1->emplace_back($2); $$ = $1; }
+        ;
+
+/* 2.2.7.7 Object Value */
+/* REVIEW: Inefficient, like ListValue. */
+object_value:   "{" "}" { $$ = new ObjectValue(@$, new std::vector<std::unique_ptr<ObjectField>>()); }
+        |       "{" object_field_list "}" { $$ = new ObjectValue(@$, $2); }
+        ;
+
+object_field_list:
+                object_field { $$ = new std::vector<std::unique_ptr<ObjectField>>(); $$->emplace_back($1); }
+        |       object_field_list object_field { $1->emplace_back($2); $$ = $1; }
+        ;
+
+object_field:   name ":" value { $$ = new ObjectField(@$, $1, $3); }
+        ;
+
+object_value_const:
+                "{" "}" { $$ = new ObjectValue(@$, new std::vector<std::unique_ptr<ObjectField>>()); }
+        |       "{" object_field_const_list "}" { $$ = new ObjectValue(@$, $2); }
+        ;
+
+object_field_const_list:
+                object_field_const { $$ = new std::vector<std::unique_ptr<ObjectField>>(); $$->emplace_back($1); }
+        |       object_field_const_list object_field_const { $1->emplace_back($2); $$ = $1; }
+        ;
+
+object_field_const: name ":" value_const { $$ = new ObjectField(@$, $1, $3); }
+        ;
+
+/* 2.2.10 Directives */
+
+directives:     directive_list
+        ;
+
+directives_opt: %empty { $$ = nullptr; }
+        |       directives
+        ;
+
+directive_list: directive { $$ = new std::vector<std::unique_ptr<Directive>>(); $$->emplace_back($1); }
+        |       directive_list directive { $1->emplace_back($2); $$ = $1; }
+        ;
+
+directive:      "@" name arguments_opt { $$ = new Directive(@$, $2, $3); }
+        ;
+
+/* 2.2.9 Types */
+
+type:           type_name { $$ = static_cast<Type *>($1); }
+        |       list_type { $$ = static_cast<Type *>($1); }
+        |       non_null_type { $$ = static_cast<Type *>($1); }
+        ;
+
+type_name:      name { $$ = new NamedType(@$, $1); }
+        ;
+
+list_type:      "[" type "]" { $$ = new ListType(@$, $2); }
+        ;
+
+non_null_type:  type_name "!" { $$ = new NonNullType(@$, $1); }
+        |       list_type "!" { $$ = new NonNullType(@$, $1); }
+        ;
+
+/* Experimental schema parsing support. */
+
+schema_definition: SCHEMA directives_opt "{" operation_type_definition_list "}" { $$ = new SchemaDefinition(@$, $2, $4); }
+                ;
+
+operation_type_definition_list:
+                operation_type_definition { $$ = new std::vector<std::unique_ptr<OperationTypeDefinition>>(); $$->emplace_back($1); }
+        |       operation_type_definition_list operation_type_definition { $1->emplace_back($2); $$ = $1; }
+        ;
+
+operation_type_definition:
+                operation_type ":" type_name { $$ = new OperationTypeDefinition(@$, $1, $3); }
+                ;
+
+scalar_type_definition: SCALAR name directives_opt { $$ = new ScalarTypeDefinition(@$, $2, $3); }
+                ;
+
+object_type_definition: TYPE name implements_interfaces_opt directives_opt "{" field_definition_list "}" { $$ = new ObjectTypeDefinition(@$, $2, $3, $4, $6); }
+                ;
+
+implements_interfaces_opt: %empty { $$ = nullptr; }
+        |       IMPLEMENTS type_name_list { $$ = $2; }
+                ;
+
+type_name_list: type_name { $$ = new std::vector<std::unique_ptr<NamedType>>(); $$->emplace_back($1); }
+        |       type_name_list type_name { $1->emplace_back($2); $$ = $1; }
+                ;
+
+field_definition: name arguments_definition_opt ":" type directives_opt { $$ = new FieldDefinition(@$, $1, $2, $4, $5); }
+                ;
+
+field_definition_list:
+                        field_definition { $$ = new std::vector<std::unique_ptr<FieldDefinition>>(); $$->emplace_back($1); }
+        |       field_definition_list field_definition { $1->emplace_back($2); $$ = $1; }
+        ;
+
+arguments_definition_opt: %empty { $$ = nullptr; }
+        |       arguments_definition { $$ = $1; }
+                ;
+
+arguments_definition: "(" input_value_definition_list ")" { $$ = $2; }
+                ;
+
+input_value_definition_list: input_value_definition { $$ = new std::vector<std::unique_ptr<InputValueDefinition>>(); $$->emplace_back($1); }
+        |       input_value_definition_list input_value_definition { $1->emplace_back($2); $$ = $1; }
+                ;
+
+input_value_definition: name ":" type default_value_opt directives_opt { $$ = new InputValueDefinition(@$, $1, $3, $4, $5); }
+
+interface_type_definition: INTERFACE name directives_opt "{" field_definition_list "}" { $$ = new InterfaceTypeDefinition(@$, $2, $3, $5); }
+                ;
+
+union_type_definition: UNION name directives_opt "=" union_members { $$ = new UnionTypeDefinition(@$, $2, $3, $5); }
+                ;
+
+union_members:  type_name { $$ = new std::vector<std::unique_ptr<NamedType>>();  $$->emplace_back($1); }
+        |       union_members "|" type_name { $1->emplace_back($3); $$ = $1; }
+        ;
+
+enum_type_definition: ENUM name directives_opt "{" enum_value_definition_list "}" { $$ = new EnumTypeDefinition(@$, $2, $3, $5); }
+                ;
+
+enum_value_definition: name directives_opt { $$ = new EnumValueDefinition(@$, $1, $2); }
+                ;
+
+enum_value_definition_list:
+                enum_value_definition { $$ = new std::vector<std::unique_ptr<EnumValueDefinition>>(); $$->emplace_back($1); }
+        |       enum_value_definition_list enum_value_definition { $1->emplace_back($2); $$ = $1; }
+        ;
+
+input_object_type_definition: INPUT name directives_opt "{" input_value_definition_list "}" { $$ = new InputObjectTypeDefinition(@$, $2, $3, $5); }
+                ;
+
+type_extension_definition: EXTEND object_type_definition { $$ = new TypeExtensionDefinition(@$, $2); }
+                ;
+
+directive_definition: DIRECTIVE "@" name arguments_definition_opt ON directive_locations { $$ = new DirectiveDefinition(@$, $3, $4, $6); }
+                ;
+
+directive_locations:
+                name { $$ = new std::vector<std::unique_ptr<Name>>(); $$->emplace_back($1); }
+        |       directive_locations "|" name { $1->emplace_back($3); $$ = $1; }
+        ;
+
+%%
+
+void yy::GraphQLParserImpl::error(const yy::location &loc, const std::string &str) {
+  std::ostringstream out;
+  out << loc << ": " << str;
+  if (outError) {
+    *outError = strdup(out.str().c_str());
+  }
+}
+
+/* Workaround for syntax_error ctor being marked inline, which causes link
+   errors if used from lexer.lpp. */
+yy::GraphQLParserImpl::syntax_error make_error(const yy::location &loc, const std::string &str) {
+  return yy::GraphQLParserImpl::syntax_error(loc, str);
+}

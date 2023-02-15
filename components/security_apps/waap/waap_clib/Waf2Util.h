@@ -858,6 +858,10 @@ namespace Util {
         std::string::const_iterator e,
         std::string &repl);
 
+    bool detectJSONasParameter(const std::string &s,
+            std::string &key,
+            std::string &value);
+
     void b64Decode(
             const std::string &s,
             RegexSubCallback_f cb,

@@ -122,9 +122,9 @@ LocalCommunication::getUpdate(CheckUpdateRequest &request)
 }
 
 Maybe<string>
-LocalCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
+LocalCommunication::downloadAttributeFile(const GetResourceFile &resource_file)
 {
-    auto file_name = resourse_file.getFileName();
+    auto file_name = resource_file.getFileName();
 
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalCommunication>();
     if (file_name.compare("policy") == 0) {
@@ -163,8 +163,8 @@ LocalCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         ));
     }
 
-    dbgError(D_ORCHESTRATOR) << "Unknown resourse file name " << file_name;
-    return genError("Failed to detect resourse file name " + file_name);
+    dbgError(D_ORCHESTRATOR) << "Unknown resource file name " << file_name;
+    return genError("Failed to detect resource file name " + file_name);
 }
 
 void

@@ -161,26 +161,6 @@ IPAddr::createIPAddr(const string &ip_text)
 
 bool IPAddr::isValidIPAddr(const string &ip_text) { return createIPAddr(ip_text).ok(); }
 
-IPAddressConfig::IPAddressConfig(const string &ip_string)
-{
-    auto maybe_address = IPAddr::createIPAddr(ip_string);
-    if (maybe_address.ok()) address = maybe_address.unpack();
-}
-
-void
-IPAddressConfig::load(cereal::JSONInputArchive &ar)
-{
-    string ip_string;
-    ar(cereal::make_nvp("IPAddress", ip_string));
-    auto ip_address = IPAddr::createIPAddr(ip_string);
-    if (!ip_address.ok()) {
-        throw Config::ConfigException(
-            "Failed to create an IP address from " + ip_string + ": " + ip_address.getErr()
-        );
-    }
-    address = ip_address.unpack();
-}
-
 const string ConnKey::network_key = "NetworkKey";
 
 template<typename Num>

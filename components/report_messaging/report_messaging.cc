@@ -28,15 +28,18 @@ ReportMessaging::~ReportMessaging()
     LogRest log_rest(report);
 
     auto messaging = Singleton::Consume<I_Messaging>::by<ReportMessaging>();
-    messaging->sendObjectWithPersistence(
-        log_rest,
-        I_Messaging::Method::POST,
-        url,
-        "",
-        true,
-        message_type_tag,
-        is_async_message
-    );
+    try {
+        messaging->sendObjectWithPersistence(
+            log_rest,
+            I_Messaging::Method::POST,
+            url,
+            "",
+            true,
+            message_type_tag,
+            is_async_message
+        );
+    } catch (...) {
+    }
 }
 
 ReportMessaging &

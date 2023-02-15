@@ -129,17 +129,29 @@ SourceReputationFeaturesAgg::addHeaders(const ReputationFeaturesEntry &entry)
     }
 
     const auto &referer_header_itr = headers.find("referer");
-    if (referer_header_itr == headers.cend()) {
+    if (referer_header_itr == headers.cend() || referer_header_itr->second.empty()) {
         m_referer_count.na++;
     } else {
         const string &uri = referer_header_itr->second;
-        size_t scheme_end_pos = uri.find("://") + 3;
-        size_t authority_end_pos = uri.find("/", scheme_end_pos + 1);
-        string authority = uri.substr(scheme_end_pos + 1, authority_end_pos);
-        if (authority.find(entry.getHost()) != string::npos) {
-            m_referer_count.external_host++;
+        size_t scheme_end_pos = uri.find("://");
+        if (scheme_end_pos != string::npos) {
+            string authority;
+            scheme_end_pos = scheme_end_pos + 3;
+            size_t authority_end_pos = uri.find("/", scheme_end_pos);
+            if (authority_end_pos == string::npos) {
+                authority = uri.substr(scheme_end_pos);
+            } else {
+                authority = uri.substr(scheme_end_pos, authority_end_pos - scheme_end_pos);
+            }
+
+            if (authority.find(entry.getHost()) != string::npos) {
+                m_referer_count.internal_host++;
+            } else {
+                m_referer_count.external_host++;
+            }
         } else {
-            m_referer_count.internal_host++;
+            m_referer_count.external_host++;
+            dbgTrace(D_WAAP_REPUTATION) << "No scheme found in referer header: " << uri;
         }
     }
 

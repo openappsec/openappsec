@@ -42,6 +42,7 @@ public:
     virtual bool shouldFilterKeyword(const std::string &key, const std::string &keyword) const;
     virtual void filterKeywords(const std::string &key, Waap::Keywords::KeywordsSet& keywords,
         std::vector<std::string>& filteredKeywords);
+    std::set<std::string> &getMatchedOverrideKeywords(void);
 
     void pushSample(const std::string& key, const std::string& sample, IWaf2Transaction* pTransaction);
 
@@ -67,4 +68,5 @@ private:
     std::shared_ptr<Waap::TrustedSources::TrustedSourcesParameter> m_trustedSrcParams;
     ScannerDetector m_ignoreSources;
     TuningDecision m_tuning;
+    std::set<std::string> m_matchedOverrideKeywords;
 };

@@ -200,6 +200,11 @@ public:
     std::set<ParameterBehavior>
     getBehavior(const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
 
+    std::set<ParameterBehavior>
+    getBehavior(
+            const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
+            std::set<std::string> &matched_override_keywords) const;
+
     static bool isGeoLocationExceptionExists() { return is_geo_location_exception_exists; }
 
 private:
@@ -217,5 +222,7 @@ private:
     static bool is_geo_location_exception_exists;
     static bool is_geo_location_exception_being_loaded;
 };
+
+static const ParameterBehavior action_ignore(BehaviorKey::ACTION, BehaviorValue::IGNORE);
 
 #endif //__PARAMETERS_CONFIG_H__

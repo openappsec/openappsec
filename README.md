@@ -78,12 +78,13 @@ Before compiling the services, you'll need to ensure the latest development vers
 * GTest
 * GMock
 * cURL
+* Python2
 
 An example of installing the packages on Alpine:
 
 ```bash
  $ apk update
- $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev
+ $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev python2
 ```
 
 ## Compiling and packaging the agent code

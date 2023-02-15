@@ -79,7 +79,7 @@ public:
     }
 
     std::string
-    getPfofileId() const
+    getProfileId() const
     {
         return profile_id;
     }

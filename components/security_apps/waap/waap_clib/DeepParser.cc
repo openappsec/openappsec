@@ -17,6 +17,7 @@
 #include "ParserUrlEncode.h"
 #include "PHPSerializedDataParser.h"
 #include "ParserJson.h"
+#include "ParserGql.h"
 #include "ParserConfluence.h"
 #include "ParserXML.h"
 #include "ParserHTML.h"
@@ -231,26 +232,30 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
 
     bool base64ParamFound = false;
     dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
-    std::string base64_decoded_val, base64_key;
+    std::string decoded_val, key;
     base64_variants base64_status = Waap::Util::b64Test (cur_val,
-            base64_key,
-            base64_decoded_val);
+            key,
+            decoded_val);
 
-    dbgTrace(D_WAAP_DEEP_PARSER) << " status = " << base64_status
-            << " key = " << base64_key
-            << " value = " << base64_decoded_val;
+    dbgTrace(D_WAAP_DEEP_PARSER)
+        << " status = "
+        << base64_status
+        << " key = "
+        << key
+        << " value = "
+        << decoded_val;
 
     switch (base64_status) {
     case SINGLE_B64_CHUNK_CONVERT:
-        cur_val = base64_decoded_val;
+        cur_val = decoded_val;
         base64ParamFound = true;
         break;
     case KEY_VALUE_B64_PAIR:
         // going deep with new pair in case value is not empty
-        if (base64_decoded_val.size() > 0) {
-            cur_val = base64_decoded_val;
+        if (decoded_val.size() > 0) {
+            cur_val = decoded_val;
             base64ParamFound = true;
-            rc = onKv(base64_key.c_str(), base64_key.size(), cur_val.data(), cur_val.size(), flags);
+            rc = onKv(key.c_str(), key.size(), cur_val.data(), cur_val.size(), flags);
             dbgTrace(D_WAAP_DEEP_PARSER) << " rc = " << rc;
             if (rc != CONTINUE_PARSING) {
                 return rc;
@@ -323,6 +328,7 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
         }
     }
 
+
     // Parse buffer
 
     // Note: API report does not include output of "PIPE" and similar extracted stuff.
@@ -363,6 +369,21 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
     if (rc != CONTINUE_PARSING)
     {
         return rc;
+    }
+
+    if (Waap::Util::detectJSONasParameter(cur_val, key, decoded_val)) {
+        dbgTrace(D_WAAP_DEEP_PARSER)
+            << " detectJSONasParameter was  true: key = "
+            << key
+            << " value = "
+            << decoded_val;
+
+        rc = onKv(key.c_str(), key.size(), decoded_val.data(), decoded_val.size(), flags);
+
+        dbgTrace(D_WAAP_DEEP_PARSER) << " After processing potential JSON rc = " << rc;
+        if (rc != CONTINUE_PARSING) {
+            return rc;
+        }
     }
 
     m_depth--;
@@ -877,6 +898,11 @@ void DeepParser::createInternalParser(const char *k, size_t k_len, std::string& 
         // PHP value detected
         dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse phpSerializedData";
         m_parsersDeque.push_front(std::make_shared<BufferedParser<PHPSerializedDataParser>>(*this));
+    }
+    else if (isPotentialGqlQuery && cur_val.size() > 0 && !validateJson(cur_val.data(), cur_val.size())) {
+        // Graphql value detected
+        dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse graphql";
+        m_parsersDeque.push_front(std::make_shared<BufferedParser<ParserGql>>(*this));
     }
     else if (cur_val.length() > 0 && (cur_val[0] == '[' || cur_val[0] == '{'))
     {

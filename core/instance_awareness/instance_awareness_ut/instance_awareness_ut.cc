@@ -43,9 +43,12 @@ TEST_F(InstanceAwarenessTest, emptyInit)
 
     init(args);
 
-    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active"));
-    EXPECT_THAT(getFamilyID(),     IsError("Family ID isn't active"));
-    EXPECT_THAT(getUniqueID(),     IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(getInstanceID(), IsError("Instance Awareness isn't active, Error: Flag not found"));
+    EXPECT_THAT(getFamilyID(), IsError("Family ID isn't active, Error: Flag not found"));
+    EXPECT_THAT(
+        getUniqueID(),
+        IsError("Can't get instance ID, Error: Instance Awareness isn't active, Error: Flag not found")
+    );
 }
 
 TEST_F(InstanceAwarenessTest, badFamilyID)
@@ -55,7 +58,7 @@ TEST_F(InstanceAwarenessTest, badFamilyID)
     init(args);
 
     EXPECT_THAT(getInstanceID(),   IsValue("9"));
-    EXPECT_THAT(getFamilyID(),     IsError("Family ID isn't active"));
+    EXPECT_THAT(getFamilyID(),     IsError("Family ID isn't active, Error: Illegal flag: family"));
     EXPECT_THAT(getUniqueID(),     IsValue("9"));
 }
 
@@ -65,9 +68,12 @@ TEST_F(InstanceAwarenessTest, badInstanceID)
 
     init(args);
 
-    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active, Error: Illegal flag: id"));
     EXPECT_THAT(getFamilyID(),     IsValue("073b8744b4c5"));
-    EXPECT_THAT(getUniqueID(),     IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(
+        getUniqueID(),
+        IsError("Can't get instance ID, Error: Instance Awareness isn't active, Error: Illegal flag: id")
+    );
 }
 
 TEST_F(InstanceAwarenessTest, emptyInstanceID)
@@ -76,9 +82,12 @@ TEST_F(InstanceAwarenessTest, emptyInstanceID)
 
     init(args);
 
-    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active, Error: Flag not found"));
     EXPECT_THAT(getFamilyID(),     IsValue("073b8744b4c5"));
-    EXPECT_THAT(getUniqueID(),     IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(
+        getUniqueID(),
+        IsError("Can't get instance ID, Error: Instance Awareness isn't active, Error: Flag not found")
+    );
 }
 
 TEST_F(InstanceAwarenessTest, noInstanceID)
@@ -87,9 +96,12 @@ TEST_F(InstanceAwarenessTest, noInstanceID)
 
     init(args);
 
-    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(getInstanceID(),   IsError("Instance Awareness isn't active, Error: Flag not found"));
     EXPECT_THAT(getFamilyID(),     IsValue("073b8744b4c5"));
-    EXPECT_THAT(getUniqueID(),     IsError("Instance Awareness isn't active"));
+    EXPECT_THAT(
+        getUniqueID(),
+        IsError("Can't get instance ID, Error: Instance Awareness isn't active, Error: Flag not found")
+    );
 }
 
 TEST_F(InstanceAwarenessTest, init)
@@ -111,7 +123,7 @@ TEST_F(InstanceAwarenessTest, initIDOnly)
 
     EXPECT_THAT(getUniqueID(),   IsValue("9"));
     EXPECT_THAT(getInstanceID(), IsValue("9"));
-    EXPECT_THAT(getFamilyID(),   IsError("Family ID isn't active"));
+    EXPECT_THAT(getFamilyID(),   IsError("Family ID isn't active, Error: Flag not found"));
 }
 
 TEST_F(InstanceAwarenessTest, defaultValues)

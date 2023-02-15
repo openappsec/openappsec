@@ -108,19 +108,50 @@ ParameterException::load(cereal::JSONInputArchive &archive_in)
 }
 
 set<ParameterBehavior>
-ParameterException::getBehavior(const unordered_map<string, set<string>> &key_value_pairs) const
+ParameterException::getBehavior(
+        const unordered_map<string, set<string>> &key_value_pairs,
+        set<string> &matched_override_keywords) const
 {
     set<ParameterBehavior> matched_behaviors;
+
+    matched_override_keywords.clear();
     dbgTrace(D_RULEBASE_CONFIG) << "Matching exception";
     for (const MatchBehaviorPair &match_behavior_pair: match_queries) {
-        if (match_behavior_pair.match.matchAttributes(key_value_pairs)) {
+        MatchQuery::MatchResult match_res = match_behavior_pair.match.getMatch(key_value_pairs);
+        if (match_res.is_match) {
             dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched an exception from a list of matches.";
-            matched_behaviors.insert(match_behavior_pair.behavior);
+            // When matching indicators with action=ignore, we expect no behavior override.
+            // Instead, a matched keywords list should be returned which will be later removed from score calculation
+            if (match_res.matched_keywords->size() > 0 && match_behavior_pair.behavior == action_ignore) {
+                matched_override_keywords.insert(match_res.matched_keywords->begin(),
+                        match_res.matched_keywords->end());
+            } else {
+                matched_behaviors.insert(match_behavior_pair.behavior);
+            }
         }
     }
-    if (match_queries.empty() && match.matchAttributes(key_value_pairs)) {
-        dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched an exception.";
-        matched_behaviors.insert(behavior);
+
+    if (match_queries.empty()) {
+        MatchQuery::MatchResult match_res = match.getMatch(key_value_pairs);
+        if (match_res.is_match) {
+            dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched an exception.";
+            // When matching indicators with action=ignore, we expect no behavior override.
+            // Instead, a matched keywords list should be returned which will be later removed from score calculation
+            if (match_res.matched_keywords->size() > 0 && behavior == action_ignore) {
+                matched_override_keywords.insert(match_res.matched_keywords->begin(),
+                        match_res.matched_keywords->end());
+            } else {
+                matched_behaviors.insert(behavior);
+            }
+        }
     }
+
     return matched_behaviors;
+}
+
+set<ParameterBehavior>
+ParameterException::getBehavior(const unordered_map<string, set<string>> &key_value_pairs) const
+{
+    set<string> keywords;
+    return getBehavior(key_value_pairs, keywords);
 }
