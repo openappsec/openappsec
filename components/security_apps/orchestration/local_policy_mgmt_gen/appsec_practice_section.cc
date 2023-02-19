@@ -105,12 +105,12 @@ AppSecPracticeWebAttacks::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_K8S_POLICY) << "Loading AppSec practice spec";
     parseAppsecJSONKey<AppSecWebAttackProtections>("protections", protections, archive_in);
+    parseAppsecJSONKey<string>("override-mode", mode, archive_in, "Unset");
     if (getMode() == "Prevent") {
         parseAppsecJSONKey<string>("minimum-confidence", minimum_confidence, archive_in, "critical");
     } else {
         minimum_confidence = "Transparent";
     }
-    parseAppsecJSONKey<string>("override-mode", mode, archive_in, "Unset");
     parseAppsecJSONKey<int>("max-body-size-kb", max_body_size_kb, archive_in, 1000000);
     parseAppsecJSONKey<int>("max-header-size-bytes", max_header_size_bytes, archive_in, 102400);
     parseAppsecJSONKey<int>("max-object-depth", max_object_depth, archive_in, 40);
