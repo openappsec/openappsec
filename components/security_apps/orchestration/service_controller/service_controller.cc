@@ -272,7 +272,8 @@ public:
         const string &new_settings_path,
         const vector<string> &new_data_files,
         const string &tenant_id,
-        const string &profile_id
+        const string &profile_id,
+        const bool last_iteration
     ) override;
 
     bool isServiceInstalled(const string &service_name) override;
@@ -325,6 +326,7 @@ private:
     map<int, string> services_reconf_names;
     map<int, string> services_reconf_ids;
     string filesystem_prefix;
+    bool is_multi_tenant_env = false;
 };
 
 class GetServicesPorts : public ServerRest
@@ -412,6 +414,11 @@ ServiceController::Impl::init()
     filesystem_prefix = getFilesystemPathConfig();
 
     loadRegisteredServicesFromFile();
+
+    auto agent_type = getSetting<string>("agentType");
+    if (agent_type.ok() && (*agent_type == "CloudNative" || *agent_type == "VirtualNSaaS")) {
+        is_multi_tenant_env = true;
+    }
 }
 
 void
@@ -592,7 +599,8 @@ ServiceController::Impl::updateServiceConfiguration(
     const string &new_settings_path,
     const vector<string> &new_data_files,
     const string &tenant_id,
-    const string &profile_id)
+    const string &profile_id,
+    const bool last_iteration)
 {
     dbgFlow(D_ORCHESTRATOR)
         << "new_policy_path: "
@@ -746,7 +754,10 @@ ServiceController::Impl::updateServiceConfiguration(
         }
     }
 
-    was_policy_updated &= sendSignalForServices(nano_services_to_update, version_value);
+    // In a multi-tenant env, we send the signal to the services only on the last iteration
+    was_policy_updated &= (is_multi_tenant_env && !last_iteration) ?
+        true :
+        sendSignalForServices(nano_services_to_update, version_value);
 
     dbgTrace(D_ORCHESTRATOR) << "was_policy_updated: " << (was_policy_updated ? "true" : "false");
 
@@ -965,6 +976,11 @@ ServiceController::Impl::updateReconfStatus(int id, ReconfStatus status)
         dbgError(D_ORCHESTRATOR) << "Service reconfiguration monitor received illegal id :" << id;
         return;
     }
+    dbgTrace(D_ORCHESTRATOR)
+        << "Updating reconf status for reconfiguration ID "
+        << id
+        << ". Status: "
+        << static_cast<int>(status);
     services_reconf_status[id] = status;
 }
 
@@ -975,6 +991,15 @@ ServiceController::Impl::startReconfStatus(
     const string &service_name,
     const string &service_id)
 {
+    dbgTrace(D_ORCHESTRATOR)
+        << "Starting reconf status. Configuration ID: "
+        << id
+        << ", service name: "
+        << service_name
+        << ", service ID: "
+        << service_id
+        << ", status: "
+        << static_cast<int>(status);
     services_reconf_status.emplace(id, status);
     services_reconf_names.emplace(id, service_name);
     services_reconf_ids.emplace(id, service_id);

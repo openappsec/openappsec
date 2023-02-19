@@ -9,6 +9,7 @@ target_link_libraries(cp-nano-http-transaction-handler
 	-Wl,--start-group
 	${COMMON_LIBRARIES}
 
+	graphqlparser
 	xml2
 	pcre2-8
 	pcre2-posix

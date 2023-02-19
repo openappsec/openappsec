@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include/graphqlparser
+
+Name: @CMAKE_PROJECT_NAME@
+Description: facebook graphql parsing library
+Version: @LIBGRAPHQLPARSER_VERSION@
+Libs: -L${libdir} -lgraphqlparser
+Libs.private:
+Cflags: -I${includedir} 

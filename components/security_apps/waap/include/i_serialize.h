@@ -191,7 +191,7 @@ protected:
             dbgWarning(D_WAAP) << "Failed to send object. Attempt: " << i;
             mainloop->yield(true);
         }
-        dbgError(D_WAAP) << "Failed to send object, reached maximum attempts: " <<
+        dbgError(D_WAAP) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
             max_send_obj_retries;
         return false;
     }
@@ -245,7 +245,7 @@ protected:
             dbgWarning(D_WAAP) << "Failed to send object. Attempt: " << i;
             mainloop->yield(true);
         }
-        dbgError(D_WAAP) << "Failed to send object, reached maximum attempts: " <<
+        dbgError(D_WAAP) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
             max_send_obj_retries;
         return false;
     }

@@ -1,0 +1,33 @@
+{
+   <osx_strdup_query_string>
+   Memcheck:Cond
+   fun:strlen
+   fun:strdup
+   fun:_ZN2yy17GraphQLParserImpl5parseEv
+   fun:_ZN8facebook7graphqlL7doParseEPPKcPv
+   fun:_ZN8facebook7graphql11parseStringEPKcPS2_
+   fun:_ZL11expectErrorPKcS0_
+   fun:_ZN44ParserTests_TracksLocationAcrossStrings_Test8TestBodyEv
+   fun:_ZN7testing8internal38HandleSehExceptionsInMethodIfSupportedINS_4TestEvEET0_PT_MS4_FS3_vEPKc
+   fun:_ZN7testing8internal35HandleExceptionsInMethodIfSupportedINS_4TestEvEET0_PT_MS4_FS3_vEPKc
+   fun:_ZN7testing4Test3RunEv
+   fun:_ZN7testing8TestInfo3RunEv
+   fun:_ZN7testing8TestCase3RunEv
+}
+
+{
+   <unix_strdup_query_string>
+   Memcheck:Cond
+   fun:__GI_strlen
+   fun:strdup
+   fun:_ZN2yy17GraphQLParserImpl5parseEv
+   fun:_ZN8facebook7graphqlL7doParseEPPKcPv
+   fun:_ZN8facebook7graphql11parseStringEPKcPS2_
+   fun:_ZL11expectErrorPKcS0_
+   fun:_ZN44ParserTests_TracksLocationAcrossStrings_Test8TestBodyEv
+   fun:_ZN7testing8internal38HandleSehExceptionsInMethodIfSupportedINS_4TestEvEET0_PT_MS4_FS3_vEPKc
+   fun:_ZN7testing8internal35HandleExceptionsInMethodIfSupportedINS_4TestEvEET0_PT_MS4_FS3_vEPKc
+   fun:_ZN7testing4Test3RunEv
+   fun:_ZN7testing8TestInfo3RunEv
+   fun:_ZN7testing8TestCase3RunEv
+}

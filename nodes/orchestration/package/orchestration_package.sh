@@ -286,7 +286,7 @@ while true; do
             LOG_FILE_PATH=$1
         fi
         echo "Log files path: ${LOG_FILE_PATH}"
-    elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
+    elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--smb_sve_v2" ] || [ "$1" = "--smb_thx_v3" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
         shift
 		continue
     elif [ "$1" = "--skip_registration" ]; then
@@ -323,7 +323,6 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             fi
         fi
     fi
-
     if [ $var_hybrid_mode = true ] && [ -z "$var_fog_address" ]; then
         var_fog_address="$var_default_gem_fog_address"
     fi
@@ -540,6 +539,7 @@ install_cp_nano_ctl()
     CP_NANO_CLI="cp-nano-cli.sh"
     CP_NANO_JSON="cpnano_json"
     CP_NANO_CTL="cpnano"
+    OPEN_APPSEC_CTL="open-appsec-ctl"
     CP_NANO_YQ_LOCATION="./scripts/yq"
     CP_NANO_YQ="yq"
 
@@ -558,8 +558,8 @@ install_cp_nano_ctl()
     cp_exec "cp -f $CP_NANO_CLI ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     if ! [ -f $USR_SBIN_PATH/${CP_NANO_CTL} ]; then
-	cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
-        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/open-appsec-ctl"
+        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
+        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${OPEN_APPSEC_CTL}.sh $USR_SBIN_PATH/${OPEN_APPSEC_CTL}"
     fi
 
     cp_exec "cp -f ${CP_NANO_DEBUG} ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG}"
@@ -774,7 +774,7 @@ install_orchestration()
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${CERTS_PATH}"
     if [ -n "$var_upgrade_mode" ]; then
         upgrade_orchestration_policy
-        cp_print "\nStarting upgrading of Check Point Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
+        cp_print "\nStarting upgrading of open-appsec Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
         install_cp_nano_ctl
         add_uninstall_script
         cp_exec "cp -f certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem"
@@ -824,15 +824,17 @@ install_orchestration()
 
         cp_print "Upgrade completed successfully" ${FORCE_STDOUT}
 
-        cat "/etc/systemd/system/nano_agent.service" | grep -q "EnvironmentFile=/etc/environment"
-        result=$?
+        if [ -f /etc/systemd/system/nano_agent.service ]; then
+            cat "/etc/systemd/system/nano_agent.service" | grep -q "EnvironmentFile=/etc/environment"
+            result=$?
 
-        if [ $var_container_mode = false ] && [ $result -eq 0 ]; then
-            sed -i "$ d" /etc/systemd/system/nano_agent.service
-            echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/nano_agent.service
-            echo >> /etc/systemd/system/nano_agent.service
-            cp_exec "systemctl daemon-reload"
-            cp_exec "systemctl restart nano_agent"
+            if [ $var_container_mode = false ] && [ $result -eq 0 ]; then
+                sed -i "$ d" /etc/systemd/system/nano_agent.service
+                echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/nano_agent.service
+                echo >> /etc/systemd/system/nano_agent.service
+                cp_exec "systemctl daemon-reload"
+                cp_exec "systemctl restart nano_agent"
+            fi
         fi
         exit 0
     fi

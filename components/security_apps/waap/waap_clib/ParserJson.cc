@@ -270,6 +270,10 @@ size_t ParserJson::push(const char* buf, size_t len) {
             m_state = s_error;
         }
 
+        if (m_receiver2) {
+            m_receiver2->onEndOfData();
+        }
+
         return 0;
     }
 

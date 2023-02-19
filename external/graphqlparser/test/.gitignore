@@ -1,0 +1,5 @@
+CTestTestfile.cmake
+gtest*/*
+googletest*
+release-1.8.0*
+runTests*

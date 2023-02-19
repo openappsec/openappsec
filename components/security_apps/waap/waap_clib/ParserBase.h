@@ -43,6 +43,7 @@ struct IParserReceiver2 {
     virtual void onEndMap() = 0;
     virtual void onStartArray() = 0;
     virtual void onEndArray() = 0;
+    virtual void onEndOfData() = 0;
 };
 
 // Interface for receiver classes that can accept not only full key/value pairs, but also partial content

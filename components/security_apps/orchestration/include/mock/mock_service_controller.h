@@ -28,14 +28,15 @@ public:
 
     MOCK_CONST_METHOD0(getUpdatePolicyVersion, const std::string &());
 
-    MOCK_METHOD5(
+    MOCK_METHOD6(
         updateServiceConfiguration,
         bool(
             const std::string &new_policy_path,
             const std::string &new_settings_path,
             const std::vector<std::string> &new_data_files,
             const std::string &tenant_id,
-            const std::string &profile_id
+            const std::string &profile_id,
+            const bool last_iteration
         )
     );
 

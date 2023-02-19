@@ -33,7 +33,7 @@ public:
         Maybe<string> instance_id = checkIfValueIsConfigured("id");
         if (instance_id.ok()) return instance_id;
 
-        return genError("Instance Awareness isn't active");
+        return genError("Instance Awareness isn't active, Error: " + instance_id.getErr());
     }
 
     Maybe<string>
@@ -42,14 +42,14 @@ public:
         Maybe<string> family_id = checkIfValueIsConfigured("family");
         if (family_id.ok()) return family_id;
 
-        return genError("Family ID isn't active");
+        return genError("Family ID isn't active, Error: " + family_id.getErr());
     }
 
     Maybe<string>
     getUniqueID() override
     {
         Maybe<string> instance_id(getInstanceID());
-        if (!instance_id.ok()) return genError("Instance Awareness isn't active");
+        if (!instance_id.ok()) return genError("Can't get instance ID, Error: " + instance_id.getErr());
 
         Maybe<string> family_id(getFamilyID());
         if (!family_id.ok()) return *instance_id;

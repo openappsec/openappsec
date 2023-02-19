@@ -14,6 +14,7 @@
 #include "config.h"
 #include "config_component.h"
 
+#include <dirent.h>
 #include <algorithm>
 #include <fstream>
 #include <boost/regex.hpp>
@@ -66,11 +67,24 @@ public:
     void
     doCall() override
     {
-        auto i_config = Singleton::Consume<I_Config>::from<ConfigComponent>();
+        static const map<I_Config::AsyncLoadConfigStatus, string> status_map {
+            {I_Config::AsyncLoadConfigStatus::Success, "Success"},
+            {I_Config::AsyncLoadConfigStatus::InProgress, "In Progress"},
+            {I_Config::AsyncLoadConfigStatus::Error, "Error"}
+        };
 
+        auto i_config = Singleton::Consume<I_Config>::from<ConfigComponent>();
         I_Config::AsyncLoadConfigStatus load_config_staus = i_config->reloadConfiguration(policy_version, true, id);
-        finished = load_config_staus == I_Config::AsyncLoadConfigStatus::InProgress;
+
+        finished = load_config_staus != I_Config::AsyncLoadConfigStatus::InProgress;
         error = load_config_staus == I_Config::AsyncLoadConfigStatus::Error;
+
+        if (error) {
+            dbgWarning(D_CONFIG) << "Configuration reload status: " << status_map.at(load_config_staus);
+        } else {
+            dbgDebug(D_CONFIG) << "Configuration reload status: " << status_map.at(load_config_staus);
+        }
+
         if (!finished) {
             error_message = "Reload already in progress - can't start another one";
         }
@@ -669,8 +683,8 @@ ConfigComponent::Impl::clearOldTenants()
 bool
 ConfigComponent::Impl::areTenantAndProfileActive(const TenantProfilePair &tenant_profile) const
 {
-    return (tenant_profile.getTenantId() == default_tenant_id && tenant_profile.getPfofileId() == default_profile_id)
-        || tenant_mananger->areTenantAndProfileActive(tenant_profile.getTenantId(), tenant_profile.getPfofileId());
+    return (tenant_profile.getTenantId() == default_tenant_id && tenant_profile.getProfileId() == default_profile_id)
+        || tenant_mananger->areTenantAndProfileActive(tenant_profile.getTenantId(), tenant_profile.getProfileId());
 }
 
 void
@@ -723,12 +737,21 @@ ConfigComponent::Impl::loadConfiguration(vector<shared_ptr<JSONInputArchive>> &f
             string curr_profile = default_profile_id;
             try {
                 (*archive)(cereal::make_nvp("tenantID", curr_tenant));
+                dbgTrace(D_CONFIG) << "Found a tenant ID in the file: " << curr_tenant;
+            } catch (cereal::Exception &e) {}
+            try {
                 (*archive)(cereal::make_nvp("profileID", curr_profile));
-            } catch (cereal::Exception &e) {
-            }
+                dbgTrace(D_CONFIG) << "Found a profile ID in the file " << curr_profile;
+            } catch (cereal::Exception &e) {}
 
-            dbgTrace(D_CONFIG) <<
-                "Loading configuration for tenant: " << curr_tenant << " and profile: " << curr_profile;
+            dbgTrace(D_CONFIG)
+                << "Loading configuration for tenant: "
+                << curr_tenant
+                << " and profile: "
+                << curr_profile
+                << ", for the archive: "
+                << (*archive).getNodeName();
+
             TenantProfilePair tenant_profile(curr_tenant, curr_profile);
             for (auto &config : expected_configs) {
                 auto loaded = config->loadConfiguration(*archive);
@@ -800,6 +823,7 @@ ConfigComponent::Impl::commitFailure(const string &error)
 bool
 ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_async)
 {
+    dbgFlow(D_CONFIG) << "Reloading configuration";
     auto env = Singleton::Consume<I_Environment>::by<ConfigComponent>();
     env->registerValue<string>("New Policy Version", version);
     auto cleanup = make_scope_exit([env] () { env->unregisterKey<string>("New Policy Version"); } );
@@ -811,6 +835,8 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
     }
 
     const auto &active_tenants = tenant_mananger ? tenant_mananger->fetchAllActiveTenants() : vector<string>();
+
+    dbgTrace(D_CONFIG) << "Number of active tenants found while reloading configuration: " << active_tenants.size();
 
     for (const auto &config_file : expected_configuration_files) {
         for (const auto &type : config_file.second) {
@@ -835,7 +861,9 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
         const vector<string> &profile_ids =
             tenant_mananger ? tenant_mananger->fetchProfileIds(tenant) : vector<string>();
         for (auto &profile_id : profile_ids) {
-            string settings_path = config_directory_path + "tenant_" + tenant + "_" + profile_id + "_settings.json";
+            string settings_path =
+                config_directory_path + "tenant_" + tenant + "_profile_"+ profile_id + "_settings.json";
+            dbgTrace(D_CONFIG) << "Inserting a settings path: " << settings_path;
             files.emplace(settings_path, make_shared<ifstream>(settings_path));
         }
     }
@@ -843,10 +871,10 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
     vector<shared_ptr<JSONInputArchive>> archives;
     for (const auto &file : files) {
         if (file.second->is_open()) {
-            dbgDebug(D_CONFIG) << "Succesfully opened configuration file. File: " << file.first;
+            dbgTrace(D_CONFIG) << "Succesfully opened configuration file. File: " << file.first;
             archives.push_back(make_shared<JSONInputArchive>(*file.second));
         } else {
-            dbgDebug(D_CONFIG) << "Could not open configuration file. Path: " << file.first;
+            dbgTrace(D_CONFIG) << "Could not open configuration file. Path: " << file.first;
         }
     }
 

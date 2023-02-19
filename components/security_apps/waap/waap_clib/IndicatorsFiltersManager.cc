@@ -25,7 +25,8 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const std::string& remotePath
     :
     SerializeToFileBase(pWaapAssetState->getWaapDataDir() + "/6.data"),
     m_ignoreSources(pWaapAssetState->getWaapDataDir(), remotePath, assetId),
-    m_tuning(remotePath)
+    m_tuning(remotePath),
+    m_matchedOverrideKeywords()
 {
     restore();
     m_keywordsFreqFilter = std::make_unique<KeywordIndicatorFilter>(
@@ -87,6 +88,12 @@ bool IndicatorsFiltersManager::shouldFilterKeyword(const std::string &key, const
         {
             shouldFilter |= m_keywordsFreqFilter->shouldFilterKeyword(type, keyword);
         }
+    }
+    if (m_matchedOverrideKeywords.size() > 0 &&
+            m_matchedOverrideKeywords.find(keyword) != m_matchedOverrideKeywords.end())
+    {
+        dbgTrace(D_WAAP_OVERRIDE) << "Filtering keyword '" << keyword << "' due to override";
+        shouldFilter = true;
     }
     return shouldFilter;
 }
@@ -314,4 +321,9 @@ void IndicatorsFiltersManager::pushSample(
         return;
     }
     m_typeFilter->registerKeywords(key, sample, pTransaction);
+}
+
+std::set<std::string> & IndicatorsFiltersManager::getMatchedOverrideKeywords(void)
+{
+    return m_matchedOverrideKeywords;
 }

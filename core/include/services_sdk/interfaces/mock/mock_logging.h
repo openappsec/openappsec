@@ -10,7 +10,7 @@ class MockLogging : public Singleton::Provide<I_Logging>::From<MockProvider<I_Lo
 public:
     MOCK_METHOD1(sendLog, void (const Report &));
     MOCK_METHOD1(addStream, bool (ReportIS::StreamType));
-    MOCK_METHOD2(addStream, bool (ReportIS::StreamType, const std::string &));
+    MOCK_METHOD3(addStream, bool (ReportIS::StreamType, const std::string &, const std::string &));
     MOCK_METHOD1(delStream, bool (ReportIS::StreamType));
     MOCK_METHOD0(getCurrentLogId, uint64_t ());
     MOCK_METHOD1(addGeneralModifier, void (const GeneralModifier &));

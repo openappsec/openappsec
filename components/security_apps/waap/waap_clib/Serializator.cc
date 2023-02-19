@@ -44,18 +44,19 @@ static const string defaultSharedStorageHost = "appsec-shared-storage-svc";
 #define LEARNING_HOST_ENV_NAME "LEARNING_HOST"
 
 static bool
-isGZipped(const std::string &stream)
+isGZipped(const string &stream)
 {
     if (stream.size() < 2) return false;
     auto unsinged_stream = reinterpret_cast<const u_char *>(stream.data());
     return unsinged_stream[0] == 0x1f && unsinged_stream[1] == 0x8b;
 }
 
-bool RestGetFile::loadJson(const std::string& json)
+bool RestGetFile::loadJson(const string& json)
 {
+    string json_str;
 
-    std::string json_str = json;
-    if (isGZipped(json_str) == 0)
+    json_str = json;
+    if (!isGZipped(json_str))
     {
         return ClientRest::loadJson(json_str);
     }
@@ -66,7 +67,7 @@ bool RestGetFile::loadJson(const std::string& json)
         reinterpret_cast<const unsigned char *>(json_str.c_str()));
 
     if (res.ok){
-        json_str = std::string((const char *)res.output, res.num_output_bytes);
+        json_str = string((const char *)res.output, res.num_output_bytes);
         if (res.output) free(res.output);
         res.output = nullptr;
         res.num_output_bytes = 0;
@@ -76,12 +77,12 @@ bool RestGetFile::loadJson(const std::string& json)
     return ClientRest::loadJson(json_str);
 }
 
-Maybe<std::string> RestGetFile::genJson() const
+Maybe<string> RestGetFile::genJson() const
 {
-    Maybe<std::string> json = ClientRest::genJson();
+    Maybe<string> json = ClientRest::genJson();
     if (json.ok())
     {
-        std::string data = json.unpack();
+        string data = json.unpack();
         auto compression_stream = initCompressionStream();
         CompressionResult res = compressData(
             compression_stream,
@@ -94,7 +95,7 @@ Maybe<std::string> RestGetFile::genJson() const
             dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to gzip data";
             return genError("Failed to compress data");
         }
-        data = std::string((const char *)res.output, res.num_output_bytes);
+        data = string((const char *)res.output, res.num_output_bytes);
 
         json = data;
 
@@ -104,7 +105,7 @@ Maybe<std::string> RestGetFile::genJson() const
     }
     return json;
 }
-SerializeToFilePeriodically::SerializeToFilePeriodically(std::chrono::seconds pollingIntervals, std::string filePath) :
+SerializeToFilePeriodically::SerializeToFilePeriodically(ch::seconds pollingIntervals, string filePath) :
     SerializeToFileBase(filePath),
     m_lastSerialization(0),
     m_interval(pollingIntervals)
@@ -140,7 +141,7 @@ void SerializeToFilePeriodically::backupWorker()
     }
 }
 
-void SerializeToFilePeriodically::setInterval(std::chrono::seconds newInterval)
+void SerializeToFilePeriodically::setInterval(ch::seconds newInterval)
 {
     if (m_interval != newInterval)
     {
@@ -150,7 +151,7 @@ void SerializeToFilePeriodically::setInterval(std::chrono::seconds newInterval)
     }
 }
 
-SerializeToFileBase::SerializeToFileBase(std::string fileName) : m_filePath(fileName)
+SerializeToFileBase::SerializeToFileBase(string fileName) : m_filePath(fileName)
 {
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "SerializeToFileBase::SerializeToFileBase() fname='" << m_filePath
         << "'";
@@ -163,12 +164,12 @@ SerializeToFileBase::~SerializeToFileBase()
 
 void SerializeToFileBase::saveData()
 {
-    std::fstream filestream;
+    fstream filestream;
 
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "saving to file: " << m_filePath;
-    filestream.open(m_filePath, std::fstream::out);
+    filestream.open(m_filePath, fstream::out);
 
-    std::stringstream ss;
+    stringstream ss;
 
     if (filestream.is_open() == false) {
         dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to open file: " << m_filePath << " Error: "
@@ -182,12 +183,12 @@ void SerializeToFileBase::saveData()
     filestream.close();
 }
 
-void SerializeToFileBase::loadFromFile(std::string filePath)
+void SerializeToFileBase::loadFromFile(string filePath)
 {
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "loadFromFile() file: " << filePath;
-    std::fstream filestream;
+    fstream filestream;
 
-    filestream.open(filePath, std::fstream::in);
+    filestream.open(filePath, fstream::in);
 
     if (filestream.is_open() == false) {
         dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to open file: " << filePath << " Error: " <<
@@ -200,14 +201,14 @@ void SerializeToFileBase::loadFromFile(std::string filePath)
         // try to strip the unique ID from the path and load the file from the parent directory
         // that might exist in previous run where instance awareness didn't exits.
         I_InstanceAwareness* instanceAwareness = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
-        Maybe<std::string> id = instanceAwareness->getUniqueID();
+        Maybe<string> id = instanceAwareness->getUniqueID();
         if (!id.ok())
         {
             return;
         }
-        std::string idStr = "/" + id.unpack() + "/";
+        string idStr = "/" + id.unpack() + "/";
         size_t idPosition = filePath.find(idStr);
-        if (idPosition != std::string::npos)
+        if (idPosition != string::npos)
         {
             filePath.erase(idPosition, idStr.length() - 1);
             dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "retry to load file from : " << filePath;
@@ -219,12 +220,12 @@ void SerializeToFileBase::loadFromFile(std::string filePath)
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "loading from file: " << filePath;
 
     int length;
-    filestream.seekg(0, std::ios::end);    // go to the end
+    filestream.seekg(0, ios::end);    // go to the end
     length = filestream.tellg();           // report location (this is the length)
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "file length: " << length;
     assert(length >= 0); // length -1 really happens if filePath is a directory (!)
     char* buffer = new char[length];       // allocate memory for a buffer of appropriate dimension
-    filestream.seekg(0, std::ios::beg);    // go back to the beginning
+    filestream.seekg(0, ios::beg);    // go back to the beginning
     if (!filestream.read(buffer, length))  // read the whole file into the buffer
     {
         filestream.close();
@@ -234,18 +235,18 @@ void SerializeToFileBase::loadFromFile(std::string filePath)
     }
     filestream.close();
 
-    std::string dataObfuscated(buffer, length);
+    string dataObfuscated(buffer, length);
 
     delete[] buffer;
 
 
-    std::stringstream ss(dataObfuscated);
+    stringstream ss(dataObfuscated);
 
     try
     {
         deserialize(ss);
     }
-    catch (std::runtime_error & e) {
+    catch (runtime_error & e) {
         dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to deserialize file: " << m_filePath << ", error: " <<
             e.what();
     }
@@ -263,7 +264,7 @@ RemoteFilesList::RemoteFilesList() : files(), filesPathsList()
 
 // parses xml instead of json
 // extracts a file list in <Contents><Key>
-bool RemoteFilesList::loadJson(const std::string& xml)
+bool RemoteFilesList::loadJson(const string& xml)
 {
     xmlDocPtr doc; // the resulting document tree
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "XML input: " << xml;
@@ -293,22 +294,22 @@ bool RemoteFilesList::loadJson(const std::string& xml)
         {
             dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Found the Contents element";
             xmlNodePtr contents_node = node->children;
-            std::string file;
-            std::string lastModified;
+            string file;
+            string lastModified;
             while (contents_node != NULL)
             {
                 if (xmlStrEqual(key_name, contents_node->name) == 1)
                 {
                     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Found the Key element";
                     xmlChar* xml_file = xmlNodeGetContent(contents_node);
-                    file = std::string(reinterpret_cast<const char*>(xml_file));
+                    file = string(reinterpret_cast<const char*>(xml_file));
                     xmlFree(xml_file);
                 }
                 if (xmlStrEqual(last_modified_name, contents_node->name) == 1)
                 {
                     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Found the LastModified element";
                     xmlChar* xml_file = xmlNodeGetContent(contents_node);
-                    lastModified = std::string(reinterpret_cast<const char*>(xml_file));
+                    lastModified = string(reinterpret_cast<const char*>(xml_file));
                     xmlFree(xml_file);
                 }
                 if (!file.empty() && !lastModified.empty())
@@ -333,24 +334,24 @@ bool RemoteFilesList::loadJson(const std::string& xml)
     return true;
 }
 
-const std::vector<std::string>& RemoteFilesList::getFilesList() const
+const vector<string>& RemoteFilesList::getFilesList() const
 {
     return filesPathsList;
 }
 
-const std::vector<FileMetaData>& RemoteFilesList::getFilesMetadataList() const
+const vector<FileMetaData>& RemoteFilesList::getFilesMetadataList() const
 {
     return files.get();
 }
 
 
 SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
-    std::chrono::minutes interval,
-    std::chrono::seconds waitForSync,
-    const std::string& filePath,
-    const std::string& remotePath,
-    const std::string& assetId,
-    const std::string& owner)
+    ch::minutes interval,
+    ch::seconds waitForSync,
+    const string& filePath,
+    const string& remotePath,
+    const string& assetId,
+    const string& owner)
     :
     SerializeToFileBase(filePath),
     m_remotePath(remotePath),
@@ -400,7 +401,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
             if (parts[0].empty()) {
                 offset = 1;
             }
-            std::string type = "";
+            string type = "";
             for (size_t i = offset + 2; i < parts.size(); i++)
             {
                 type += type.empty() ? parts[i] : "/" + parts[i];
@@ -417,7 +418,7 @@ bool SerializeToLocalAndRemoteSyncBase::isBase()
     return m_remotePath == "";
 }
 
-std::string SerializeToLocalAndRemoteSyncBase::getUri()
+string SerializeToLocalAndRemoteSyncBase::getUri()
 {
     static const string hybridModeUri = "/api";
     static const string onlineModeUri = "/storage/waap";
@@ -437,24 +438,24 @@ SerializeToLocalAndRemoteSyncBase::~SerializeToLocalAndRemoteSyncBase()
 
 }
 
-std::string SerializeToLocalAndRemoteSyncBase::getWindowId()
+string SerializeToLocalAndRemoteSyncBase::getWindowId()
 {
-    return "window_" + std::to_string(m_daysCount) + "_" + std::to_string(m_windowsCount);
+    return "window_" + to_string(m_daysCount) + "_" + to_string(m_windowsCount);
 }
 
-std::string SerializeToLocalAndRemoteSyncBase::getPostDataUrl()
+string SerializeToLocalAndRemoteSyncBase::getPostDataUrl()
 {
-    std::string agentId = Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getAgentId();
+    string agentId = Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getAgentId();
     if (Singleton::exists<I_InstanceAwareness>())
     {
         I_InstanceAwareness* instance = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
-        Maybe<std::string> uniqueId = instance->getUniqueID();
+        Maybe<string> uniqueId = instance->getUniqueID();
         if (uniqueId.ok())
         {
             agentId += "/" + uniqueId.unpack();
         }
     }
-    std::string windowId = getWindowId();
+    string windowId = getWindowId();
     return getUri() + "/" + m_remotePath + "/" + windowId + "/" + agentId + "/data.data";
 }
 void SerializeToLocalAndRemoteSyncBase::setRemoteSyncEnabled(bool enabled)
@@ -462,7 +463,7 @@ void SerializeToLocalAndRemoteSyncBase::setRemoteSyncEnabled(bool enabled)
     m_remoteSyncEnabled = enabled;
 }
 
-void SerializeToLocalAndRemoteSyncBase::setInterval(std::chrono::seconds newInterval)
+void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
 {
     dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "setInterval: from " << m_interval.count() << " to " <<
         newInterval.count() << " seconds. assetId='" << m_assetId << "', owner='" << m_owner << "'";
@@ -495,7 +496,7 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(std::chrono::seconds newInte
             size_t slicesCount = m_interval / assetSyncTimeSliceLength;
             size_t sliceIndex = 0;
             if (slicesCount != 0 && m_assetId != "") {
-                sliceIndex = std::hash<std::string>{}(m_assetId) % slicesCount;
+                sliceIndex = hash<string>{}(m_assetId) % slicesCount;
             }
             ch::seconds sliceOffset = assetSyncTimeSliceLength * sliceIndex;
 
@@ -572,7 +573,7 @@ bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
     return true;
 }
 
-std::chrono::seconds SerializeToLocalAndRemoteSyncBase::getIntervalDuration() const
+ch::seconds SerializeToLocalAndRemoteSyncBase::getIntervalDuration() const
 {
     return m_interval;
 }
@@ -581,14 +582,14 @@ void SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteService()
 {
     for (int i = 0; i < remoteSyncMaxPollingAttempts; i++)
     {
-        m_pMainLoop->yield(std::chrono::seconds(60));
+        m_pMainLoop->yield(ch::seconds(60));
         RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
         if (remoteFiles.getFilesMetadataList().empty())
         {
             dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "no files generated by the remote service were found";
             continue;
         }
-        std::string lastModified = remoteFiles.getFilesMetadataList().begin()->modified;
+        string lastModified = remoteFiles.getFilesMetadataList().begin()->modified;
         if (lastModified != m_lastProcessedModified)
         {
             m_lastProcessedModified = lastModified;
@@ -618,7 +619,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
             << "Did not synchronize the data. Remote URL: "
             << m_remotePath
             << " is enabled: "
-            << std::to_string(m_remoteSyncEnabled);
+            << to_string(m_remoteSyncEnabled);
         processData();
         saveData();
         return;
@@ -659,7 +660,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
 
         Flags<MessageConnConfig> conn_flags;
         conn_flags.setFlag(MessageConnConfig::EXTERNAL);
-        std::string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
+        string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
         bool ok = messaging->sendNoReplyObject(syncObj,
                 I_Messaging::Method::POST,
                 getLearningHost(),
@@ -735,7 +736,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
 
     if (!processedFilesList.getFilesList().empty())
     {
-        const std::vector<FileMetaData>& filesMD = processedFilesList.getFilesMetadataList();
+        const vector<FileMetaData>& filesMD = processedFilesList.getFilesMetadataList();
         if (filesMD.size() > 1) {
             dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "got more than 1 expected processed file";
         }
@@ -764,7 +765,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
         return processedFilesList;
     }
     // backward compatibility - try to get backup file with the buggy prefix tenantID/assetID/instanceID/
-    std::string bcRemotePath = m_remotePath;
+    string bcRemotePath = m_remotePath;
     size_t pos = bcRemotePath.find('/');
     pos = bcRemotePath.find('/', pos + 1);
     if (!Singleton::exists<I_InstanceAwareness>())
@@ -774,14 +775,14 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
         return processedFilesList;
     }
     I_InstanceAwareness* instanceAwareness = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
-    Maybe<std::string> id = instanceAwareness->getUniqueID();
+    Maybe<string> id = instanceAwareness->getUniqueID();
     if (!id.ok())
     {
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to get instance id err: " << id.getErr() <<
             ". can't check backward compatibility";
         return processedFilesList;
     }
-    std::string idStr = id.unpack();
+    string idStr = id.unpack();
     bcRemotePath.insert(pos + 1, idStr + "/");
     dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "List of files is empty - trying to get the file from " <<
         bcRemotePath;

@@ -29,50 +29,17 @@ USE_DEBUG_FLAG(D_K8S_POLICY);
 class TrustedSourcesSpec
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading trusted sources spec";
-        parseAppsecJSONKey<int>("minNumOfSources", min_num_of_sources, archive_in, 3);
-        parseAppsecJSONKey<std::vector<std::string>>("sourcesIdentifiers", sources_identifiers, archive_in);
-        parseAppsecJSONKey<std::string>("name", name, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    int
-    getMinNumOfSources() const
-    {
-        return min_num_of_sources;
-    }
-
-    const std::vector<std::string> &
-    getSourcesIdentifiers() const
-    {
-        return sources_identifiers;
-    }
-
-    const std::string &
-    getName() const
-    {
-        return name;
-    }
+    int getMinNumOfSources() const;
+    const std::vector<std::string> & getSourcesIdentifiers() const;
+    const std::string & getName() const;
 
 private:
-    int min_num_of_sources;
+    int min_num_of_sources = 0;
     std::string name;
     std::vector<std::string> sources_identifiers;
 };
-
-std::ostream &
-operator<<(std::ostream &os, const TrustedSourcesSpec &obj)
-{
-    os
-        << "Min number of sources: "
-        << obj.getMinNumOfSources()
-        << ", SourceIdentifiers: ["
-        << makeSeparatedStr(obj.getSourcesIdentifiers(), ",")
-        << "]";
-    return os;
-}
 
 class SourcesIdentifiers
 {
@@ -83,20 +50,8 @@ public:
         value(_value)
     {}
 
-    void
-    save(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("sourceIdentifier",   source_identifier),
-            cereal::make_nvp("value",              value)
-        );
-    }
-
-    const std::string &
-    getSourceIdent() const
-    {
-        return source_identifier;
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::string & getSourceIdent() const;
 
 private:
     std::string source_identifier;
@@ -106,25 +61,10 @@ private:
 class SourceIdentifierSpec
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading trusted sources spec";
-        parseAppsecJSONKey<std::string>("sourceIdentifier", source_identifier, archive_in);
-        parseAppsecJSONKey<std::vector<std::string>>("value", value, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string &
-    getSourceIdentifier() const
-    {
-        return source_identifier;
-    }
-
-    const std::vector<std::string> &
-    getValues() const
-    {
-        return value;
-    }
+    const std::string & getSourceIdentifier() const;
+    const std::vector<std::string> & getValues() const;
 
 private:
     std::string source_identifier;
@@ -134,42 +74,15 @@ private:
 class SourceIdentifierSpecWrapper
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading Source Identifier Spec Wrapper";
-        parseAppsecJSONKey<std::vector<SourceIdentifierSpec>>("identifiers", identifiers, archive_in);
-        parseAppsecJSONKey<std::string>("name", name, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string &
-    getName() const
-    {
-        return name;
-    }
-
-    const std::vector<SourceIdentifierSpec> &
-    getIdentifiers() const
-    {
-        return identifiers;
-    }
+    const std::string & getName() const;
+    const std::vector<SourceIdentifierSpec> & getIdentifiers() const;
 
 private:
     std::string name;
     std::vector<SourceIdentifierSpec> identifiers;
 };
-
-std::ostream &
-operator<<(std::ostream &os, const SourceIdentifierSpec &obj)
-{
-    os
-        << "sourceIdentifier: "
-        << obj.getSourceIdentifier()
-        << ", values: ["
-        << makeSeparatedStr(obj.getValues(), ",")
-        << "]";
-    return os;
-}
 
 class AppSecTrustedSources
 {
@@ -180,42 +93,16 @@ public:
     AppSecTrustedSources(
         const std::string &_name,
         int _num_of_sources,
-        const std::vector<SourcesIdentifiers> &_sources_identifiers)
-            :
-        name(_name),
-        num_of_sources(_num_of_sources),
-        sources_identifiers(_sources_identifiers)
-    {
-        try {
-            id = to_string(boost::uuids::random_generator()());
-        } catch (const boost::uuids::entropy_error &e) {
-            dbgWarning(D_K8S_POLICY) << "Failed to generate Trusted Sources ID. Error: " << e.what();
-        }
-    }
+        const std::vector<SourcesIdentifiers> &_sources_identifiers
+    );
 
-    void
-    save(cereal::JSONOutputArchive &out_ar) const
-    {
-        std::string parameter_type = "TrustedSource";
-        out_ar(
-            cereal::make_nvp("id",                   id),
-            cereal::make_nvp("name",                 name),
-            cereal::make_nvp("numOfSources",         num_of_sources),
-            cereal::make_nvp("sourcesIdentifiers",   sources_identifiers),
-            cereal::make_nvp("parameterType",        parameter_type)
-        );
-    }
-
-    const std::vector<SourcesIdentifiers> &
-    getSourcesIdentifiers() const
-    {
-        return sources_identifiers;
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::vector<SourcesIdentifiers> & getSourcesIdentifiers() const;
 
 private:
     std::string id;
     std::string name;
-    int num_of_sources;
+    int num_of_sources = 0;
     std::vector<SourcesIdentifiers> sources_identifiers;
 };
 // LCOV_EXCL_STOP

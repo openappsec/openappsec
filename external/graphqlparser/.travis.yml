@@ -1,0 +1,21 @@
+language: cpp
+
+compiler:
+  - clang
+  - gcc
+
+
+addons:
+  apt:
+    packages:
+      - valgrind
+
+before_install:
+  # Versions of g++ prior to 4.8 don't have very good C++11 support.
+  - wget https://codeload.github.com/google/googletest/zip/release-1.8.0
+      && cd test
+      && unzip ../release-1.8.0
+      && cd ..
+      && rm release-1.8.0
+
+script: mkdir build && cd build && cmake .. -Dtest=ON -DCMAKE_BUILD_TYPE=Debug && make && test/runTests && make memcheck

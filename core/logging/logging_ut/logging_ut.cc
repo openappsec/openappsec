@@ -21,6 +21,7 @@
 #include "mock/mock_encryptor.h"
 #include "mock/mock_agent_details.h"
 #include "metric/all_metric_event.h"
+#include "mock/mock_shell_cmd.h"
 #include "version.h"
 
 using namespace testing;
@@ -33,6 +34,7 @@ class TestEnd {};
 
 static bool should_fail = false;
 static bool should_load_file_stream = false;
+static bool should_load_k8s_stream = false;
 
 class fakeConfig : Singleton::Consume<I_Logging>
 {
@@ -57,19 +59,45 @@ public:
     }
 
     void
-    load(cereal::JSONInputArchive &)
+    load(cereal::JSONInputArchive &ar)
     {
         if (should_fail) throw cereal::Exception("Should fail load");
         if (should_load_file_stream) {
             Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_LOG_FILE);
             return;
         }
+        if (should_load_k8s_stream) {
+            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_K8S_SVC);
+            return;
+        }
         Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_DEBUG);
         Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_FOG);
-        Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::CEF, "1.3.3.0:123");
-        Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::SYSLOG, "1.2.3.4:567");
-    }
 
+        bool is_domain;
+        ar(cereal::make_nvp("IsDomain", is_domain));
+        if (is_domain) {
+            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(
+                ReportIS::StreamType::CEF,
+                "www.youtube.com:123",
+                "UDP"
+            );
+            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(
+                ReportIS::StreamType::SYSLOG,
+                "www.google.com:567",
+                "UDP"
+            );
+        } else {
+            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(
+                ReportIS::StreamType::CEF,
+                "1.3.3.0:123", "UDP"
+            );
+            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(
+                ReportIS::StreamType::SYSLOG,
+                "1.2.3.4:567",
+                "UDP"
+            );
+        }
+    }
 };
 
 class LogTest : public testing::TestWithParam<bool>
@@ -81,8 +109,10 @@ public:
         i_agent_details(Singleton::Consume<I_AgentDetails>::from(agent_details)),
         logger(Singleton::Consume<I_Logging>::from(log_comp))
     {
+        is_domain = false;
         should_fail = false;
         should_load_file_stream = false;
+        should_load_k8s_stream = false;
         env.preload();
         log_comp.preload();
         env.init();
@@ -143,8 +173,10 @@ public:
 
     ~LogTest()
     {
+        is_domain = false;
         should_fail = false;
         should_load_file_stream = false;
+        should_load_k8s_stream = false;
         env.fini();
         log_comp.fini();
         Debug::setUnitTestFlag(D_REPORT, Debug::DebugLevel::INFO);
@@ -208,15 +240,23 @@ public:
     }
 
     bool
-    loadFakeConfiguration(const bool &enable_bulk, const string &log_file_name = "", int bulks_size = -1)
+    loadFakeConfiguration(
+        bool enable_bulk,
+        bool domain = false,
+        const string &log_file_name = "",
+        int bulks_size = -1)
     {
         string is_enable_bulks = enable_bulk ? "true" : "false";
+        string is_domain = domain ? "true" : "false";
         fakeConfig::preload();
         output_filename = log_file_name == "" ? file.fname : log_file_name;
 
         stringstream str_stream;
         str_stream
-            << "{\"fake config\": [{}], \"Logging\": {\"Log file name\": [{\"value\": \""
+            << "{\"fake config\": [{\"IsDomain\": "
+            << is_domain
+            << "}],"
+            << "\"Logging\": {\"Log file name\": [{\"value\": \""
             << output_filename
             << "\"}],"
             << "\"Enable bulk of logs\": [{\"value\": "
@@ -247,6 +287,8 @@ public:
     ConfigComponent           config;
     vector<string>            capture_syslog_cef_data;
     I_MainLoop::Routine       sysog_routine = nullptr;
+    StrictMock<MockShellCmd>  mock_shell_cmd;
+    bool                      is_domain;
 
 private:
     string                    body;
@@ -257,6 +299,16 @@ private:
 TEST_F(LogTest, load_policy)
 {
     EXPECT_TRUE(loadFakeConfiguration(false));
+}
+
+TEST_F(LogTest, loadPolicyDomain)
+{
+    is_domain = true;
+    string result = "172.28.1.6";
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(result));
+    EXPECT_TRUE(loadFakeConfiguration(false, true));
+    string failed_str = "Failed to connect to the CEF server";
+    EXPECT_THAT(getMessages(), Not(HasSubstr(failed_str)));
 }
 
 TEST_F(LogTest, loadPolicyFailure)
@@ -690,9 +742,117 @@ TEST_F(LogTest, FogBulkLogs)
     EXPECT_EQ(local_body, str1);
 }
 
+TEST_F(LogTest, OfflineK8sSvcTest)
+{
+    i_agent_details->setOrchestrationMode(OrchestrationMode::HYBRID);
+    should_load_k8s_stream = true;
+    loadFakeConfiguration(false);
+    Tags tag1 = Tags::POLICY_INSTALLATION;
+    Tags tag2 = Tags::ACCESS_CONTROL;
+    string local_body;
+    string res("[{\"id\": 1, \"code\": 400, \"message\": \"yes\"}]");
+    EXPECT_CALL(
+        mock_fog_msg,
+        sendMessage(_, _, _, "open-appsec-tuning-svc", _, _, "/api/v1/agents/events", _, _, MessageTypeTag::LOG)
+    ).WillRepeatedly(DoAll(SaveArg<1>(&local_body), Return(res)));
+
+    string str1(
+        "{\n"
+        "    \"log\": {\n"
+        "        \"eventTime\": \"0:0:0\",\n"
+        "        \"eventName\": \"Install policy\",\n"
+        "        \"eventSeverity\": \"Info\",\n"
+        "        \"eventPriority\": \"Low\",\n"
+        "        \"eventType\": \"Event Driven\",\n"
+        "        \"eventLevel\": \"Log\",\n"
+        "        \"eventLogLevel\": \"info\",\n"
+        "        \"eventAudience\": \"Internal\",\n"
+        "        \"eventAudienceTeam\": \"\",\n"
+        "        \"eventFrequency\": 0,\n"
+        "        \"eventTags\": [\n"
+        "            \"Access Control\",\n"
+        "            \"Policy Installation\"\n"
+        "        ],\n"
+        "        \"eventSource\": {\n"
+        "            \"agentId\": \"Unknown\",\n"
+        "            \"eventTraceId\": \"\",\n"
+        "            \"eventSpanId\": \"\",\n"
+        "            \"issuingEngineVersion\": \"\",\n"
+        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "        },\n"
+        "        \"eventData\": {\n"
+        "            \"logIndex\": 1\n"
+        "        }\n"
+        "    }\n"
+        "}"
+    );
+
+    LogGen("Install policy", Audience::INTERNAL, Severity::INFO, Priority::LOW, tag1, tag2);
+    EXPECT_EQ(local_body, str1);
+}
+
+TEST_F(LogTest, OfflineK8sSvcBulkLogs)
+{
+    i_agent_details->setOrchestrationMode(OrchestrationMode::HYBRID);
+    should_load_k8s_stream = true;
+    loadFakeConfiguration(true);
+    string local_body;
+    string res("[{\"id\": 1, \"code\": 400, \"message\": \"yes\"}]");
+    EXPECT_CALL(
+        mock_fog_msg,
+        sendMessage(_, _, _, "open-appsec-tuning-svc", _, _, "/api/v1/agents/events/bulk", _, _, MessageTypeTag::LOG)
+    ).WillRepeatedly(DoAll(SaveArg<1>(&local_body), Return(res)));
+
+    Tags tag1 = Tags::POLICY_INSTALLATION;
+    Tags tag2 = Tags::ACCESS_CONTROL;
+
+
+    string str1(
+        "{\n"
+        "    \"logs\": [\n"
+        "        {\n"
+        "            \"id\": 1,\n"
+        "            \"log\": {\n"
+        "                \"eventTime\": \"0:0:0\",\n"
+        "                \"eventName\": \"Install policy\",\n"
+        "                \"eventSeverity\": \"Info\",\n"
+        "                \"eventPriority\": \"Low\",\n"
+        "                \"eventType\": \"Event Driven\",\n"
+        "                \"eventLevel\": \"Log\",\n"
+        "                \"eventLogLevel\": \"info\",\n"
+        "                \"eventAudience\": \"Internal\",\n"
+        "                \"eventAudienceTeam\": \"\",\n"
+        "                \"eventFrequency\": 0,\n"
+        "                \"eventTags\": [\n"
+        "                    \"Access Control\",\n"
+        "                    \"Policy Installation\"\n"
+        "                ],\n"
+        "                \"eventSource\": {\n"
+        "                    \"agentId\": \"Unknown\",\n"
+        "                    \"eventTraceId\": \"\",\n"
+        "                    \"eventSpanId\": \"\",\n"
+        "                    \"issuingEngineVersion\": \"\",\n"
+        "                    \"serviceName\": \"Unnamed Nano Service\"\n"
+        "                },\n"
+        "                \"eventData\": {\n"
+        "                    \"logIndex\": 1\n"
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    ]\n"
+        "}"
+    );
+    {
+    LogGen("Install policy", Audience::INTERNAL, Severity::INFO, Priority::LOW, tag1, tag2);
+    }
+    bulk_routine();
+
+    EXPECT_EQ(local_body, str1);
+}
+
 TEST_P(LogTest, metrics_check)
 {
-    loadFakeConfiguration(true, "", 3);
+    loadFakeConfiguration(true, false, "", 3);
     Tags tag1 = Tags::POLICY_INSTALLATION;
     Tags tag2 = Tags::ACCESS_CONTROL;
 
@@ -837,7 +997,7 @@ TEST_F(LogTest, ShouldRetryAfterFailedWriteToFile)
     EXPECT_TRUE(logger->delStream(ReportIS::StreamType::JSON_LOG_FILE));
 
     static const string invalid_file_path = "/proc/gibberish";
-    loadFakeConfiguration(false, invalid_file_path, -1);
+    loadFakeConfiguration(false, false, invalid_file_path, -1);
 
     LogGen(
         "Install policy",

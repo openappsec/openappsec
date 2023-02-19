@@ -65,7 +65,8 @@ bool TypeIndicatorFilter::shouldFilterKeyword(const std::string &key, const std:
             key.compare(key.size() - htmlParam.size(), htmlParam.size(), htmlParam) == 0);
     for (auto keyType : keyTypes)
     {
-        if (keyType == "free_text" && !isHtmlInput)
+        static const std::string free_text = "free_text";
+        if (!keyType.compare(0, free_text.size(), free_text) && !isHtmlInput)
         {
             return true;
         }

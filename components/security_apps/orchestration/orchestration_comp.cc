@@ -124,6 +124,29 @@ private:
     map<string, HealthCheckStatus> field_types_status;
 };
 
+class setAgentUninstall : public ServerRest
+{
+public:
+    void
+    doCall() override
+    {
+        dbgTrace(D_ORCHESTRATOR) << "Send 'agent uninstall process started' log to fog";
+        setConfiguration(false, "Logging", "Enable bulk of logs");
+        LogGen log (
+            "Agent started uninstall process",
+            Audience::INTERNAL,
+            Severity::INFO,
+            Priority::URGENT,
+            LogField("issuingEngine", "agentUninstallProvider"),
+            Tags::ORCHESTRATOR
+        );
+        notify_uninstall_to_fog = true;
+    }
+
+private:
+    S2C_PARAM(bool, notify_uninstall_to_fog);
+};
+
 class OrchestrationComp::Impl
 {
 public:
@@ -144,6 +167,7 @@ public:
         auto rest = Singleton::Consume<I_RestApi>::by<OrchestrationComp>();
         rest->addRestCall<getStatusRest>(RestAction::SHOW, "orchestration-status");
         rest->addRestCall<AddProxyRest>(RestAction::ADD, "proxy");
+        rest->addRestCall<setAgentUninstall>(RestAction::SET, "agent-uninstall");
         // Main loop of the Orchestration.
         Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
             I_MainLoop::RoutineType::RealTime,
@@ -982,7 +1006,7 @@ private:
         const Maybe<vector<CheckUpdateRequest::Tenants>> &updated_policy_tenants,
         const vector<string> &new_data_files)
     {
-        dbgFlow(D_ORCHESTRATOR) << "Hanlding virtual files";
+        dbgFlow(D_ORCHESTRATOR) << "Handling virtual files";
         if (!updated_policy_tenants.ok()) return;
 
         // Sorting files by tenant id;
@@ -1053,26 +1077,31 @@ private:
             }
         }
 
-        for (const auto downloade_files: sorted_files) {
-            auto files = downloade_files.second;
+        for (auto it = sorted_files.begin(); it != sorted_files.end(); it++) {
+            const auto &downloaded_files = *it;
+            auto files = downloaded_files.second;
             string policy_file = files[0];
             string setting_file = "";
             if (files.size() > 1) {
                 setting_file = files[1];
                 auto handled_settings = updateSettingsFile(
                     setting_file,
-                    downloade_files.first.getTenantId(),
-                    downloade_files.first.getPfofileId()
+                    downloaded_files.first.getTenantId(),
+                    downloaded_files.first.getProfileId()
                 );
                 if (handled_settings.ok()) setting_file = *handled_settings;
             }
+
+            bool last_iteration = false;
+            if (next(it) == sorted_files.end()) last_iteration = true;
 
             Singleton::Consume<I_ServiceController>::by<OrchestrationComp>()->updateServiceConfiguration(
                 policy_file,
                 setting_file,
                 new_data_files,
-                downloade_files.first.getTenantId(),
-                downloade_files.first.getPfofileId()
+                downloaded_files.first.getTenantId(),
+                downloaded_files.first.getProfileId(),
+                last_iteration
             );
         }
     }
@@ -1087,9 +1116,9 @@ private:
             "Conf dir"
         ) + (tenant_id != "" ? "tenant_" + tenant_id  + "_profile_" + profile_id + "_"  : "");
 
-        dbgTrace(D_ORCHESTRATOR) << "The settings directory is " << conf_dir;
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
         string settings_file_path = conf_dir + "settings.json";
+        dbgTrace(D_ORCHESTRATOR) << "The settings directory is " << settings_file_path;
         if (!orchestration_tools->copyFile(new_settings_file, settings_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to update the settings.";
             return genError("Failed to update the settings");
@@ -1278,7 +1307,7 @@ private:
         int sleep_interval = policy.getErrorSleepInterval();
         Maybe<void> start_state(genError("Not running yet."));
         while (!(start_state = start()).ok()) {
-            dbgError(D_ORCHESTRATOR) << "Failed to start the Orchestration. Error: " << start_state.getErr();
+            dbgDebug(D_ORCHESTRATOR) << "Orchestration not started yet. Status: " << start_state.getErr();
             health_check_status_listener.setStatus(
                 HealthCheckStatus::UNHEALTHY,
                 OrchestrationStatusFieldType::REGISTRATION,

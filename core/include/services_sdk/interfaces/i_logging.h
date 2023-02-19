@@ -25,7 +25,11 @@ public:
     using GeneralModifier = std::function<void(LogBulkRest &)>;
 
     virtual bool addStream(ReportIS::StreamType type) = 0;
-    virtual bool addStream(ReportIS::StreamType type, const std::string &log_server_url) = 0;
+    virtual bool addStream(
+        ReportIS::StreamType type,
+        const std::string &log_server_url,
+        const std::string &protocol
+    ) = 0;
     virtual bool delStream(ReportIS::StreamType type) = 0;
 
     virtual void sendLog(const Report &msg) = 0;

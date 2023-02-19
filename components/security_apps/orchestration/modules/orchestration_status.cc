@@ -389,17 +389,17 @@ public:
     void
     writeStatusToFile()
     {
-        auto orchestrations_status_path = getConfigurationWithDefault<string>(
-            filesystem_prefix + "/conf/orchestrations_status.json",
+        auto orchestration_status_path = getConfigurationWithDefault<string>(
+            filesystem_prefix + "/conf/orchestration_status.json",
             "orchestration",
             "Orchestration status path"
         );
         auto write_result =
-            orchestration_tools->objectToJsonFile<Status>(status, orchestrations_status_path);
+            orchestration_tools->objectToJsonFile<Status>(status, orchestration_status_path);
         if (!write_result) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to write Orchestration status. File: " << orchestrations_status_path;
+            dbgWarning(D_ORCHESTRATOR) << "Failed to write Orchestration status. File: " << orchestration_status_path;
         }
-        dbgTrace(D_ORCHESTRATOR) << "Orchestration status file has been updated. File: " << orchestrations_status_path;
+        dbgTrace(D_ORCHESTRATOR) << "Orchestration status file has been updated. File: " << orchestration_status_path;
     }
 
     void
@@ -440,10 +440,10 @@ public:
     {
         time = Singleton::Consume<I_TimeGet>::by<OrchestrationStatus>();
         orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationStatus>();
+        filesystem_prefix = getFilesystemPathConfig();
         initValues();
         loadFromFile();
 
-        filesystem_prefix = getFilesystemPathConfig();
         dbgTrace(D_ORCHESTRATOR)
             << "Initializing Orchestration status, file system path prefix: "
             << filesystem_prefix;
@@ -473,13 +473,13 @@ private:
     void
     loadFromFile()
     {
-        auto orchestrations_status_path = getConfigurationWithDefault<string>(
-            filesystem_prefix + "/conf/orchestrations_status.json",
+        auto orchestration_status_path = getConfigurationWithDefault<string>(
+            filesystem_prefix + "/conf/orchestration_status.json",
             "orchestration",
             "Orchestration status path"
         );
         Maybe<Status> maybe_status_file =
-            orchestration_tools->jsonFileToObject<Status>(orchestrations_status_path);
+            orchestration_tools->jsonFileToObject<Status>(orchestration_status_path);
         if (!maybe_status_file.ok()) {
             dbgTrace(D_ORCHESTRATOR)
                 << "Failed to load Orchestration status, start with clear status."
@@ -489,7 +489,7 @@ private:
 
         status = maybe_status_file.unpack();
 
-        dbgInfo(D_ORCHESTRATOR) << "Orchestration status loaded from file." << " File: " << orchestrations_status_path;
+        dbgInfo(D_ORCHESTRATOR) << "Orchestration status loaded from file." << " File: " << orchestration_status_path;
     }
 
     const string & getLastUpdateAttempt() const override              { return status.getLastUpdateAttempt(); }

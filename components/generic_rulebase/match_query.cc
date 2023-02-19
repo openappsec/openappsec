@@ -95,6 +95,8 @@ MatchQuery::load(cereal::JSONInputArchive &archive_in)
                     is_specific_label = false;
                 }
             }
+            is_ignore_keyword = (key == "indicator");
+
             if (condition_type != Conditions::Exist) {
                 archive_in(cereal::make_nvp("value", value));
                 for(const auto &val: value) {
@@ -221,23 +223,34 @@ MatchQuery::getAllKeys() const
 }
 
 bool
-MatchQuery::matchAttributes(const unordered_map<string, set<string>> &key_value_pairs) const
+MatchQuery::matchAttributes(
+        const unordered_map<string, set<string>> &key_value_pairs,
+        set<string> &matched_override_keywords ) const
 {
+
     if (type == MatchType::Condition) {
         auto key_value_pair = key_value_pairs.find(key);
         if (key_value_pair == key_value_pairs.end()) {
             dbgTrace(D_RULEBASE_CONFIG) << "Ignoring irrelevant key: " << key;
             return false;
         }
-        return matchAttributes(key_value_pair->second);
+        return matchAttributes(key_value_pair->second, matched_override_keywords);
     } else if (type == MatchType::Operator && operator_type == Operators::And) {
         for (const MatchQuery &inner_match: items) {
-            if (!inner_match.matchAttributes(key_value_pairs)) return false;
+            if (!inner_match.matchAttributes(key_value_pairs, matched_override_keywords)) {
+                return false;
+            }
         }
         return true;
     } else if (type == MatchType::Operator && operator_type == Operators::Or) {
+        // With 'or' condition, evaluate matched override keywords first and add the ones that were fully matched
+        set<string> inner_override_keywords;
         for (const MatchQuery &inner_match: items) {
-            if (inner_match.matchAttributes(key_value_pairs)) return true;
+            inner_override_keywords.clear();
+            if (inner_match.matchAttributes(key_value_pairs, inner_override_keywords)) {
+                matched_override_keywords.insert(inner_override_keywords.begin(), inner_override_keywords.end());
+                return true;
+            }
         }
         return false;
     } else {
@@ -246,18 +259,39 @@ MatchQuery::matchAttributes(const unordered_map<string, set<string>> &key_value_
     return false;
 }
 
+MatchQuery::MatchResult
+MatchQuery::getMatch( const unordered_map<string, set<string>> &key_value_pairs) const
+{
+    MatchQuery::MatchResult matches;
+    matches.matched_keywords = make_shared<set<string>>();
+    matches.is_match = matchAttributes(key_value_pairs, *matches.matched_keywords);
+    return matches;
+}
+
 bool
-MatchQuery::matchAttributes(const set<string> &values) const
+MatchQuery::matchAttributes(
+        const unordered_map<string, set<string>> &key_value_pairs) const
+{
+    return getMatch(key_value_pairs).is_match;
+}
+
+bool
+MatchQuery::matchAttributes(
+        const set<string> &values,
+        set<string> &matched_override_keywords) const
 {
     auto &type = condition_type;
     bool negate = type == MatchQuery::Conditions::NotEquals || type == MatchQuery::Conditions::NotIn;
-    bool match = isRegEx() ? matchAttributesRegEx(values) : matchAttributesString(values);
+    bool match = isRegEx() ? matchAttributesRegEx(values, matched_override_keywords) : matchAttributesString(values);
     return negate ? !match : match;
 }
 
 bool
-MatchQuery::matchAttributesRegEx(const set<string> &values) const
+MatchQuery::matchAttributesRegEx(
+        const set<string> &values,
+        set<string> &matched_override_keywords) const
 {
+    bool res = false;
     boost::cmatch value_matcher;
     for (const boost::regex &val_regex : regex_values) {
         for (const string &requested_match_value : values) {
@@ -268,11 +302,16 @@ MatchQuery::matchAttributesRegEx(const set<string> &values) const
                 value_matcher,
                 val_regex))
             {
-                return true;
+                res = true;
+                if (is_ignore_keyword) {
+                    matched_override_keywords.insert(requested_match_value);
+                } else {
+                    return res;
+                }
             }
         }
     }
-    return false;
+    return res;
 }
 
 bool

@@ -111,7 +111,11 @@ public:
     }
 
     bool
-    addStream(ReportIS::StreamType type, const string &log_server_url) override
+    addStream(
+        ReportIS::StreamType type,
+        const string &log_server_url,
+        const string &_protocol
+    ) override
     {
         string log_type = TagAndEnumManagement::convertToString(type);
         if (streams_preperation.find(type) != streams_preperation.end()) {
@@ -124,8 +128,9 @@ public:
             string ip = log_server_url.substr(0, log_server_url.find(':'));
             string port = log_server_url.substr(log_server_url.find(':') + 1, log_server_url.length());
             int port_num = stoi(port);
+            auto protocol = (_protocol == "TCP") ? I_Socket::SocketType::TCP : I_Socket::SocketType::UDP;
 
-            streams_preperation[type] = makeStream(type, ip, port_num);
+            streams_preperation[type] = makeStream(type, ip, port_num, protocol);
             dbgInfo(D_REPORT)
                 << "Successfully added log stream. Stream type: "
                 << log_type
@@ -265,6 +270,7 @@ private:
             case StreamType::JSON_DEBUG: return make_shared<DebugStream>();
             case StreamType::JSON_FOG: return make_shared<FogStream>();
             case StreamType::JSON_LOG_FILE: return make_shared<LogFileStream>();
+            case StreamType::JSON_K8S_SVC: return make_shared<K8sSvcStream>();
             case StreamType::SYSLOG: return nullptr;
             case StreamType::CEF: return nullptr;
             case StreamType::NONE: return nullptr;
@@ -275,12 +281,11 @@ private:
     }
 
     shared_ptr<Stream>
-    makeStream(StreamType type, const string &ip, int port)
+    makeStream(StreamType type, const string &ip, int port, I_Socket::SocketType protocol)
     {
         switch (type) {
-            case StreamType::SYSLOG:
-                return make_shared<SyslogStream>(ip, port);
-            case StreamType::CEF: return make_shared<CefStream>(ip, port);
+            case StreamType::SYSLOG: return make_shared<SyslogStream>(ip, port, protocol);
+            case StreamType::CEF: return make_shared<CefStream>(ip, port, protocol);
             default:
                 dbgWarning(D_REPORT) << "Invalid stream type with url";
                 return NULL;

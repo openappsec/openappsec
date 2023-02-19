@@ -21,26 +21,21 @@
 #include "debug.h"
 #include "rest.h"
 #include "cereal/archives/json.hpp"
+#include <cereal/types/map.hpp>
+
+#include "k8s_policy_common.h"
 
 USE_DEBUG_FLAG(D_K8S_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 class IngressMetadata
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "IngressMetadata load";
-        parseAppsecJSONKey<std::string>("name", name, archive_in);
-        parseAppsecJSONKey<std::string>("resourceVersion", resourceVersion, archive_in);
-        parseAppsecJSONKey<std::string>("namespace", namespace_name, archive_in);
-        parseAppsecJSONKey<std::map<std::string, std::string>>("annotations", annotations, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getName() const { return name; }
-    const std::string & getResourceVersion() const { return resourceVersion; }
-    const std::string & getNamespace() const { return namespace_name; }
-    const std::map<std::string, std::string> & getAnnotations() const { return annotations; }
+    const std::string & getName() const;
+    const std::string & getResourceVersion() const;
+    const std::string & getNamespace() const;
+    const std::map<std::string, std::string> & getAnnotations() const;
 
 private:
     std::string name;
@@ -53,19 +48,15 @@ class IngressRulePath
 {
 public:
     void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading ingress defined rule path";
-        parseAppsecJSONKey<std::string>("path", path, archive_in);
-    }
+    load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getPath() const { return path; }
+    const std::string & getPath() const;
 
 private:
     std::string path;
 };
 
-std::ostream &
+inline std::ostream &
 operator<<(std::ostream &os, const IngressRulePath &obj)
 {
     os << obj.getPath();
@@ -75,14 +66,9 @@ operator<<(std::ostream &os, const IngressRulePath &obj)
 class IngressRulePathsWrapper
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading ingress defined rule path wrapper";
-        parseAppsecJSONKey<std::vector<IngressRulePath>>("paths", paths, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::vector<IngressRulePath> & getRulePaths() const { return paths; }
+    const std::vector<IngressRulePath> & getRulePaths() const;
 
 private:
     std::vector<IngressRulePath> paths;
@@ -91,23 +77,17 @@ private:
 class IngressDefinedRule
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading ingress defined rule";
-        parseAppsecJSONKey<std::string>("host", host, archive_in);
-        parseAppsecJSONKey<IngressRulePathsWrapper>("http", paths_wrapper, archive_in);
-    }
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getHost() const { return host; }
-    const IngressRulePathsWrapper & getPathsWrapper() const { return paths_wrapper; }
+    const std::string & getHost() const;
+    const IngressRulePathsWrapper & getPathsWrapper() const;
 
 private:
     std::string host;
     IngressRulePathsWrapper paths_wrapper;
 };
 
-std::ostream &
+inline std::ostream &
 operator<<(std::ostream &os, const IngressDefinedRule &obj)
 {
     os
@@ -123,13 +103,9 @@ class DefaultBackend
 {
 public:
     void
-    load(cereal::JSONInputArchive &)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading Default Backend";
-        is_exists = true;
-    }
+    load(cereal::JSONInputArchive &);
 
-    bool isExists() const { return is_exists; }
+    bool isExists() const;
 
 private:
     bool is_exists = false;
@@ -139,17 +115,11 @@ class IngressSpec
 {
 public:
     void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading single ingress spec";
-        parseAppsecJSONKey<std::string>("ingressClassName", ingress_class_name, archive_in);
-        parseAppsecJSONKey<std::vector<IngressDefinedRule>>("rules", rules, archive_in);
-        parseAppsecJSONKey<DefaultBackend>("defaultBackend", default_backend, archive_in);
-    }
+    load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getIngressClassName() const { return ingress_class_name; }
-    const std::vector<IngressDefinedRule> & getRules() const { return rules; }
-    bool isDefaultBackendExists() const { return default_backend.isExists(); }
+    const std::string & getIngressClassName() const;
+    const std::vector<IngressDefinedRule> & getRules() const;
+    bool isDefaultBackendExists() const;
 
 private:
     std::string ingress_class_name;
@@ -157,31 +127,14 @@ private:
     DefaultBackend default_backend;
 };
 
-std::ostream &
-operator<<(std::ostream &os, const IngressSpec &obj)
-{
-    os
-        << "Ingress Spec - ingressClassName: "
-        << obj.getIngressClassName()
-        << ", rules: [" << std::endl
-        << makeSeparatedStr(obj.getRules(), ",")
-        << std::endl << "]";
-    return os;
-}
-
 class SingleIngressData
 {
 public:
     void
-    load(cereal::JSONInputArchive &archive_in)
-    {
-        dbgTrace(D_K8S_POLICY) << "Loading single ingress data";
-        parseAppsecJSONKey<IngressMetadata>("metadata", metadata, archive_in);
-        parseAppsecJSONKey<IngressSpec>("spec", spec, archive_in);
-    }
+    load(cereal::JSONInputArchive &archive_in);
 
-    const IngressMetadata & getMetadata() const { return metadata; }
-    const IngressSpec & getSpec() const { return spec; }
+    const IngressMetadata & getMetadata() const;
+    const IngressSpec & getSpec() const;
 
 private:
     IngressMetadata metadata;
@@ -192,29 +145,10 @@ private:
 class IngressData : public ClientRest
 {
 public:
-    bool
-    loadJson(const std::string &json)
-    {
-        std::string modified_json = json;
-        modified_json.pop_back();
-        std::stringstream in;
-        in.str(modified_json);
-        dbgTrace(D_K8S_POLICY) << "Loading ingress data";
-        try {
-            cereal::JSONInputArchive in_ar(in);
-            in_ar(
-                cereal::make_nvp("apiVersion", apiVersion),
-                cereal::make_nvp("items", items)
-            );
-        } catch (cereal::Exception &e) {
-            dbgError(D_K8S_POLICY) << "Failed to load ingress data JSON. Error: " << e.what();
-            return false;
-        }
-        return true;
-    }
+    bool loadJson(const std::string &json);
 
-    const std::string & getapiVersion() const { return apiVersion; }
-    const std::vector<SingleIngressData> & getItems() const { return items; }
+    const std::string & getapiVersion() const;
+    const std::vector<SingleIngressData> & getItems() const;
 
 private:
     std::string apiVersion;

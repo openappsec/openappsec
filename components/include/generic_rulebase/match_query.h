@@ -18,6 +18,7 @@
 #include <string>
 #include <set>
 #include <map>
+#include <memory>
 #include <arpa/inet.h>
 
 #include "cereal/types/string.hpp"
@@ -45,6 +46,13 @@ public:
         Domain,
         NotStatic
     };
+    struct MatchResult
+    {
+        bool is_match;
+        std::shared_ptr<std::set<std::string>> matched_keywords;
+    };
+
+    MatchQuery(): is_specific_label(false), is_ignore_keyword(false) {}
 
     void load(cereal::JSONInputArchive &archive_in);
 
@@ -58,6 +66,7 @@ public:
     const std::vector<IpProtoRange> & getProtoValue() const { return ip_proto_value; }
     const std::vector<MatchQuery> & getItems() const { return items; }
     std::string getFirstValue() const { return first_value; }
+    MatchResult getMatch(const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
     bool matchAttributes(const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
     bool matchException(const std::string &behaviorKey, const std::string &behaviorValue) const;
     bool isKeyTypeIp() const;
@@ -69,9 +78,14 @@ public:
     std::set<std::string> getAllKeys() const;
 
 private:
+    bool matchAttributes(
+            const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
+            std::set<std::string> &matched_override_keywords) const;
     StaticKeys getKeyByName(const std::string &key_type_name);
-    bool matchAttributes(const std::set<std::string> &values) const;
-    bool matchAttributesRegEx(const std::set<std::string> &values) const;
+    bool matchAttributes(const std::set<std::string> &values,
+            std::set<std::string> &matched_override_keywords) const;
+    bool matchAttributesRegEx(const std::set<std::string> &values,
+            std::set<std::string> &matched_override_keywords) const;
     bool matchAttributesString(const std::set<std::string> &values) const;
     bool isRegEx() const;
 
@@ -88,6 +102,7 @@ private:
     std::vector<PortsRange> port_value;
     std::vector<IpProtoRange> ip_proto_value;
     std::vector<MatchQuery> items;
+    bool is_ignore_keyword;
 };
 
 #endif // __MATCH_QUERY_H__

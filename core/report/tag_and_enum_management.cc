@@ -98,7 +98,8 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"Reverse Proxy", ReportIS::Tags::REVERSE_PROXY},
         {"Http Geo Filter", ReportIS::Tags::HTTP_GEO_FILTER},
         {"File Upload", ReportIS::Tags::FILE_UPLOAD},
-        {"Identity Awareness", ReportIS::Tags::IDENTITY_AWARENESS}
+        {"Identity Awareness", ReportIS::Tags::IDENTITY_AWARENESS},
+        {"Rate Limit", ReportIS::Tags::RATE_LIMIT}
     };
 
     auto report_is_tag = strings_to_tags.find(tag);
@@ -135,6 +136,7 @@ TagAndEnumManagement::convertToString(const StreamType &stream_type)
         case StreamType::JSON_DEBUG:    return "JSON Debug stream";
         case StreamType::JSON_FOG:      return "JSON FOG stream";
         case StreamType::JSON_LOG_FILE: return "JSON File stream";
+        case StreamType::JSON_K8S_SVC:  return "JSON K8S service stream";
         case StreamType::SYSLOG:        return "Syslog stream";
         case StreamType::CEF:           return "CEF stream";
 
@@ -307,7 +309,8 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Reverse Proxy",
     "Http Geo Filter",
     "File Upload",
-    "Identity Awareness"
+    "Identity Awareness",
+    "Rate Limit"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

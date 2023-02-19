@@ -31,6 +31,7 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     std::string param_name = IndicatorsFiltersManager::generateKey(res.location, res.param_name, m_transaction);
     dbgTrace(D_WAAP_SCANNER) << "filter processing for parameter: " << param_name;
     m_transaction->getAssetState()->logIndicatorsInFilters(param_name, keywordsSet, m_transaction);
+
     m_transaction->getAssetState()->filterKeywords(param_name, keywordsSet, res.filtered_keywords);
     if (m_transaction->getSiteConfig() != nullptr)
     {
@@ -40,6 +41,7 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
         }
     }
     m_transaction->getAssetState()->filterKeywordsByParameters(res.param_name, keywordsSet);
+
 
     // The keywords are only removed in production, they are still used while building scores
     if (!m_transaction->get_ignoreScore()) {
@@ -66,6 +68,7 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     std::sort(res.keyword_matches.begin(), res.keyword_matches.end());
 
     std::string keywords_string;
+    std::vector<std::string> strippedKeywords;
     for (auto pKeyword = keywordsSet.begin(); pKeyword != keywordsSet.end(); ++pKeyword) {
         // Add spaces between the items, but not before the first one
         if (pKeyword != keywordsSet.begin()) {
@@ -75,15 +78,21 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
         std::string k = *pKeyword;
         stripSpaces(k);
         keywords_string += k;
+        strippedKeywords.push_back(k);
     }
 
     std::vector<std::string> newKeywords;
     for (auto pKeyword = keywordsSet.begin(); pKeyword != keywordsSet.end(); ++pKeyword) {
         std::string k = *pKeyword;
         stripSpaces(k);
-        // if keyword_string.count(key) < 2: new_keywords.append(key)
         if (countSubstrings(keywords_string, k) < 2) {
             newKeywords.push_back(k);
+        } else {
+            if ((std::count(strippedKeywords.begin(), strippedKeywords.end(), k)  > 1) ) {
+                if ((std::count(newKeywords.begin(), newKeywords.end(), k)  < 1)) {
+                    newKeywords.push_back(k);
+                }
+            }
         }
     }
 
@@ -127,6 +136,10 @@ bool Waap::Scanner::suspiciousHit(Waf2ScanResult& res, DeepParser &dp,
     res.location = location;
     res.param_name = param_name; // remember the param name (analyzer needs it for reporting)
 
+    // call shouldIgnoreOverride prior to score calculation, so that matched override keywords will be filtered
+    // when an ignore override action is detected
+    bool ignoreOverride = m_transaction->shouldIgnoreOverride(res);
+
     // Select scores pool by location
     std::string poolName = Waap::Scores::getScorePoolNameByLocation(location);
 
@@ -145,7 +158,7 @@ bool Waap::Scanner::suspiciousHit(Waf2ScanResult& res, DeepParser &dp,
         );
     }
 
-    if (isKeyCspReport(key, res, dp) || m_transaction->shouldIgnoreOverride(res)) {
+    if (isKeyCspReport(key, res, dp) || ignoreOverride) {
         dbgTrace(D_WAAP_SCANNER) << "Ignoring parameter key/value " << res.param_name <<
             " due to ignore action in override";
         m_bIgnoreOverride = true;

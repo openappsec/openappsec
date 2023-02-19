@@ -28,31 +28,10 @@ USE_DEBUG_FLAG(D_K8S_POLICY);
 class AgentSettingsSection
 {
 public:
-    AgentSettingsSection(
-        const std::string &_key,
-        const std::string &_value)
-            :
-        key(_key),
-        value(_value)
-    {
-        try {
-            id = to_string(boost::uuids::random_generator()());
-        } catch (const boost::uuids::entropy_error &e) {
-            dbgWarning(D_K8S_POLICY) << "Failed to generate agent setting UUID. Error: " << e.what();
-        }
-    }
+    AgentSettingsSection(const std::string &_key, const std::string &_value);
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("id",    id),
-            cereal::make_nvp("key",   key),
-            cereal::make_nvp("value", value)
-        );
-    }
-
-    const std::string & getSettingId() const { return id; }
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::string & getSettingId() const;
 
 private:
     std::string id;
@@ -65,20 +44,7 @@ class SettingsRulebase
 public:
     SettingsRulebase(std::vector<AgentSettingsSection> _agentSettings) : agentSettings(_agentSettings) {}
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        std::string profile_type = "Kubernetes";
-        std::string upgrade_mode = "automatic";
-        out_ar(
-            cereal::make_nvp("agentSettings",                agentSettings),
-            cereal::make_nvp("agentType",                    profile_type),
-            cereal::make_nvp("allowOnlyDefinedApplications", false),
-            cereal::make_nvp("anyFog",                       true),
-            cereal::make_nvp("maxNumberOfAgents",            10),
-            cereal::make_nvp("upgradeMode",                  upgrade_mode)
-        );
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::vector<AgentSettingsSection> agentSettings;
@@ -87,27 +53,9 @@ private:
 class SettingsWrapper
 {
 public:
-    SettingsWrapper(SettingsRulebase _agent) : agent(_agent)
-    {
-        try {
-            id = to_string(boost::uuids::random_generator()());
-        } catch (const boost::uuids::entropy_error &e) {
-            dbgWarning(D_K8S_POLICY) << "Failed to generate Settings Wrapper UUID. Error: " << e.what();
-        }
-    }
+    SettingsWrapper(SettingsRulebase _agent);
 
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("profileType", profileType),
-            cereal::make_nvp("tokenType",   isToken),
-            cereal::make_nvp("tokenType",   tokenType),
-            cereal::make_nvp("name",        name),
-            cereal::make_nvp("id",          id),
-            cereal::make_nvp("agent",       agent)
-        );
-    }
+    void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::string profileType = "agent";

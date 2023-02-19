@@ -44,6 +44,7 @@
 #include "include/exceptions_section.h"
 #include "include/rules_config_section.h"
 #include "include/trusted_sources_section.h"
+#include "include/policy_maker_utils.h"
 
 using namespace std;
 
@@ -56,62 +57,6 @@ const static string syslog_key = "syslog";
 const static string mode_key = "mode";
 const static string local_mgmt_policy_path = "/conf/local_policy.yaml";
 // LCOV_EXCL_START Reason: no test exist
-class SecurityAppsWrapper
-{
-public:
-    SecurityAppsWrapper(
-        const AppSecWrapper &_waap,
-        const TriggersWrapper &_trrigers,
-        const RulesConfigWrapper &_rules,
-        const ExceptionsWrapper &_exceptions,
-        const string &_policy_version)
-            :
-        waap(_waap),
-        trrigers(_trrigers),
-        rules(_rules),
-        exceptions(_exceptions),
-        policy_version(_policy_version) {}
-
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        out_ar(
-            cereal::make_nvp("waap",       waap),
-            cereal::make_nvp("triggers",   trrigers),
-            cereal::make_nvp("rules",      rules),
-            cereal::make_nvp("exceptions", exceptions),
-            cereal::make_nvp("version", policy_version)
-        );
-    }
-
-private:
-    AppSecWrapper waap;
-    TriggersWrapper trrigers;
-    RulesConfigWrapper rules;
-    ExceptionsWrapper exceptions;
-    string policy_version;
-};
-
-class K8sPolicyWrapper
-{
-public:
-    K8sPolicyWrapper(
-        const SettingsWrapper &_settings,
-        const SecurityAppsWrapper &_security_apps)
-            :
-        settings(_settings),
-        security_apps(_security_apps) {}
-
-    void
-    serialize(cereal::JSONOutputArchive &out_ar) const
-    {
-        security_apps.serialize(out_ar);
-    }
-
-private:
-    SettingsWrapper settings;
-    SecurityAppsWrapper security_apps;
-};
 
 class NamespaceMetadata
 {
@@ -120,16 +65,16 @@ public:
     load(cereal::JSONInputArchive &archive_in)
     {
         dbgInfo(D_K8S_POLICY) << "NamespaceMetadata load";
-        parseAppsecJSONKey<std::string>("name", name, archive_in);
-        parseAppsecJSONKey<std::string>("uid", uid, archive_in);
+        parseAppsecJSONKey<string>("name", name, archive_in);
+        parseAppsecJSONKey<string>("uid", uid, archive_in);
     }
 
-    const std::string & getName() const { return name; }
-    const std::string & getUID() const { return uid; }
+    const string & getName() const { return name; }
+    const string & getUID() const { return uid; }
 
 private:
-    std::string name;
-    std::string uid;
+    string name;
+    string uid;
 };
 
 class SingleNamespaceData
@@ -151,12 +96,12 @@ class NamespaceData : public ClientRest
 {
 public:
     bool
-    loadJson(const std::string &json)
+    loadJson(const string &json)
     {
         dbgTrace(D_K8S_POLICY) << "Loading namespace data";
-        std::string modified_json = json;
+        string modified_json = json;
         modified_json.pop_back();
-        std::stringstream in;
+        stringstream in;
         in.str(modified_json);
         try {
             cereal::JSONInputArchive in_ar(in);
@@ -170,10 +115,10 @@ public:
         return true;
     }
 
-    const std::vector<SingleNamespaceData> & getItems() const { return items; }
+    const vector<SingleNamespaceData> & getItems() const { return items; }
 
 private:
-    std::vector<SingleNamespaceData> items;
+    vector<SingleNamespaceData> items;
 };
 
 class LocalPolicyMgmtGenerator::Impl
@@ -289,7 +234,7 @@ public:
             return appsec_policy;
         });
 
-        vector<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
+        list<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
         ParsedRule default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
 
         string asset;
@@ -461,7 +406,7 @@ public:
             );
             string port = "80";
             string full_url = asset_name == "Any" ? "" : url + uri + ":" + port;
-            string asset_id = rules_config.getAsstId();
+            string asset_id = rules_config.getAssetId();
             string practice_id = rules_config.getPracticeId();
 
             if (!generated_apps.count(full_url)) {
@@ -483,7 +428,7 @@ public:
                 parsed_rules.push_back(rules_config);
                 generated_apps.insert(full_url);
             }
-        }
+        } //end specific rules
 
         string exception_name;
         if (!default_rule.getExceptions().empty()) {
@@ -563,9 +508,9 @@ public:
         );
 
         SettingsWrapper profiles_section = createProfilesSection();
-        K8sPolicyWrapper k8s_policy = K8sPolicyWrapper(profiles_section, security_app_section);
+        PolicyWrapper policy_wrapper = PolicyWrapper(profiles_section, security_app_section);
 
-        return dumpPolicyToFile(k8s_policy);
+        return dumpPolicyToFile(policy_wrapper);
     }
 
     LocalPolicyEnv getEnvType() const { return env_type;}
@@ -608,14 +553,6 @@ public:
         dbgTrace(D_K8S_POLICY) << "Ingress items ammount: " << ingress.getItems().size();
         // TBD: break to methods : INXT-31445
         for (const SingleIngressData &item : ingress.getItems()) {
-            dbgTrace(D_K8S_POLICY)
-                << "Metadata name is: "
-                << item.getMetadata().getName()
-                << ", Namespace is: "
-                << item.getMetadata().getNamespace()
-                << ", Spec: "
-                << item.getSpec();
-
             set<pair<string, string>> specific_assets_from_ingress;
             for (const IngressDefinedRule &rule : item.getSpec().getRules()) {
                 string url = rule.getHost();
@@ -670,9 +607,8 @@ public:
             }
 
             AppsecSpecParser<AppsecPolicySpec> appsec_policy = maybe_appsec_policy.unpack();
-            dbgTrace(D_K8S_POLICY) << "Succeessfully retrieved AppSec policy: " << appsec_policy.getSpec();
 
-            vector<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
+            list<ParsedRule> specific_rules = appsec_policy.getSpec().getSpecificRules();
             ParsedRule default_rule = appsec_policy.getSpec().getDefaultRule();
 
             for (const ParsedRule &parsed_rule : specific_rules) {
@@ -799,10 +735,6 @@ public:
 
                     AppsecSpecParser<AppSecPracticeSpec> appsec_practice = maybe_appsec_practice.unpack();
                     practice_map.emplace(practice_annotation_name, appsec_practice.getSpec());
-                    dbgTrace(D_K8S_POLICY)
-                        << "Successfully retrieved AppSec practice"
-                        << practice_annotation_name
-                        << appsec_practice.getSpec();
                 }
 
                 string log_trigger_id;
@@ -830,7 +762,7 @@ public:
                 );
                 string port = "80";
                 string full_url = asset_name == "Any" ? "" : url + "/" + uri + ":" + port;
-                string asset_id = rules_config.getAsstId();
+                string asset_id = rules_config.getAssetId();
                 string practice_id = rules_config.getPracticeId();
 
                 if (!generated_apps.count(full_url)) {
@@ -917,10 +849,6 @@ public:
 
                 AppsecSpecParser<AppSecPracticeSpec> appsec_practice = maybe_appsec_practice.unpack();
                 practice_map.emplace(practice_name, appsec_practice.getSpec());
-                dbgTrace(D_K8S_POLICY)
-                    << "Successfully retrieved AppSec practice"
-                    << practice_name
-                    << appsec_practice.getSpec();
             }
 
             if (item.getSpec().isDefaultBackendExists()) {
@@ -978,7 +906,7 @@ public:
                     parsed_rules.push_back(default_rule_config);
                 }
 
-                string asset_id = default_rule_config.getAsstId();
+                string asset_id = default_rule_config.getAssetId();
                 string practice_id = default_rule_config.getPracticeId();
 
                 if (!generated_apps.count(asset.first + asset.second)) {
@@ -1035,7 +963,7 @@ public:
         );
 
         SettingsWrapper profiles_section = createProfilesSection();
-        K8sPolicyWrapper k8s_policy = K8sPolicyWrapper(profiles_section, security_app_section);
+        PolicyWrapper k8s_policy = PolicyWrapper(profiles_section, security_app_section);
 
         return dumpPolicyToFile(k8s_policy);
     }
@@ -1238,7 +1166,7 @@ private:
                 env_value.begin(),
                 env_value.end(),
                 env_value.begin(),
-                [](unsigned char c) { return std::tolower(c); }
+                [](unsigned char c) { return tolower(c); }
             );
             return env_value == "true";
         }
@@ -1283,12 +1211,12 @@ private:
     }
 
     const string
-    dumpPolicyToFile(const K8sPolicyWrapper &k8s_policy) const
+    dumpPolicyToFile(const PolicyWrapper &policy) const
     {
         stringstream ss;
         {
             cereal::JSONOutputArchive ar(ss);
-            k8s_policy.serialize(ar);
+            policy.save(ar);
         }
         string policy_str = ss.str();
         ofstream policy_file(local_appsec_policy_path);
@@ -1300,12 +1228,18 @@ private:
     string
     readFileContent(const string&file_path)
     {
-        ifstream file(file_path);
-        stringstream buffer;
-
-        buffer << file.rdbuf();
-
-        return buffer.str();
+        try {
+            ifstream file(file_path);
+            stringstream buffer;
+            buffer << file.rdbuf();
+            return buffer.str();
+        } catch (ifstream::failure &f) {
+            dbgWarning(D_ORCHESTRATOR)
+                << "Cannot read the file"
+                << " File: " << file_path
+                << " Error: " << f.what();
+            return "";
+        }
     }
 
     string
@@ -1435,12 +1369,6 @@ private:
                 dbgWarning(D_K8S_POLICY) << "Error: " << maybe_appsec_trigger_spec.getErr();
                 return false;
             }
-
-            dbgTrace(D_K8S_POLICY)
-                << "Successfuly retrieved AppSec exceptions for "
-                << trigger_annotation_name
-                << ":\n"
-                << *maybe_appsec_trigger_spec;
 
             LogTriggerSection log_triggers_section =
                 createLogTriggersSection(trigger_annotation_name, false, "", *maybe_appsec_trigger_spec);
@@ -1688,12 +1616,6 @@ private:
                     )
                 );
             }
-
-            dbgTrace(D_K8S_POLICY)
-                << "Successfuly retrieved AppSec web user response for: "
-                << web_user_res_annotation_name
-                << ":\n"
-                << appsec_web_user_res_spec;
         }
         return true;
     }

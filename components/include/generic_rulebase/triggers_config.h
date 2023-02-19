@@ -160,8 +160,10 @@ private:
 
     std::string name;
     std::string verbosity;
-    std::string url_for_syslog = "";
-    std::string url_for_cef = "";
+    std::string url_for_syslog = "UDP";
+    std::string url_for_cef = "UDP";
+    std::string syslog_protocol = "";
+    std::string cef_protocol = "";
     Flags<ReportIS::StreamType> active_streams;
     Flags<SecurityType> should_log_on_detect;
     Flags<SecurityType> should_log_on_prevent;

@@ -1,0 +1,203 @@
+# Copyright 2019-present, GraphQL Foundation
+
+# Mini-language for AST definition.
+# All AST nodes extend AstNode.
+# All AST nodes are visitible.
+# All AST fields have a getter and a setter and are a constructor argument.
+# We have concrete types (code T) and unions (code U).
+# S for singular field, P for plural, ? for nullable.
+# O for option in a union.
+# Scalar type ontology: string, boolean
+
+# Definitions other than OperationDefinition and FragmentDefinition
+# are experimental additions for schema parsing. (We don't support
+# nested unions in the AST mini-language, so I've flattened and elided
+# TypeSystemDefinition and TypeDefinition.)
+U Definition
+O OperationDefinition
+O FragmentDefinition
+O SchemaDefinition
+O ScalarTypeDefinition
+O ObjectTypeDefinition
+O InterfaceTypeDefinition
+O UnionTypeDefinition
+O EnumTypeDefinition
+O InputObjectTypeDefinition
+O TypeExtensionDefinition
+O DirectiveDefinition
+
+
+T Document
+P Definition definitions
+
+T OperationDefinition
+S OperationKind operation
+S? Name name
+P? VariableDefinition variableDefinitions
+P? Directive directives
+S SelectionSet selectionSet
+
+T VariableDefinition
+S Variable variable
+S Type type
+S? Value defaultValue
+
+T SelectionSet
+P Selection selections
+
+U Selection
+O Field
+O FragmentSpread
+O InlineFragment
+
+T Field
+S? Name alias
+S Name name
+P? Argument arguments
+P? Directive directives
+S? SelectionSet selectionSet
+
+T Argument
+S Name name
+S Value value
+
+T FragmentSpread
+S Name name
+P? Directive directives
+
+T InlineFragment
+S? NamedType typeCondition
+P? Directive directives
+S SelectionSet selectionSet
+
+T FragmentDefinition
+S Name name
+S NamedType typeCondition
+P? Directive directives
+S SelectionSet selectionSet
+
+U Value
+O Variable
+O IntValue
+O FloatValue
+O StringValue
+O BooleanValue
+O NullValue
+O EnumValue
+O ListValue
+O ObjectValue
+
+T Variable
+S Name name
+
+T IntValue
+S string value
+
+T FloatValue
+S string value
+
+T StringValue
+S string value
+
+T BooleanValue
+S boolean value
+
+T NullValue
+
+T EnumValue
+S string value
+
+T ListValue
+P Value values
+
+T ObjectValue
+P ObjectField fields
+
+T ObjectField
+S Name name
+S Value value
+
+T Directive
+S Name name
+P? Argument arguments
+
+U Type
+O NamedType
+O ListType
+O NonNullType
+
+T NamedType
+S Name name
+
+T ListType
+S Type type
+
+T NonNullType
+# JS version prohibits nesting nonnull in nonnull, we can't because we
+# can't support multiple unions. Fix?
+S Type type
+
+T Name
+S string value
+
+T SchemaDefinition
+P? Directive directives
+P OperationTypeDefinition operationTypes
+
+T OperationTypeDefinition
+S OperationKind operation
+S NamedType type
+
+T ScalarTypeDefinition
+S Name name
+P? Directive directives
+
+T ObjectTypeDefinition
+S Name name
+P? NamedType interfaces
+P? Directive directives
+P FieldDefinition fields
+
+T FieldDefinition
+S Name name
+P? InputValueDefinition arguments
+S Type type
+P? Directive directives
+
+T InputValueDefinition
+S Name name
+S Type type
+S? Value defaultValue
+P? Directive directives
+
+T InterfaceTypeDefinition
+S Name name
+P? Directive directives
+P FieldDefinition fields
+
+T UnionTypeDefinition
+S Name name
+P? Directive directives
+P NamedType types
+
+T EnumTypeDefinition
+S Name name
+P? Directive directives
+P EnumValueDefinition values
+
+T EnumValueDefinition
+S Name name
+P? Directive directives
+
+T InputObjectTypeDefinition
+S Name name
+P? Directive directives
+P InputValueDefinition fields
+
+T TypeExtensionDefinition
+S ObjectTypeDefinition definition
+
+T DirectiveDefinition
+S Name name
+P? InputValueDefinition arguments
+P Name locations
