@@ -121,8 +121,11 @@ INSTALL(FILES
   JsonVisitor.h
   ${BISON_LOCATION_HEADER}
   DESTINATION include/graphqlparser)
+  
+if (0)
 INSTALL(TARGETS graphqlparser
   LIBRARY DESTINATION lib)
+endif
 
 if (UNIX)
   # generate pkgconfig file
