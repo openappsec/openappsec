@@ -125,7 +125,7 @@ INSTALL(FILES
 if (0)
 INSTALL(TARGETS graphqlparser
   LIBRARY DESTINATION lib)
-endif
+endif()
 
 if (UNIX)
   # generate pkgconfig file
