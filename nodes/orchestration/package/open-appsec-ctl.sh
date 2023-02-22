@@ -1647,6 +1647,11 @@ run() # Initials - r
     elif [ "-ap" = "$1" ] || [ "--apply-policy" = "$1" ]; then
         curl_apply_policy=$(${curl_cmd} -S  -w "%{http_code}\n" -m 1 --noproxy "*" --header "Content-Type: application/json" \
         --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/set-apply-policy 2>&1)
+        while [ /etc/cp/conf/local_policy.yaml -nt /etc/cp/conf/policy.json ]; do
+            echo -n "."
+            sleep 3
+        done
+        echo "New policy applied."
         exit 1
     elif [ "-lp" = "$1" ] || [ "--list-policies" = "$1" ]; then
         echo "/etc/cp/conf/local_policy.yaml"
