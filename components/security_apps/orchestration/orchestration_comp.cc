@@ -124,7 +124,10 @@ private:
     map<string, HealthCheckStatus> field_types_status;
 };
 
-class setAgentUninstall : public ServerRest
+class SetAgentUninstall
+        :
+    public ServerRest,
+    Singleton::Consume<I_AgentDetails>
 {
 public:
     void
@@ -132,11 +135,13 @@ public:
     {
         dbgTrace(D_ORCHESTRATOR) << "Send 'agent uninstall process started' log to fog";
         setConfiguration(false, "Logging", "Enable bulk of logs");
+        string profile_id = Singleton::Consume<I_AgentDetails>::by<SetAgentUninstall>()->getProfileId();
         LogGen log (
             "Agent started uninstall process",
             Audience::INTERNAL,
             Severity::INFO,
             Priority::URGENT,
+            LogField("profileId", profile_id),
             LogField("issuingEngine", "agentUninstallProvider"),
             Tags::ORCHESTRATOR
         );
@@ -167,7 +172,7 @@ public:
         auto rest = Singleton::Consume<I_RestApi>::by<OrchestrationComp>();
         rest->addRestCall<getStatusRest>(RestAction::SHOW, "orchestration-status");
         rest->addRestCall<AddProxyRest>(RestAction::ADD, "proxy");
-        rest->addRestCall<setAgentUninstall>(RestAction::SET, "agent-uninstall");
+        rest->addRestCall<SetAgentUninstall>(RestAction::SET, "agent-uninstall");
         // Main loop of the Orchestration.
         Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
             I_MainLoop::RoutineType::RealTime,

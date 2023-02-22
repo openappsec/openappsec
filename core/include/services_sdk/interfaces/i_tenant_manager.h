@@ -41,7 +41,11 @@ public:
 
     virtual std::chrono::microseconds getTimeoutVal() const = 0;
 
-    virtual std::string getProfileId(const std::string &tenant_id, const std::string &region) const = 0;
+    virtual std::vector<std::string> getProfileId(
+        const std::string &tenant_id,
+        const std::string &region,
+        const std::string &account_id = ""
+    ) const = 0;
 
 private:
     friend class LoadNewTenants;

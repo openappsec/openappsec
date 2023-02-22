@@ -266,6 +266,10 @@ public:
     setActiveTenantAndProfile()
     {
         string container_id = inst_awareness->getFamilyID().unpack();
+        if (container_id.empty()) {
+            dbgWarning(D_NGINX_ATTACHMENT) << "Failed getting a family ID";
+            return false;
+        }
         dbgTrace(D_NGINX_ATTACHMENT) << "Found a family ID: " << container_id;
 
         I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<NginxAttachment>();
@@ -273,58 +277,44 @@ public:
         string cmd =
             "docker inspect --format='{{.Name}}' " + container_id  +
             " | awk -F'cp_nginx_gaia' '{print substr($2, index($2, \" \"))}'";
-        auto maybe_tenant_id = shell_cmd->getExecOutput(cmd, 1000, false);
+        auto maybe_tenant_profile_ids = shell_cmd->getExecOutput(cmd, 1000, false);
+        dbgTrace(D_NGINX_ATTACHMENT) << "Checking for tenant and profile IDs with the command: " << cmd;
 
-        if (maybe_tenant_id.ok()) {
-
-            string tenant_id = *maybe_tenant_id;
-            tenant_id.erase(remove(tenant_id.begin(), tenant_id.end(), '\n'), tenant_id.end());
-            dbgTrace(D_NGINX_ATTACHMENT) << "The tenant ID found is :" << tenant_id;
-
-            static string region;
-            if (region.empty()) {
-                const char *env_region = getenv("CP_NSAAS_REGION");
-                if (env_region) {
-                    region = env_region;
-                } else {
-                    region = getProfileAgentSettingWithDefault<string>("eu-west-1", "accessControl.region");
-                }
-                dbgInfo(D_NGINX_ATTACHMENT) << "Resolved region is " << region;
-            }
-
-            string profile_id = Singleton::Consume<I_TenantManager>::by<NginxAttachment>()->getProfileId(
-                tenant_id,
-                region
-            );
-
-            if (!profile_id.empty()) {
-                i_env->setActiveTenantAndProfile(tenant_id, profile_id);
-                dbgTrace(D_NGINX_ATTACHMENT)
-                    << "NGINX attachment setting active context. Tenant ID: "
-                    << tenant_id
-                    << ", Profile ID: "
-                    << profile_id
-                    << ", Region: "
-                    << region;
-                return true;
-            } else {
-                dbgWarning(D_NGINX_ATTACHMENT)
-                    << "Received an empty profile ID. Tenant ID: "
-                    << tenant_id
-                    << ", Region: "
-                    << region;
-
-                return false;
-            }
-        } else {
+        if (!maybe_tenant_profile_ids.ok()) {
             dbgWarning(D_NGINX_ATTACHMENT)
-                << "Failed getting the tenant ID: "
+                << "Failed getting the tenant and progile IDs: "
                 << cmd
                 << ". Error :"
-                << maybe_tenant_id.getErr();
+                << maybe_tenant_profile_ids.getErr();
 
             return false;
         }
+
+        dbgWarning(D_NGINX_ATTACHMENT)
+            << "Parsing the tenant and profile IDs from the container name: "
+            << maybe_tenant_profile_ids.unpack();
+
+        string tenant_profile_ids = maybe_tenant_profile_ids.unpack();
+        tenant_profile_ids.erase(
+            remove(tenant_profile_ids.begin(), tenant_profile_ids.end(), '\n'), tenant_profile_ids.end()
+        );
+
+        size_t delimeter_pos = tenant_profile_ids.find("_");
+        if (delimeter_pos == string::npos) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Couldn't parse tenant and profile IDs from the container name: "
+                << tenant_profile_ids;
+            return false;
+        }
+        string tenant_id = tenant_profile_ids.substr(0, delimeter_pos);
+        string profile_id = tenant_profile_ids.substr(delimeter_pos + 1);
+
+        i_env->setActiveTenantAndProfile(tenant_id, profile_id);
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "NGINX attachment setting active context. Tenant ID: "
+            << tenant_id
+            << ", Profile ID: "
+            << profile_id;
 
         return true;
     }

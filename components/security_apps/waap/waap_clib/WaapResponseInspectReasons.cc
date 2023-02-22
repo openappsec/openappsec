@@ -24,7 +24,8 @@ openRedirect(false),
 errorDisclosure(false),
 errorLimiter(false),
 rateLimiting(false),
-collectResponseForLog(false)
+collectResponseForLog(false),
+applyOverride(false)
 {
 }
 
@@ -36,8 +37,9 @@ ResponseInspectReasons::shouldInspect() const
         " ErrorDisclosure=" << errorDisclosure <<
         " RateLimiting=" << rateLimiting <<
         " ErrorLimiter=" << errorLimiter <<
-        " collectResponseForLog=" << collectResponseForLog;
-    return openRedirect || errorDisclosure || rateLimiting || errorLimiter || collectResponseForLog;
+        " collectResponseForLog=" << collectResponseForLog <<
+        " applyOverride=" << applyOverride;
+    return openRedirect || errorDisclosure || rateLimiting || errorLimiter || collectResponseForLog || applyOverride;
 }
 
 void
@@ -74,6 +76,20 @@ ResponseInspectReasons::setCollectResponseForLog(bool flag)
     dbgTrace(D_WAAP) << "Change ResponseInspectReasons(collectResponseForLog) " << collectResponseForLog << " to " <<
         flag;
     collectResponseForLog = flag;
+}
+
+void
+ResponseInspectReasons::setApplyOverride(bool flag)
+{
+    dbgTrace(D_WAAP) << "Change ResponseInspectReasons(setApplyOverride) " << applyOverride << " to " <<
+        flag;
+    applyOverride = flag;
+}
+
+bool
+ResponseInspectReasons::getApplyOverride(void)
+{
+    return applyOverride;
 }
 
 }

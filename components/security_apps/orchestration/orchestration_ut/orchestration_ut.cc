@@ -312,7 +312,7 @@ TEST_F(OrchestrationTest, testAgentUninstallRest)
     EXPECT_CALL(
         rest,
         mockRestCall(RestAction::ADD, "proxy", _)
-        ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
 
     init();
 

@@ -69,6 +69,7 @@ enum class AudienceTeam
     AGENT_INTELLIGENCE,
     CPVIEW_MONITORING,
     SIGNATURE_DEVELOPERS,
+    FILE_UPLOAD,
     IDENTITY_AWARENESS,
     NONE,
 
@@ -140,6 +141,7 @@ enum class IssuingEngine {
     AGENT_CORE,
     IOT_NEXT,
     SDWAN,
+    FILE_UPLOAD,
     IDA_NEXT
 };
 

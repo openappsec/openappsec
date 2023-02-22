@@ -257,6 +257,7 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::AGENT_CORE: return "Agent Core";
         case IssuingEngine::IOT_NEXT: return "iotNext";
         case IssuingEngine::SDWAN: return "sdwanGwSharing";
+        case IssuingEngine::FILE_UPLOAD: return "fileUpload";
         case IssuingEngine::IDA_NEXT: return "quantumMetaNotifyIdn";
     }
 

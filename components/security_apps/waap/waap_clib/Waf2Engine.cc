@@ -2097,6 +2097,29 @@ bool Waf2Transaction::decideResponse()
         return false; // block
     }
 
+
+    if (m_responseInspectReasons.getApplyOverride()) {
+        WaapConfigApplication ngenSiteConfig;
+
+        dbgTrace(D_WAAP_OVERRIDE) << "Checking exceptions for response";
+        if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
+            dbgTrace(D_WAAP)
+                    << "Waf2Transaction::decideResponse(): got relevant Application configuration from the I/S";
+            m_overrideState = getOverrideState(&ngenSiteConfig);
+            // Apply overrides
+            if (m_overrideState.bForceBlock) {
+                dbgTrace(D_WAAP)
+                        << "Waf2Transaction::decideResponse(): setting shouldBlock to true due to override";
+                return false; // BLOCK
+            }
+            else if (m_overrideState.bForceException) {
+                dbgTrace(D_WAAP)
+                        << "Waf2Transaction::decideResponse(): setting shouldBlock to false due to override";
+                return true; // PASS
+            }
+        }
+    }
+
     if (m_siteConfig) {
         const std::shared_ptr<Waap::Trigger::Policy> triggerPolicy = m_siteConfig->get_TriggerPolicy();
         if (!triggerPolicy) {

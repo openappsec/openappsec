@@ -25,7 +25,10 @@ public:
     MOCK_CONST_METHOD2(areTenantAndProfileActive,   bool(const std::string &, const std::string &));
     MOCK_METHOD2(addActiveTenantAndProfile,         void(const std::string &, const std::string &));
     MOCK_METHOD2(deactivateTenant,                  void(const std::string &, const std::string &));
-    MOCK_CONST_METHOD2(getProfileId,                std::string(const std::string &, const std::string &));
+    MOCK_CONST_METHOD3(
+        getProfileId,
+        std::vector<std::string>(const std::string &, const std::string &, const std::string &)
+    );
 
     MOCK_CONST_METHOD0(getTimeoutVal,               std::chrono::microseconds());
 

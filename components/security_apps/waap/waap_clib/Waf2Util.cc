@@ -971,6 +971,7 @@ bool decodeBase64Chunk(
     int acc_bits = 0; // how many bits are filled in acc
     int terminatorCharsSeen = 0; // whether '=' character was seen, and how many of them.
     uint32_t nonPrintableCharsCount = 0;
+    uint32_t spacer_count = 0;
 
     dbgTrace(D_WAAP) << "decodeBase64Chunk: value='" << value << "' match='" << string(it, end) << "'";
 
@@ -1047,8 +1048,11 @@ bool decodeBase64Chunk(
                 acc_bits -= 8;
 
                 // Count non-printable characters seen
-                if (!isprint(code)) {
+                if (!isprint(code) && (code != '\n') && (code != '\t')) {
                     nonPrintableCharsCount++;
+                }
+                if (code == '\r') {
+                    spacer_count++;
                 }
 
                 decoded += (char)code;
@@ -1059,12 +1063,24 @@ bool decodeBase64Chunk(
 
         // end of encoded sequence decoded.
 
-        dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: decoded.size=" << decoded.size() <<
-                ", nonPrintableCharsCount=" << nonPrintableCharsCount << "; decoded='" << decoded << "'";
+        dbgTrace(D_WAAP_BASE64)
+            << "decodeBase64Chunk: decoded.size="
+            << decoded.size()
+            << ", nonPrintableCharsCount="
+            << nonPrintableCharsCount
+            << ", spacer_count = "
+            << spacer_count
+            << ", decoded size = "
+            << decoded.size()
+            << "; decoded='"
+            << decoded << "'";
 
         // Return success only if decoded.size>=5 and there are less than 10% of non-printable
         // characters in output.
         if (decoded.size() >= 5) {
+            if (spacer_count > 1) {
+                nonPrintableCharsCount = nonPrintableCharsCount - spacer_count + 1;
+            }
             if (nonPrintableCharsCount * 10 < decoded.size()) {
                 dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (decode/replace) decoded.size=" << decoded.size() <<
                         ", nonPrintableCharsCount=" << nonPrintableCharsCount << ": replacing with decoded data";
@@ -1074,6 +1090,8 @@ bool decodeBase64Chunk(
                         ", nonPrintableCharsCount=" << nonPrintableCharsCount;
                 decoded.clear();
             }
+            dbgTrace(D_WAAP_BASE64) << "returning true: successfully decoded."
+                << " Returns decoded data in \"decoded\" parameter";
             return true; // successfully decoded. Returns decoded data in "decoded" parameter
         }
 
