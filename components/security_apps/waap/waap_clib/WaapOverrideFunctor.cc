@@ -99,6 +99,16 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
         else if (tag == "paramlocation" || tag == "paramLocation") {
             return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getLocation().c_str(), what, rx);
         }
+        else if (tag == "responsebody" || tag == "responseBody") {
+            waf2Transaction.getResponseInspectReasons().setApplyOverride(true);
+            if (!waf2Transaction.getResponseBody().empty()) {
+                boost::smatch matcher;
+                return NGEN::Regex::regexSearch(__FILE__, __LINE__,
+                        waf2Transaction.getResponseBody().c_str(), matcher, rx);
+            } else {
+                return false;
+            }
+        }
     }
     catch (std::runtime_error & e) {
         dbgDebug(D_WAAP_OVERRIDE) << "RegEx match for tag " << tag << " failed due to: " << e.what();

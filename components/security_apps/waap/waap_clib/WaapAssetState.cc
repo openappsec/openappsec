@@ -726,7 +726,7 @@ checkBinaryData(const std::string &line, bool binaryDataFound)
 
         for (size_t i=0; i<line.size(); ++i) {
             unsigned char ch = (unsigned char)(line[i]);
-            if (!isprint(ch)) {
+            if (!isprint(ch) && (ch != '\r') && (ch != '\t') && (ch != '\n')) {
                 nonPrintableCharsCount++;
             }
         }
@@ -735,7 +735,7 @@ checkBinaryData(const std::string &line, bool binaryDataFound)
             nonPrintableCharsCount << ", len=" << line.size();
 
         // note: the threshold here is the same as used in base64 decoding (in function b64DecodeChunk)
-        if (nonPrintableCharsCount * 3 >= line.size()) {
+        if (nonPrintableCharsCount * 32 >= line.size()*10) {
             dbgTrace(D_WAAP_SAMPLE_SCAN) <<  "checkBinaryData('" << line << "'): detected BINARY DATA";
             binaryDataFound = true;
         }

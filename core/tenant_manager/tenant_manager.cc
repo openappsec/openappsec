@@ -27,6 +27,46 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_TENANT_MANAGER);
 
+class AccountRegionPair
+{
+public:
+    void
+    load(cereal::JSONInputArchive &ar)
+    {
+        ar(
+            cereal::make_nvp("accountId", accountID),
+            cereal::make_nvp("regionName", regionName)
+        );
+    }
+
+    bool
+    operator<(const AccountRegionPair &other) const {
+        return accountID < other.getAccountID() && regionName < other.getRegion();
+    }
+
+    const string & getAccountID() const { return accountID; }
+    const string & getRegion() const { return regionName; }
+
+private:
+    string accountID;
+    string regionName;
+};
+
+class AccountRegionSet
+{
+public:
+    void
+    load(cereal::JSONInputArchive &ar)
+    {
+        cereal::load(ar, account_region_map);
+    }
+
+    const set<AccountRegionPair> & getAccoutRegionPairs() const { return account_region_map; }
+
+private:
+    set<AccountRegionPair> account_region_map;
+};
+
 class TenantManager::Impl
         :
     Singleton::Provide<I_TenantManager>::From<TenantManager>
@@ -49,7 +89,7 @@ public:
 
     chrono::microseconds getTimeoutVal() const override;
 
-    string getProfileId(const string &tenant_id, const string &region) const override;
+    vector<string> getProfileId(const string &tenant_id, const string &region, const string &account) const override;
 
     void
     addInstance(const string &tenant_id, const string &profile_id, const string &instace_id)
@@ -338,12 +378,13 @@ TenantManager::Impl::getProfileIds(const string &_tenant_id) const
     return tenant_id.profile_ids.get();
 }
 
-string
-TenantManager::Impl::getProfileId(const string &tenant_id, const string &region) const
+
+vector<string>
+TenantManager::Impl::getProfileId(const string &tenant_id, const string &region, const string &account_id = "") const
 {
     if (region.empty()) {
         dbgWarning(D_TENANT_MANAGER) << "Can't find the profile ID. Region is empty";
-        return "";
+        return vector<string>();
     }
 
     vector<string> profile_ids = fetchProfileIds(tenant_id);
@@ -352,36 +393,56 @@ TenantManager::Impl::getProfileId(const string &tenant_id, const string &region)
 
     auto i_env = Singleton::Consume<I_Environment>::by<TenantManager>();
     auto unset_tenant_on_exit = make_scope_exit([&]() { i_env->unsetActiveTenantAndProfile(); });
+
+    vector<string> profiles_to_return;
     for (const string &profile_id : profile_ids) {
+        string account_dbg = account_id.empty() ? "" : (" in the account " + account_id);
         dbgDebug(D_TENANT_MANAGER)
             << "Checking if the profile ID: "
             << profile_id
             << " corresponds to the tenant ID:  "
             << tenant_id
             << " and the region "
-            << region;
+            << region
+            << account_dbg;
 
         i_env->setActiveTenantAndProfile(tenant_id, profile_id);
 
-        auto maybe_region = getSetting<string>("region");
-        if (maybe_region.ok() && region == maybe_region.unpack()) {
-            dbgDebug(D_TENANT_MANAGER) << "The region corresponds to profile ID " << profile_id;
-            return profile_id;
+        auto maybe_account_region_set = getSetting<AccountRegionSet>("accountRegionSet");
+        if (maybe_account_region_set.ok()) {
+            for (const AccountRegionPair &account : maybe_account_region_set.unpack().getAccoutRegionPairs()) {
+                if (region == account.getRegion() && (account_id.empty() || account_id == account.getAccountID())) {
+                    dbgTrace(D_TENANT_MANAGER) << "Found a corresponding profile ID: " << profile_id;
+                    profiles_to_return.push_back(profile_id);
+                }
+            }
         } else {
-            if (maybe_region.ok()) {
-                dbgTrace(D_TENANT_MANAGER)
-                    << "The region does not corresponds to profile ID "
-                    << profile_id
-                    << " region "
-                    << *maybe_region;
+            auto maybe_region = getSetting<string>("region");
+            if (maybe_region.ok() && region == maybe_region.unpack()) {
+                dbgDebug(D_TENANT_MANAGER) << "The region corresponds to profile ID " << profile_id;
+                profiles_to_return.push_back(profile_id);
+                return profiles_to_return;
             } else {
-                dbgDebug(D_TENANT_MANAGER) << "Failed to get region for profile ID " << profile_id;
+                if (maybe_region.ok()) {
+                    dbgTrace(D_TENANT_MANAGER)
+                        << "The region does not corresponds to profile ID "
+                        << profile_id
+                        << " region "
+                        << *maybe_region;
+                } else {
+                    dbgDebug(D_TENANT_MANAGER) << "Failed to match profile ID by accountRegionSet or region";
+                }
             }
         }
     }
 
-    dbgWarning(D_TENANT_MANAGER) << "Found no profile ID for tenant " << tenant_id << " and region " << region;
-    return "";
+    if (!profiles_to_return.empty()) {
+        dbgDebug(D_TENANT_MANAGER) << "Found " << profiles_to_return.size() << " profiles that correspond";
+        return profiles_to_return;
+    }
+
+    dbgWarning(D_TENANT_MANAGER) << "Found no corresponding profile ID";
+    return vector<string>();
 }
 
 void
@@ -520,5 +581,6 @@ TenantManager::preload()
 {
     registerExpectedConfiguration<uint32_t>("Tenant Manager", "Tenant timeout");
     registerExpectedConfiguration<string>("Tenant Manager", "Tenant manager type");
+    registerExpectedSetting<AccountRegionSet>("accountRegionSet");
     registerExpectedSetting<string>("region");
 }

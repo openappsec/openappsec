@@ -51,6 +51,7 @@ public:
             if (m_tag == "sourceip" || m_tag == "sourceidentifier") {
                 m_isCidr = Waap::Util::isCIDR(m_value, m_cidr);
             }
+            m_isOverrideResponse = (m_tag == "responsebody" || m_tag == "responseBody");
 
             if (!m_isCidr) {
                 // regex build may throw boost::regex_error
@@ -71,11 +72,13 @@ public:
                 ar(cereal::make_nvp("operand1", *m_operand1));
                 m_operand2 = std::make_shared<Match>();
                 ar(cereal::make_nvp("operand2", *m_operand2));
+                m_isOverrideResponse = m_operand1->m_isOverrideResponse || m_operand2->m_isOverrideResponse;
             }
             else if (m_op == "not") {
                 // If op is "NOT" get one operand
                 m_operand1 = std::make_shared<Match>();
                 ar(cereal::make_nvp("operand1", *m_operand1));
+                m_isOverrideResponse = m_operand1->m_isOverrideResponse;
             }
         }
     }
@@ -113,6 +116,10 @@ public:
         return false;
     }
 
+    bool isOverrideResponse() const {
+        return m_isOverrideResponse;
+    }
+
 private:
     std::string m_op;
     std::shared_ptr<Match> m_operand1;
@@ -122,6 +129,7 @@ private:
     std::shared_ptr<boost::regex> m_valueRegex;
     Waap::Util::CIDRData m_cidr;
     bool        m_isCidr;
+    bool        m_isOverrideResponse;
 };
 
 class Behavior
@@ -233,6 +241,9 @@ public:
     bool isChangingRequestData() const {
         return m_isChangingRequestData;
     }
+    bool isOverrideResponse() const {
+        return m_match.isOverrideResponse();
+    }
 
     const std::string &getId() const {
         return m_id;
@@ -251,6 +262,7 @@ public:
     Policy(_A &ar) {
         std::vector<Waap::Override::Rule> rules;
         ar(cereal::make_nvp("overrides", rules));
+        m_isOverrideResponse = false;
 
         for (std::vector<Waap::Override::Rule>::const_iterator it = rules.begin(); it != rules.end(); ++it) {
             const Waap::Override::Rule& rule = *it;
@@ -262,6 +274,7 @@ public:
             {
                 m_ResponseOverrides.push_back(rule);
             }
+            m_isOverrideResponse |= rule.isOverrideResponse();
         }
     }
 
@@ -282,9 +295,14 @@ public:
         dbgTrace(D_WAAP_OVERRIDE) << "Finished matching override rules.";
     }
 
+    bool isOverrideResponse() const {
+        return m_isOverrideResponse;
+    }
+
 private:
     std::vector<Waap::Override::Rule> m_RequestOverrides; //overrides that change request data
     std::vector<Waap::Override::Rule> m_ResponseOverrides; //overrides that change response/log data
+    bool m_isOverrideResponse;
 };
 
 struct State {

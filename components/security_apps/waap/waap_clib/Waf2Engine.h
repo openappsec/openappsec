@@ -219,6 +219,8 @@ public:
     Waap::OpenRedirect::State &getOpenRedirectState() { return m_openRedirectState; }
     IWaapConfig* getSiteConfig() { return m_siteConfig; }
     void addNote(const std::string &note) { m_notes.push_back(note); }
+    const std::string &getResponseBody(void) const { return m_response_body; }
+    Waap::ResponseInspectReasons &getResponseInspectReasons(void) { return m_responseInspectReasons; }
 
 private:
     int finalizeDecision(IWaapConfig *sitePolicy, bool shouldBlock);

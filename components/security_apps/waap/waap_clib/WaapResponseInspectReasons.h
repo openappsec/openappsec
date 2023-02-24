@@ -24,12 +24,15 @@ public:
     void setRateLimiting(bool flag);
     void setErrorLimiter(bool flag);
     void setCollectResponseForLog(bool flag);
+    void setApplyOverride(bool flag);
+    bool getApplyOverride(void);
 private:
     bool openRedirect;
     bool errorDisclosure;
     bool errorLimiter;
     bool rateLimiting;
     bool collectResponseForLog;
+    bool applyOverride;
 };
 
 }

@@ -556,6 +556,7 @@ Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
     Waap::Override::State overrideState;
     std::shared_ptr<Waap::Override::Policy> overridePolicy = sitePolicy->get_OverridePolicy();
     if (overridePolicy) { // at first we will run request overrides (in order to set the source)
+        m_responseInspectReasons.setApplyOverride(overridePolicy->isOverrideResponse());
         overrideState.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, true);
     }
 
