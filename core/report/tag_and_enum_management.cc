@@ -242,8 +242,8 @@ TagAndEnumManagement::convertToString(const Notification &notification)
         case Notification::SYNC_LEARNING: return "b9b9ab04-2e2a-4cd1-b7e5-2c956861fb69";
         case Notification::SDWAN_POLICY_UPDATE: return "2b18f5a0-5503-4c6b-967f-aa71dbced1aa";
         case Notification::SDWAN_POLICY_UPDATE_ERROR: return "8d2db6ea-30b7-11ec-8d3d-0242ac130003";
-        case Notification::SDWAN_POLICY_UPDATE_LOG: return "f3a4fa06-2d91-41bc-84cd-7e9eaa9f4ce3";
-        case Notification::SDWAN_POLICY_UPDATE_ERROR_LOG: return "5529d385-44ed-46d6-b8d0-1b8a99b4fbea";
+        case Notification::SDWAN_POLICY_UPDATE_LOG: return "97cb79e1-e873-4f28-b123-5e19f8dd6f99";
+        case Notification::SDWAN_POLICY_UPDATE_ERROR_LOG: return "44ca5755-07a2-483c-b756-b7df444e175c";
     }
 
     dbgAssert(false) << "Reached impossible notification value of: " << static_cast<int>(notification);

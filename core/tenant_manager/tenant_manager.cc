@@ -410,7 +410,13 @@ TenantManager::Impl::getProfileId(const string &tenant_id, const string &region,
 
         auto maybe_account_region_set = getSetting<AccountRegionSet>("accountRegionSet");
         if (maybe_account_region_set.ok()) {
-            for (const AccountRegionPair &account : maybe_account_region_set.unpack().getAccoutRegionPairs()) {
+            auto account_region_set = maybe_account_region_set.unpack().getAccoutRegionPairs();
+            if (account_region_set.empty()) {
+                dbgTrace(D_TENANT_MANAGER) << "Old profile with new hook. Resolving to profile ID: " << profile_id;
+                profiles_to_return.push_back(profile_id);
+                return profiles_to_return;
+            }
+            for (const AccountRegionPair &account : account_region_set) {
                 if (region == account.getRegion() && (account_id.empty() || account_id == account.getAccountID())) {
                     dbgTrace(D_TENANT_MANAGER) << "Found a corresponding profile ID: " << profile_id;
                     profiles_to_return.push_back(profile_id);

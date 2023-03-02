@@ -50,6 +50,7 @@ var_sleep_interval=30
 var_error_sleep_interval=30
 var_upgrade_mode=
 var_token=
+var_email=
 var_installation_debug_mode=false
 var_startup_service=
 var_arch_flag=
@@ -132,6 +133,7 @@ usage()
     echo "--uninstall                         : Remove Nano Agent"
     echo "--token <token>                     : Registration token"
     echo "--fog <fog URL>                     : Fog Address"
+    echo "--email <email address>             : Contact Information"
     echo "--certs-dir <Trusted CA directory>  : Path to the trusted CA directory"
     echo "--public-key <Public key file path> : Path to the SSL certificate's public key file (PEM format)"
     echo "--ignore <ignore packages list>     : List of ignored packages"
@@ -222,6 +224,9 @@ while true; do
     elif [ "$1" = "--token" ]; then
         shift
         OTP_TOKEN=$1
+    elif [ "$1" = "--email" ]; then
+        shift
+        var_email=$1
     elif [ "$1" = "--offline_mode" ]; then
         var_offline_mode=true
         var_orchestration_mode="offline_mode"
@@ -891,7 +896,8 @@ install_orchestration()
     cp_print "Building the default policy json"
     echo '{"'$ORCHESTRATION_NAME'": { "fog-address":"'$var_fog_address'", ' > ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
     echo '"pulling-interval":'$var_sleep_interval', ' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
-    echo '"error-pulling-interval":'$var_error_sleep_interval'}}' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+    echo '"error-pulling-interval":'$var_error_sleep_interval'},' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+    echo '"registration-data": { "email-address": "'$var_email'"}}' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
 
     copy_orchestration_executable
     copy_k8s_executable

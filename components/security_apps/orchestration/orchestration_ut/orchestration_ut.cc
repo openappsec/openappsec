@@ -456,6 +456,25 @@ TEST_F(OrchestrationTest, register_config)
     env.fini();
 }
 
+TEST_F(OrchestrationTest, registertion_data_config)
+{
+    EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "declare-boolean-variable", _))
+        .WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::declareVariable)));
+
+    preload();
+    env.init();
+
+    string config_json =
+        "{\n"
+        "    \"email-address\": \"fake@example.com\"\n"
+        "}";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
+    EXPECT_THAT(getSetting<string>("email-address"), IsValue("fake@example.com"));
+    env.fini();
+}
+
 TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
 {
     waitForRestCall();

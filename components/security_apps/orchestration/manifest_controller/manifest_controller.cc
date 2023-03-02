@@ -397,7 +397,7 @@ ManifestController::Impl::handlePackage(
 
     if (!package.isInstallable().ok()) {
         string report_msg =
-            "Skipping installation of " + package.getName() + ".  Reason: " + package.isInstallable().getErr();
+            "Skipping installation of package: " + package.getName() + ". Reason: " + package.isInstallable().getErr();
         dbgWarning(D_ORCHESTRATOR) << report_msg;
         LogGen(report_msg, Audience::SECURITY, Severity::CRITICAL, Priority::HIGH, Tags::ORCHESTRATOR);
         current_packages.insert(make_pair(package.getName(), package));

@@ -46,12 +46,7 @@ SHELL_CMD_HANDLER(
     getSmbObjectName
 )
 #endif//smb
-#endif // SHELL_CMD_HANDLER
 
-
-// use SHELL_CMD_OUTPUT(key as string, shell command as string) to return a shell command output as the value
-// for a given key
-#ifdef SHELL_CMD_OUTPUT
 SHELL_CMD_OUTPUT("kernel_version", "uname -r")
 SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
 #endif // SHELL_CMD_OUTPUT

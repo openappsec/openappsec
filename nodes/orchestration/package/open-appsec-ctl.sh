@@ -1565,26 +1565,39 @@ stop_service() # Initials - stops
     exit 255
 }
 
+record_command() # Initials - rc
+{
+    touch /var/log/nano_agent/operations.log
+    echo "$(tail -99 /var/log/nano_agent/operations.log)" > /var/log/nano_agent/operations.log
+    echo $(date "+%Y.%m.%d-%H.%M.%S") ": " $0 $@ >> /var/log/nano_agent/operations.log
+}
+
 run() # Initials - r
 {
     r_deprecated_msg="Option ${1} is deprecated. Please use"
     if [ -z "$1" ]; then
         usage
     elif [ "--debug" = "$1" ] || [ "-d" = "$1" ]; then
+        record_command $@
         run_cpnano_debug "cpnano" "$@"
     elif [ "--display-policy" = "$1" ] || [ "-dp" = "$1" ]; then
+        record_command $@
         run_display_policy
     elif [ "--status" = "$1" ] || [ "-s" = "$1" ]; then
+        record_command $@
         run_status
         if [ "--extended" = "$2" ]; then
             shift
             run_health_check "${@}"
         fi
     elif [ "--start-agent" = "$1" ] || [ "-r" = "$1" ]; then
+        record_command $@
         run_start_agent
     elif [ "--stop-agent" = "$1" ] || [ "-q" = "$1" ]; then
+        record_command $@
         run_stop_agent
     elif [ "--uninstall" = "$1" ] || [ "-u" = "$1" ]; then
+        record_command $@
         uninstall_agent
     elif [ "--display-settings" = "$1" ]; then
         echo "${r_deprecated_msg} --display-config"
@@ -1595,42 +1608,56 @@ run() # Initials - r
     elif [ "-ls" = "$1" ]; then
         echo "${r_deprecated_msg} -lc"
     elif [ "--display-config" = "$1" ] || [ "-dc" = "$1" ]; then
+        record_command $@
         shift
         run_display_settings "${@}"
     elif [ "--load-config" = "$1" ] || [ "-lc" = "$1" ]; then
+        record_command $@
         shift
         run_load_settings "${@}"
     elif [ "--set-proxy" = "$1" ] || [ "-sp" = "$1" ]; then
+        record_command $@
         shift
         set_proxy "${@}"
     elif [ "--set-gradual-policy" = "$1" ] || [ "-gp" = "$1" ]; then
+        record_command $@
         shift
         run_update_gradual_policy "set" "${@}"
     elif [ "--delete-gradual-policy" = "$1" ] || [ "-dg" = "$1" ]; then
+        record_command $@
         shift
         run_update_gradual_policy "delete" "${@}"
     elif [ "--set-traffic-recording-policy" = "$1" ] || [ "-tr" = "$1" ]; then
+        record_command $@
         shift
         run_set_traffic_recording_policy "${@}"
     elif [ "--cp-agent-info" = "$1" ] || [ "-ai" = "$1" ]; then
+        record_command $@
         shift
         run_ai "${@}"
     elif [ "--update-certs" = "$1" ] || [ "-uc" = "$1" ]; then
+        record_command $@
         run_set_ca_directory "$2"
     elif [ "--set-public-key" = "$1" ] || [ "-pk" = "$1" ]; then
+        record_command $@
         run_set_publick_key "$2"
     elif [ "--print-metrics" = "$1" ] || [ "-pm" = "$1" ]; then
+        record_command $@
         run_print_metrics "$2"
     elif [ "--stop-service" = "$1" ] || [ "-qs" = "$1" ]; then
+        record_command $@
         shift
         stop_service "${@}"
     elif [ "--start-service" = "$1" ] || [ "-rs" = "$1" ]; then
+        record_command $@
         shift
         start_service "${@}"
     elif [ "--set-mode" = "$1" ] || [ "-sm" = "$1" ]; then
+        record_command $@
         shift
         set_mode "${@}"
     elif [ "-vp" = "$1" ] || [ "--view-policy" = "$1" ]; then
+        record_command $@
         shift
         var_policy_file=$1
         if [ -z ${var_policy_file} ]; then
@@ -1638,6 +1665,7 @@ run() # Initials - r
         fi
         less ${var_policy_file}
     elif [ "-ep" = "$1" ] || [ "--edit-policy" = "$1" ]; then
+        record_command $@
         shift
         var_policy_file=$1
         if [ -z ${var_policy_file} ]; then
@@ -1645,6 +1673,7 @@ run() # Initials - r
         fi
         vi ${var_policy_file}
     elif [ "-ap" = "$1" ] || [ "--apply-policy" = "$1" ]; then
+        record_command $@
         curl_apply_policy=$(${curl_cmd} -S  -w "%{http_code}\n" -m 1 --noproxy "*" --header "Content-Type: application/json" \
         --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/set-apply-policy 2>&1)
         while [ /etc/cp/conf/local_policy.yaml -nt /etc/cp/conf/policy.json ]; do
@@ -1654,8 +1683,10 @@ run() # Initials - r
         echo "New policy applied."
         exit 1
     elif [ "-lp" = "$1" ] || [ "--list-policies" = "$1" ]; then
+        record_command $@
         echo "/etc/cp/conf/local_policy.yaml"
     elif [ "-vl" = "$1" ] || [ "--view-logs" = "$1" ]; then
+        record_command $@
         less /var/log/nano_agent/cp-nano-http-transaction-handler.log?
     else
         usage

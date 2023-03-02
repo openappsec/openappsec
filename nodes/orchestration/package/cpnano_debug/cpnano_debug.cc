@@ -78,6 +78,7 @@ enum class Service {
     SDWAN_LOGGER,
     IOT_ENFORCE,
     IOT_DOCTOR,
+    IOT_RISK,
     IOT_GW_SENSOR,
     IOT_SNMP,
     IOT_MS_DHCP,
@@ -152,6 +153,7 @@ getServiceString(const Service service)
         case (Service::CAPSULE8): return "capsule8";
         case (Service::IOT_ENFORCE): return "iot-enforce";
         case (Service::IOT_DOCTOR): return "iot-doctor";
+        case (Service::IOT_RISK): return "iot-risk";
         case (Service::IOT_GW_SENSOR): return "iot-gw-sensor";
         case (Service::IOT_SNMP): return "iot-snmp";
         case (Service::IOT_MS_DHCP): return "iot-ms-dhcp";
@@ -266,6 +268,11 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-iot-doctor-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-iot-doctor.dbg"
+            );
+        case (Service::IOT_RISK):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-iot-risk-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-iot-risk.dbg"
             );
         case (Service::IOT_GW_SENSOR):
             return ServiceConfig(
@@ -1246,6 +1253,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::IOT_ENFORCE);
         } else if (getServiceString(Service::IOT_DOCTOR).find(maybe_service) == 0) {
             services.push_back(Service::IOT_DOCTOR);
+        } else if (getServiceString(Service::IOT_RISK).find(maybe_service) == 0) {
+            services.push_back(Service::IOT_RISK);
         } else if (getServiceString(Service::IOT_GW_SENSOR).find(maybe_service) == 0) {
             services.push_back(Service::IOT_GW_SENSOR);
         } else if (getServiceString(Service::IOT_SNMP).find(maybe_service) == 0) {
