@@ -1342,6 +1342,18 @@ private:
             << LogField("agentType", "Orchestration")
             << LogField("agentVersion", Version::get());
 
+        auto email = getSettingWithDefault<string>("", "email-address");
+        if (email != "") {
+            dbgInfo(D_ORCHESTRATOR) << "Sending registration data";
+            LogGen(
+                "Local Agent Data",
+                Audience::INTERNAL,
+                Severity::INFO,
+                Priority::LOW,
+                Tags::ORCHESTRATOR
+            ) << LogField("userDefinedId", email);
+        }
+
         reportAgentDetailsMetaData();
 
         if (!Singleton::Consume<I_ManifestController>::by<OrchestrationComp>()->loadAfterSelfUpdate()) {
@@ -1683,5 +1695,7 @@ OrchestrationComp::preload()
     registerExpectedSetting<vector<string>>("orchestration", "Orchestration status ignored policies");
     registerExpectedSetting<string>("agentType");
     registerExpectedSetting<string>("upgradeMode");
+    registerExpectedSetting<string>("email-address");
     registerExpectedConfigFile("orchestration", Config::ConfigFileType::Policy);
+    registerExpectedConfigFile("registration-data", Config::ConfigFileType::Policy);
 }

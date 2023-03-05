@@ -102,6 +102,8 @@ static const boost::regex utf_evasion_for_dot_regex(utf_evasion_for_dot_helper);
 static const std::string sqli_comma_evasion_regex_helper = "\"\\s*,\\s*\"";
 static const boost::regex sqli_comma_evasion_regex(sqli_comma_evasion_regex_helper);
 
+static const boost::regex space_evasion_regex("[[:space:]]{2,}");
+
 WaapAssetState::WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAssetState,
     const std::string& waapDataFileName,
     const std::string& id) :
@@ -267,6 +269,76 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
     }
 #endif
 
+    void trimSpaces(std::string & text) {
+        size_t result_position = 0;
+        size_t position = 0;
+        space_stage state = NO_SPACES;
+        uint32_t code;
+
+        if (text.empty()) {
+            return;
+        }
+
+        boost::cmatch what;
+        if (!boost::regex_search(text.c_str(), what, space_evasion_regex))
+            return;
+        dbgTrace(D_WAAP) << "Boost regex passed";
+        for (;position < text.size(); position++) {
+            code = text[position];
+            switch (code) {
+                case '\t':
+                case ' ':
+                case '\f':
+                case '\v':
+                    if (state == NO_SPACES) {
+                        state = SPACE_SYNBOL;
+                        text[result_position++] = code;
+                    }
+                    break;
+                case '\r':
+                    switch (state) {
+                        case (SPACE_SYNBOL):
+                            text[result_position - 1] = code;
+                            state = BR_SYMBOL;
+                            break;
+                        case (NO_SPACES):
+                            text[result_position++] = code;
+                            state = BR_SYMBOL;
+                            break;
+                        case (BN_SYMBOL):
+                            text[result_position++] = code;
+                            state = BNR_SEQUENCE;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                case '\n':
+                    switch (state) {
+                        case (SPACE_SYNBOL):
+                            text[result_position - 1] = code;
+                            state = BN_SYMBOL;
+                            break;
+                        case (NO_SPACES):
+                            text[result_position++] = code;
+                            state = BN_SYMBOL;
+                            break;
+                        case (BR_SYMBOL):
+                            text[result_position++] = code;
+                            state = BRN_SEQUENCE;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                default:
+                    text[result_position++] = code;
+                    state = NO_SPACES;
+            }
+        }
+        text.erase(result_position, position - result_position);
+    }
+
     // Python equivalent: text = re.sub(r'[^\x00-\x7F]+',' ', text)
     void replaceUnicodeSequence(std::string & text, const char repl) {
         std::string::iterator it = text.begin();
@@ -431,6 +503,8 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
 #endif
 
         dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (11) '" << text << "'";
+
+        trimSpaces(text);
 
         // 12. finally, apply tolower() to all characters of a string
         // std::for_each(text.begin(), text.end(), [](char &c) { c = tolower(c); });

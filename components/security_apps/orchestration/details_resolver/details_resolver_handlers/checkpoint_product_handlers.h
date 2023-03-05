@@ -50,7 +50,7 @@ checkIDP(shared_ptr<istream> file_stream)
         if (line.find("<identity_portal/>") != string::npos) {
             return string("false");
         }
-        if (line.find("identity_provider") != string::npos) {
+        if (line.find("<central_idp ") != string::npos) {
             return string("true");
         }
     }

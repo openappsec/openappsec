@@ -34,6 +34,8 @@
 #include "ScanResult.h"
 #include "WaapSampleValue.h"
 
+enum space_stage {SPACE_SYNBOL, BR_SYMBOL, BN_SYMBOL, BRN_SEQUENCE, BNR_SEQUENCE, NO_SPACES};
+
 class IWaf2Transaction;
 
 class WaapAssetState : public boost::noncopyable, public I_WaapAssetState
@@ -155,6 +157,7 @@ inline std::size_t hash_value(WaapAssetState::CacheKey const &cacheKey)
 }
 
 void filterUnicode(std::string & text);
+void trimSpaces(std::string & text);
 void replaceUnicodeSequence(std::string & text, const char repl);
 std::string unescape(const std::string & s);
 

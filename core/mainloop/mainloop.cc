@@ -441,6 +441,7 @@ void
 MainloopComponent::Impl::yield(bool force)
 {
     dbgAssert(curr_iter != routines.end()) << "Calling 'yield' without a running current routine";
+    if (do_stop) throw MainloopStop();
     if (!force && getTimer()->getMonotonicTime() < stop_time) return;
 
     auto env = Singleton::Consume<I_Environment>::by<MainloopComponent>()->saveEnvironment();
