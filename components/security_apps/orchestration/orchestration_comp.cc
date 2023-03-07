@@ -1349,13 +1349,41 @@ private:
         }
         if (email != "") {
             dbgInfo(D_ORCHESTRATOR) << "Sending registration data";
-            LogGen(
-                "Local Agent Data",
-                Audience::INTERNAL,
-                Severity::INFO,
-                Priority::LOW,
-                Tags::ORCHESTRATOR
-            ) << LogField("userDefinedId", email);
+            Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
+                I_MainLoop::RoutineType::Offline,
+                [email] ()
+                {
+                    chrono::microseconds curr_time = Singleton::Consume<I_TimeGet>::by<OrchestrationComp>()->getWalltime();
+
+                    Report registration_report(
+                        "Local Agent Data",
+                        Singleton::Consume<I_TimeGet>::by<OrchestrationComp>()->getWalltime(),
+                        Type::EVENT,
+                        Level::LOG,
+                        LogLevel::INFO,
+                        Audience::INTERNAL,
+                        AudienceTeam::NONE,
+                        Severity::INFO,
+                        Priority::LOW,
+                        chrono::seconds(0),
+                        LogField("agentId", Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId()),
+                        Tags::ORCHESTRATOR
+                    );
+                    registration_report << LogField("userDefinedId", email);
+
+                    LogRest registration_report_rest(registration_report);
+
+                    Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendObjectWithPersistence(
+                        registration_report_rest,
+                        I_Messaging::Method::POST,
+                        "/api/v1/agents/events",
+                        "",
+                        true,
+                        MessageTypeTag::REPORT
+                    );
+                },
+                "Send registration data"
+            );
         }
 
         reportAgentDetailsMetaData();
