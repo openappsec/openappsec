@@ -256,8 +256,8 @@ private:
         }
 
         auto agent_mode = Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getOrchestrationMode();
-        if (agent_mode == OrchestrationMode::OFFLINE || agent_mode == OrchestrationMode::HYBRID) {
-            dbgInfo(D_REPORT) << "Agent not in online mode, fog stream is no supported";
+        if (agent_mode == OrchestrationMode::OFFLINE) {
+            dbgInfo(D_REPORT) << "Agent in offline mode, fog stream is no supported";
         } else {
             addStream(StreamType::JSON_FOG);
         }

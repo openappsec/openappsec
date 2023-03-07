@@ -1343,6 +1343,10 @@ private:
             << LogField("agentVersion", Version::get());
 
         auto email = getSettingWithDefault<string>("", "email-address");
+        if (email == "") {
+            auto env_email = getenv("user_email");
+            if (env_email != nullptr) email = env_email;
+        }
         if (email != "") {
             dbgInfo(D_ORCHESTRATOR) << "Sending registration data";
             LogGen(
