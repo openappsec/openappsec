@@ -15,12 +15,12 @@
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 void
 AppSecWebBotsURI::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Web Bots URI";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Bots URI";
     parseAppsecJSONKey<string>("uri", uri, archive_in);
 }
 
@@ -33,7 +33,7 @@ AppSecWebBotsURI::getURI() const
 void
 AppSecPracticeAntiBot::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Web Bots";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Bots";
     parseAppsecJSONKey<vector<AppSecWebBotsURI>>("injected-URIs", injected_uris, archive_in);
     parseAppsecJSONKey<vector<AppSecWebBotsURI>>("validated-URIs", validated_uris, archive_in);
     parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
@@ -55,7 +55,7 @@ AppSecPracticeAntiBot::save(cereal::JSONOutputArchive &out_ar) const
 void
 AppSecWebAttackProtections::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Web Attack Protections";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Attack Protections";
     parseAppsecJSONKey<string>("csrf-enabled", csrf_protection, archive_in, "inactive");
     parseAppsecJSONKey<string>("error-disclosure-enabled", error_disclosure, archive_in, "inactive");
     parseAppsecJSONKey<string>("open-redirect-enabled", open_redirect, archive_in, "inactive");
@@ -66,7 +66,7 @@ const string
 AppSecWebAttackProtections::getCsrfProtectionMode() const
 {
     if (key_to_practices_val.find(csrf_protection) == key_to_practices_val.end()) {
-        dbgError(D_K8S_POLICY)
+        dbgError(D_LOCAL_POLICY)
             << "Failed to find a value for "
             << csrf_protection
             << ". Setting CSRF protection to Inactive";
@@ -91,7 +91,7 @@ const string
 AppSecWebAttackProtections::getOpenRedirectMode() const
 {
     if (key_to_practices_val.find(open_redirect) == key_to_practices_val.end()) {
-        dbgError(D_K8S_POLICY)
+        dbgError(D_LOCAL_POLICY)
             << "Failed to find a value for "
             << open_redirect
             << ". Setting Open Redirect mode to Inactive";
@@ -103,7 +103,7 @@ AppSecWebAttackProtections::getOpenRedirectMode() const
 void
 AppSecPracticeWebAttacks::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec practice spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec practice spec";
     parseAppsecJSONKey<AppSecWebAttackProtections>("protections", protections, archive_in);
     parseAppsecJSONKey<string>("override-mode", mode, archive_in, "Unset");
     if (getMode() == "Prevent") {
@@ -151,7 +151,7 @@ const string &
 AppSecPracticeWebAttacks::getMode(const string &default_mode) const
 {
     if (mode == "Unset" || (key_to_practices_val.find(mode) == key_to_practices_val.end())) {
-        dbgError(D_K8S_POLICY) << "Couldn't find a value for key: " << mode << ". Returning " << default_mode;
+        dbgError(D_LOCAL_POLICY) << "Couldn't find a value for key: " << mode << ". Returning " << default_mode;
         return default_mode;
     }
     return key_to_practices_val.at(mode);
@@ -160,7 +160,7 @@ AppSecPracticeWebAttacks::getMode(const string &default_mode) const
 void
 AppSecPracticeSnortSignatures::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Snort Signatures practice";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Snort Signatures practice";
     parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
 }
@@ -180,7 +180,7 @@ AppSecPracticeSnortSignatures::getConfigMap() const
 void
 AppSecPracticeOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSecPracticeOpenSchemaAPI practice";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSecPracticeOpenSchemaAPI practice";
     parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
 }
@@ -200,7 +200,7 @@ AppSecPracticeOpenSchemaAPI::getConfigMap() const
 void
 AppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec practice spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec practice spec";
     parseAppsecJSONKey<AppSecPracticeOpenSchemaAPI>(
         "openapi-schema-validation",
         openapi_schema_validation,
@@ -421,7 +421,7 @@ AppSecWrapper::save(cereal::JSONOutputArchive &out_ar) const
 void
 ParsedRule::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec ParsedRule";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec ParsedRule";
     parseAppsecJSONKey<vector<string>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<string>>("triggers", log_triggers, archive_in);
     parseAppsecJSONKey<vector<string>>("practices", practices, archive_in);
@@ -498,7 +498,7 @@ ParsedRule::getTrustedSources() const
 void
 AppsecPolicySpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec policy spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec policy spec";
     parseAppsecJSONKey<ParsedRule>("default", default_rule, archive_in);
     auto default_mode_annot =
         Singleton::Consume<I_Environment>::by<AppsecPolicySpec>()->get<string>("default mode annotation");
@@ -506,8 +506,7 @@ AppsecPolicySpec::load(cereal::JSONInputArchive &archive_in)
         default_rule.setMode(default_mode_annot.unpack());
     }
     default_rule.setHost("*");
-    parseAppsecJSONKey<list<ParsedRule>>("specific-rules", specific_rules, archive_in);
-    specific_rules.push_front(default_rule);
+    parseAppsecJSONKey<vector<ParsedRule>>("specific-rules", specific_rules, archive_in);
 }
 
 const ParsedRule &
@@ -516,7 +515,7 @@ AppsecPolicySpec::getDefaultRule() const
     return default_rule;
 }
 
-const list<ParsedRule> &
+const vector<ParsedRule> &
 AppsecPolicySpec::getSpecificRules() const
 {
     return specific_rules;
@@ -525,7 +524,7 @@ AppsecPolicySpec::getSpecificRules() const
 void
 AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading Appsec Linux Policy";
+    dbgTrace(D_LOCAL_POLICY) << "Loading Appsec Linux Policy";
     parseAppsecJSONKey<AppsecPolicySpec>("policies", policies, archive_in);
     parseAppsecJSONKey<vector<AppSecPracticeSpec>>("practices", practices, archive_in);
     parseAppsecJSONKey<vector<AppsecTriggerSpec>>("log-triggers", log_triggers, archive_in);
@@ -533,8 +532,8 @@ AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<AppsecExceptionSpec>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<TrustedSourcesSpec>>("trusted-sources", trusted_sources, archive_in);
     parseAppsecJSONKey<vector<SourceIdentifierSpecWrapper>>(
-        "source-identifier",
-        sources_identifier,
+        "source-identifiers",
+        sources_identifiers,
         archive_in
     );
 }
@@ -578,7 +577,7 @@ AppsecLinuxPolicy::getAppsecTrustedSourceSpecs() const
 const vector<SourceIdentifierSpecWrapper> &
 AppsecLinuxPolicy::getAppsecSourceIdentifierSpecs() const
 {
-    return sources_identifier;
+    return sources_identifiers;
 }
 
 // LCOV_EXCL_STOP

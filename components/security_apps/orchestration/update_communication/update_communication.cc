@@ -25,6 +25,7 @@
 #include "i_encryptor.h"
 #include "fog_authenticator.h"
 #include "fog_communication.h"
+#include "service_controller.h"
 #include "local_communication.h"
 #include "hybrid_communication.h"
 
@@ -40,6 +41,7 @@ public:
     void
     doCall() override
     {
+        Singleton::Consume<I_ServiceController>::by<UpdateCommunication>()->refreshPendingServices();
         Singleton::Consume<I_MainLoop>::by<UpdateCommunication>()->stopAll();
         status = "Operation mode had changed successfully";
     }

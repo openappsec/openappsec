@@ -49,7 +49,7 @@ private:
     void updateDecisions();
     TuningDecisionType convertDecisionType(std::string decisionTypeStr);
     TuningDecisionEnum convertDecision(std::string decisionStr);
-
+    std::string getSharedStorageHost();
 
     template<typename T>
     bool sendObject(T &obj, I_Messaging::Method method, std::string uri)
@@ -64,7 +64,7 @@ private:
             return messaging->sendObject(
                 obj,
                 method,
-                "fog-msrv-appsec-shared-files-svc",
+                getSharedStorageHost(),
                 80,
                 conn_flags,
                 uri,
@@ -83,6 +83,7 @@ private:
     }
 
     std::string m_remotePath;
+    std::string m_baseUri;
     std::map<TuningDecisionType, std::map<std::string, TuningDecisionEnum>> m_decisions;
 };
 

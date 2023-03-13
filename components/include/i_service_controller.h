@@ -26,6 +26,7 @@ enum class ReconfStatus { SUCCEEDED, IN_PROGRESS, FAILED, INACTIVE };
 class I_ServiceController
 {
 public:
+    virtual void refreshPendingServices() = 0;
     virtual const std::string & getPolicyVersion() const = 0;
     virtual const std::string & getUpdatePolicyVersion() const = 0;
     virtual void updateReconfStatus(int id, ReconfStatus status) = 0;

@@ -1351,10 +1351,9 @@ private:
             dbgInfo(D_ORCHESTRATOR) << "Sending registration data";
             Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
                 I_MainLoop::RoutineType::Offline,
+                // LCOV_EXCL_START Reason: to be refactored
                 [email] ()
                 {
-                    chrono::microseconds curr_time = Singleton::Consume<I_TimeGet>::by<OrchestrationComp>()->getWalltime();
-
                     Report registration_report(
                         "Local Agent Data",
                         Singleton::Consume<I_TimeGet>::by<OrchestrationComp>()->getWalltime(),
@@ -1382,6 +1381,7 @@ private:
                         MessageTypeTag::REPORT
                     );
                 },
+                // LCOV_EXCL_STOP
                 "Send registration data"
             );
         }

@@ -220,9 +220,15 @@ GenericMetric::generateLog()
         }
     }
 
-    string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
     LogRest metric_client_rest(metric_to_fog);
 
+    sendLog(metric_client_rest);
+}
+
+void
+GenericMetric::sendLog(const LogRest &metric_client_rest) const
+{
+    string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
     Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendObjectWithPersistence(
         metric_client_rest,
         I_Messaging::Method::POST,

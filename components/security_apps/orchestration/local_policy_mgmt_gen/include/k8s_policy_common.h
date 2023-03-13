@@ -23,7 +23,7 @@
 #include "debug.h"
 #include "rest.h"
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 enum class PracticeType { WebApplication, WebAPI };
 enum class TriggerType { Log, WebUserResponse };
@@ -65,7 +65,7 @@ parseAppsecJSONKey(
     } catch (const cereal::Exception &e) {
         archive_in.setNextName(nullptr);
         value = default_value;
-        dbgDebug(D_K8S_POLICY)
+        dbgDebug(D_LOCAL_POLICY)
             << "Could not parse the required key. Key: "
             << key_name
             << ", Error: "
@@ -91,7 +91,7 @@ public:
             cereal::JSONInputArchive in_ar(ss);
             in_ar(cereal::make_nvp("spec", spec));
         } catch (cereal::Exception &e) {
-            dbgError(D_K8S_POLICY) << "Failed to load spec JSON. Error: " << e.what();
+            dbgError(D_LOCAL_POLICY) << "Failed to load spec JSON. Error: " << e.what();
             return false;
         }
         return true;

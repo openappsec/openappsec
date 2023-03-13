@@ -48,7 +48,13 @@ private:
     DecisionTelemetryData data;
 };
 
-class WaapTelemetrics : public GenericMetric
+class WaapTelemetryBase : public GenericMetric
+{
+protected:
+    virtual void sendLog(const LogRest &metric_client_rest) const override;
+};
+
+class WaapTelemetrics : public WaapTelemetryBase
 {
 public:
     void updateMetrics(const std::string &asset_id, const DecisionTelemetryData &data);
@@ -68,7 +74,7 @@ private:
     std::unordered_set<std::string> sources_seen;
 };
 
-class WaapAttackTypesMetrics : public GenericMetric
+class WaapAttackTypesMetrics : public WaapTelemetryBase
 {
 public:
     void updateMetrics(const std::string &asset_id, const DecisionTelemetryData &data);

@@ -562,10 +562,9 @@ install_cp_nano_ctl()
 
     cp_exec "cp -f $CP_NANO_CLI ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
-    if ! [ -f $USR_SBIN_PATH/${CP_NANO_CTL} ]; then
-        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
-        cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${OPEN_APPSEC_CTL}.sh $USR_SBIN_PATH/${OPEN_APPSEC_CTL}"
-    fi
+
+    cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
+    cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${OPEN_APPSEC_CTL}.sh $USR_SBIN_PATH/${OPEN_APPSEC_CTL}"
 
     cp_exec "cp -f ${CP_NANO_DEBUG} ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG}"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG}"
@@ -987,7 +986,7 @@ install_orchestration()
     install_watchdog
 
     cp_print "Note: in order for the agent to remain active and effective it must connect to the Fog/Cloud at least every 45 days" ${FORCE_STDOUT}
-    cp_print "open-appsec Nano Agent installation completed successfully" ${FORCE_STDOUT}
+    cp_print "open-appsec Orchestration Nano Service installation completed successfully" ${FORCE_STDOUT}
 
     if [ $var_hybrid_mode = false ] && [ $var_offline_mode = false ] && [ $var_no_otp = false ] && [ $var_skip_registration = false ]; then
         time_sleep=2

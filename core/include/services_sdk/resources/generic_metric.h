@@ -38,6 +38,8 @@ namespace MetricCalculations
     template <typename PrintableKey, typename Metric> class MetricMap;
 } // MetricCalculations
 
+class LogRest;
+
 class GenericMetric
         :
     Singleton::Consume<I_MainLoop>,
@@ -83,6 +85,9 @@ public:
 
     std::string getMetricName() const;
     std::chrono::seconds getReportInterval() const;
+
+protected:
+    virtual void sendLog(const LogRest &metric_client_rest) const;
 
 private:
     class MetricsRest;

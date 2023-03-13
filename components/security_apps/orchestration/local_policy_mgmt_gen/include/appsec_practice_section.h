@@ -29,8 +29,6 @@
 #include "exceptions_section.h"
 #include "trusted_sources_section.h"
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
-
 // LCOV_EXCL_START Reason: no test exist
 class AppSecWebBotsURI
 {
@@ -355,11 +353,11 @@ public:
     void load(cereal::JSONInputArchive &archive_in);
 
     const ParsedRule & getDefaultRule() const;
-    const std::list<ParsedRule> & getSpecificRules() const;
+    const std::vector<ParsedRule> & getSpecificRules() const;
 
 private:
     ParsedRule default_rule;
-    std::list<ParsedRule> specific_rules;
+    std::vector<ParsedRule> specific_rules;
 };
 
 class AppsecLinuxPolicy : Singleton::Consume<I_Environment>
@@ -383,7 +381,7 @@ private:
     std::vector<AppSecCustomResponseSpec> custom_responses;
     std::vector<AppsecExceptionSpec> exceptions;
     std::vector<TrustedSourcesSpec> trusted_sources;
-    std::vector<SourceIdentifierSpecWrapper> sources_identifier;
+    std::vector<SourceIdentifierSpecWrapper> sources_identifiers;
 };
 
 // LCOV_EXCL_STOP

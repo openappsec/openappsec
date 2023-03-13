@@ -12,15 +12,16 @@
 // limitations under the License.
 
 #include "ingress_data.h"
+#include "customized_cereal_map.h"
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 void
 IngressMetadata::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "IngressMetadata load";
+    dbgTrace(D_LOCAL_POLICY) << "IngressMetadata load";
     parseAppsecJSONKey<string>("name", name, archive_in);
     parseAppsecJSONKey<string>("resourceVersion", resourceVersion, archive_in);
     parseAppsecJSONKey<string>("namespace", namespace_name, archive_in);
@@ -54,7 +55,7 @@ IngressMetadata::getAnnotations() const
 void
 IngressRulePath::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading ingress defined rule path";
+    dbgTrace(D_LOCAL_POLICY) << "Loading ingress defined rule path";
     parseAppsecJSONKey<string>("path", path, archive_in);
 }
 
@@ -67,7 +68,7 @@ IngressRulePath::getPath() const
 void
 IngressRulePathsWrapper::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading ingress defined rule path wrapper";
+    dbgTrace(D_LOCAL_POLICY) << "Loading ingress defined rule path wrapper";
     parseAppsecJSONKey<vector<IngressRulePath>>("paths", paths, archive_in);
 }
 
@@ -80,7 +81,7 @@ IngressRulePathsWrapper::getRulePaths() const
 void
 IngressDefinedRule::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading ingress defined rule";
+    dbgTrace(D_LOCAL_POLICY) << "Loading ingress defined rule";
     parseAppsecJSONKey<string>("host", host, archive_in);
     parseAppsecJSONKey<IngressRulePathsWrapper>("http", paths_wrapper, archive_in);
 }
@@ -100,7 +101,7 @@ IngressDefinedRule::getPathsWrapper() const
 void
 DefaultBackend::load(cereal::JSONInputArchive &)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading Default Backend";
+    dbgTrace(D_LOCAL_POLICY) << "Loading Default Backend";
     is_exists = true;
 }
 
@@ -113,7 +114,7 @@ DefaultBackend::isExists() const
 void
 IngressSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading single ingress spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading single ingress spec";
     parseAppsecJSONKey<string>("ingressClassName", ingress_class_name, archive_in);
     parseAppsecJSONKey<vector<IngressDefinedRule>>("rules", rules, archive_in);
     parseAppsecJSONKey<DefaultBackend>("defaultBackend", default_backend, archive_in);
@@ -139,7 +140,7 @@ IngressSpec::isDefaultBackendExists() const
 void
 SingleIngressData::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading single ingress data";
+    dbgTrace(D_LOCAL_POLICY) << "Loading single ingress data";
     parseAppsecJSONKey<IngressMetadata>("metadata", metadata, archive_in);
     parseAppsecJSONKey<IngressSpec>("spec", spec, archive_in);
 }
@@ -163,7 +164,7 @@ IngressData::loadJson(const string &json)
     modified_json.pop_back();
     stringstream in;
     in.str(modified_json);
-    dbgTrace(D_K8S_POLICY) << "Loading ingress data";
+    dbgTrace(D_LOCAL_POLICY) << "Loading ingress data";
     try {
         cereal::JSONInputArchive in_ar(in);
         in_ar(
@@ -171,7 +172,7 @@ IngressData::loadJson(const string &json)
             cereal::make_nvp("items", items)
         );
     } catch (cereal::Exception &e) {
-        dbgError(D_K8S_POLICY) << "Failed to load ingress data JSON. Error: " << e.what();
+        dbgError(D_LOCAL_POLICY) << "Failed to load ingress data JSON. Error: " << e.what();
         return false;
     }
     return true;

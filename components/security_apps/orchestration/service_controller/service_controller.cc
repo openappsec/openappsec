@@ -285,6 +285,7 @@ public:
         const string &service_id
     ) override;
 
+    void refreshPendingServices() override;
     const string & getPolicyVersion() const override;
     const string & getUpdatePolicyVersion() const override;
     void updateReconfStatus(int id, ReconfStatus status) override;
@@ -297,7 +298,6 @@ public:
 
 private:
     void cleanUpVirtualFiles();
-    void refreshPendingServices();
 
     bool sendSignalForServices(const set<string> &nano_services_to_update, const string &policy_version);
 

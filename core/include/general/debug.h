@@ -201,6 +201,8 @@ private:
         const uint &line
     );
 
+    void isCommunicationFlag(const DebugFlags &flag);
+
     static DebugLevel lowest_global_level;
     static I_TimeGet *time;
     static I_MainLoop *mainloop;
@@ -212,6 +214,7 @@ private:
     static std::vector<std::string> streams_from_mgmt;
 
     bool do_assert;
+    bool is_communication = false;
     DebugStreamAggr stream;
     std::set<std::shared_ptr<DebugStream>> current_active_streams;
 };

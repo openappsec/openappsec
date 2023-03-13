@@ -18,6 +18,7 @@
 #include "i_environment.h"
 #include "i_rest_api.h"
 #include "i_mainloop.h"
+#include "i_service_controller.h"
 #include "i_orchestration_tools.h"
 #include "component.h"
 
@@ -27,6 +28,7 @@ class UpdateCommunication
     Singleton::Provide<I_UpdateCommunication>,
     Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_MainLoop>,
+    Singleton::Consume<I_ServiceController>,
     Singleton::Consume<I_OrchestrationTools>
 {
 public:
