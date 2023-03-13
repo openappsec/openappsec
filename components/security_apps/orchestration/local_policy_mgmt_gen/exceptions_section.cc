@@ -15,13 +15,13 @@
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 // LCOV_EXCL_START Reason: no test exist
 void
 AppsecExceptionSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec exception spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec exception spec";
     parseAppsecJSONKey<string>("name", name, archive_in);
     parseAppsecJSONKey<string>("action", action, archive_in);
     parseAppsecJSONKey<vector<string>>("countryCode", country_code, archive_in);
@@ -159,7 +159,7 @@ ExceptionMatch::save(cereal::JSONOutputArchive &out_ar) const
             break;
         }
         default: {
-            dbgError(D_K8S_POLICY) << "No match for exception match type: " << static_cast<int>(match_type);
+            dbgError(D_LOCAL_POLICY) << "No match for exception match type: " << static_cast<int>(match_type);
         }
     }
 }
@@ -174,7 +174,7 @@ ExceptionBehavior::ExceptionBehavior(
     try {
         id = to_string(boost::uuids::random_generator()());
     } catch (const boost::uuids::entropy_error &e) {
-        dbgWarning(D_K8S_POLICY) << "Failed to generate exception behavior UUID. Error: " << e.what();
+        dbgWarning(D_LOCAL_POLICY) << "Failed to generate exception behavior UUID. Error: " << e.what();
     }
 }
 

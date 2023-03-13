@@ -280,6 +280,8 @@ Debug::Debug(
         :
     do_assert(false)
 {
+    isCommunicationFlag(flag1);
+
     auto current_configuration =
         Singleton::exists<Config::I_Config>() ? getConfigurationWithDefault(default_config, "Debug") : default_config;
     for (auto &stream : current_configuration.streams_in_context) {
@@ -309,6 +311,9 @@ Debug::Debug(
         :
     do_assert(false)
 {
+    isCommunicationFlag(flag1);
+    isCommunicationFlag(flag2);
+
     auto current_configuration =
         Singleton::exists<Config::I_Config>() ? getConfigurationWithDefault(default_config, "Debug") : default_config;
 
@@ -344,6 +349,10 @@ Debug::Debug(
         :
     do_assert(false)
 {
+    isCommunicationFlag(flag1);
+    isCommunicationFlag(flag2);
+    isCommunicationFlag(flag3);
+
     auto current_configuration =
         Singleton::exists<Config::I_Config>() ? getConfigurationWithDefault(default_config, "Debug") : default_config;
 
@@ -382,6 +391,11 @@ Debug::Debug(
         :
     do_assert(false)
 {
+    isCommunicationFlag(flag1);
+    isCommunicationFlag(flag2);
+    isCommunicationFlag(flag3);
+    isCommunicationFlag(flag4);
+
     auto current_configuration =
         Singleton::exists<Config::I_Config>() ? getConfigurationWithDefault(default_config, "Debug") : default_config;
 
@@ -694,6 +708,7 @@ Debug::findDebugFilePrefix(const string &file_name)
 void
 Debug::addActiveStream(const string &name)
 {
+    if (is_communication && name == "FOG") return;
     auto stream_entry = active_streams.find(name);
     if (stream_entry != active_streams.end()) {
         current_active_streams.insert(stream_entry->second);
@@ -733,6 +748,12 @@ Debug::startStreams(
     }
 
     is_debug_running = true;
+}
+
+void
+Debug::isCommunicationFlag(const DebugFlags &flag)
+{
+    is_communication |= (flag == D_HTTP_REQUEST || flag == D_COMMUNICATION);
 }
 
 Debug::DebugLevel Debug::lowest_global_level = default_level;

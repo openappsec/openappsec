@@ -25,7 +25,6 @@
 #include "debug.h"
 #include "k8s_policy_common.h"
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 class AssetUrlParser
 {
@@ -110,6 +109,7 @@ public:
     const std::string & getAssetId() const;
     const std::string & getPracticeId() const;
     const std::string & getPracticeName() const;
+    const std::string & getContext() const;
     const std::vector<PracticeSection> & getPractice() const;
     const std::vector<ParametersSection> & getParameters() const;
     const std::vector<RulesTriggerSection> & getTriggers() const;
@@ -123,32 +123,74 @@ private:
     std::vector<RulesTriggerSection> triggers;
 };
 
+class UsersIdentifier
+{
+public:
+    UsersIdentifier() {}
+
+    UsersIdentifier(
+        const std::string &_source_identifier,
+        std::vector<std::string> _identifier_values);
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    std::string source_identifier;
+    std::vector<std::string> identifier_values;
+};
+
+class UsersIdentifiersRulebase
+{
+public:
+    UsersIdentifiersRulebase()
+    {}
+
+    UsersIdentifiersRulebase(
+        const std::string &_context,
+        const std::string &_source_identifier,
+        std::vector<std::string> _identifier_values,
+        std::vector<UsersIdentifier> _source_identifiers);
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    std::string context;
+    std::string source_identifier;
+    std::vector<std::string> identifier_values;
+    std::vector<UsersIdentifier> source_identifiers;
+};
+
+class RulesRulebase
+{
+public:
+    RulesRulebase(
+        const std::vector<RulesConfigRulebase> &_rules_config,
+        const std::vector<UsersIdentifiersRulebase> &_users_identifiers);
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    static bool sortBySpecific(const RulesConfigRulebase &first, const RulesConfigRulebase &second);
+    static bool sortBySpecificAux(const std::string &first, const std::string &second);
+
+    std::vector<RulesConfigRulebase> rules_config;
+    std::vector<UsersIdentifiersRulebase> users_identifiers;
+};
+
 class RulesConfigWrapper
 {
 public:
-    class RulesConfig
-    {
-    public:
-        RulesConfig(const std::vector<RulesConfigRulebase> &_rules_config);
-
-        void save(cereal::JSONOutputArchive &out_ar) const;
-
-    private:
-        static bool sortBySpecific(const RulesConfigRulebase &first, const RulesConfigRulebase &second);
-        static bool sortBySpecificAux(const std::string &first, const std::string &second);
-
-        std::vector<RulesConfigRulebase> rules_config;
-    };
-
-    RulesConfigWrapper(const std::vector<RulesConfigRulebase> &_rules_config)
-        :
-    rules_config_rulebase(RulesConfig(_rules_config))
+    RulesConfigWrapper(
+        const std::vector<RulesConfigRulebase> &_rules_config,
+        const std::vector<UsersIdentifiersRulebase> &_users_identifiers)
+            :
+        rules_config_rulebase(RulesRulebase(_rules_config, _users_identifiers))
     {}
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
-    RulesConfig rules_config_rulebase;
+    RulesRulebase rules_config_rulebase;
 };
 // LCOV_EXCL_STOP
 #endif // __RULES_CONFIG_SECTION_H__

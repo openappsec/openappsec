@@ -24,6 +24,7 @@ bool checkUrlEncoded(const char *buf, size_t len)
     dbgFlow(D_WAAP);
     size_t i = 0;
     int hex_characters_to_follow = 0;
+    bool has_encoded_value = false;
 
     for (; i < len; i++) {
         char ch = buf[i];
@@ -38,6 +39,7 @@ bool checkUrlEncoded(const char *buf, size_t len)
             }
             return false;
         } else if (ch == '%') {
+            has_encoded_value = true;
             hex_characters_to_follow = 2;
             continue;
         }
@@ -75,7 +77,7 @@ bool checkUrlEncoded(const char *buf, size_t len)
         }
     }
 
-    return true;
+    return has_encoded_value;
 }
 
 ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
@@ -137,6 +139,10 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
             case '|':
                 hasCharPipe = true;
                 break;
+        }
+
+        if (isspace(ch)) {
+            hasSpace = true;
         }
 
         // The index will be 0 for even, and 1 for odd offsets
@@ -225,40 +231,6 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
     if (longestZerosSeq[0] <= 2 && longestZerosSeq[1] <= 2) {
         isUTF16 = false;
     }
-
     // Detect URLEncode value
-    size_t ofs = 0;
-    for (size_t i = 0 ; i < cur_val.size(); ++i) {
-        char ch = cur_val[i];
-
-        if (isspace(ch)) {
-            hasSpace = true;
-            isUrlEncoded = false;
-            break;
-        }
-
-        if (ofs == 0) {
-            if (ch == '%') {
-                ofs++;
-            }
-        }
-        else if (ofs <= 2) {
-            if (!isHexDigit(ch)) {
-                isUrlEncoded = false;
-                break; // at least one broken URLEncode sequence detected
-            }
-            if (ofs == 2) {
-                isUrlEncoded = true; // complete '%hh' sequence
-                ofs = 0; // search for next '%' character
-            }
-            else {
-                ofs++;
-            }
-        }
-    }
-
-    // Cancel url decoding if partial match after '%' is found, or if potential specific utf8 evasion is suspected
-    if (ofs != 0) {
-        isUrlEncoded = false;
-    }
+    isUrlEncoded = checkUrlEncoded(cur_val.data(), cur_val.size());
 }

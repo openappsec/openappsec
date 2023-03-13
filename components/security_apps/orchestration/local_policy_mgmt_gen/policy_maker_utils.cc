@@ -37,6 +37,42 @@ PolicyWrapper::save(cereal::JSONOutputArchive &out_ar) const
     security_apps.save(out_ar);
 }
 
+string
+PolicyMakerUtils::getPolicyName(const string &policy_path)
+{
+    if (policy_path.find_last_of("/") != string::npos) {
+        string policy_name = policy_path.substr(policy_path.find_last_of("/") + 1);
+        if (policy_name.find(".") != string::npos) return policy_name.substr(0, policy_name.find("."));
+        return policy_name;
+    }
+    return policy_path;
+}
+
+Maybe<AppsecLinuxPolicy>
+PolicyMakerUtils::openPolicyAsJson(const string &policy_path)
+{
+    auto maybe_policy_as_json = Singleton::Consume<I_ShellCmd>::by<PolicyMakerUtils>()->getExecOutput(
+        getFilesystemPathConfig() + "/bin/yq " + policy_path + " -o json"
+    );
+
+    if (!maybe_policy_as_json.ok()) {
+        dbgDebug(D_NGINX_POLICY) << "Could not convert policy from yaml to json";
+        return genError("Could not convert policy from yaml to json. Error: " + maybe_policy_as_json.getErr());
+    }
+
+    auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<PolicyMakerUtils>();
+    auto maybe_policy = i_orchestration_tools->jsonStringToObject<AppsecLinuxPolicy>(
+        maybe_policy_as_json.unpack()
+    );
+
+    if (!maybe_policy.ok()) {
+        string error = "Policy in path: " + policy_path + " was not loaded. Error: " + maybe_policy.getErr();
+        dbgDebug(D_NGINX_POLICY) << error;
+        return  genError(error);
+    }
+    return maybe_policy.unpack();
+}
+
 void
 PolicyMakerUtils::clearElementsMaps()
 {
@@ -388,6 +424,59 @@ createWebUserResponseTriggerSection(
     return web_user_res;
 }
 
+vector<SourcesIdentifiers>
+addSourceIdentifiersToTrustedSource(
+    const string &source_identifeir_from_trust,
+    const SourceIdentifierSpec &src_ident
+)
+{
+    vector<SourcesIdentifiers> generated_trusted_json;
+    if (src_ident.getValues().empty()) {
+        generated_trusted_json.push_back(
+            SourcesIdentifiers(src_ident.getSourceIdentifier(), source_identifeir_from_trust)
+        );
+    } else {
+        for (const string &val : src_ident.getValues()) {
+            string src_key = src_ident.getSourceIdentifier() + ":" + val;
+            generated_trusted_json.push_back(SourcesIdentifiers(src_key, source_identifeir_from_trust));
+        }
+    }
+
+    return generated_trusted_json;
+}
+
+AppSecTrustedSources
+createTrustedSourcesSection(
+    const string &treusted_sources_annotation_name,
+    const string &source_identifier_annotation_name,
+    const AppsecLinuxPolicy &policy)
+{
+    TrustedSourcesSpec treusted_sources_spec = getAppsecTrustedSourceSpecs(treusted_sources_annotation_name, policy);
+    SourceIdentifierSpecWrapper source_identifiers_spec = getAppsecSourceIdentifierSpecs(
+        source_identifier_annotation_name,
+        policy
+    );
+
+    vector<SourcesIdentifiers> generated_trusted_json;
+    for (const SourceIdentifierSpec &src_ident : source_identifiers_spec.getIdentifiers()) {
+        for (const string &source_identifeir_from_trust : treusted_sources_spec.getSourcesIdentifiers()) {
+            vector<SourcesIdentifiers> tmp_trusted = addSourceIdentifiersToTrustedSource(
+                source_identifeir_from_trust,
+                src_ident
+            );
+            generated_trusted_json.insert(generated_trusted_json.end(), tmp_trusted.begin(), tmp_trusted.end());
+        }
+    }
+
+    AppSecTrustedSources treusted_sources(
+        treusted_sources_spec.getName(),
+        treusted_sources_spec.getMinNumOfSources(),
+        generated_trusted_json
+    );
+
+    return treusted_sources;
+}
+
 InnerException
 createExceptionSection(
     const string &exception_annotation_name,
@@ -402,6 +491,44 @@ createExceptionSection(
     ExceptionBehavior exception_behavior("action", behavior);
     InnerException inner_exception(exception_behavior, exception_match);
     return inner_exception;
+}
+
+UsersIdentifiersRulebase
+createUserIdentifiers (
+    const string &source_identifier_annotation_name,
+    const AppsecLinuxPolicy &policy,
+    const string &context
+)
+{
+    string jwt_identifier = "";
+    vector<string> jwt_identifier_values;
+    vector<UsersIdentifier> user_ident_vec;
+    SourceIdentifierSpecWrapper source_identifiers_spec = getAppsecSourceIdentifierSpecs(
+        source_identifier_annotation_name,
+        policy
+    );
+
+    for (const SourceIdentifierSpec &src_ident : source_identifiers_spec.getIdentifiers()) {
+        if (src_ident.getSourceIdentifier() == "JWTKey") {
+            jwt_identifier = "JWTKey";
+            jwt_identifier_values.insert(
+                jwt_identifier_values.end(),
+                src_ident.getValues().begin(),
+                src_ident.getValues().end()
+            );
+            user_ident_vec.push_back(UsersIdentifier("authorization", src_ident.getValues()));
+        } else {
+            user_ident_vec.push_back(UsersIdentifier(src_ident.getSourceIdentifier(), src_ident.getValues()));
+        }
+    }
+    UsersIdentifiersRulebase users_ident = UsersIdentifiersRulebase(
+        context,
+        jwt_identifier,
+        jwt_identifier_values,
+        user_ident_vec
+    );
+
+    return users_ident;
 }
 
 RulesConfigRulebase
@@ -444,6 +571,7 @@ createMultiRulesSections(
         {exception_param},
         triggers
     );
+
     return rules_config;
 }
 
@@ -471,7 +599,7 @@ PolicyMakerUtils::combineElementsToPolicy(const string &policy_version)
     });
 
     AppSecWrapper appses_section(AppSecRulebase(convertMapToVector(web_apps), {}));
-    RulesConfigWrapper rules_config_section(convertMapToVector(rules_config));
+    RulesConfigWrapper rules_config_section(convertMapToVector(rules_config), convertMapToVector(users_identifiers));
     SecurityAppsWrapper security_app_section = SecurityAppsWrapper(
         appses_section,
         triggers_section,
@@ -528,6 +656,19 @@ PolicyMakerUtils::createPolicyElementsByRule(
     }
 
     if (
+        !rule_annotations[AnnotationTypes::TRUSTED_SOURCES].empty() &&
+        !rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS].empty() &&
+        !trusted_sources.count(rule_annotations[AnnotationTypes::TRUSTED_SOURCES])
+    ) {
+        trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]] =
+            createTrustedSourcesSection(
+                rule_annotations[AnnotationTypes::TRUSTED_SOURCES],
+                rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS],
+                policy
+            );
+    }
+
+    if (
         !rule_annotations[AnnotationTypes::PRACTICE].empty() &&
         !web_apps.count(rule_annotations[AnnotationTypes::PRACTICE])
     ) {
@@ -561,6 +702,15 @@ PolicyMakerUtils::createPolicyElementsByRule(
             );
             rules_config[rule_config.getAssetName()] = rule_config;
 
+            if (!rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS].empty()) {
+                UsersIdentifiersRulebase user_identifiers = createUserIdentifiers(
+                    rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS],
+                    policy,
+                    rule_config.getContext()
+                );
+                users_identifiers[rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS]] = user_identifiers;
+            }
+
             WebAppSection web_app = WebAppSection(
                 full_url == "Any" ? "" : full_url,
                 rule_config.getAssetId(),
@@ -572,7 +722,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
                 getAppsecPracticeSpec(rule_annotations[AnnotationTypes::PRACTICE], policy),
                 log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],
                 rule.getMode(),
-                AppSecTrustedSources()
+                trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]]
             );
             web_apps[rule_annotations[AnnotationTypes::PRACTICE]] = web_app;
         }
@@ -589,4 +739,5 @@ PolicyMakerUtils::createPolicyElements(
         createPolicyElementsByRule(rule, default_rule, policy, policy_name);
     }
 }
+
 // LCOV_EXCL_STOP

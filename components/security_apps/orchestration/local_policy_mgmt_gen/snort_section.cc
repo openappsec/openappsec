@@ -15,7 +15,7 @@
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
 AgentSettingsSection::AgentSettingsSection(string _key, string _value) : key(_key), value(_value)
@@ -23,7 +23,7 @@ AgentSettingsSection::AgentSettingsSection(string _key, string _value) : key(_ke
     try {
         id = to_string(boost::uuids::random_generator()());
     } catch (const boost::uuids::entropy_error &e) {
-        dbgWarning(D_K8S_POLICY) << "Failed to generate agent setting UUID. Error: " << e.what();
+        dbgWarning(D_LOCAL_POLICY) << "Failed to generate agent setting UUID. Error: " << e.what();
     }
 }
 

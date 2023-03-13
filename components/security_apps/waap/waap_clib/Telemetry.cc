@@ -27,6 +27,35 @@ USE_DEBUG_FLAG(D_WAAP);
 
 using namespace std;
 
+const static string default_host = "open-appsec-tuning-svc";
+
+void
+WaapTelemetryBase::sendLog(const LogRest &metric_client_rest) const
+{
+    OrchestrationMode mode = Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getOrchestrationMode();
+
+    if (mode == OrchestrationMode::ONLINE) {
+        GenericMetric::sendLog(metric_client_rest);
+        return;
+    }
+    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
+    Flags<MessageConnConfig> conn_flags;
+    conn_flags.setFlag(MessageConnConfig::EXTERNAL);
+    string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
+    std::string tenant_header = "X-Tenant-Id: " +
+                                Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getTenantId();
+    Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendNoReplyObject(
+        metric_client_rest,
+        I_Messaging::Method::POST,
+        svc_host,
+        80,
+        conn_flags,
+        fog_metric_uri,
+        tenant_header,
+        nullptr,
+        MessageTypeTag::METRIC);
+}
+
 void
 WaapTelemetrics::initMetrics()
 {
@@ -172,7 +201,7 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
             "WAAP telemetry",
             ReportIS::AudienceTeam::WAAP,
             ReportIS::IssuingEngine::AGENT_CORE,
-            chrono::minutes(10),
+            chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
             true,
             ReportIS::Audience::SECURITY
         );
@@ -204,7 +233,7 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
             "WAAP attack type telemetry",
             ReportIS::AudienceTeam::WAAP,
             ReportIS::IssuingEngine::AGENT_CORE,
-            chrono::minutes(10),
+            chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
             true,
             ReportIS::Audience::SECURITY
         );
@@ -255,7 +284,7 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
                 "Waap Metrics",
                 ReportIS::AudienceTeam::WAAP,
                 ReportIS::IssuingEngine::AGENT_CORE,
-                chrono::minutes(10),
+                chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
                 true,
                 ReportIS::Audience::INTERNAL
             );
@@ -267,7 +296,7 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
                 "WAAP Attack Type Metrics",
                 ReportIS::AudienceTeam::WAAP,
                 ReportIS::IssuingEngine::AGENT_CORE,
-                chrono::minutes(10),
+                chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
                 true,
                 ReportIS::Audience::INTERNAL
             );

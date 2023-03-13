@@ -15,7 +15,7 @@
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 // LCOV_EXCL_START Reason: no test exist
 AssetUrlParser
@@ -80,7 +80,7 @@ PracticeSection::PracticeSection(
 {
     auto maybe_type = string_to_practice_type.find(_type);
     if (maybe_type == string_to_practice_type.end()) {
-        dbgError(D_K8S_POLICY) << "Illegal pracrtice type: " << _type;
+        dbgError(D_LOCAL_POLICY) << "Illegal pracrtice type: " << _type;
         return;
     }
 
@@ -119,7 +119,7 @@ ParametersSection::ParametersSection(
     id(_id)
 {
     if (_id.empty() && _name.empty()) {
-        dbgError(D_K8S_POLICY) << "Illegal Parameter values. Name and ID are empty";
+        dbgError(D_LOCAL_POLICY) << "Illegal Parameter values. Name and ID are empty";
         return;
     }
 }
@@ -149,12 +149,12 @@ RulesTriggerSection::RulesTriggerSection(
     id(_id)
 {
     if (_name.empty() && _id.empty()) {
-        dbgError(D_K8S_POLICY) << "Illegal values for trigger. Name and ID are empty";
+        dbgError(D_LOCAL_POLICY) << "Illegal values for trigger. Name and ID are empty";
         return;
     }
     auto maybe_type = string_to_trigger_type.find(_type);
     if (maybe_type == string_to_trigger_type.end()) {
-        dbgError(D_K8S_POLICY) << "Illegal trigger type in rule: " << _type;
+        dbgError(D_LOCAL_POLICY) << "Illegal trigger type in rule: " << _type;
         return;
     }
     type = _type;
@@ -232,7 +232,7 @@ RulesConfigRulebase::RulesConfigRulebase(
             ")";
         }
     } catch (const boost::uuids::entropy_error &e) {
-        dbgWarning(D_K8S_POLICY) << "Failed to generate rule UUID. Error: " << e.what();
+        dbgWarning(D_LOCAL_POLICY) << "Failed to generate rule UUID. Error: " << e.what();
     }
 }
 
@@ -260,6 +260,12 @@ const string &
 RulesConfigRulebase::getRuleId() const
 {
     return id;
+}
+
+const string &
+RulesConfigRulebase::getContext() const
+{
+    return context;
 }
 
 const string &
@@ -310,23 +316,65 @@ RulesConfigRulebase::getTriggers() const
     return triggers;
 }
 
-RulesConfigWrapper::RulesConfig::RulesConfig(const vector<RulesConfigRulebase> &_rules_config)
+UsersIdentifier::UsersIdentifier(const string &_source_identifier, vector<string> _identifier_values)
         :
-    rules_config(_rules_config)
+    source_identifier(_source_identifier),
+    identifier_values(_identifier_values)
+{}
+
+void
+UsersIdentifier::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("sourceIdentifier", source_identifier),
+        cereal::make_nvp("identifierValues", identifier_values)
+    );
+}
+
+UsersIdentifiersRulebase::UsersIdentifiersRulebase(
+    const string &_context,
+    const string &_source_identifier,
+    vector<string> _identifier_values,
+    vector<UsersIdentifier> _source_identifiers)
+        :
+    context(_context),
+    source_identifier(_source_identifier),
+    identifier_values(_identifier_values),
+    source_identifiers(_source_identifiers)
+{}
+
+void
+UsersIdentifiersRulebase::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("context",         context),
+        cereal::make_nvp("sourceIdentifier", source_identifier),
+        cereal::make_nvp("identifierValues", identifier_values),
+        cereal::make_nvp("sourceIdentifiers", source_identifiers)
+    );
+}
+
+RulesRulebase::RulesRulebase(
+    const vector<RulesConfigRulebase> &_rules_config,
+    const vector<UsersIdentifiersRulebase> &_users_identifiers)
+        :
+    rules_config(_rules_config),
+    users_identifiers(_users_identifiers)
 {
     sort(rules_config.begin(), rules_config.end(), sortBySpecific);
 }
 
 void
-RulesConfigWrapper::RulesConfig::save(cereal::JSONOutputArchive &out_ar) const
+RulesRulebase::save(cereal::JSONOutputArchive &out_ar) const
 {
     out_ar(
-        cereal::make_nvp("rulesConfig", rules_config)
+        cereal::make_nvp("rulesConfig", rules_config),
+        cereal::make_nvp("usersIdentifiers", users_identifiers)
     );
 }
 
 bool
-RulesConfigWrapper::RulesConfig::sortBySpecific(
+RulesRulebase::sortBySpecific(
     const RulesConfigRulebase &first,
     const RulesConfigRulebase &second
 )
@@ -335,7 +383,7 @@ RulesConfigWrapper::RulesConfig::sortBySpecific(
 }
 
 bool
-RulesConfigWrapper::RulesConfig::sortBySpecificAux(const string &first, const string &second)
+RulesRulebase::sortBySpecificAux(const string &first, const string &second)
 {
     if (first.empty()) return false;
     if (second.empty()) return true;

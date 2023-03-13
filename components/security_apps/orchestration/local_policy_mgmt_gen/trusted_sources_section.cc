@@ -15,13 +15,13 @@
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
 void
 TrustedSourcesSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading trusted sources spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading trusted sources spec";
     parseAppsecJSONKey<int>("minNumOfSources", min_num_of_sources, archive_in, 3);
     parseAppsecJSONKey<vector<string>>("sourcesIdentifiers", sources_identifiers, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
@@ -63,7 +63,7 @@ SourcesIdentifiers::getSourceIdent() const
 void
 SourceIdentifierSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading trusted sources spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading trusted sources spec";
     parseAppsecJSONKey<string>("sourceIdentifier", source_identifier, archive_in);
     parseAppsecJSONKey<vector<string>>("value", value, archive_in);
 }
@@ -83,7 +83,7 @@ SourceIdentifierSpec::getValues() const
 void
 SourceIdentifierSpecWrapper::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading Source Identifier Spec Wrapper";
+    dbgTrace(D_LOCAL_POLICY) << "Loading Source Identifier Spec Wrapper";
     parseAppsecJSONKey<vector<SourceIdentifierSpec>>("identifiers", identifiers, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
 }
@@ -112,7 +112,7 @@ AppSecTrustedSources::AppSecTrustedSources(
     try {
         id = to_string(boost::uuids::random_generator()());
     } catch (const boost::uuids::entropy_error &e) {
-        dbgWarning(D_K8S_POLICY) << "Failed to generate Trusted Sources ID. Error: " << e.what();
+        dbgWarning(D_LOCAL_POLICY) << "Failed to generate Trusted Sources ID. Error: " << e.what();
     }
 }
 

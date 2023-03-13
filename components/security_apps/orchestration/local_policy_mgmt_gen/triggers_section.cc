@@ -15,7 +15,7 @@
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_K8S_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
 LogTriggerSection::LogTriggerSection(
@@ -67,7 +67,7 @@ LogTriggerSection::LogTriggerSection(
         id = to_string(boost::uuids::random_generator()());
         context = "triggerId(" + id + ")";
     } catch (const boost::uuids::entropy_error &e) {
-        dbgWarning(D_K8S_POLICY) << "Failed to generate log trigger UUID. Error: " << e.what();
+        dbgWarning(D_LOCAL_POLICY) << "Failed to generate log trigger UUID. Error: " << e.what();
     }
 }
 
@@ -143,7 +143,7 @@ WebUserResponseTriggerSection::WebUserResponseTriggerSection(
         id = to_string(boost::uuids::random_generator()());
         context = "triggerId(" + id + ")";
     } catch (const boost::uuids::entropy_error &e) {
-        dbgWarning(D_K8S_POLICY) << "Failed to generate webUserResponse trigger UUID. Error: " << e.what();
+        dbgWarning(D_LOCAL_POLICY) << "Failed to generate webUserResponse trigger UUID. Error: " << e.what();
     }
 }
 
@@ -181,7 +181,7 @@ WebUserResponseTriggerSection::operator<(const WebUserResponseTriggerSection &ot
 void
 AppSecCustomResponseSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec web user response spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec web user response spec";
     parseAppsecJSONKey<int>("http-response-code", httpResponseCode, archive_in, 403);
     parseAppsecJSONKey<string>("mode", mode, archive_in, "block-page");
     parseAppsecJSONKey<string>("name", name, archive_in);
@@ -243,7 +243,7 @@ TriggersRulebase::save(cereal::JSONOutputArchive &out_ar) const
 void
 AppsecTriggerAccessControlLogging::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Trigger - Access Control Logging";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger - Access Control Logging";
     parseAppsecJSONKey<bool>("allow-events", allow_events, archive_in, false);
     parseAppsecJSONKey<bool>("drop-events", drop_events, archive_in, false);
 }
@@ -263,7 +263,7 @@ AppsecTriggerAccessControlLogging::isDropEvents() const
 void
 AppsecTriggerAdditionalSuspiciousEventsLogging::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Trigger - Additional Suspicious Events Logging";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger - Additional Suspicious Events Logging";
     parseAppsecJSONKey<bool>("enabled", enabled, archive_in, true);
     parseAppsecJSONKey<bool>("response-body", response_body, archive_in, false);
     parseAppsecJSONKey<string>("minimum-severity", minimum_severity, archive_in, "high");
@@ -290,7 +290,7 @@ AppsecTriggerAdditionalSuspiciousEventsLogging::getMinimumSeverity() const
 void
 AppsecTriggerLogging::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Trigger Logging";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger Logging";
     parseAppsecJSONKey<bool>("all-web-requests", all_web_requests, archive_in, false);
     parseAppsecJSONKey<bool>("detect-events", detect_events, archive_in, false);
     parseAppsecJSONKey<bool>("prevent-events", prevent_events, archive_in, true);
@@ -317,7 +317,7 @@ AppsecTriggerLogging::isPreventEvents() const
 void
 AppsecTriggerExtendedLogging::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Trigger Extended Logging";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger Extended Logging";
     parseAppsecJSONKey<bool>("http-headers", http_headers, archive_in, false);
     parseAppsecJSONKey<bool>("request-body", request_body, archive_in, false);
     parseAppsecJSONKey<bool>("url-path", url_path, archive_in, false);
@@ -390,7 +390,7 @@ StdoutLogging::getFormat() const
 void
 AppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec Trigger LogDestination";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger LogDestination";
     // TBD: support "file"
     parseAppsecJSONKey<bool>("cloud", cloud, archive_in, false);
 
@@ -471,7 +471,7 @@ AppsecTriggerLogDestination::getCefServiceData() const
 void
 AppsecTriggerSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_K8S_POLICY) << "Loading AppSec trigger spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec trigger spec";
     parseAppsecJSONKey<AppsecTriggerAccessControlLogging>(
         "access-control-logging",
         access_control_logging,

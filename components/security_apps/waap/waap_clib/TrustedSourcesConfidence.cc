@@ -260,7 +260,6 @@ void TrustedSourcesConfidenceCalculator::log(Key key, Val value, Source source)
         << " from the source: "
         << source;
     m_logger[key][value].insert(source);
-    saveData();
 }
 
 void TrustedSourcesConfidenceCalculator::reset()

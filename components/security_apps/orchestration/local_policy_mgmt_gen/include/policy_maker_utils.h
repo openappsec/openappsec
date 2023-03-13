@@ -27,6 +27,8 @@
 #include "debug.h"
 #include "common.h"
 #include "maybe_res.h"
+#include "i_orchestration_tools.h"
+#include "i_shell_cmd.h"
 #include "appsec_practice_section.h"
 #include "ingress_data.h"
 #include "settings_section.h"
@@ -93,8 +95,16 @@ private:
 };
 // LCOV_EXCL_STOP
 class PolicyMakerUtils
+        :
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<I_OrchestrationTools>,
+    Singleton::Consume<I_ShellCmd>
 {
 public:
+    std::string getPolicyName(const std::string &policy_path);
+
+    Maybe<AppsecLinuxPolicy> openPolicyAsJson(const std::string &policy_path);
+
     void clearElementsMaps();
 
     bool startsWith(const std::string &str, const std::string &prefix);
@@ -127,6 +137,8 @@ private:
     std::map<std::string, InnerException> inner_exceptions;
     std::map<std::string, WebAppSection> web_apps;
     std::map<std::string, RulesConfigRulebase> rules_config;
+    std::map<std::string, UsersIdentifiersRulebase> users_identifiers;
+    std::map<std::string, AppSecTrustedSources> trusted_sources;
 };
 
 #endif // __POLICY_MAKER_UTILS_H__

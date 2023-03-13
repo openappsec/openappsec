@@ -16,11 +16,17 @@
 #include "i_serialize.h"
 #include "waap.h"
 
-static const std::string BASE_URI = "/storage/waap/";
+using namespace std;
+
+static const string defaultSharedStorageHost = "appsec-shared-storage-svc";
+
+#define SHARED_STORAGE_HOST_ENV_NAME "SHARED_STORAGE_HOST"
 USE_DEBUG_FLAG(D_WAAP);
 
-TuningDecision::TuningDecision(const std::string& remotePath) :
-    m_remotePath(remotePath + "/tuning")
+TuningDecision::TuningDecision(const string& remotePath)
+        :
+    m_remotePath(remotePath + "/tuning"),
+    m_baseUri()
 {
     if (remotePath == "")
     {
@@ -28,7 +34,7 @@ TuningDecision::TuningDecision(const std::string& remotePath) :
     }
     Singleton::Consume<I_MainLoop>::by<WaapComponent>()->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
-        std::chrono::minutes(10),
+        chrono::minutes(10),
         [&]() { updateDecisions(); },
         "Get tuning updates"
     );
@@ -48,9 +54,9 @@ struct TuningEvent
         ar(cereal::make_nvp("eventType", eventType));
         ar(cereal::make_nvp("eventTitle", eventTitle));
     }
-    std::string decision;
-    std::string eventType;
-    std::string eventTitle;
+    string decision;
+    string eventType;
+    string eventTitle;
 };
 
 class TuningEvents : public RestGetFile
@@ -61,16 +67,16 @@ public:
 
     }
 
-    Maybe<std::vector<TuningEvent>> getTuningEvents()
+    Maybe<vector<TuningEvent>> getTuningEvents()
     {
         return decisions.get();
     }
 
 private:
-    S2C_PARAM(std::vector<TuningEvent>, decisions);
+    S2C_PARAM(vector<TuningEvent>, decisions);
 };
 
-TuningDecisionEnum TuningDecision::convertDecision(std::string decisionStr)
+TuningDecisionEnum TuningDecision::convertDecision(string decisionStr)
 {
     if (decisionStr == "benign")
     {
@@ -87,7 +93,7 @@ TuningDecisionEnum TuningDecision::convertDecision(std::string decisionStr)
     return NO_DECISION;
 }
 
-TuningDecisionType TuningDecision::convertDecisionType(std::string decisionTypeStr)
+TuningDecisionType TuningDecision::convertDecisionType(string decisionTypeStr)
 {
     if (decisionTypeStr == "source")
     {
@@ -112,9 +118,18 @@ void TuningDecision::updateDecisions()
 {
     TuningEvents tuningEvents;
     RemoteFilesList tuningDecisionFiles;
+    if (m_baseUri == "") {
+        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
+        if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
+            m_baseUri = "/api/";
+        } else {
+            m_baseUri = "/storage/waap/";
+        }
+        dbgTrace(D_WAAP) << "URI prefix: " << m_baseUri;
+    }
     bool isSuccessful = sendObject(tuningDecisionFiles,
         I_Messaging::Method::GET,
-        BASE_URI + "?list-type=2&prefix=" + m_remotePath);
+        m_baseUri + "?list-type=2&prefix=" + m_remotePath);
 
     if (!isSuccessful || tuningDecisionFiles.getFilesList().empty())
     {
@@ -124,12 +139,12 @@ void TuningDecision::updateDecisions()
 
     if (!sendObject(tuningEvents,
         I_Messaging::Method::GET,
-        BASE_URI + tuningDecisionFiles.getFilesList()[0]))
+        m_baseUri + tuningDecisionFiles.getFilesList()[0]))
     {
         return;
     }
     m_decisions.clear();
-    Maybe<std::vector<TuningEvent>> events = tuningEvents.getTuningEvents();
+    Maybe<vector<TuningEvent>> events = tuningEvents.getTuningEvents();
     if (!events.ok())
     {
         dbgDebug(D_WAAP) << "failed to parse events";
@@ -142,7 +157,7 @@ void TuningDecision::updateDecisions()
     }
 }
 
-TuningDecisionEnum TuningDecision::getDecision(std::string tuningValue, TuningDecisionType tuningType)
+TuningDecisionEnum TuningDecision::getDecision(string tuningValue, TuningDecisionType tuningType)
 {
     const auto& typeDecisionsItr = m_decisions.find(tuningType);
     if (typeDecisionsItr == m_decisions.cend())
@@ -155,4 +170,21 @@ TuningDecisionEnum TuningDecision::getDecision(std::string tuningValue, TuningDe
         return NO_DECISION;
     }
     return decisionItr->second;
+}
+
+string
+TuningDecision::getSharedStorageHost()
+{
+    static string shared_storage_host;
+    if (!shared_storage_host.empty()) {
+        return shared_storage_host;
+    }
+    char* sharedStorageHost = getenv(SHARED_STORAGE_HOST_ENV_NAME);
+    if (sharedStorageHost != NULL) {
+        shared_storage_host = string(sharedStorageHost);
+        dbgInfo(D_WAAP) << "shared storage host is set to " << shared_storage_host;
+        return shared_storage_host;
+    }
+    dbgWarning(D_WAAP) << "shared storage host is not set. using default: " << defaultSharedStorageHost;
+    return defaultSharedStorageHost;
 }

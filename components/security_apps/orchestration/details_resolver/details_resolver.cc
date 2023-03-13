@@ -237,7 +237,7 @@ DetailsResolver::Impl::parseNginxMetadata()
             return genError("Cannot open the file with nginx metadata, File: " + output_path);
         }
 
-        string line;
+    string line;
         while (getline(input_stream, line)) {
             lines.push_back(line);
         }
