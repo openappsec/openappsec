@@ -589,7 +589,7 @@ private:
 
             uint32_t handled_session_id = session_verdict.unpack().first;
             bool is_signal_needed = session_verdict.unpack().second;
-            if (is_signal_needed || !isDataAvailable(attachment_ipc)) {
+            if (is_signal_needed) {
                 dbgTrace(D_NGINX_ATTACHMENT) << "Signaling attachment to read verdict";
                 bool res = false;
                 vector<char> session_id_data(
@@ -1486,7 +1486,8 @@ private:
             i_transaction_table->unsetActiveKey();
         }
 
-        return make_pair(cur_session_id, is_final_verdict);
+        bool should_signal = (is_final_verdict || !isDataAvailable(attachment_ipc));
+        return make_pair(cur_session_id, should_signal);
     }
 
     bool

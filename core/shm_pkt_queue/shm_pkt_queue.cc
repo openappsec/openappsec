@@ -16,41 +16,15 @@
 #include <iostream>
 #include <map>
 #include <sstream>
-#include <boost/lockfree/spsc_queue.hpp>
-#include <boost/interprocess/managed_shared_memory.hpp>
-#include <boost/interprocess/allocators/allocator.hpp>
-#include <boost/interprocess/containers/string.hpp>
 #include <sys/time.h>
 #include "common.h"
 
-static const int queue_size = 200;
+#include "shared_string_wrapper.h"
+
 const int shm_pkt_queue_bad_alloc = -2;
 namespace bip = boost::interprocess;
 
-using char_alloc = bip::allocator<u_char, bip::managed_shared_memory::segment_manager>;
-using shared_string = bip::basic_string<u_char, std::char_traits<u_char>, char_alloc>;
-
-class SharedStringWrapper
-{
-public:
-    static void setAlloc(bip::managed_shared_memory::segment_manager *_alloc) { alloc = _alloc; }
-
-    SharedStringWrapper() : str(alloc) {}
-
-    void reserve(size_t size) { str.reserve(size); }
-    void append(const u_char *data, size_t len) { str.append(data, len); }
-    size_t size() const { return str.size(); }
-    shared_string::iterator begin() { return str.begin(); }
-    shared_string::iterator end() { return str.end(); }
-
-private:
-    static bip::managed_shared_memory::segment_manager *alloc;
-    shared_string str;
-};
-
 bip::managed_shared_memory::segment_manager *SharedStringWrapper::alloc = nullptr;
-
-using ring_buffer = boost::lockfree::spsc_queue<SharedStringWrapper, boost::lockfree::capacity<queue_size>>;
 
 class Impl
 {

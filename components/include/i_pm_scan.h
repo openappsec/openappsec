@@ -18,6 +18,7 @@
 #include <set>
 #include <iostream>
 #include <functional>
+#include <unordered_set>
 
 #include "buffer.h"
 #include "maybe_res.h"
@@ -57,7 +58,7 @@ public:
     using CBFunction =  std::function<void(uint, const PMPattern &)>;
 
     virtual std::set<PMPattern> scanBuf(const Buffer &buf) const = 0;
-    virtual std::set<std::pair<uint, PMPattern>> scanBufWithOffset(const Buffer &buf) const = 0;
+    virtual std::set<std::pair<uint, uint>> scanBufWithOffset(const Buffer &buf) const = 0;
     virtual void scanBufWithOffsetLambda(const Buffer &buf, CBFunction cb) const = 0;
 
 protected:

@@ -21,9 +21,8 @@
 
 #include "config.h"
 #include "debug.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 
-// LCOV_EXCL_START Reason: no test exist
 class LogTriggerSection
 {
 public:
@@ -58,7 +57,6 @@ public:
 
     const std::string & getTriggerId() const;
     const std::string & getTriggerName() const;
-    bool operator<(const LogTriggerSection &other) const;
 
 private:
     std::string id;
@@ -102,9 +100,6 @@ public:
     void save(cereal::JSONOutputArchive &out_ar) const;
 
     const std::string & getTriggerId() const;
-    const std::string & getTriggerName() const;
-
-    bool operator<(const WebUserResponseTriggerSection &other) const;
 
 private:
     std::string id;
@@ -126,6 +121,7 @@ public:
     const std::string & getMessageTitle() const;
     const std::string & getMode() const;
     const std::string & getName() const;
+    void setName(const std::string &_name);
 
 private:
     int httpResponseCode;
@@ -157,9 +153,6 @@ class AppsecTriggerAccessControlLogging
 {
 public:
     void load(cereal::JSONInputArchive &archive_in);
-
-    bool isAllowEvents() const;
-    bool isDropEvents() const;
 
 private:
     bool allow_events = false;
@@ -220,7 +213,6 @@ public:
     void load(cereal::JSONInputArchive &archive_in);
 
     const std::string & getAddress() const;
-    const std::string & getProto() const;
     int getPort() const;
 
 private:
@@ -273,8 +265,8 @@ class AppsecTriggerSpec
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    const AppsecTriggerAccessControlLogging & getAppsecTriggerAccessControlLogging() const;
     const std::string & getName() const;
+    void setName(const std::string &_name);
     const AppsecTriggerAdditionalSuspiciousEventsLogging & getAppsecTriggerAdditionalSuspiciousEventsLogging() const;
     const AppsecTriggerLogging & getAppsecTriggerLogging() const;
     const AppsecTriggerExtendedLogging & getAppsecTriggerExtendedLogging() const;
@@ -300,5 +292,4 @@ public:
 private:
     TriggersRulebase triggers_rulebase;
 };
-// LCOV_EXCL_STOP
 #endif // __TRIGGERS_SECTION_H__

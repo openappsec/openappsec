@@ -22,6 +22,7 @@
 #include "i_time_get.h"
 #include "i_shell_cmd.h"
 #include "i_encryptor.h"
+#include "i_env_details.h"
 #include "maybe_res.h"
 #include "event.h"
 
@@ -35,6 +36,7 @@ class DeclarativePolicyUtils
         :
     public Singleton::Consume<I_ShellCmd>,
     Singleton::Consume<I_LocalPolicyMgmtGen>,
+    Singleton::Consume<I_EnvDetails>,
     Singleton::Consume<I_AgentDetails>,
     Singleton::Consume<I_OrchestrationTools>,
     Singleton::Consume<I_RestApi>,

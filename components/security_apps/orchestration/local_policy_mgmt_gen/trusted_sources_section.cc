@@ -16,7 +16,8 @@
 using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
-// LCOV_EXCL_START Reason: no test exist
+
+static const set<string> valid_source_identifiers = {"headerkey", "JWTKey", "cookie", "sourceip", "x-forwarded-for"};
 
 void
 TrustedSourcesSpec::load(cereal::JSONInputArchive &archive_in)
@@ -25,6 +26,12 @@ TrustedSourcesSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<int>("minNumOfSources", min_num_of_sources, archive_in, 3);
     parseAppsecJSONKey<vector<string>>("sourcesIdentifiers", sources_identifiers, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
+}
+
+void
+TrustedSourcesSpec::setName(const string &_name)
+{
+    name = _name;
 }
 
 int
@@ -63,8 +70,11 @@ SourcesIdentifiers::getSourceIdent() const
 void
 SourceIdentifierSpec::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_LOCAL_POLICY) << "Loading trusted sources spec";
+    dbgTrace(D_LOCAL_POLICY) << "Loading source identifiers spec";
     parseAppsecJSONKey<string>("sourceIdentifier", source_identifier, archive_in);
+    if (valid_source_identifiers.count(source_identifier) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec source identifier invalid: " << source_identifier;
+    }
     parseAppsecJSONKey<vector<string>>("value", value, archive_in);
 }
 
@@ -86,6 +96,12 @@ SourceIdentifierSpecWrapper::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading Source Identifier Spec Wrapper";
     parseAppsecJSONKey<vector<SourceIdentifierSpec>>("identifiers", identifiers, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
+}
+
+void
+SourceIdentifierSpecWrapper::setName(const string &_name)
+{
+    name = _name;
 }
 
 const string &
@@ -134,5 +150,3 @@ AppSecTrustedSources::getSourcesIdentifiers() const
 {
     return sources_identifiers;
 }
-
-// LCOV_EXCL_STOP

@@ -17,7 +17,6 @@
 using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
-// LCOV_EXCL_START Reason: no test exist
 void
 IngressMetadata::load(cereal::JSONInputArchive &archive_in)
 {
@@ -26,24 +25,6 @@ IngressMetadata::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("resourceVersion", resourceVersion, archive_in);
     parseAppsecJSONKey<string>("namespace", namespace_name, archive_in);
     parseAppsecJSONKey<map<string, string>>("annotations", annotations, archive_in);
-}
-
-const string &
-IngressMetadata::getName() const
-{
-    return name;
-}
-
-const string &
-IngressMetadata::getResourceVersion() const
-{
-    return resourceVersion;
-}
-
-const string &
-IngressMetadata::getNamespace() const
-{
-    return namespace_name;
 }
 
 const map<string, string> &
@@ -105,12 +86,6 @@ DefaultBackend::load(cereal::JSONInputArchive &)
     is_exists = true;
 }
 
-bool
-DefaultBackend::isExists() const
-{
-    return is_exists;
-}
-
 void
 IngressSpec::load(cereal::JSONInputArchive &archive_in)
 {
@@ -120,21 +95,10 @@ IngressSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<DefaultBackend>("defaultBackend", default_backend, archive_in);
 }
 
-const string &
-IngressSpec::getIngressClassName() const
-{
-    return ingress_class_name;
-}
-
 const vector<IngressDefinedRule> &
 IngressSpec::getRules() const
 {
     return rules;
-}
-bool
-IngressSpec::isDefaultBackendExists() const
-{
-    return default_backend.isExists();
 }
 
 void
@@ -178,15 +142,8 @@ IngressData::loadJson(const string &json)
     return true;
 }
 
-const string &
-IngressData::getapiVersion() const
-{
-    return apiVersion;
-}
-
 const vector<SingleIngressData> &
 IngressData::getItems() const
 {
     return items;
 }
-// LCOV_EXCL_STOP

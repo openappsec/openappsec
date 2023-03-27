@@ -953,13 +953,34 @@ run_status() # Initials - rs
     fi
 
     if [ -n "$(cat /etc/cp/conf/agent_details.json | grep "hybrid_mode")" ]; then
+        add_policy_file=true
         rs_mgmt_mode_text="Local management"
     else
-        rs_mgmt_mode_text="Cloud management"
+        if [ -n "$(cat /etc/cp/conf/settings.json | grep "\"profileManagedMode\":\"management\"")" ]; then
+            add_policy_file=false
+            rs_mgmt_mode_text="Cloud management (Fully managed)"
+        else
+            add_policy_file=true
+            rs_mgmt_mode_text="Cloud management (Visibility mode)"
+        fi
     fi
     echo "Management mode: ${rs_mgmt_mode_text}"
-    echo "Policy files: "
-    echo "    /etc/cp/conf/local_policy.yaml"
+
+    if [ "${add_policy_file}" = "true" ]; then
+        echo "Policy files: "
+        echo "    /etc/cp/conf/local_policy.yaml"
+    else
+        policy=`cat /etc/cp/conf/policy.json`
+        version="version"
+        policy_version=${policy#*version}
+        policy_version=`echo $policy_version | cut -d"\"" -f3`
+
+        if [ -n "$policy_version" ] && [ "$policy_version" -eq "$policy_version" ] 2>/dev/null; then
+            echo "Policy version: ${policy_version}"
+        else
+            echo "Policy version: Updating policy. Please try again in a few seconds"
+        fi
+    fi
 
     if [ -n "$(echo ${rs_temp_old_status} | grep "Last update status" | grep "Fail")" ]; then
         rs_policy_load_status="Error"

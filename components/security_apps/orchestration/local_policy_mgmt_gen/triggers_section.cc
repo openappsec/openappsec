@@ -16,7 +16,11 @@
 using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
-// LCOV_EXCL_START Reason: no test exist
+
+static const set<string> valid_modes = {"block-page", "response-code-only"};
+static const set<string> valid_severities = {"high", "critical"};
+static const set<string> valid_protocols = {"tcp", "udp"};
+static const set<string> valid_formats = {"json", "json-formatted"};
 
 LogTriggerSection::LogTriggerSection(
     const string &_name,
@@ -119,12 +123,6 @@ LogTriggerSection::getTriggerName() const
     return name;
 }
 
-bool
-LogTriggerSection::operator<(const LogTriggerSection &other) const
-{
-    return getTriggerName() < other.getTriggerName();
-}
-
 WebUserResponseTriggerSection::WebUserResponseTriggerSection(
     const string &_name,
     const string &_details_level,
@@ -166,24 +164,15 @@ WebUserResponseTriggerSection::getTriggerId() const
     return id;
 }
 
-const string &
-WebUserResponseTriggerSection::getTriggerName() const
-{
-    return name;
-}
-
-bool
-WebUserResponseTriggerSection::operator<(const WebUserResponseTriggerSection &other) const
-{
-    return getTriggerName() < other.getTriggerName();
-}
-
 void
 AppSecCustomResponseSpec::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec web user response spec";
     parseAppsecJSONKey<int>("http-response-code", httpResponseCode, archive_in, 403);
     parseAppsecJSONKey<string>("mode", mode, archive_in, "block-page");
+    if (valid_modes.count(mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec web user response mode invalid: " << mode;
+    }
     parseAppsecJSONKey<string>("name", name, archive_in);
     if (mode == "block-page") {
         parseAppsecJSONKey<string>(
@@ -199,6 +188,12 @@ AppSecCustomResponseSpec::load(cereal::JSONInputArchive &archive_in)
             "Attack blocked by web application protection"
         );
     }
+}
+
+void
+AppSecCustomResponseSpec::setName(const string &_name)
+{
+    name = _name;
 }
 
 int
@@ -248,18 +243,6 @@ AppsecTriggerAccessControlLogging::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<bool>("drop-events", drop_events, archive_in, false);
 }
 
-bool
-AppsecTriggerAccessControlLogging::isAllowEvents() const
-{
-    return allow_events;
-}
-
-bool
-AppsecTriggerAccessControlLogging::isDropEvents() const
-{
-    return drop_events;
-}
-
 void
 AppsecTriggerAdditionalSuspiciousEventsLogging::load(cereal::JSONInputArchive &archive_in)
 {
@@ -267,6 +250,11 @@ AppsecTriggerAdditionalSuspiciousEventsLogging::load(cereal::JSONInputArchive &a
     parseAppsecJSONKey<bool>("enabled", enabled, archive_in, true);
     parseAppsecJSONKey<bool>("response-body", response_body, archive_in, false);
     parseAppsecJSONKey<string>("minimum-severity", minimum_severity, archive_in, "high");
+    if (valid_severities.count(minimum_severity) == 0) {
+        dbgWarning(D_LOCAL_POLICY)
+            << "AppSec AppSec Trigger - Additional Suspicious Events Logging minimum severity invalid: "
+            << minimum_severity;
+    }
 }
 
 bool
@@ -353,6 +341,10 @@ LoggingService::load(cereal::JSONInputArchive &archive_in)
 {
     parseAppsecJSONKey<string>("address", address, archive_in);
     parseAppsecJSONKey<string>("proto", proto, archive_in);
+    if (valid_protocols.count(proto) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Logging Service - proto invalid: " << proto;
+    }
+
     parseAppsecJSONKey<int>("port", port, archive_in, 514);
 }
 
@@ -360,12 +352,6 @@ const string &
 LoggingService::getAddress() const
 {
     return address;
-}
-
-const string &
-LoggingService::getProto() const
-{
-    return proto;
 }
 
 int
@@ -379,6 +365,9 @@ void
 StdoutLogging::load(cereal::JSONInputArchive &archive_in)
 {
     parseAppsecJSONKey<string>("format", format, archive_in, "json");
+    if (valid_formats.count(format) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Stdout Logging - format invalid: " << format;
+    }
 }
 
 const string &
@@ -488,10 +477,10 @@ AppsecTriggerSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("name", name, archive_in);
 }
 
-const AppsecTriggerAccessControlLogging &
-AppsecTriggerSpec::getAppsecTriggerAccessControlLogging() const
+void
+AppsecTriggerSpec::setName(const string &_name)
 {
-    return access_control_logging;
+    name = _name;
 }
 
 const string &
@@ -531,5 +520,3 @@ TriggersWrapper::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("rulebase", triggers_rulebase)
     );
 }
-
-// LCOV_EXCL_STOP

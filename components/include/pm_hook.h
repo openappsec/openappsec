@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 #include <map>
+#include <unordered_set>
 #include <sys/types.h>
 #include "i_pm_scan.h"
 
@@ -30,7 +31,7 @@ public:
 
     Maybe<void> prepare(const std::set<PMPattern> &patterns);
     std::set<PMPattern> scanBuf(const Buffer &buf) const override;
-    std::set<std::pair<uint, PMPattern>> scanBufWithOffset(const Buffer &buf) const override;
+    std::set<std::pair<uint, uint>> scanBufWithOffset(const Buffer &buf) const override;
     void scanBufWithOffsetLambda(const Buffer &buf, I_PMScan::CBFunction cb) const override;
 
     // Line may begin with ^ or $ sign to mark LSS is at begin/end of buffer.

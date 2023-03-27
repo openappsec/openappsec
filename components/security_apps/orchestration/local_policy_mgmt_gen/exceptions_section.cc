@@ -18,12 +18,18 @@ using namespace std;
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 // LCOV_EXCL_START Reason: no test exist
+static const set<string> valid_actions = {"skip", "accept", "drop", "suppressLog"};
+
 void
 AppsecExceptionSpec::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec exception spec";
     parseAppsecJSONKey<string>("name", name, archive_in);
     parseAppsecJSONKey<string>("action", action, archive_in);
+    if (valid_actions.count(action) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec exception action invalid: " << action;
+    }
+
     parseAppsecJSONKey<vector<string>>("countryCode", country_code, archive_in);
     parseAppsecJSONKey<vector<string>>("countryName", country_name, archive_in);
     parseAppsecJSONKey<vector<string>>("hostName", host_name, archive_in);
@@ -33,6 +39,12 @@ AppsecExceptionSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<string>>("sourceIdentifier", source_identifier, archive_in);
     parseAppsecJSONKey<vector<string>>("sourceIp", source_ip, archive_in);
     parseAppsecJSONKey<vector<string>>("url", url, archive_in);
+}
+
+void
+AppsecExceptionSpec::setName(const string &_name)
+{
+    name = _name;
 }
 
 const string &
@@ -209,12 +221,6 @@ InnerException::getBehaviorId() const
     return behavior.getBehaviorId();
 }
 
-bool
-InnerException::operator<(const InnerException &other) const
-{
-    return getBehaviorId() < other.getBehaviorId();
-}
-
 ExceptionsRulebase::ExceptionsRulebase(
     vector<InnerException> _exceptions)
         :
@@ -251,5 +257,3 @@ ExceptionsWrapper::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("rulebase", exception_rulebase)
     );
 }
-
-// LCOV_EXCL_STOP

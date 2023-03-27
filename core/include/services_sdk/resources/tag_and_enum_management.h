@@ -43,7 +43,6 @@ public:
     static Maybe<ReportIS::Tags>        convertStringToTag(const std::string &tag);
 
 private:
-    static EnumArray<ReportIS::Tags, ReportIS::Tags> tags_hierarchy;
     static EnumArray<ReportIS::Tags, std::string> tags_translation_arr;
     static EnumArray<ReportIS::AudienceTeam, std::string>  audience_team_translation;
 };

@@ -40,7 +40,7 @@
 class HybridCommunication
         :
     public FogAuthenticator,
-    Singleton::Consume<I_LocalPolicyMgmtGen>
+    Singleton::Consume<I_EnvDetails>
 {
 public:
     void init() override;

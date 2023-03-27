@@ -23,9 +23,8 @@
 #include "config.h"
 #include "debug.h"
 #include "rest.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 
-// LCOV_EXCL_START Reason: no test exist
 class AppsecExceptionSpec
 {
 public:
@@ -42,6 +41,7 @@ public:
     const std::vector<std::string> & getSourceIdentifier() const;
     const std::vector<std::string> & getSourceIp() const;
     const std::vector<std::string> & getUrl() const;
+    void setName(const std::string &_name);
 
 private:
     std::string name;
@@ -111,7 +111,6 @@ public:
 
     void save(cereal::JSONOutputArchive &out_ar) const;
     const std::string getBehaviorId() const;
-    bool operator<(const InnerException &other) const;
 
 private:
     ExceptionBehavior behavior;
@@ -150,5 +149,4 @@ public:
 private:
     Exception exception_rulebase;
 };
-// LCOV_EXCL_STOP
 #endif // __EXCEPTPIONS_SECTION_H__

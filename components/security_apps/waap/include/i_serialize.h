@@ -21,6 +21,7 @@
 #include "i_agent_details.h"
 
 static const uint max_send_obj_retries = 3;
+static const std::chrono::microseconds wait_next_attempt(5000000);
 
 USE_DEBUG_FLAG(D_WAAP);
 
@@ -189,7 +190,7 @@ protected:
                 return true;
             }
             dbgWarning(D_WAAP) << "Failed to send object. Attempt: " << i;
-            mainloop->yield(true);
+            mainloop->yield(wait_next_attempt);
         }
         dbgError(D_WAAP) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
             max_send_obj_retries;
@@ -243,7 +244,7 @@ protected:
                 return true;
             }
             dbgWarning(D_WAAP) << "Failed to send object. Attempt: " << i;
-            mainloop->yield(true);
+            mainloop->yield(wait_next_attempt);
         }
         dbgError(D_WAAP) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
             max_send_obj_retries;

@@ -21,12 +21,12 @@
 #include "messaging/http_core.h"
 #include "i_message_decoder.h"
 #include "i_messaging.h"
-#include "i_environment.h"
+#include "i_env_details.h"
 
 class HTTPDecoder
         :
     public I_MessageDecoder <HTTPResponse>,
-    Singleton::Consume<I_Environment>
+    Singleton::Consume<I_EnvDetails>
 {
 public:
     HTTPDecoder(I_Messaging::Method _method);

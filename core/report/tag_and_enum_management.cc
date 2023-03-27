@@ -99,7 +99,11 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"Http Geo Filter", ReportIS::Tags::HTTP_GEO_FILTER},
         {"File Upload", ReportIS::Tags::FILE_UPLOAD},
         {"Identity Awareness", ReportIS::Tags::IDENTITY_AWARENESS},
-        {"Rate Limit", ReportIS::Tags::RATE_LIMIT}
+        {"Rate Limit", ReportIS::Tags::RATE_LIMIT},
+        {"NGINX Server", ReportIS::Tags::WEB_SERVER_NGINX},
+        {"Kong Server", ReportIS::Tags::WEB_SERVER_KONG},
+        {"Embedded Deployment", ReportIS::Tags::DEPLOYMENT_EMBEDDED},
+        {"Kubernetes Deployment", ReportIS::Tags::DEPLOYMENT_K8S}
     };
 
     auto report_is_tag = strings_to_tags.find(tag);
@@ -266,25 +270,6 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
 }
 
 
-EnumArray<Tags, Tags> TagAndEnumManagement::tags_hierarchy {
-    Tags::THREAT_PREVENTION,
-    Tags::THREAT_PREVENTION,
-    Tags::THREAT_PREVENTION,
-    Tags::NEW_CONNECTION,
-    Tags::POLICY_INSTALLATION,
-    Tags::ACCESS_CONTROL,
-    Tags::ACCESS_CONTROL,
-    Tags::ACCESS_CONTROL,
-    Tags::FW,
-    Tags::WAF,
-    Tags::IPS,
-    Tags::URLF,
-    Tags::INFORMATIONAL,
-    Tags::ORCHESTRATOR,
-    Tags::COMPLIANCE,
-    Tags::REVERSE_PROXY
-};
-
 EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Threat Prevention",
     "Remote Code Execution",
@@ -311,7 +296,11 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Http Geo Filter",
     "File Upload",
     "Identity Awareness",
-    "Rate Limit"
+    "Rate Limit",
+    "NGINX Server",
+    "Kong Server",
+    "Embedded Deployment",
+    "Kubernetes Deployment"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

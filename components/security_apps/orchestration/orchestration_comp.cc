@@ -38,6 +38,8 @@
 #include "hybrid_mode_telemetry.h"
 #include "telemetry.h"
 #include "tenant_profile_pair.h"
+#include "env_details.h"
+#include "hybrid_communication.h"
 
 using namespace std;
 using namespace chrono;
@@ -1342,49 +1344,11 @@ private:
             << LogField("agentType", "Orchestration")
             << LogField("agentVersion", Version::get());
 
-        auto email = getSettingWithDefault<string>("", "email-address");
-        if (email == "") {
-            auto env_email = getenv("user_email");
-            if (env_email != nullptr) email = env_email;
-        }
-        if (email != "") {
-            dbgInfo(D_ORCHESTRATOR) << "Sending registration data";
-            Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
-                I_MainLoop::RoutineType::Offline,
-                // LCOV_EXCL_START Reason: to be refactored
-                [email] ()
-                {
-                    Report registration_report(
-                        "Local Agent Data",
-                        Singleton::Consume<I_TimeGet>::by<OrchestrationComp>()->getWalltime(),
-                        Type::EVENT,
-                        Level::LOG,
-                        LogLevel::INFO,
-                        Audience::INTERNAL,
-                        AudienceTeam::NONE,
-                        Severity::INFO,
-                        Priority::LOW,
-                        chrono::seconds(0),
-                        LogField("agentId", Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId()),
-                        Tags::ORCHESTRATOR
-                    );
-                    registration_report << LogField("userDefinedId", email);
-
-                    LogRest registration_report_rest(registration_report);
-
-                    Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendObjectWithPersistence(
-                        registration_report_rest,
-                        I_Messaging::Method::POST,
-                        "/api/v1/agents/events",
-                        "",
-                        true,
-                        MessageTypeTag::REPORT
-                    );
-                },
-                // LCOV_EXCL_STOP
-                "Send registration data"
-            );
-        }
+        Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
+            I_MainLoop::RoutineType::Offline,
+            sendRegistrationData,
+            "Send registration data"
+        );
 
         reportAgentDetailsMetaData();
 
@@ -1451,6 +1415,72 @@ private:
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->finishTrace();
             Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(seconds(sleep_interval));
         }
+    }
+
+    static void
+    sendRegistrationData()
+    {
+        dbgInfo(D_ORCHESTRATOR) << "Sending registration data";
+
+        set<Tags> tags{ Tags::ORCHESTRATOR };
+
+        auto deployment_type = Singleton::Consume<I_EnvDetails>::by<HybridCommunication>()->getEnvType();
+        switch (deployment_type) {
+            case EnvType::LINUX: {
+                tags.insert(Tags::DEPLOYMENT_EMBEDDED);
+                break;
+            }
+            case EnvType::K8S: {
+                tags.insert(Tags::DEPLOYMENT_K8S);
+                break;
+            }
+            case EnvType::COUNT: {
+                dbgWarning(D_ORCHESTRATOR) << "Could not identify deployment type";
+                break;
+            }
+        }
+
+        string server_name = getAttribute("registered-server", "registered_server");
+        auto server = TagAndEnumManagement::convertStringToTag(server_name);
+        if (server.ok()) tags.insert(*server);
+
+        Report registration_report(
+            "Local Agent Data",
+            Singleton::Consume<I_TimeGet>::by<OrchestrationComp>()->getWalltime(),
+            Type::EVENT,
+            Level::LOG,
+            LogLevel::INFO,
+            Audience::INTERNAL,
+            AudienceTeam::NONE,
+            Severity::INFO,
+            Priority::LOW,
+            chrono::seconds(0),
+            LogField("agentId", Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId()),
+            tags
+        );
+
+        auto email = getAttribute("email-address", "user_email");
+        if (email != "") registration_report << LogField("userDefinedId", email);
+
+        LogRest registration_report_rest(registration_report);
+        Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendObjectWithPersistence(
+            registration_report_rest,
+            I_Messaging::Method::POST,
+            "/api/v1/agents/events",
+            "",
+            true,
+            MessageTypeTag::REPORT
+        );
+    }
+
+    static string
+    getAttribute(const string &setting, const string &env)
+    {
+        auto res = getSetting<string>(setting);
+        if (res.ok()) return res.unpack();
+        auto env_res = getenv(env.c_str());
+        if (env_res != nullptr) return env_res;
+        return "";
     }
 
     // LCOV_EXCL_START Reason: future changes will be done
@@ -1672,6 +1702,7 @@ private:
     OrchestrationPolicy policy;
     HealthCheckStatusListener health_check_status_listener;
     HybridModeMetric hybrid_mode_metric;
+    EnvDetails env_details;
 
     string filesystem_prefix = "";
 };
@@ -1728,6 +1759,7 @@ OrchestrationComp::preload()
     registerExpectedSetting<string>("agentType");
     registerExpectedSetting<string>("upgradeMode");
     registerExpectedSetting<string>("email-address");
+    registerExpectedSetting<string>("registered-server");
     registerExpectedConfigFile("orchestration", Config::ConfigFileType::Policy);
     registerExpectedConfigFile("registration-data", Config::ConfigFileType::Policy);
 }

@@ -102,8 +102,6 @@ static const boost::regex utf_evasion_for_dot_regex(utf_evasion_for_dot_helper);
 static const std::string sqli_comma_evasion_regex_helper = "\"\\s*,\\s*\"";
 static const boost::regex sqli_comma_evasion_regex(sqli_comma_evasion_regex_helper);
 
-static const boost::regex space_evasion_regex("[[:space:]]{2,}");
-
 WaapAssetState::WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAssetState,
     const std::string& waapDataFileName,
     const std::string& id) :
@@ -279,10 +277,6 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
             return;
         }
 
-        boost::cmatch what;
-        if (!boost::regex_search(text.c_str(), what, space_evasion_regex))
-            return;
-        dbgTrace(D_WAAP) << "Boost regex passed";
         for (;position < text.size(); position++) {
             code = text[position];
             switch (code) {

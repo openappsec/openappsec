@@ -323,6 +323,8 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
             if (shouldUpdateKeyStack) {
                 m_key.pop("deep parser key");
             }
+
+
             m_depth--;
             return rc;
         }
@@ -1012,6 +1014,7 @@ void DeepParser::createInternalParser(const char *k, size_t k_len, std::string& 
         }
     }
 }
+
 
 void DeepParser::apiProcessKey(const char* v, size_t v_len)
 {

@@ -17,7 +17,6 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
-// LCOV_EXCL_START Reason: no test exist
 AssetUrlParser
 AssetUrlParser::parse(const string &uri)
 {
@@ -99,18 +98,6 @@ PracticeSection::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
-const string &
-PracticeSection::getPracticeId() const
-{
-    return id;
-}
-
-const string &
-PracticeSection::getPracticeName() const
-{
-    return name;
-}
-
 ParametersSection::ParametersSection(
     const string &_id,
     const string &_name)
@@ -132,12 +119,6 @@ ParametersSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("parameterName", name),
         cereal::make_nvp("parameterType", type)
     );
-}
-
-const string &
-ParametersSection::getId() const
-{
-    return id;
 }
 
 RulesTriggerSection::RulesTriggerSection(
@@ -168,18 +149,6 @@ RulesTriggerSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("triggerName", name),
         cereal::make_nvp("triggerType", type)
     );
-}
-
-const string &
-RulesTriggerSection::getId() const
-{
-    return id;
-}
-
-const string &
-RulesTriggerSection::getName() const
-{
-    return id;
 }
 
 RulesConfigRulebase::RulesConfigRulebase(
@@ -257,12 +226,6 @@ RulesConfigRulebase::save(cereal::JSONOutputArchive &out_ar) const
 }
 
 const string &
-RulesConfigRulebase::getRuleId() const
-{
-    return id;
-}
-
-const string &
 RulesConfigRulebase::getContext() const
 {
     return context;
@@ -275,45 +238,9 @@ RulesConfigRulebase::getAssetName() const
 }
 
 const string &
-RulesConfigRulebase::getRuleName() const
-{
-    return name;
-}
-
-const string &
 RulesConfigRulebase::getAssetId() const
 {
     return id;
-}
-
-const string &
-RulesConfigRulebase::getPracticeId() const
-{
-    return practices[0].getPracticeId();
-}
-
-const string &
-RulesConfigRulebase::getPracticeName() const
-{
-    return practices[0].getPracticeName();
-}
-
-const vector<PracticeSection> &
-RulesConfigRulebase::getPractice() const
-{
-    return practices;
-}
-
-const vector<ParametersSection> &
-RulesConfigRulebase::getParameters() const
-{
-    return parameters;
-}
-
-const vector<RulesTriggerSection> &
-RulesConfigRulebase::getTriggers() const
-{
-    return triggers;
 }
 
 UsersIdentifier::UsersIdentifier(const string &_source_identifier, vector<string> _identifier_values)
@@ -334,8 +261,8 @@ UsersIdentifier::save(cereal::JSONOutputArchive &out_ar) const
 UsersIdentifiersRulebase::UsersIdentifiersRulebase(
     const string &_context,
     const string &_source_identifier,
-    vector<string> _identifier_values,
-    vector<UsersIdentifier> _source_identifiers)
+    const vector<string> &_identifier_values,
+    const vector<UsersIdentifier> &_source_identifiers)
         :
     context(_context),
     source_identifier(_source_identifier),
@@ -422,5 +349,3 @@ RulesConfigWrapper::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("rulebase", rules_config_rulebase)
     );
 }
-
-// LCOV_EXCL_STOP

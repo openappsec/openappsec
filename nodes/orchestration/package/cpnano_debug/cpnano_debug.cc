@@ -75,7 +75,7 @@ enum class Service {
     REVERSE_PROXY_MANAGER,
     CAPSULE8,
     SDWAN,
-    SDWAN_LOGGER,
+    LOGGER_SDWAN,
     IOT_ENFORCE,
     IOT_DOCTOR,
     IOT_RISK,
@@ -166,7 +166,7 @@ getServiceString(const Service service)
         case (Service::DEDICATED_NETWORK_HANDLER): return "dedicated-network-handler";
         case (Service::MESSAGING_PROXY): return "messaging-proxy";
         case (Service::SDWAN): return "sdwan";
-        case (Service::SDWAN_LOGGER): return "sdwan-logger";
+        case (Service::LOGGER_SDWAN): return "logger-sdwan";
         case (Service::IOT_WLP): return "workload-protection";
         case (Service::HELLO_WORLD): return "hello-world";
         case (Service::IDA): return "identity-awareness";
@@ -329,7 +329,7 @@ getServiceConfig (const Service service)
                 filesystem_path + "/conf/cp-nano-sdwan-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-sdwan.dbg"
             );
-        case (Service::SDWAN_LOGGER):
+        case (Service::LOGGER_SDWAN):
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-logger-sdwan-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-logger-sdwan.dbg"
@@ -1279,8 +1279,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::MESSAGING_PROXY);
         } else if (getServiceString(Service::SDWAN).find(maybe_service) == 0) {
             services.push_back(Service::SDWAN);
-        } else if (getServiceString(Service::SDWAN_LOGGER).find(maybe_service) == 0) {
-            services.push_back(Service::SDWAN_LOGGER);
+        } else if (getServiceString(Service::LOGGER_SDWAN).find(maybe_service) == 0) {
+            services.push_back(Service::LOGGER_SDWAN);
         } else if (getServiceString(Service::IOT_WLP).find(maybe_service) == 0) {
             services.push_back(Service::IOT_WLP);
         } else if (getServiceString(Service::IDA).find(maybe_service) == 0) {
