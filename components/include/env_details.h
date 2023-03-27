@@ -11,31 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __LOCAL_POLICY_MGMT_GEN_H__
-#define __LOCAL_POLICY_MGMT_GEN_H__
+#ifndef __ENV_DETAILS_H__
+#define __ENV_DETAILS_H__
 
-#include "config.h"
-#include "component.h"
-#include "i_mainloop.h"
-#include "i_local_policy_mgmt_gen.h"
+#include <string>
+#include <fstream>
+#include <streambuf>
+
 #include "i_env_details.h"
+#include "singleton.h"
+#include "debug.h"
 
-class LocalPolicyMgmtGenerator
-        :
-    public Component,
-    Singleton::Provide<I_LocalPolicyMgmtGen>,
-    Singleton::Consume<I_MainLoop>,
-    Singleton::Consume<I_EnvDetails>
+class EnvDetails : Singleton::Provide<I_EnvDetails>::SelfInterface
 {
 public:
-    LocalPolicyMgmtGenerator();
-    ~LocalPolicyMgmtGenerator();
+    EnvDetails();
 
-    void init() override;
+    virtual EnvType getEnvType() override;
+    virtual std::string getToken() override;
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> pimpl;
+    std::string retrieveToken();
+    std::string readFileContent(const std::string &file_path);
+
+    std::string token;
+    EnvType env_type;
 };
 
-#endif // __LOCAL_POLICY_MGMT_GEN_H__
+#endif // __ENV_DETAILS_H__

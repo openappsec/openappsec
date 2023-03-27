@@ -29,18 +29,6 @@ class WaapConfigApplication
 {
 public:
     WaapConfigApplication();
-#if 0 // maybe will be used in the future
-    WaapConfigApplication(
-        bool        autonomousSecurity,
-        std::string autonomousSecurityLevel,
-        std::string assetId,
-        std::string assetName,
-        std::string practiceId,
-        std::string practiceName,
-        std::string ruleId,
-        std::string ruleName,
-        bool        botProtection);
-#endif
 
     bool operator==(const WaapConfigApplication& other) const;
 

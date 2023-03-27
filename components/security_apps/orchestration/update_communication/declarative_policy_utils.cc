@@ -35,8 +35,8 @@ DeclarativePolicyUtils::upon(const ApplyPolicyEvent &)
 bool
 DeclarativePolicyUtils::shouldApplyPolicy()
 {
-    auto env_type = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getEnvType();
-    return env_type == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S ? true : should_apply_policy;
+    auto env_type = Singleton::Consume<I_EnvDetails>::by<DeclarativePolicyUtils>()->getEnvType();
+    return env_type == EnvType::K8S ? true : should_apply_policy;
 }
 
 void
@@ -49,8 +49,8 @@ Maybe<string>
 DeclarativePolicyUtils::getLocalPolicyChecksum()
 {
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<DeclarativePolicyUtils>();
-    auto env_type = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getEnvType();
-    if (env_type == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S) {
+    auto env_type = Singleton::Consume<I_EnvDetails>::by<DeclarativePolicyUtils>()->getEnvType();
+    if (env_type == EnvType::K8S) {
         return orchestration_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
     }
 
@@ -121,8 +121,8 @@ DeclarativePolicyUtils::sendUpdatesToFog(
         + " --access_token " + access_token
         + " --tenant_id " + tenant_id
         + " --profile_id " + profile_id;
-    auto env = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getEnvType();
-    if (env == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S) {
+    auto env = Singleton::Consume<I_EnvDetails>::by<DeclarativePolicyUtils>()->getEnvType();
+    if (env == EnvType::K8S) {
         exec_command =
             getFilesystemPathConfig()
             + "/scripts/open-appsec-cloud-mgmt-k8s"

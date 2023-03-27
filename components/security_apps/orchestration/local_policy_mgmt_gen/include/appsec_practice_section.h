@@ -24,12 +24,11 @@
 #include "config.h"
 #include "debug.h"
 #include "customized_cereal_map.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 #include "triggers_section.h"
 #include "exceptions_section.h"
 #include "trusted_sources_section.h"
 
-// LCOV_EXCL_START Reason: no test exist
 class AppSecWebBotsURI
 {
 public:
@@ -129,6 +128,7 @@ public:
     const AppSecPracticeWebAttacks & getWebAttacks() const;
     const AppSecPracticeAntiBot & getAntiBot() const;
     const std::string & getName() const;
+    void setName(const std::string &_name);
 
 private:
     AppSecPracticeOpenSchemaAPI       openapi_schema_validation;
@@ -214,8 +214,6 @@ public:
     );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
-    const std::string & getPracticeId() const;
-    bool operator<(const WebAppSection &other) const;
 
 private:
     std::string application_urls;
@@ -271,8 +269,6 @@ public:
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
-    const std::string & getPracticeId() const;
-
 private:
     std::string application_urls;
     std::string asset_id;
@@ -323,8 +319,10 @@ private:
 class ParsedRule
 {
 public:
-    void load(cereal::JSONInputArchive &archive_in);
+    ParsedRule() {}
+    ParsedRule(const std::string &_host) : host(_host) {}
 
+    void load(cereal::JSONInputArchive &archive_in);
     const std::vector<std::string> & getExceptions() const;
     const std::vector<std::string> & getLogTriggers() const;
     const std::vector<std::string> & getPractices() const;
@@ -354,6 +352,8 @@ public:
 
     const ParsedRule & getDefaultRule() const;
     const std::vector<ParsedRule> & getSpecificRules() const;
+    bool isAssetHostExist(const std::string &full_url) const;
+    void addSpecificRule(const ParsedRule &_rule);
 
 private:
     ParsedRule default_rule;
@@ -363,8 +363,25 @@ private:
 class AppsecLinuxPolicy : Singleton::Consume<I_Environment>
 {
 public:
-    void
-    serialize(cereal::JSONInputArchive &archive_in);
+    AppsecLinuxPolicy() {}
+    AppsecLinuxPolicy(
+        const AppsecPolicySpec &_policies,
+        const std::vector<AppSecPracticeSpec> &_practices,
+        const std::vector<AppsecTriggerSpec> &_log_triggers,
+        const std::vector<AppSecCustomResponseSpec> &_custom_responses,
+        const std::vector<AppsecExceptionSpec> &_exceptions,
+        const std::vector<TrustedSourcesSpec> &_trusted_sources,
+        const std::vector<SourceIdentifierSpecWrapper> &_sources_identifiers)
+            :
+        policies(_policies),
+        practices(_practices),
+        log_triggers(_log_triggers),
+        custom_responses(_custom_responses),
+        exceptions(_exceptions),
+        trusted_sources(_trusted_sources),
+        sources_identifiers(_sources_identifiers) {}
+
+    void serialize(cereal::JSONInputArchive &archive_in);
 
     const AppsecPolicySpec & getAppsecPolicySpec() const;
     const std::vector<AppSecPracticeSpec> & getAppSecPracticeSpecs() const;
@@ -373,6 +390,7 @@ public:
     const std::vector<AppsecExceptionSpec> & getAppsecExceptionSpecs() const;
     const std::vector<TrustedSourcesSpec> & getAppsecTrustedSourceSpecs() const;
     const std::vector<SourceIdentifierSpecWrapper> & getAppsecSourceIdentifierSpecs() const;
+    void addSpecificRule(const ParsedRule &_rule);
 
 private:
     AppsecPolicySpec policies;
@@ -384,5 +402,4 @@ private:
     std::vector<SourceIdentifierSpecWrapper> sources_identifiers;
 };
 
-// LCOV_EXCL_STOP
 #endif // __APPSEC_PRACTICE_SECTION_H__

@@ -18,7 +18,6 @@
 #include <set>
 
 #include "WaapConfigBase.h"
-
 #include "log_generator.h"
 #include "debug.h"
 
@@ -26,18 +25,6 @@ class WaapConfigAPI : public WaapConfigBase
 {
 public:
     WaapConfigAPI();
-#if 0 // maybe will be used in the future
-    WaapConfigAPI(
-        bool                     autonomousSecurity,
-        std::string              autonomousSecurityLevel,
-        std::string              assetId,
-        std::string              assetName,
-        std::string              practiceId,
-        std::string              practiceName,
-        std::string              ruleId,
-        std::string              ruleName,
-        bool                     schemaValidation);
-#endif
 
     void load(cereal::JSONInputArchive& ar);
     bool operator==(const WaapConfigAPI& other) const;
@@ -49,10 +36,6 @@ public:
     static void clearAssetsCount();
 
 private:
-    void readJSONByCereal(cereal::JSONInputArchive&ar);
-
-
-    std::string m_schemaValidationPoicyStatusMessage;
 
     static const std::string s_PracticeSubType;
     static std::set<std::string> assets_ids;

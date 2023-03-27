@@ -84,7 +84,6 @@ public:
             mockRestCall(RestAction::SET, "agent-uninstall", _)
         ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandlerAgentUninstall)));
 
-        string message_body;
         EXPECT_CALL(mock_message, mockSendPersistentMessage(
             false,
             _,
@@ -221,6 +220,11 @@ public:
     void
     runRoutine()
     {
+        EXPECT_CALL(
+            mock_ml,
+            addOneTimeRoutine(I_MainLoop::RoutineType::Offline, _, "Send registration data", false)
+        ).WillOnce(DoAll(SaveArg<1>(&sending_routine), Return(1)));
+
         routine();
     }
 
@@ -288,6 +292,8 @@ public:
     NiceMock<MockTenantManager> tenant_manager;
     OrchestrationComp orchestration_comp;
     AgentDetails agent_details;
+    I_MainLoop::Routine sending_routine;
+    string message_body;
 
 private:
     bool
@@ -466,13 +472,72 @@ TEST_F(OrchestrationTest, registertion_data_config)
 
     string config_json =
         "{\n"
-        "    \"email-address\": \"fake@example.com\"\n"
+        "    \"email-address\": \"fake@example.com\",\n"
+        "    \"registered-server\": \"NGINX Server\"\n"
         "}";
 
     istringstream ss(config_json);
     Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
     EXPECT_THAT(getSetting<string>("email-address"), IsValue("fake@example.com"));
+    EXPECT_THAT(getSetting<string>("registered-server"), IsValue("NGINX Server"));
     env.fini();
+}
+
+TEST_F(OrchestrationTest, check_sending_registration_data)
+{
+    EXPECT_CALL(rest, mockRestCall(_, _, _)).WillRepeatedly(Return(true));
+
+    preload();
+    env.init();
+    init();
+
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(_)).WillOnce(Return(false));
+    Maybe<string> response(
+        string(
+            "{\n"
+            "    \"fog-address\": \"" + host_url + "\",\n"
+            "    \"agent-type\": \"test\",\n"
+            "    \"pulling-interval\": 25,\n"
+            "    \"error-pulling-interval\": 15\n"
+            "}"
+        )
+    );
+    EXPECT_CALL(mock_orchestration_tools, readFile(_)).WillOnce(Return(response));
+    EXPECT_CALL(mock_service_controller, updateServiceConfiguration(_, _, _, _, _, _)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setActiveFog(_, _, _, _)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, _)).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_update_communication, setAddressExtenesion(_));
+    EXPECT_CALL(mock_status, setFogAddress(_));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_update_communication, getUpdate(_));
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setFieldStatus(_, _, _));
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(_));
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([] (chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+    try {
+        runRoutine();
+    } catch (const invalid_argument& e) {}
+
+    string config_json =
+        "{\n"
+        "    \"email-address\": \"fake@example.com\",\n"
+        "    \"registered-server\": \"NGINX Server\"\n"
+        "}";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
+    sending_routine();
+
+    EXPECT_THAT(message_body, HasSubstr("\"userDefinedId\": \"fake@example.com\""));
+    EXPECT_THAT(message_body, AnyOf(HasSubstr("\"Embedded Deployment\""), HasSubstr("\"Kubernetes Deployment\"")));
+    EXPECT_THAT(message_body, HasSubstr("\"NGINX Server\""));
 }
 
 TEST_F(OrchestrationTest, orchestrationPolicyUpdate)

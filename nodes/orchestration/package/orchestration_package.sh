@@ -51,6 +51,7 @@ var_error_sleep_interval=30
 var_upgrade_mode=
 var_token=
 var_email=
+var_server=
 var_installation_debug_mode=false
 var_startup_service=
 var_arch_flag=
@@ -227,6 +228,9 @@ while true; do
     elif [ "$1" = "--email" ]; then
         shift
         var_email=$1
+    elif [ "$1" = "--server" ]; then
+        shift
+        var_server=$1
     elif [ "$1" = "--offline_mode" ]; then
         var_offline_mode=true
         var_orchestration_mode="offline_mode"
@@ -896,7 +900,7 @@ install_orchestration()
     echo '{"'$ORCHESTRATION_NAME'": { "fog-address":"'$var_fog_address'", ' > ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
     echo '"pulling-interval":'$var_sleep_interval', ' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
     echo '"error-pulling-interval":'$var_error_sleep_interval'},' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
-    echo '"registration-data": { "email-address": "'$var_email'"}}' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+    echo '"registration-data": { "email-address": "'$var_email'", "registered-server": "'$var_server'"}}' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
 
     copy_orchestration_executable
     copy_k8s_executable

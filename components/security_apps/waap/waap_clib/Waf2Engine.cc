@@ -553,7 +553,6 @@ bool Waf2Transaction::checkIsScanningRequired()
         auto csrfPolicy = m_siteConfig ? m_siteConfig->get_CsrfPolicy() : NULL;
         auto userLimitsPolicy = m_siteConfig ? m_siteConfig->get_UserLimitsPolicy() : nullptr;
         result |= m_siteConfig->get_WebAttackMitigation();
-
         if (rateLimitingPolicy) {
             result |= m_siteConfig->get_RateLimitingPolicy()->getRateLimitingEnforcementStatus();
         }
@@ -1007,7 +1006,6 @@ void Waf2Transaction::add_request_hdr(const char* name, int name_len, const char
 }
 
 void Waf2Transaction::end_request_hdrs() {
-
     dbgFlow(D_WAAP) << "[transaction:" << this << "] end_request_hdrs";
     m_isScanningRequired = setCurrentAssetContext();
     if (m_siteConfig != NULL)
@@ -1468,23 +1466,20 @@ Waf2Transaction::decideFinal(
         sitePolicy = &ngenAPIConfig;
         m_overrideState = getOverrideState(sitePolicy);
 
-        // User limits
-        shouldBlock = (getUserLimitVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
     }
     else if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant Application configuration from the I/S";
         sitePolicy = &ngenSiteConfig;
         m_overrideState = getOverrideState(sitePolicy);
 
-        // Autonomus Security
         shouldBlock = decideAutonomousSecurity(
             *sitePolicy,
             mode,
             false,
             transactionResult,
             realPoolName,
-            fpClassification
-        );
+            fpClassification);
+
         // CSRF Protection
         auto csrfPolicy = m_siteConfig ? m_siteConfig->get_CsrfPolicy() : nullptr;
         if(csrfPolicy && csrfPolicy->enable) {

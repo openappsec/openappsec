@@ -56,46 +56,13 @@ WaapConfigAPI::clearAssetsCount()
     WaapConfigAPI::assets_ids_aggregation.clear();
 }
 
-#if 0 // maybe will be used in the future
-WaapConfigAPI::WaapConfigAPI(
-    bool                     autonomousSecurity,
-    string              autonomousSecurityLevel,
-    string              assetId,
-    string              assetName,
-    string              practiceId,
-    string              practiceName,
-    string              ruleId,
-    string              ruleName,
-    bool                     schemaValidation) :
-    WaapConfigBase(
-        autonomousSecurity,
-        autonomousSecurityLevel,
-        assetId,
-        assetName,
-        practiceId,
-        practiceName,
-        ruleId,
-        ruleName),
-    m_schemaValidation(schemaValidation)
-{
-}
-#endif
-
 void WaapConfigAPI::load(cereal::JSONInputArchive& ar)
 {
     // order has affect - we need to call base last because of triggers and overrides
 
-    readJSONByCereal(ar);
-
-
     WaapConfigBase::load(ar);
     assets_ids_aggregation.insert(m_assetId);
 }
-
-void WaapConfigAPI::readJSONByCereal(cereal::JSONInputArchive &ar)
-{
-}
-
 
 bool WaapConfigAPI::operator==(const WaapConfigAPI& other) const
 {
@@ -114,4 +81,3 @@ const string& WaapConfigAPI::get_PracticeSubType() const
 {
     return s_PracticeSubType;
 }
-

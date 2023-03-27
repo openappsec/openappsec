@@ -22,18 +22,15 @@
 #include "rest.h"
 #include "cereal/archives/json.hpp"
 #include <cereal/types/map.hpp>
+#include "customized_cereal_map.h"
 
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 
-// LCOV_EXCL_START Reason: no test exist
 class IngressMetadata
 {
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getName() const;
-    const std::string & getResourceVersion() const;
-    const std::string & getNamespace() const;
     const std::map<std::string, std::string> & getAnnotations() const;
 
 private:
@@ -46,21 +43,13 @@ private:
 class IngressRulePath
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in);
+    void load(cereal::JSONInputArchive &archive_in);
 
     const std::string & getPath() const;
 
 private:
     std::string path;
 };
-
-inline std::ostream &
-operator<<(std::ostream &os, const IngressRulePath &obj)
-{
-    os << obj.getPath();
-    return os;
-}
 
 class IngressRulePathsWrapper
 {
@@ -86,25 +75,10 @@ private:
     IngressRulePathsWrapper paths_wrapper;
 };
 
-inline std::ostream &
-operator<<(std::ostream &os, const IngressDefinedRule &obj)
-{
-    os
-        << "host: "
-        << obj.getHost()
-        << ", paths: [" << std::endl
-        << makeSeparatedStr(obj.getPathsWrapper().getRulePaths(), ",")
-        << std::endl << "]";
-    return os;
-}
-
 class DefaultBackend
 {
 public:
-    void
-    load(cereal::JSONInputArchive &);
-
-    bool isExists() const;
+    void load(cereal::JSONInputArchive &);
 
 private:
     bool is_exists = false;
@@ -113,12 +87,9 @@ private:
 class IngressSpec
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in);
+    void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getIngressClassName() const;
     const std::vector<IngressDefinedRule> & getRules() const;
-    bool isDefaultBackendExists() const;
 
 private:
     std::string ingress_class_name;
@@ -129,8 +100,7 @@ private:
 class SingleIngressData
 {
 public:
-    void
-    load(cereal::JSONInputArchive &archive_in);
+    void load(cereal::JSONInputArchive &archive_in);
 
     const IngressMetadata & getMetadata() const;
     const IngressSpec & getSpec() const;
@@ -146,12 +116,10 @@ class IngressData : public ClientRest
 public:
     bool loadJson(const std::string &json);
 
-    const std::string & getapiVersion() const;
     const std::vector<SingleIngressData> & getItems() const;
 
 private:
     std::string apiVersion;
     std::vector<SingleIngressData> items;
 };
-// LCOV_EXCL_STOP
 #endif // __INGRESS_DATA_H__

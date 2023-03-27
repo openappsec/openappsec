@@ -117,6 +117,47 @@ getMgmtObjName(shared_ptr<istream> file_stream)
 }
 
 Maybe<string>
+getGWIPAddress(shared_ptr<istream> file_stream)
+{
+    return getMgmtObjAttr(file_stream, "ipaddr ");
+}
+
+Maybe<string>
+getGWHardware(shared_ptr<istream> file_stream)
+{
+    Maybe<string> val = getMgmtObjAttr(file_stream, "appliance_type ");
+    if(val.ok()) {
+        if (val == string("software")) return string("Open server");
+        if (val == string("Maestro Gateway")) return string("Maestro");
+    }
+    return val;
+}
+
+Maybe<string>
+getGWApplicationControlBlade(shared_ptr<istream> file_stream)
+{
+    return getMgmtObjAttr(file_stream, "application_firewall_blade ");
+}
+
+Maybe<string>
+getGWURLFilteringBlade(shared_ptr<istream> file_stream)
+{
+    return getMgmtObjAttr(file_stream, "advanced_uf_blade ");
+}
+
+Maybe<string>
+getGWIPSecVPNBlade(shared_ptr<istream> file_stream)
+{
+    return getMgmtObjAttr(file_stream, "VPN_1 ");
+}
+
+Maybe<string>
+getGWVersion(shared_ptr<istream> file_stream)
+{
+    return getMgmtObjAttr(file_stream, "svn_version_name ");
+}
+
+Maybe<string>
 getSmbObjectName(const string &command_output)
 {
     static const char centrally_managed_comd_output = '0';

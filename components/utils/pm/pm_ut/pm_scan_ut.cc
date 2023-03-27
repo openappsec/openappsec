@@ -16,6 +16,18 @@ push_pat(set<PMPattern> &pats, const string &hex_pat)
     pats.insert(*pat);
 }
 
+
+static uint
+get_index_in_set(const set<PMPattern> &input_set, const PMPattern &input_elem)
+{
+    uint index = 1;
+    for (auto &elem : input_set) {
+        if (input_elem == elem) return index;
+        index++;
+    }
+    return index;
+}
+
 static set<PMPattern>
 getPatternSet(const string &pattern)
 {
@@ -262,9 +274,9 @@ TEST(pm_scan, scan_with_offsets)
     PMHook pm;
     ASSERT_TRUE(pm.prepare(pats).ok());
 
-    set<pair<uint, PMPattern>> res;
-    res.emplace(2, PMHook::lineToPattern("ABC").unpackMove());
-    res.emplace(8, PMHook::lineToPattern("ABC").unpackMove());
+    set<pair<uint, uint>> res;
+    res.emplace(get_index_in_set(pats, PMHook::lineToPattern("ABC").unpackMove()), 2);
+    res.emplace(get_index_in_set(pats, PMHook::lineToPattern("ABC").unpackMove()), 8);
     EXPECT_THAT(pm.scanBufWithOffset(buf3), ContainerEq(res));
 }
 
@@ -305,14 +317,14 @@ TEST(pm_scan, pm_offsets_test_multiple_matches)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("hex()");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {1, {"he", false, false, 0}},
-        {2, {"ex", false, false, 0}},
-        {2, {"hex", false, false, 2}},
-        {3, {"(", false, false, 5}},
-        {4, {")", false, false, 7}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"he", false, false, 0}), 1},
+        {get_index_in_set(initPatts, {"ex", false, false, 0}), 2},
+        {get_index_in_set(initPatts, {"hex", false, false, 2}), 2},
+        {get_index_in_set(initPatts, {"(", false, false, 5}), 3},
+        {get_index_in_set(initPatts, {")", false, false, 7}), 4}
     };
 
     EXPECT_EQ(results, expected);
@@ -327,10 +339,10 @@ TEST(pm_scan, pm_offsets_test_one_char_match)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("/");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {0, {"/", false, false, 0}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"/", false, false, 0}), 0}
     };
 
     EXPECT_EQ(results, expected);
@@ -345,10 +357,10 @@ TEST(pm_scan, pm_offsets_test_one_char_at_end_match)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("abc/");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {3, {"/", false, false, 0}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"/", false, false, 0}), 3}
     };
 
     EXPECT_EQ(results, expected);
@@ -363,10 +375,10 @@ TEST(pm_scan, pm_offsets_test_one_char_at_start_match)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("/abc");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {0, {"/", false, false, 0}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"/", false, false, 0}), 0}
     };
 
     EXPECT_EQ(results, expected);
@@ -381,10 +393,10 @@ TEST(pm_scan, pm_offsets_test_word_full_match)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("abc");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {2, {"abc", false, false, 0}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"abc", false, false, 0}), 2}
     };
 
     EXPECT_EQ(results, expected);
@@ -399,10 +411,10 @@ TEST(pm_scan, pm_offsets_test_word_at_start_match)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("application/x-www-form-urlencoded");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {10, {"application", false, false, 0}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"application", false, false, 0}), 10}
     };
 
     EXPECT_EQ(results, expected);
@@ -417,10 +429,10 @@ TEST(pm_scan, pm_offsets_test_word_at_end_match)
     ASSERT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("application/x-www-form-urlencoded");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {32, {"x-www-form-urlencoded", false, false, 0}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"x-www-form-urlencoded", false, false, 0}), 32}
     };
 
     EXPECT_EQ(results, expected);
@@ -436,12 +448,12 @@ TEST(pm_scan, pm_offsets_test_pat_getIndex_method)
     EXPECT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("12345ABCDEF5678");
-    std::set<std::pair<uint, PMPattern>> results = pm.scanBufWithOffset(buf);
+    std::set<std::pair<uint, uint>> results = pm.scanBufWithOffset(buf);
 
-    std::set<std::pair<uint, PMPattern>> expected{
-        {7, {"ABC", false, false, 0}},
-        {8, {"ABCD", false, false, 4}},
-        {9, {"CDE", false, false, 7}}
+    std::set<std::pair<uint, uint>> expected{
+        {get_index_in_set(initPatts, {"ABC", false, false, 0}), 7},
+        {get_index_in_set(initPatts, {"ABCD", false, false, 4}), 8},
+        {get_index_in_set(initPatts, {"CDE", false, false, 7}), 9}
     };
     EXPECT_EQ(results, expected);
 }
@@ -456,12 +468,12 @@ TEST(pm_scan, pm_offsets_lambda_test_pat_getIndex_method)
     EXPECT_TRUE(pm.prepare(initPatts).ok());
 
     Buffer buf("12345ABCDEF5678");
-    std::vector<std::pair<u_int, PMPattern>> results;
-    pm.scanBufWithOffsetLambda(buf, [&] (uint offset, const PMPattern &pat) { results.emplace_back(offset, pat); });
+    std::set<std::pair<u_int, PMPattern>> results;
+    pm.scanBufWithOffsetLambda(buf, [&] (uint offset, const PMPattern &pat) { results.emplace(offset, pat); });
 
-    std::vector<std::pair<uint, PMPattern>> expected{
-        {7, {"ABC", false, false, 0}},
+    std::set<std::pair<uint, PMPattern>> expected{
         {8, {"ABCD", false, false, 4}},
+        {7, {"ABC", false, false, 0}},
         {9, {"CDE", false, false, 7}}
     };
 

@@ -21,7 +21,7 @@
 
 #include "config.h"
 #include "debug.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 
 // LCOV_EXCL_START Reason: no test exist
 class AgentSettingsSection

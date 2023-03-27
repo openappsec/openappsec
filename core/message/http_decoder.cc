@@ -130,10 +130,10 @@ HTTPDecoder::handleBody()
     if (maybe_transfer_encoding.ok()) {
         auto transfer_encoding_type = maybe_transfer_encoding.unpack();
         if (transfer_encoding_type == "chunked") {
-            if (Singleton::exists<I_Environment>()) {
-                I_Environment *env = Singleton::Consume<I_Environment>::by<HTTPDecoder>();
-                auto is_k8s_env = env->get<bool>("k8s_env");
-                if (is_k8s_env.ok() && *is_k8s_env) {
+            if (Singleton::exists<I_EnvDetails>()) {
+                I_EnvDetails *env_details = Singleton::Consume<I_EnvDetails>::by<HTTPDecoder>();
+                EnvType env_type = env_details->getEnvType();
+                if (env_type == EnvType::K8S) {
                     dbgDebug(D_COMMUNICATION) << "Getting Chunked Response in a k8s env";
                     return getChunkedResponseK8s();
                 }

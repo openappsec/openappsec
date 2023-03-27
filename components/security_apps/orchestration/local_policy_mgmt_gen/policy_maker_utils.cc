@@ -17,8 +17,6 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_NGINX_POLICY);
 
-// LCOV_EXCL_START Reason: no test exist
-
 void
 SecurityAppsWrapper::save(cereal::JSONOutputArchive &out_ar) const
 {
@@ -40,12 +38,16 @@ PolicyWrapper::save(cereal::JSONOutputArchive &out_ar) const
 string
 PolicyMakerUtils::getPolicyName(const string &policy_path)
 {
+    string policy_name;
     if (policy_path.find_last_of("/") != string::npos) {
-        string policy_name = policy_path.substr(policy_path.find_last_of("/") + 1);
-        if (policy_name.find(".") != string::npos) return policy_name.substr(0, policy_name.find("."));
-        return policy_name;
+        policy_name = policy_path.substr(policy_path.find_last_of("/") + 1);
+    } else {
+        policy_name = policy_path;
     }
-    return policy_path;
+    if (policy_name.find(".") != string::npos) {
+        return policy_name.substr(0, policy_name.find("."));
+    }
+    return policy_name;
 }
 
 Maybe<AppsecLinuxPolicy>
@@ -83,6 +85,7 @@ PolicyMakerUtils::clearElementsMaps()
     rules_config.clear();
 }
 
+// LCOV_EXCL_START Reason: no test exist - needed for NGINX config
 bool
 PolicyMakerUtils::startsWith(const string &str, const string &prefix)
 {
@@ -95,6 +98,7 @@ PolicyMakerUtils::endsWith(const string &str, const string &suffix)
     return str.size() >= suffix.size() &&
         str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
+// LCOV_EXCL_STOP
 
 tuple<string, string, string>
 PolicyMakerUtils::splitHostName(const string &host_name)
@@ -130,8 +134,10 @@ PolicyMakerUtils::splitHostName(const string &host_name)
 }
 
 string
-PolicyMakerUtils::dumpPolicyToFile(const PolicyWrapper &policy, const string &policy_path) const
+PolicyMakerUtils::dumpPolicyToFile(const PolicyWrapper &policy, const string &policy_path)
 {
+    clearElementsMaps();
+
     stringstream ss;
     {
         cereal::JSONOutputArchive ar(ss);
@@ -147,6 +153,7 @@ PolicyMakerUtils::dumpPolicyToFile(const PolicyWrapper &policy, const string &po
         dbgDebug(D_NGINX_POLICY) << "Error while writing new policy to " << policy_path << ", Error: " << e.what();
         return "";
     }
+
     return policy_str;
 }
 
@@ -488,6 +495,7 @@ createExceptionSection(
         exception_spec.getAction() == "skip" ?
         "ignore" :
         exception_spec.getAction();
+
     ExceptionBehavior exception_behavior("action", behavior);
     InnerException inner_exception(exception_behavior, exception_match);
     return inner_exception;
@@ -672,45 +680,55 @@ PolicyMakerUtils::createPolicyElementsByRule(
         !rule_annotations[AnnotationTypes::PRACTICE].empty() &&
         !web_apps.count(rule_annotations[AnnotationTypes::PRACTICE])
     ) {
-            string practice_id = "";
-            try {
-                practice_id = to_string(boost::uuids::random_generator()());
-            } catch (const boost::uuids::entropy_error &e) {
-                //TBD: return Maybe as part of future error handling
-            }
-            tuple<string, string, string> splited_host_name = splitHostName(rule.getHost());
-            string full_url = rule.getHost() == "*"
-                ? "Any"
-                : rule.getHost();
-
-
-            RulesConfigRulebase rule_config = createMultiRulesSections(
-                std::get<0>(splited_host_name),
-                std::get<2>(splited_host_name),
-                practice_id,
-                rule_annotations[AnnotationTypes::PRACTICE],
-                "WebApplication",
-                rule_annotations[AnnotationTypes::TRIGGER],
-                log_triggers[rule_annotations[AnnotationTypes::TRIGGER]].getTriggerId(),
-                "log",
-                rule_annotations[AnnotationTypes::WEB_USER_RES],
-                web_user_res_triggers[rule_annotations[AnnotationTypes::WEB_USER_RES]].getTriggerId(),
-                "WebUserResponse",
-                full_url,
-                rule_annotations[AnnotationTypes::EXCEPTION],
-                inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]].getBehaviorId()
+        trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]] =
+            createTrustedSourcesSection(
+                rule_annotations[AnnotationTypes::TRUSTED_SOURCES],
+                rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS],
+                policy
             );
-            rules_config[rule_config.getAssetName()] = rule_config;
+    }
 
-            if (!rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS].empty()) {
-                UsersIdentifiersRulebase user_identifiers = createUserIdentifiers(
-                    rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS],
-                    policy,
-                    rule_config.getContext()
-                );
-                users_identifiers[rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS]] = user_identifiers;
-            }
+    if (!rule_annotations[AnnotationTypes::PRACTICE].empty()) {
+        string practice_id = "";
+        try {
+            practice_id = to_string(boost::uuids::random_generator()());
+        } catch (const boost::uuids::entropy_error &e) {
+            //TBD: return Maybe as part of future error handling
+        }
 
+        tuple<string, string, string> splited_host_name = splitHostName(rule.getHost());
+        string full_url = rule.getHost() == "*"
+            ? "Any"
+            : rule.getHost();
+
+        RulesConfigRulebase rule_config = createMultiRulesSections(
+            std::get<0>(splited_host_name),
+            std::get<2>(splited_host_name),
+            practice_id,
+            rule_annotations[AnnotationTypes::PRACTICE],
+            "WebApplication",
+            rule_annotations[AnnotationTypes::TRIGGER],
+            log_triggers[rule_annotations[AnnotationTypes::TRIGGER]].getTriggerId(),
+            "log",
+            rule_annotations[AnnotationTypes::WEB_USER_RES],
+            web_user_res_triggers[rule_annotations[AnnotationTypes::WEB_USER_RES]].getTriggerId(),
+            "WebUserResponse",
+            full_url,
+            rule_annotations[AnnotationTypes::EXCEPTION],
+            inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]].getBehaviorId()
+        );
+        rules_config[rule_config.getAssetName()] = rule_config;
+
+        if (!rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS].empty()) {
+            UsersIdentifiersRulebase user_identifiers = createUserIdentifiers(
+                rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS],
+                policy,
+                rule_config.getContext()
+            );
+            users_identifiers[rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS]] = user_identifiers;
+        }
+
+        if (!web_apps.count(rule_annotations[AnnotationTypes::PRACTICE])) {
             WebAppSection web_app = WebAppSection(
                 full_url == "Any" ? "" : full_url,
                 rule_config.getAssetId(),
@@ -726,6 +744,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
             );
             web_apps[rule_annotations[AnnotationTypes::PRACTICE]] = web_app;
         }
+    }
 }
 
 void
@@ -739,5 +758,3 @@ PolicyMakerUtils::createPolicyElements(
         createPolicyElementsByRule(rule, default_rule, policy, policy_name);
     }
 }
-
-// LCOV_EXCL_STOP

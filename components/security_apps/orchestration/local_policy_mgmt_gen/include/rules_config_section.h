@@ -23,9 +23,8 @@
 
 #include "config.h"
 #include "debug.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 
-// LCOV_EXCL_START Reason: no test exist
 class AssetUrlParser
 {
 public:
@@ -41,12 +40,10 @@ public:
     PracticeSection(
         const std::string &_id,
         const std::string &_type,
-        const std::string &_practice_name);
+        const std::string &_practice_name
+    );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
-
-    const std::string & getPracticeId() const;
-    const std::string & getPracticeName() const;
 
 private:
     std::string id;
@@ -60,7 +57,6 @@ public:
     ParametersSection(const std::string &_id, const std::string &_name);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
-    const std::string & getId() const;
 
 private:
     std::string name;
@@ -74,12 +70,10 @@ public:
     RulesTriggerSection(
         const std::string &_name,
         const std::string &_id,
-        const std::string &_type);
+        const std::string &_type
+    );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
-
-    const std::string & getId() const;
-    const std::string & getName() const;
 
 private:
     std::string name;
@@ -99,20 +93,14 @@ public:
         const std::string &_uri,
         std::vector<PracticeSection> _practices,
         std::vector<ParametersSection> _parameters,
-        std::vector<RulesTriggerSection> _triggers);
+        std::vector<RulesTriggerSection> _triggers
+    );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
-    const std::string & getRuleId() const;
     const std::string & getAssetName() const;
-    const std::string & getRuleName() const;
     const std::string & getAssetId() const;
-    const std::string & getPracticeId() const;
-    const std::string & getPracticeName() const;
     const std::string & getContext() const;
-    const std::vector<PracticeSection> & getPractice() const;
-    const std::vector<ParametersSection> & getParameters() const;
-    const std::vector<RulesTriggerSection> & getTriggers() const;
 
 private:
     std::string context;
@@ -130,7 +118,8 @@ public:
 
     UsersIdentifier(
         const std::string &_source_identifier,
-        std::vector<std::string> _identifier_values);
+        std::vector<std::string> _identifier_values
+    );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -148,8 +137,9 @@ public:
     UsersIdentifiersRulebase(
         const std::string &_context,
         const std::string &_source_identifier,
-        std::vector<std::string> _identifier_values,
-        std::vector<UsersIdentifier> _source_identifiers);
+        const std::vector<std::string> &_identifier_values,
+        const std::vector<UsersIdentifier> &_source_identifiers
+    );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -165,7 +155,8 @@ class RulesRulebase
 public:
     RulesRulebase(
         const std::vector<RulesConfigRulebase> &_rules_config,
-        const std::vector<UsersIdentifiersRulebase> &_users_identifiers);
+        const std::vector<UsersIdentifiersRulebase> &_users_identifiers
+    );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -192,5 +183,4 @@ public:
 private:
     RulesRulebase rules_config_rulebase;
 };
-// LCOV_EXCL_STOP
 #endif // __RULES_CONFIG_SECTION_H__

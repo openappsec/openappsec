@@ -29,16 +29,15 @@
 #include "maybe_res.h"
 #include "i_orchestration_tools.h"
 #include "i_shell_cmd.h"
+#include "i_messaging.h"
 #include "appsec_practice_section.h"
 #include "ingress_data.h"
 #include "settings_section.h"
 #include "triggers_section.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 #include "exceptions_section.h"
 #include "rules_config_section.h"
 #include "trusted_sources_section.h"
-
-USE_DEBUG_FLAG(D_NGINX_POLICY);
 
 enum class AnnotationTypes {
     PRACTICE,
@@ -50,7 +49,6 @@ enum class AnnotationTypes {
     COUNT
 };
 
-// LCOV_EXCL_START Reason: no test exist
 class SecurityAppsWrapper
 {
 public:
@@ -93,11 +91,11 @@ private:
     SettingsWrapper settings;
     SecurityAppsWrapper security_apps;
 };
-// LCOV_EXCL_STOP
 class PolicyMakerUtils
         :
     Singleton::Consume<I_Environment>,
     Singleton::Consume<I_OrchestrationTools>,
+    Singleton::Consume<I_Messaging>,
     Singleton::Consume<I_ShellCmd>
 {
 public:
@@ -113,7 +111,7 @@ public:
 
     std::tuple<std::string, std::string, std::string> splitHostName(const std::string &host_name);
 
-    std::string dumpPolicyToFile(const PolicyWrapper &policy, const std::string &policy_path) const;
+    std::string dumpPolicyToFile(const PolicyWrapper &policy, const std::string &policy_path);
 
     PolicyWrapper combineElementsToPolicy(const std::string &policy_version);
 

@@ -17,6 +17,10 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
+
+static const set<string> valid_modes = {"prevent-learn", "detect-learn", "prevent", "detect", "inactive"};
+static const set<string> valid_confidences = {"medium", "high", "critical"};
+
 void
 AppSecWebBotsURI::load(cereal::JSONInputArchive &archive_in)
 {
@@ -37,6 +41,9 @@ AppSecPracticeAntiBot::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<AppSecWebBotsURI>>("injected-URIs", injected_uris, archive_in);
     parseAppsecJSONKey<vector<AppSecWebBotsURI>>("validated-URIs", validated_uris, archive_in);
     parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
+    if (valid_modes.count(override_mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Web Bots override mode invalid: " << override_mode;
+    }
 }
 
 void
@@ -106,8 +113,17 @@ AppSecPracticeWebAttacks::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec practice spec";
     parseAppsecJSONKey<AppSecWebAttackProtections>("protections", protections, archive_in);
     parseAppsecJSONKey<string>("override-mode", mode, archive_in, "Unset");
+    if (valid_modes.count(mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec practice override mode invalid: " << mode;
+    }
+
     if (getMode() == "Prevent") {
         parseAppsecJSONKey<string>("minimum-confidence", minimum_confidence, archive_in, "critical");
+        if (valid_confidences.count(minimum_confidence) == 0) {
+            dbgWarning(D_LOCAL_POLICY)
+                << "AppSec practice override minimum confidence invalid: "
+                << minimum_confidence;
+        }
     } else {
         minimum_confidence = "Transparent";
     }
@@ -163,6 +179,9 @@ AppSecPracticeSnortSignatures::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Snort Signatures practice";
     parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
+    if (valid_modes.count(override_mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Snort Signatures override mode invalid: " << override_mode;
+    }
 }
 
 const string &
@@ -180,9 +199,12 @@ AppSecPracticeSnortSignatures::getConfigMap() const
 void
 AppSecPracticeOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_LOCAL_POLICY) << "Loading AppSecPracticeOpenSchemaAPI practice";
-    parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Practice OpenSchemaAPI practice";
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
+    parseAppsecJSONKey<string>("override-mode", override_mode, archive_in, "Inactive");
+    if (valid_modes.count(override_mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Open Schema API override mode invalid: " << override_mode;
+    }
 }
 
 const string &
@@ -196,7 +218,7 @@ AppSecPracticeOpenSchemaAPI::getConfigMap() const
 {
     return config_map;
 }
-
+// LCOV_EXCL_STOP
 void
 AppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
 {
@@ -212,6 +234,13 @@ AppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("name", practice_name, archive_in);
 }
 
+void
+AppSecPracticeSpec::setName(const string &_name)
+{
+    practice_name = _name;
+}
+
+// LCOV_EXCL_START Reason: no test exist
 const AppSecPracticeOpenSchemaAPI &
 AppSecPracticeSpec::getOpenSchemaValidation() const
 {
@@ -223,6 +252,7 @@ AppSecPracticeSpec::getSnortSignatures() const
 {
     return snort_signatures;
 }
+// LCOV_EXCL_STOP
 
 const AppSecPracticeWebAttacks &
 AppSecPracticeSpec::getWebAttacks() const
@@ -345,6 +375,9 @@ WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("assetName",                   asset_name),
         cereal::make_nvp("ruleId",                      rule_id),
         cereal::make_nvp("ruleName",                    rule_name),
+        cereal::make_nvp("schemaValidation",               false),
+        cereal::make_nvp("schemaValidation_v2",            disabled_str),
+        cereal::make_nvp("oas",                            empty_list),
         cereal::make_nvp("triggers",                    triggers),
         cereal::make_nvp("applicationUrls",             application_urls),
         cereal::make_nvp("overrides",                   overrides),
@@ -355,19 +388,7 @@ WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("botProtection_v2",            detect_str)
     );
 }
-
-const string &
-WebAppSection::getPracticeId() const
-{
-    return practice_id;
-}
-
-bool
-WebAppSection::operator<(const WebAppSection &other) const
-{
-    return getPracticeId() < other.getPracticeId();
-}
-
+// LCOV_EXCL_START Reason: no test exist
 void
 WebAPISection::save(cereal::JSONOutputArchive &out_ar) const
 {
@@ -396,12 +417,7 @@ WebAPISection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("overrides",                      empty_list)
     );
 }
-
-const string &
-WebAPISection::getPracticeId() const
-{
-    return practice_id;
-}
+// LCOV_EXCL_STOP
 
 void
 AppSecRulebase::save(cereal::JSONOutputArchive &out_ar) const
@@ -426,6 +442,9 @@ ParsedRule::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<string>>("triggers", log_triggers, archive_in);
     parseAppsecJSONKey<vector<string>>("practices", practices, archive_in);
     parseAppsecJSONKey<string>("mode", mode, archive_in);
+    if (valid_modes.count(mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Parsed Rule mode invalid: " << mode;
+    }
     parseAppsecJSONKey<string>("custom-response", custom_response, archive_in);
     parseAppsecJSONKey<string>("source-identifiers", source_identifiers, archive_in);
     parseAppsecJSONKey<string>("trusted-sources", trusted_sources, archive_in);
@@ -500,11 +519,6 @@ AppsecPolicySpec::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec policy spec";
     parseAppsecJSONKey<ParsedRule>("default", default_rule, archive_in);
-    auto default_mode_annot =
-        Singleton::Consume<I_Environment>::by<AppsecPolicySpec>()->get<string>("default mode annotation");
-    if (default_mode_annot.ok() && !default_mode_annot.unpack().empty() && default_rule.getMode().empty()) {
-        default_rule.setMode(default_mode_annot.unpack());
-    }
     default_rule.setHost("*");
     parseAppsecJSONKey<vector<ParsedRule>>("specific-rules", specific_rules, archive_in);
 }
@@ -519,6 +533,21 @@ const vector<ParsedRule> &
 AppsecPolicySpec::getSpecificRules() const
 {
     return specific_rules;
+}
+
+bool
+AppsecPolicySpec::isAssetHostExist(const std::string &full_url) const
+{
+    for (const ParsedRule &rule : specific_rules) {
+        if (rule.getHost() == full_url) return true;
+    }
+    return false;
+}
+
+void
+AppsecPolicySpec::addSpecificRule(const ParsedRule &_rule)
+{
+    specific_rules.push_back(_rule);
 }
 
 void
@@ -580,4 +609,8 @@ AppsecLinuxPolicy::getAppsecSourceIdentifierSpecs() const
     return sources_identifiers;
 }
 
-// LCOV_EXCL_STOP
+void
+AppsecLinuxPolicy::addSpecificRule(const ParsedRule &_rule)
+{
+    policies.addSpecificRule(_rule);
+}

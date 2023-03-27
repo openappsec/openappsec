@@ -11,31 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __LOCAL_POLICY_MGMT_GEN_H__
-#define __LOCAL_POLICY_MGMT_GEN_H__
+#ifndef __NAMESPACE_DATA_H__
+#define __NAMESPACE_DATA_H__
 
-#include "config.h"
-#include "component.h"
-#include "i_mainloop.h"
-#include "i_local_policy_mgmt_gen.h"
-#include "i_env_details.h"
+#include <vector>
+#include <map>
 
-class LocalPolicyMgmtGenerator
-        :
-    public Component,
-    Singleton::Provide<I_LocalPolicyMgmtGen>,
-    Singleton::Consume<I_MainLoop>,
-    Singleton::Consume<I_EnvDetails>
+#include "cereal/archives/json.hpp"
+#include <cereal/types/map.hpp>
+
+#include "rest.h"
+
+class NamespaceData : public ClientRest
 {
 public:
-    LocalPolicyMgmtGenerator();
-    ~LocalPolicyMgmtGenerator();
-
-    void init() override;
+    bool loadJson(const std::string &json);
+    Maybe<std::string> getNamespaceUidByName(const std::string &name);
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> pimpl;
+    std::map<std::string, std::string> ns_name_to_uid;
 };
 
-#endif // __LOCAL_POLICY_MGMT_GEN_H__
+#endif // __NAMESPACE_DATA_H__

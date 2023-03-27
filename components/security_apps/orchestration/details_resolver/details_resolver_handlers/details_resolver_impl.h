@@ -87,6 +87,37 @@ FILE_CONTENT_HANDLER(
     (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",
     getMgmtObjUid
 )
+FILE_CONTENT_HANDLER(
+    "IP Address",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getGWIPAddress
+)
+FILE_CONTENT_HANDLER(
+    "Hardware",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getGWHardware
+)
+FILE_CONTENT_HANDLER(
+    "Application Control",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getGWApplicationControlBlade
+)
+FILE_CONTENT_HANDLER(
+    "URL Filtering",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getGWURLFilteringBlade
+)
+FILE_CONTENT_HANDLER(
+    "IPSec VPN",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getGWIPSecVPNBlade
+)
+FILE_CONTENT_HANDLER(
+    "Version",
+    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
+    getGWVersion
+)
+
 #else // !(gaia || smb)
 FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 #endif // gaia || smb

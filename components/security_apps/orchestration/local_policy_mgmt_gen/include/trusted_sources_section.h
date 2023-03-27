@@ -22,9 +22,8 @@
 
 #include "config.h"
 #include "debug.h"
-#include "k8s_policy_common.h"
+#include "local_policy_common.h"
 
-// LCOV_EXCL_START Reason: no test exist
 class TrustedSourcesSpec
 {
 public:
@@ -33,6 +32,7 @@ public:
     int getMinNumOfSources() const;
     const std::vector<std::string> & getSourcesIdentifiers() const;
     const std::string & getName() const;
+    void setName(const std::string &_name);
 
 private:
     int min_num_of_sources = 0;
@@ -77,6 +77,7 @@ public:
 
     const std::string & getName() const;
     const std::vector<SourceIdentifierSpec> & getIdentifiers() const;
+    void setName(const std::string &_name);
 
 private:
     std::string name;
@@ -104,5 +105,4 @@ private:
     int num_of_sources = 0;
     std::vector<SourcesIdentifiers> sources_identifiers;
 };
-// LCOV_EXCL_STOP
 #endif // __TRUSTED_SOURCES_SECTION_H__

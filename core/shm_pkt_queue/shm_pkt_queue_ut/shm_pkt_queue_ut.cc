@@ -1,22 +1,25 @@
+// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "shmpktqueue.h"
 #include <string>
 #include <sstream>
 
-#include <boost/lockfree/spsc_queue.hpp>
-#include <boost/interprocess/managed_shared_memory.hpp>
-#include <boost/interprocess/allocators/allocator.hpp>
-#include <boost/interprocess/containers/string.hpp>
-
 #include "cptest.h"
 #include "maybe_res.h"
+#include "../shared_string_wrapper.h"
 
 namespace bip = boost::interprocess;
-
-static const int queue_size = 200;
-using char_alloc = bip::allocator<u_char, bip::managed_shared_memory::segment_manager>;
-using shared_string = bip::basic_string<u_char, std::char_traits<u_char>, char_alloc>;
-using ring_buffer = boost::lockfree::spsc_queue<shared_string, boost::lockfree::capacity<queue_size>>;
-
 using namespace std;
 
 static const int segment_name_len = 128;
@@ -103,8 +106,7 @@ class ShmPktQueueTest : public ::testing::Test {
         pop_packet_via_boost()
         {
             ring_buffer *queue = segment->find_or_construct<ring_buffer>(queue_name)();
-            char_alloc char_alloc(segment->get_segment_manager());
-            shared_string node_content(char_alloc);
+            SharedStringWrapper node_content;
             PacketInfo packet_pop_by_boost;
 
             if (queue->pop(node_content)) {

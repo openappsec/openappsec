@@ -78,8 +78,8 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
 
     string policy_response = declarative_policy_utils.getUpdate(request);
 
-    auto env = Singleton::Consume<I_LocalPolicyMgmtGen>::by<HybridCommunication>()->getEnvType();
-    if (env == I_LocalPolicyMgmtGen::LocalPolicyEnv::K8S && !policy_response.empty()) {
+    auto env = Singleton::Consume<I_EnvDetails>::by<HybridCommunication>()->getEnvType();
+    if (env == EnvType::K8S && !policy_response.empty()) {
         dbgDebug(D_ORCHESTRATOR) << "Policy has changes, sending notification to tuning host";
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<HybridCommunication>();
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<HybridCommunication>();

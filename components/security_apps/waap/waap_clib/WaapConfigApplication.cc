@@ -72,12 +72,15 @@ const string& WaapConfigApplication::get_PracticeSubType() const
 
 void WaapConfigApplication::load(cereal::JSONInputArchive& ar)
 {
-    WaapConfigBase::load(ar);
+    // order has affect - we need to call base last because of triggers and overrides
+
+
     loadOpenRedirectPolicy(ar);
     loadErrorDisclosurePolicy(ar);
     loadCsrfPolicy(ar);
     loadSecurityHeadersPolicy(ar);
 
+    WaapConfigBase::load(ar);
     assets_ids_aggregation.insert(m_assetId);
 }
 

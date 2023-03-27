@@ -11,17 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __I_LOCAL_POLICY_MGMT_GEN_H__
-#define __I_LOCAL_POLICY_MGMT_GEN_H__
+#ifndef __I_ENV_DETAILS_H__
+#define __I_ENV_DETAILS_H__
 
-class I_LocalPolicyMgmtGen
+#include <string>
+#include <stdbool.h>
+
+enum class EnvType { LINUX, K8S, COUNT };
+
+class I_EnvDetails
 {
 public:
-    virtual std::string parsePolicy(const std::string &policy_version) = 0;
-    virtual const std::string & getPolicyPath(void) const = 0;
+    virtual EnvType getEnvType() = 0;
+    virtual std::string getToken() = 0;
 
 protected:
-    ~I_LocalPolicyMgmtGen() {}
+    virtual ~I_EnvDetails() {}
 };
 
-#endif //__I_LOCAL_POLICY_MGMT_GEN_H__
+#endif // __I_ENV_DETAILS_H__

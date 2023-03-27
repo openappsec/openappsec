@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <fstream>
 #include <algorithm>
+#include <string>
 #include "kiss_patterns.h"
 #include "kiss_thin_nfa_impl.h"
 
@@ -100,12 +101,10 @@ PMHook::prepare(const set<PMPattern> &inputs)
     return Maybe<void>();
 }
 
-
 set<PMPattern>
 PMHook::scanBuf(const Buffer &buf) const
 {
     dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
-
     vector<pair<uint, uint>> pm_matches;
     kiss_thin_nfa_exec(handle.get(), buf, pm_matches);
     dbgTrace(D_PM) << pm_matches.size() << " raw matches found";
@@ -118,7 +117,7 @@ PMHook::scanBuf(const Buffer &buf) const
     return res;
 }
 
-set<pair<uint, PMPattern>>
+set<pair<uint, uint>>
 PMHook::scanBufWithOffset(const Buffer &buf) const
 {
     dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
@@ -127,10 +126,7 @@ PMHook::scanBufWithOffset(const Buffer &buf) const
     kiss_thin_nfa_exec(handle.get(), buf, pm_matches);
     dbgTrace(D_PM) << pm_matches.size() << " raw matches found";
 
-    set<pair<uint, PMPattern>> res;
-    for (auto &match : pm_matches) {
-        res.emplace(match.second, patterns.at(match.first));
-    }
+    set<pair<uint, uint>> res(pm_matches.begin(), pm_matches.end());
     dbgTrace(D_PM) << res.size() << " matches found";
     return res;
 }
@@ -138,9 +134,14 @@ PMHook::scanBufWithOffset(const Buffer &buf) const
 void
 PMHook::scanBufWithOffsetLambda(const Buffer &buf, function<void(uint, const PMPattern&)> cb) const
 {
+    dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
 
-    for (auto &res : scanBufWithOffset(buf)) {
-        cb(res.first, res.second);
+    vector<pair<uint, uint>> pm_matches;
+    kiss_thin_nfa_exec(handle.get(), buf, pm_matches);
+    dbgTrace(D_PM) << pm_matches.size() << " raw matches found";
+
+    for (auto &res : pm_matches) {
+        cb(res.second, patterns.at(res.first));
     }
 }
 

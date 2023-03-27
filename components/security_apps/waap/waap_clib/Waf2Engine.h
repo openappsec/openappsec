@@ -184,7 +184,6 @@ public:
     void handleSecurityHeadersInjection(std::vector<std::pair<std::string, std::string>>& injectHeaderStrs);
     void disableShouldInjectSecurityHeaders();
 
-
     bool shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger::Log> &trigger_log) const;
 
     // query

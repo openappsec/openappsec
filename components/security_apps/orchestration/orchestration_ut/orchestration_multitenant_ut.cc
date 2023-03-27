@@ -44,6 +44,10 @@ public:
             mock_ml,
             addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Configuration update registration", false)
         ).WillOnce(Return(0));
+        EXPECT_CALL(
+            mock_ml,
+            addOneTimeRoutine(I_MainLoop::RoutineType::Offline, _, "Send registration data", false)
+        ).WillRepeatedly(Return(0));
 
         config_comp.preload();
         config_comp.init();

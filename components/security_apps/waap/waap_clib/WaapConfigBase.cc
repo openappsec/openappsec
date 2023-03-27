@@ -23,7 +23,9 @@
 #include "Waf2Util.h"
 
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
+USE_DEBUG_FLAG(D_WAAP);
 using boost::algorithm::to_lower_copy;
+using namespace std;
 
 WaapConfigBase::WaapConfigBase()
         :
