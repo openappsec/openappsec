@@ -35,8 +35,8 @@ open-appsec uses two models:
 * [Project Website](https://openappsec.io)
 * [Offical documentation](https://docs.openappsec.io/)
 * [Video Tutorial](https://www.youtube.com/playlist?list=PL8pzPlPbjDY0V2u7E-KZQrzIiw41fWB0h)
-* [Live Kubernetes Playground](https://killercoda.com/open-appsec/scenario/simple-appsec-kubernetes-ingress)
-* [Live Linux/NGINX Playground](https://killercoda.com/open-appsec/scenario/simple-appsec-for-nginx)
+* [Live Kubernetes Ingress Playground](https://my.openappsec.io/#/signup/playground/kubernetes)
+* [Live Linux NGINX Playground](https://my.openappsec.io/#/signup/playground/nginx)
 
 
 # open-appsec Installation
