@@ -6,7 +6,7 @@
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6629/badge)](https://bestpractices.coreinfrastructure.org/projects/6629)
 
 # About
-[open-appsec](https://www.openappsec.io) (openappsec.io) builds on machine learning to provide preemptive web app & API threat protection against OWASP-Top-10 and zero-day attacks. It can be deployed as add-on to Kubernetes Ingress, NGINX, Envoy (soon) and API Gateways.
+[open-appsec](https://www.openappsec.io) (openappsec.io) builds on machine learning to provide preemptive web app & API threat protection against OWASP-Top-10 and zero-day attacks. It can be deployed as an add-on to Kubernetes Ingress, NGINX, Envoy (soon), and API Gateways.
 
 The open-appsec engine learns how users normally interact with your web application. It then uses this information to automatically detect requests that fall outside of normal operations, and conducts further analysis to decide whether the request is malicious or not.
 
@@ -14,9 +14,9 @@ Upon every HTTP request, all parts are decoded, JSON and XML sections are extrac
 
 Every request to the application goes through two phases:
 
-1. Multiple variables are fed to the machine learning engine. These variables, which are either directly extracted from the HTTP request or decoded from different parts of the payload, include attack indicators, IP addresses, user agents, fingerprints, and many other considerations. The supervised model of the machine learning engine uses these variables to compare the request with many common attack patterns found across the globe.
+1. Multiple variables are fed to the machine-learning engine. These variables, which are either directly extracted from the HTTP request or decoded from different parts of the payload, include attack indicators, IP addresses, user agents, fingerprints, and many other considerations. The supervised model of the machine learning engine uses these variables to compare the request with many common attack patterns found across the globe.
 
-2. If the request is identified as a valid and legitimate request, the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
+2. If the request is identified as a valid and legitimate request the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
 
 The project is currently in Beta and feedback is most welcomed!
 
@@ -27,16 +27,15 @@ open-appsec uses two models:
 1. A supervised model that was trained offline based on millions of requests, both malicious and benign.
     
     * A basic model is provided as part of this repository. It is recommended for use in Monitor-Only and Test environments.
-    * An advanced model which is more accurate and recommended for Production use, can be downloaded from [open-appsec portal](https://my.openappsec.io). User Menu->Download advanced ML model. This model updates from time to time and you will get an email when these updates happen.
+    * An advanced model which is more accurate and recommended for Production use can be downloaded from the [open-appsec portal](https://my.openappsec.io)->User Menu->Download advanced ML model. This model updates from time to time and you will get an email when these updates happen.
 
 2. An unsupervised model that is being built in real time in the protected environment. This model uses traffic patterns specific to the environment.
 
 # Resources
 * [Project Website](https://openappsec.io)
-* [Offical documentation](https://docs.openappsec.io/)
-* [Video Tutorial](https://www.youtube.com/playlist?list=PL8pzPlPbjDY0V2u7E-KZQrzIiw41fWB0h)
-* [Live Kubernetes Ingress Playground](https://my.openappsec.io/#/signup/playground/kubernetes)
-* [Live Linux NGINX Playground](https://my.openappsec.io/#/signup/playground/nginx)
+* [Offical Documentation](https://docs.openappsec.io/)
+* [Video Tutorials](https://www.openappsec.io/tutorials)
+* [Live Playgrounds](https://www.openappsec.io/playground)
 
 
 # open-appsec Installation
@@ -59,7 +58,7 @@ It is recommended to read the documentation or follow the video tutorial.
 
 # Repositories
 
-open-appsec GitHub includes four main repositores:
+open-appsec GitHub includes four main repositories:
 
 * [openappsec/openappsec](https://github.com/openappsec/openappsec) the main code and logic of open-appsec. Developed in C++.
 * [openappsec/attachment](https://github.com/openappsec/attachment) connects between processes that provide HTTP data (e.g NGINX) and the open-appsec Agent security logic. Developed in C.
@@ -103,7 +102,7 @@ An example of installing the packages on Alpine:
 
 ## Placing the agent code inside an Alpine docker image
 
-Once the agent code has been compiled and packaged, an Alpine image running it can be created. This requires permissions to excute the `docker` command.
+Once the agent code has been compiled and packaged, an Alpine image running it can be created. This requires permissions to execute the `docker` command.
 
 ```bash
  $ make docker
@@ -111,13 +110,13 @@ Once the agent code has been compiled and packaged, an Alpine image running it c
 
 This will create a local image for your docker called `agent-docker`.
 
-## Deployment of the agent docker image as container
+## Deployment of the agent docker image as a container
 
 To run a Nano-Agent as a container the following steps are required:
 
 1. If you are using a container management system / plan on deploying the container using your CI, add the agent docker image to an accessible registry.
 2. If you are planning to manage the agent using the open-appsec UI, then make sure to obtain an agent token from the Management Portal and Enforce.
-3. Run the agent with the follwing command (where –e https_proxy parameter is optional):
+3. Run the agent with the following command (where –e https_proxy parameter is optional):
 
 `docker run -d --name=agent-container --ipc=host -v=<path to persistent location for agent config>:/etc/cp/conf -v=<path to persistent location for agent data files>:/etc/cp/data -v=<path to persistent location for agent debugs and logs>:/var/log/nano_agent –e https_proxy=<user:password@Proxy address:port> -it <agent-image> /cp-nano-agent [--token <token> | --hybrid-mode]`
 
@@ -129,8 +128,8 @@ CONTAINER ID        IMAGE               COMMAND                          CREATED
 1e67f2abbfd4        agent-docker        "/cp-nano-agent --hybrid-mode"   1 minute ago        Up 1 minute                             agent-container
 ```
 
- Note that you are not requiered to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --hybryd-mode flag in such case. In addition, the voliums in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re execution.
- Lastly, --ipc=host argument is mandatory in order for the agent to have access to shared memory with a protected attachment (nginx server).
+ Note that you are not required to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --hybryd-mode flag in such cases. In addition, the voliums in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re execution.
+ Lastly, --ipc=host argument is mandatory in order for the agent to have access to shared memory with a protected attachment (NGINX server).
 
 4. Create or replace the NGINX container using the [Attachment Repository](https://github.com/openappsec/attachment).
 
