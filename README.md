@@ -63,7 +63,7 @@ $ install-cp-nano-agent.sh --install --hybrid_mode
 $ install-cp-nano-service-http-transaction-handler.sh –install
 $ install-cp-nano-attachment-registration-manager.sh --install
 ```
-You can add ```--token <token>``` and ```--email <email address>``` to the first command, to get a token follow [documentation](https://docs.openappsec.io/getting-started/using-the-web-ui-saas/connect-deployed-agents-to-saas-management-k8s-and-linux). 
+You can add the ```--token <token>``` and ```--email <email address>``` options to the first command, to get a token follow [documentation](https://docs.openappsec.io/getting-started/using-the-web-ui-saas/connect-deployed-agents-to-saas-management-k8s-and-linux). 
 
 For Docker: follow [documentation](https://docs.openappsec.io/getting-started/start-with-docker) 
 
