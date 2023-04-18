@@ -40,21 +40,34 @@ open-appsec uses two models:
 
 # open-appsec Installation
 
-Installer for Kubernetes:
+For Kubernetes (NGINX Ingress) using the installer:
 
 ```bash
-wget https://downloads.openappsec.io/open-appsec-k8s-install && chmod +x open-appsec-k8s-install
-./open-appsec-k8s-install
+$ wget https://downloads.openappsec.io/open-appsec-k8s-install && chmod +x open-appsec-k8s-install
+$ ./open-appsec-k8s-install
 ```
 
-Installer for standard NGINX (list of supported/pre-compiled NGINX attachements is available [here](https://downloads.openappsec.io/supported-nginx.txt)):
+For Kubernetes (NGINX or Kong) using Helm: follow [documentation](https://docs.openappsec.io/getting-started/start-with-kubernetes/install-using-helm-ingress-nginx-and-kong) – use this method if you’ve built your own containers. 
+
+For Linux (NGINX or Kong) using the installer (list of supported/pre-compiled NGINX attachments is available [here](https://downloads.openappsec.io/supported-nginx.txt)):
 
 ```bash
-wget https://downloads.openappsec.io/open-appsec-nginx-install && chmod +x open-appsec-nginx-install
-./open-appsec-nginx-install
+$ wget https://downloads.openappsec.io/open-appsec-install && chmod +x open-appsec-install
+$ ./open-appsec-install –auto
 ```
 
-It is recommended to read the documentation or follow the video tutorial.
+For Linux, if you’ve built your own package use the following commands:
+
+```bash
+$ install-cp-nano-agent.sh --install --hybrid_mode
+$ install-cp-nano-service-http-transaction-handler.sh –install
+$ install-cp-nano-attachment-registration-manager.sh --install
+```
+You can add ```--token <token>``` and ```--email <email address>``` to the first command, to get a token follow [documentation](https://docs.openappsec.io/getting-started/using-the-web-ui-saas/connect-deployed-agents-to-saas-management-k8s-and-linux). 
+
+For Docker: follow [documentation](https://docs.openappsec.io/getting-started/start-with-docker) 
+
+For more information read the [documentation](https://docs.openappsec.io/) or follow the [video tutorials](https://www.openappsec.io/tutorials).
 
 # Repositories
 
@@ -116,9 +129,9 @@ To run a Nano-Agent as a container the following steps are required:
 
 1. If you are using a container management system / plan on deploying the container using your CI, add the agent docker image to an accessible registry.
 2. If you are planning to manage the agent using the open-appsec UI, then make sure to obtain an agent token from the Management Portal and Enforce.
-3. Run the agent with the following command (where –e https_proxy parameter is optional):
+3. Run the agent with the following command (where -e https_proxy parameter is optional):
 
-`docker run -d --name=agent-container --ipc=host -v=<path to persistent location for agent config>:/etc/cp/conf -v=<path to persistent location for agent data files>:/etc/cp/data -v=<path to persistent location for agent debugs and logs>:/var/log/nano_agent –e https_proxy=<user:password@Proxy address:port> -it <agent-image> /cp-nano-agent [--token <token> | --hybrid-mode]`
+`docker run -d --name=agent-container --ipc=host -v=<path to persistent location for agent config>:/etc/cp/conf -v=<path to persistent location for agent data files>:/etc/cp/data -v=<path to persistent location for agent debugs and logs>:/var/log/nano_agent -e https_proxy=<user:password@Proxy address:port> -it <agent-image> /cp-nano-agent [--token <token> | --hybrid-mode]`
 
 Example:
 ```bash
@@ -128,7 +141,7 @@ CONTAINER ID        IMAGE               COMMAND                          CREATED
 1e67f2abbfd4        agent-docker        "/cp-nano-agent --hybrid-mode"   1 minute ago        Up 1 minute                             agent-container
 ```
 
- Note that you are not required to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --hybryd-mode flag in such cases. In addition, the voliums in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re execution.
+ Note that you are not required to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --hybrid-mode flag in such cases. In addition, the volumes in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re-execution.
  Lastly, --ipc=host argument is mandatory in order for the agent to have access to shared memory with a protected attachment (NGINX server).
 
 4. Create or replace the NGINX container using the [Attachment Repository](https://github.com/openappsec/attachment).
