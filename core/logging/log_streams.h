@@ -103,6 +103,7 @@ public:
     void sendLog(const Report &log) override;
 
 private:
+    void sendLog(const std::vector<char> &data);
     void connect();
 
     I_Socket *i_socket = nullptr;

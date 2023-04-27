@@ -118,15 +118,13 @@ void TuningDecision::updateDecisions()
 {
     TuningEvents tuningEvents;
     RemoteFilesList tuningDecisionFiles;
-    if (m_baseUri == "") {
-        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
-        if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
-            m_baseUri = "/api/";
-        } else {
-            m_baseUri = "/storage/waap/";
-        }
-        dbgTrace(D_WAAP) << "URI prefix: " << m_baseUri;
+    I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
+    if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
+        m_baseUri = "/api/";
+    } else {
+        m_baseUri = "/storage/waap/";
     }
+    dbgTrace(D_WAAP) << "URI prefix: " << m_baseUri;
     bool isSuccessful = sendObject(tuningDecisionFiles,
         I_Messaging::Method::GET,
         m_baseUri + "?list-type=2&prefix=" + m_remotePath);

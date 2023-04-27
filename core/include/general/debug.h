@@ -32,6 +32,9 @@ class I_Encryptor;
 class I_AgentDetails;
 class I_SignalHandler;
 
+namespace Config { enum class Errors; }
+std::ostream & operator<<(std::ostream &, const Config::Errors &);
+
 class Debug
         :
     Singleton::Consume<I_TimeGet>,

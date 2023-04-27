@@ -1489,7 +1489,7 @@ TEST_F(LogTest, ObfuscationTest)
     sysog_routine();
     EXPECT_EQ(capture_syslog_cef_data.size(), 2);
     for (const string &str : capture_syslog_cef_data) {
-        EXPECT_THAT(str, AnyOf(HasSubstr("String='Another string'"), HasSubstr("String=Another string")));
+        EXPECT_THAT(str, AnyOf(HasSubstr("String='Another string'"), HasSubstr("String=\"Another string\"")));
     }
 }
 

@@ -5,6 +5,8 @@
 using namespace std;
 using namespace testing;
 
+USE_DEBUG_FLAG(D_INTELLIGENCE);
+
 TEST(QueryRequestTestV2, QueryTest)
 {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
@@ -437,4 +439,105 @@ TEST(QueryRequestTestV2, OneLinerComplexQueryTest)
         "    }\n"
         "}";
     EXPECT_EQ(out.str(), output_json);
+}
+
+TEST(QueryRequestTestV2, CrossTenantAssetDBTest)
+{
+    QueryRequest request(Condition::EQUALS, "class", "risk", true);
+
+    request.setObjectType(ObjectType::CONFIGURATION);
+    request.setCrossTenantAssetDB(true);
+
+    string output_json =
+        "{\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"equals\",\n"
+        "        \"key\": \"mainAttributes.class\",\n"
+        "        \"value\": \"risk\"\n"
+        "    },\n"
+        "    \"objectType\": \"configuration\",\n"
+        "    \"queryTypes\": {\n"
+        "        \"queryCrossTenantAssetDB\": true\n"
+        "    }\n"
+        "}";
+
+    stringstream out;
+    {
+        cereal::JSONOutputArchive out_ar(out);
+        request.saveToJson(out_ar);
+    }
+    EXPECT_EQ(out.str(), output_json);
+}
+
+TEST(QueryRequestTestV2, IllegalObjectTypeTest)
+{
+    QueryRequest request(Condition::EQUALS, "class", "risk", true);
+    stringstream debug_output;
+    Debug::setNewDefaultStdout(&debug_output);
+    Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
+
+    request.setObjectType(static_cast<ObjectType>(static_cast<int>(ObjectType::COUNT) + 1));
+    request.setCrossTenantAssetDB(true);
+
+    string output_json =
+        "{\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"equals\",\n"
+        "        \"key\": \"mainAttributes.class\",\n"
+        "        \"value\": \"risk\"\n"
+        "    },\n"
+        "    \"queryTypes\": {\n"
+        "        \"queryCrossTenantAssetDB\": true\n"
+        "    }\n"
+        "}";
+
+    stringstream out;
+    {
+        cereal::JSONOutputArchive out_ar(out);
+        request.saveToJson(out_ar);
+    }
+    EXPECT_EQ(out.str(), output_json);
+
+    string debug_str = "Illegal Object Type.";
+    EXPECT_THAT(debug_output.str(), HasSubstr(debug_str));
+    Debug::setNewDefaultStdout(&cout);
+}
+
+TEST(QueryRequestTestV2, UninitializedObjectTypeTest)
+{
+    QueryRequest request(Condition::EQUALS, "class", "risk", true);
+    stringstream debug_output;
+    Debug::setNewDefaultStdout(&debug_output);
+    Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
+
+    request.setCrossTenantAssetDB(true);
+
+    string output_json =
+        "{\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"equals\",\n"
+        "        \"key\": \"mainAttributes.class\",\n"
+        "        \"value\": \"risk\"\n"
+        "    },\n"
+        "    \"queryTypes\": {\n"
+        "        \"queryCrossTenantAssetDB\": true\n"
+        "    }\n"
+        "}";
+
+    stringstream out;
+    {
+        cereal::JSONOutputArchive out_ar(out);
+        request.saveToJson(out_ar);
+    }
+    EXPECT_EQ(out.str(), output_json);
+
+    string debug_str = "uninitialized";
+    EXPECT_THAT(debug_output.str(), HasSubstr(debug_str));
+    Debug::setNewDefaultStdout(&cout);
 }

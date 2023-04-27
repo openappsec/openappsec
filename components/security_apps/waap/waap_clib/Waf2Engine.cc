@@ -2205,6 +2205,9 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
         for (auto &keyword : res.keyword_matches) {
             exceptions_dict["indicator"].insert(keyword);
         }
+        for (auto &it : res.found_patterns) {
+            exceptions_dict["indicator"].insert(it.first);
+        }
 
         // calling behavior and check if there is a behavior that match to this specific param name.
         auto behaviors = exceptions.unpack().getBehavior(exceptions_dict,

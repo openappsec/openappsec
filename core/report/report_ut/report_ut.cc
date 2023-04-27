@@ -570,8 +570,8 @@ TEST_F(ReportTest, testSyslogWithoutServiceName)
     EXPECT_EQ(
         report.getSyslog(),
         "<133>1 0:0:0.123Z cpnano-agent-001 UnnamedNanoService - 0 - "
-        "title='Log Test' agent='Secret' eventTraceId='' eventSpanId='' "
-        "issuingEngineVersion='' serviceName='Unnamed Nano Service' serviceId='' serviceFamilyId=''"
+        "title='Log Test' agent=\"Secret\" eventTraceId=\"\" eventSpanId=\"\" "
+        "issuingEngineVersion=\"\" serviceName=\"Unnamed Nano Service\" serviceId=\"\" serviceFamilyId=\"\""
     );
 }
 
@@ -604,13 +604,17 @@ TEST_F(ReportTest, testSyslog)
     vector<vector<string>> f1 = { { "a", "b"}, {"1", "2"} };
 
     report << LogField("ArrayOfArraies", f1);
+    report << LogField("DataWithNewLine", "new\r\nline");
+    report << LogField("DataWithQuote", "data'bla");
 
     string result =
         string("<133>1 0:0:0.123Z cpnano-agent-001 AccessControlApp - 1 - "
-        "title='Log Test' agent='Secret'") +
-        " eventTraceId='' eventSpanId='' issuingEngineVersion=''" +
-        " serviceName='Access Control App' serviceId='' serviceFamilyId=''" +
-        string(" ArrayOfArraies='[ [ a, b ], [ 1, 2 ] ]'");
+        "title='Log Test' agent=\"Secret\"") +
+        " eventTraceId=\"\" eventSpanId=\"\" issuingEngineVersion=\"\"" +
+        " serviceName=\"Access Control App\" serviceId=\"\" serviceFamilyId=\"\"" +
+        string(" ArrayOfArraies=\"[ [ a, b \\], [ 1, 2 \\] \\]\"") +
+        string(" DataWithNewLine=\"new\\r\\nline\"") +
+        string(" DataWithQuote=\"data\\'bla\"");
 
     EXPECT_EQ(report.getSyslog(), result);
 }
@@ -643,11 +647,14 @@ TEST_F(ReportTest, testCef)
     );
     report.addToOrigin(another_origin);
 
+    report << LogField("DataWithQuote", "data'bla");
+
     EXPECT_EQ(
         report.getCef(),
         "CEF:0|Check Point|AccessControlApp||Event Driven|Log Test|Low|"
-        "agent=Secret eventTraceId= eventSpanId= issuingEngineVersion="
-        " serviceName=Access Control App serviceId= serviceFamilyId= Bond=1"
+        "eventTime=0:0:0.123 agent=\"Secret\" eventTraceId=\"\" eventSpanId=\"\" issuingEngineVersion=\"\""
+        " serviceName=\"Access Control App\" serviceId=\"\""
+        " serviceFamilyId=\"\" Bond=\"1\" DataWithQuote=\"data\\'bla\""
     );
 }
 

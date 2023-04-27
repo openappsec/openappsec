@@ -26,6 +26,10 @@ class MockServiceController :
 public:
     MOCK_METHOD0(refreshPendingServices, void());
 
+    MOCK_METHOD0(doesFailedServicesExist, bool());
+
+    MOCK_METHOD0(clearFailedServices, void());
+
     MOCK_CONST_METHOD0(getPolicyVersion, const std::string &());
 
     MOCK_CONST_METHOD0(getUpdatePolicyVersion, const std::string &());

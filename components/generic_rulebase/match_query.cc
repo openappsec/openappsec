@@ -245,14 +245,15 @@ MatchQuery::matchAttributes(
     } else if (type == MatchType::Operator && operator_type == Operators::Or) {
         // With 'or' condition, evaluate matched override keywords first and add the ones that were fully matched
         set<string> inner_override_keywords;
+        bool res = false;
         for (const MatchQuery &inner_match: items) {
             inner_override_keywords.clear();
             if (inner_match.matchAttributes(key_value_pairs, inner_override_keywords)) {
                 matched_override_keywords.insert(inner_override_keywords.begin(), inner_override_keywords.end());
-                return true;
+                res = true;
             }
         }
-        return false;
+        return res;
     } else {
         dbgWarning(D_RULEBASE_CONFIG) << "Unsupported match query type";
     }

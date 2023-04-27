@@ -91,6 +91,7 @@ private:
     SettingsWrapper settings;
     SecurityAppsWrapper security_apps;
 };
+
 class PolicyMakerUtils
         :
     Singleton::Consume<I_Environment>,
@@ -99,6 +100,19 @@ class PolicyMakerUtils
     Singleton::Consume<I_ShellCmd>
 {
 public:
+    std::string proccesSingleAppsecPolicy(
+        const std::string &policy_path,
+        const std::string &policy_version,
+        const std::string &local_appsec_policy_path
+    );
+
+    std::string proccesMultipleAppsecPolicies(
+        const std::map<std::string, AppsecLinuxPolicy> &appsec_policies,
+        const std::string &policy_version,
+        const std::string &local_appsec_policy_path
+    );
+
+private:
     std::string getPolicyName(const std::string &policy_path);
 
     Maybe<AppsecLinuxPolicy> openPolicyAsJson(const std::string &policy_path);
@@ -129,7 +143,8 @@ public:
         const std::string &policy_name
     );
 
-private:
+    void createAgentPolicyFromAppsecPolicy(const std::string &policy_name, const AppsecLinuxPolicy &appsec_policy);
+
     std::map<std::string, LogTriggerSection> log_triggers;
     std::map<std::string, WebUserResponseTriggerSection> web_user_res_triggers;
     std::map<std::string, InnerException> inner_exceptions;

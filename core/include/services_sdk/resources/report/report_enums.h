@@ -61,6 +61,7 @@ enum class Tags {
     WEB_SERVER_KONG,
     DEPLOYMENT_EMBEDDED,
     DEPLOYMENT_K8S,
+    LAYER_7_ACCESS_CONTROL,
 
     COUNT
 };

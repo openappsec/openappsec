@@ -18,7 +18,9 @@ class I_LocalPolicyMgmtGen
 {
 public:
     virtual std::string parsePolicy(const std::string &policy_version) = 0;
-    virtual const std::string & getPolicyPath(void) const = 0;
+    virtual const std::string & getAgentPolicyPath(void) const = 0;
+    virtual const std::string & getLocalPolicyPath(void) const = 0;
+    virtual void setPolicyPath(const std::string &new_local_policy_path) = 0;
 
 protected:
     ~I_LocalPolicyMgmtGen() {}

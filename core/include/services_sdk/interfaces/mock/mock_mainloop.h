@@ -26,6 +26,8 @@ public:
 
     MOCK_CONST_METHOD0(getCurrentRoutineId, Maybe<I_MainLoop::RoutineID> ());
 
+    MOCK_METHOD1(updateCurrentStress,       void (bool));
+
     MOCK_METHOD1(yield,                     void (bool));
     MOCK_METHOD1(yield,                     void (std::chrono::microseconds));
 

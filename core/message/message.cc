@@ -513,17 +513,22 @@ public:
                     http_status_code == HTTPStatusCode::HTTP_BAD_REQUEST;
             };
             pending_signatures.insert(req_sig);
-            auto res = sendMessage(get_reply, body, method, url, headers, fog_server_err, should_yield, tag);
-            pending_signatures.erase(req_sig);
-            if (res.ok()) return res;
+            try {
+                auto res = sendMessage(get_reply, body, method, url, headers, fog_server_err, should_yield, tag);
+                pending_signatures.erase(req_sig);
+                if (res.ok()) return res;
 
-            bool should_buffer_default = getProfileAgentSettingWithDefault<bool>(
-                true,
-                "eventBuffer.bufferFailedRequests"
-            );
-            if (!getConfigurationWithDefault<bool>(should_buffer_default, "message", "Buffer Failed Requests")) {
-                dbgWarning(D_COMMUNICATION) << "Failed to send Request.";
-                return res;
+                bool should_buffer_default = getProfileAgentSettingWithDefault<bool>(
+                    true,
+                    "eventBuffer.bufferFailedRequests"
+                );
+                if (!getConfigurationWithDefault<bool>(should_buffer_default, "message", "Buffer Failed Requests")) {
+                    dbgWarning(D_COMMUNICATION) << "Failed to send Request.";
+                    return res;
+                }
+            } catch (...) {
+                dbgWarning(D_COMMUNICATION) << "Can't send a persistent message, mainloop has been stopped";
+                return genError("mainloop has been stopped");
             }
             dbgWarning(D_COMMUNICATION) << "Failed to send Request. Buffering the request.";
         }

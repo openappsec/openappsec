@@ -140,6 +140,9 @@ IntelligenceComponentV2::preload()
     registerExpectedConfiguration<bool>("intelligence", "offline intelligence only");
     registerExpectedConfiguration<uint>("intelligence", "maximum request overall time");
     registerExpectedConfiguration<uint>("intelligence", "maximum request lap time");
+    registerExpectedSetting<string>("intelligence", "local intelligence server ip");
+    registerExpectedSetting<uint>("intelligence", "local intelligence server secondary port");
+    registerExpectedSetting<uint>("intelligence", "local intelligence server primary port");
 
     registerExpectedConfigFile("agent-intelligence", Config::ConfigFileType::Policy);
 }

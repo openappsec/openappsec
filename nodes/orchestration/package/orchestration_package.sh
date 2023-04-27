@@ -179,6 +179,14 @@ verify_proxy_config()
     fi
 }
 
+save_local_policy_config()
+{
+    custom_policy_conf_file=${FILESYSTEM_PATH}/${CONF_PATH}/custom_policy.cfg
+    var_policy_file=${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+    echo "var_policy_file=${var_policy_file}" > ${custom_policy_conf_file}
+    echo "last_local_policy_modification_time=$(stat -c %Y ${var_policy_file})" >> ${custom_policy_conf_file}
+}
+
 [ -f /etc/environment ] && . "/etc/environment"
 if [ -n "${CP_ENV_FILESYSTEM}" ] ; then
     FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
@@ -632,6 +640,10 @@ upgrade_conf_if_needed()
             var_orchestration_mode=${previous_mode}
         fi
 
+        if [ ${var_orchestration_mode} = "hybrid_mode" ]; then
+            save_local_policy_config
+        fi
+
         cp_exec "cp -f configuration/orchestration.cfg ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
         execution_flags="execution_flags=\"--orchestration-mode=${var_orchestration_mode}\""
         echo $execution_flags >> ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg
@@ -667,7 +679,11 @@ copy_orchestration_executable()
     cp_copy open-appsec-cloud-mgmt-k8s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-cloud-mgmt-k8s
     cp_copy open-appsec-ctl.sh ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-ctl.sh
     if [ $var_hybrid_mode = true ]; then
-        cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+        if [ -f /ext/appsec/local_policy.yaml ]; then
+            cp_exec "ln -s /ext/appsec/local_policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml"
+        else
+            cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+        fi
     fi
 }
 
@@ -761,6 +777,10 @@ install_orchestration()
         fi
     fi
 
+    if [ -f "$FILESYSTEM_PATH/$CONF_PATH/custom_policy.cfg" ]; then
+        cp_exec "rm -f $FILESYSTEM_PATH/$CONF_PATH/custom_policy.cfg"
+    fi
+
     if command -v ldconfig &>/dev/null; then
         cp_exec "ldconfig" ${FORCE_STDOUT}
     fi
@@ -793,6 +813,11 @@ install_orchestration()
         if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
         fi
+
+        if [ ${var_orchestration_mode} = "hybrid_mode" ]; then
+            save_local_policy_config
+        fi
+
         cp_exec "cp -f configuration/orchestration.cfg ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
         execution_flags="execution_flags=\"--orchestration-mode=${var_orchestration_mode}\""
         echo $execution_flags >> ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg
@@ -920,6 +945,8 @@ install_orchestration()
     elif [ $var_hybrid_mode = true ]; then
         cp_print "Run Orchestration nano service in hybrid mode" ${FORCE_STDOUT}
         cp_copy certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem
+
+        save_local_policy_config
     else
         cp_copy certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem
     fi
@@ -1016,19 +1043,19 @@ run_pre_install_test()
 run_post_install_test()
 {
     if [ $var_is_alpine = false ]; then
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_chrono.so.1.78.0 ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_chrono.so ]; then
             cp_print "Error, libboost_chrono .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_context.so.1.78.0 ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_context.so ]; then
             cp_print "Error, libboost_context .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_system.so.1.78.0 ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_system.so ]; then
             cp_print "Error, libboost_system .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_thread.so.1.78.0 ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_thread.so ]; then
             cp_print "Error, libboost_thread .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi

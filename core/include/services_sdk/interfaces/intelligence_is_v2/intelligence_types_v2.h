@@ -58,6 +58,8 @@ enum class ResponseStatus
     IN_PROGRESS
 };
 
+enum class ObjectType { ASSET, ZONE, CONFIGURATION, COUNT };
+
 const std::string & convertConditionTypeToString(const Condition &condition_type);
 const std::string & convertOperationTypeToString(const Operator &operation_type);
 std::string createAttributeString(const std::string &key, AttributeKeyType type);

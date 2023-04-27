@@ -63,6 +63,8 @@ public:
     );
 
     void setTenantsList(const std::vector<std::string> tenants);
+    void setCrossTenantAssetDB(bool cross_tenant_asset_db);
+    void setObjectType(const ObjectType &obj_type);
 
     void setAssetsLimit(uint _assets_limit);
     bool checkMinConfidence(uint upper_confidence_limit);
@@ -83,11 +85,13 @@ public:
 private:
     uint assets_limit = default_assets_limit;
     bool full_response = false;
+    Maybe<ObjectType> object_type = genError("uninitialized");
     Maybe<RequestCursor> cursor = genError("Cursor not initialized");
     SerializableQueryFilter query;
     SerializableAttributesMap requested_attributes;
     SerializableQueryTypes query_types;
     QueryRequest calcQueryRequestOperator(const QueryRequest &other_query, const Operator &operator_type);
+    Maybe<std::string> convertObjectTypeToString() const;
 };
 
 class BulkQueryRequest

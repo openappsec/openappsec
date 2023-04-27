@@ -42,35 +42,6 @@ namespace Waap {
 
         auto preconditions = jsObj.at("preconditions").get<picojson::value::object>();
 
-        // Build full list of words to load into aho-corasick pattern matcher
-        dbgTrace(D_WAAP_REGEX) << "Loading regex precondition_keys into Aho-Corasick pattern matcher...";
-
-        auto preconditionKeys = jsObj.at("precondition_keys").get<picojson::value::array>();
-        std::set<PMPattern> pmPatterns;
-
-        for (const auto &preconditionKey : preconditionKeys) {
-            std::string wordStr(preconditionKey.get<std::string>());
-
-            // Do not load the "empty" word into Aho-Corasick. It's meaningless and Aho prepare() call would fail.
-            if (wordStr.empty()) {
-                continue;
-            }
-
-            WordIndex wordIndex = registerWord(wordStr);
-            pmPatterns.insert(PMPattern(wordStr, false, false, wordIndex));
-        }
-
-        // Initialize the aho-corasick pattern matcher with the patterns
-        Maybe<void> pmHookStatus = m_pmHook.prepare(pmPatterns);
-
-        if (!pmHookStatus.ok()) {
-            dbgError(D_WAAP_REGEX) << "Aho-Corasick engine failed to load!";
-            error = true;
-            return;
-        }
-
-        dbgTrace(D_WAAP_REGEX) << "Aho-Corasick engine loaded.";
-
         // Loop over pre-conditions (rules) and load them
         dbgTrace(D_WAAP_REGEX) << "Loading regex preconditions...";
 
@@ -140,6 +111,7 @@ namespace Waap {
                     if (flags == "_noregex") {
                         // Add regex pattern to set of "noRegex" patterns
                         m_noRegexPatterns.insert(regexPattern);
+                        m_pmWordInfo[wordIndex].noRegex = true;
                     }
 
                     m_regexToWordMap[regexPattern] = wordIndex;
@@ -166,6 +138,43 @@ namespace Waap {
                 }
             }
         }
+
+        // Build full list of words to load into aho-corasick pattern matcher
+        dbgTrace(D_WAAP_REGEX) << "Loading regex precondition_keys into Aho-Corasick pattern matcher...";
+
+        auto preconditionKeys = jsObj.at("precondition_keys").get<picojson::value::array>();
+        std::set<PMPattern> pmPatterns;
+
+        for (const auto &preconditionKey : preconditionKeys) {
+            std::string wordStr(preconditionKey.get<std::string>());
+
+            // Do not load the "empty" word into Aho-Corasick. It's meaningless and Aho prepare() call would fail.
+            if (wordStr.empty()) {
+                continue;
+            }
+
+            WordIndex wordIndex = registerWord(wordStr);
+            WordIndex napreWordIndex = m_pmWordInfo[wordIndex].napreWordIndex;
+            WordIndex napostWordIndex = m_pmWordInfo[wordIndex].napostWordIndex;
+            WordIndex napostNapreWordIndex = m_pmWordInfo[wordIndex].napostNapreWordIndex;
+
+            bool noRegex = ((napreWordIndex != emptyWordIndex) && m_pmWordInfo[napreWordIndex].noRegex) ||
+                    ((napostWordIndex != emptyWordIndex) && m_pmWordInfo[napostWordIndex].noRegex) ||
+                    ((napostNapreWordIndex != emptyWordIndex) && m_pmWordInfo[napostNapreWordIndex].noRegex);
+
+            pmPatterns.insert(PMPattern(wordStr, false, false, wordIndex, noRegex));
+        }
+
+        // Initialize the aho-corasick pattern matcher with the patterns
+        Maybe<void> pmHookStatus = m_pmHook.prepare(pmPatterns);
+
+        if (!pmHookStatus.ok()) {
+            dbgError(D_WAAP_REGEX) << "Aho-Corasick engine failed to load!";
+            error = true;
+            return;
+        }
+
+        dbgTrace(D_WAAP_REGEX) << "Aho-Corasick engine loaded.";
 
         dbgTrace(D_WAAP_REGEX) << "Aho-corasick pattern matching engine initialized!";
     }
@@ -225,17 +234,17 @@ namespace Waap {
         dbgTrace(D_WAAP_REGEX) << "Rules pass #1: collect OR sets";
 
         m_pmHook.scanBufWithOffsetLambda(buffer, [this, &wordsSet, &buffer]
-            (u_int endMatchOffset, const PMPattern &pmPattern)
+            (u_int endMatchOffset, const PMPattern &pmPattern, bool matchAll)
         {
             uint offset = endMatchOffset + 1 - pmPattern.size(); // reported offset points to last character of a match
 
             // Extract the word index from the PMPattern object (we do not need the string part of it)
             WordIndex wordIndex = pmPattern.getIndex();
 
-            bool regexWordBefore = (offset != 0) &&
-                (isRegexWordChar(buffer.data()[offset - 1]));
-            bool regexWordAfter = (offset + pmPattern.size() < buffer.size()) &&
-                (isRegexWordChar(buffer.data()[offset + pmPattern.size()]));
+            bool regexWordBefore = !matchAll && (offset != 0) &&
+                    (isRegexWordChar(buffer.data()[offset - 1]));
+            bool regexWordAfter = !matchAll && (offset + pmPattern.size() < buffer.size()) &&
+                    (isRegexWordChar(buffer.data()[offset + pmPattern.size()]));
 
             processWord(wordsSet, wordIndex);
 

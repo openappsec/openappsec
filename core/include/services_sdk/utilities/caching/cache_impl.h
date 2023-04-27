@@ -233,6 +233,14 @@ TemporaryCache<Key, Value>::getEntry(const Key &key)
 }
 
 template <typename Key, typename Value>
+Maybe<Value, void>
+TemporaryCache<Key, Value>::getEntry(const Key &key) const
+{
+    if (!BaseTemporaryCache<Key, Value>::doesKeyExists(key)) return genError(0);
+    return entries.at(key).getValue();
+}
+
+template <typename Key, typename Value>
 std::chrono::microseconds
 TemporaryCache<Key, Value>::getEntryTimeLeft(const Key &key)
 {

@@ -27,6 +27,7 @@ public:
     metaDataReport(const metaDataReport &) = default;
 
     metaDataReport & operator<<(const std::pair<std::string, std::string> &data);
+    bool operator==(const metaDataReport &other) const;
     void serialize(cereal::JSONOutputArchive &out_ar) const;
 
 private:

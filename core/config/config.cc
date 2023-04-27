@@ -80,13 +80,10 @@ public:
         error = load_config_staus == I_Config::AsyncLoadConfigStatus::Error;
 
         if (error) {
+            error_message = "Reload already in progress - can't start another one";
             dbgWarning(D_CONFIG) << "Configuration reload status: " << status_map.at(load_config_staus);
         } else {
             dbgDebug(D_CONFIG) << "Configuration reload status: " << status_map.at(load_config_staus);
-        }
-
-        if (!finished) {
-            error_message = "Reload already in progress - can't start another one";
         }
     }
 
@@ -625,7 +622,7 @@ ConfigComponent::Impl::reloadConfiguration(const string &version, bool is_async,
 {
     if (is_continuous_report) {
         dbgWarning(D_CONFIG) << "Cannot start another continuous reload while another is running.";
-        return AsyncLoadConfigStatus::InProgress;
+        return AsyncLoadConfigStatus::Error;
     }
 
     if (!is_async) {
@@ -643,7 +640,7 @@ ConfigComponent::Impl::reloadConfiguration(const string &version, bool is_async,
         "A-Synchronize reload configuraion"
     );
 
-    return AsyncLoadConfigStatus::Success;
+    return AsyncLoadConfigStatus::InProgress;
 }
 
 void

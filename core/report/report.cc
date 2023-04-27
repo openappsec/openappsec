@@ -149,8 +149,8 @@ Report::getSyslog() const
     }
     time_stamp += "Z";
 
-    string origin_syslog = origin.getSyslog();
-    string event_data_syslog = event_data.getSyslog();
+    string origin_syslog = origin.getSyslogAndCef();
+    string event_data_syslog = event_data.getSyslogAndCef();
     string agent_id = "cpnano-agent-" + Singleton::Consume<I_AgentDetails>::by<Report>()->getAgentId();
     auto service_name = Singleton::Consume<I_Environment>::by<Report>()->get<string>("Service Name");
 
@@ -189,6 +189,12 @@ Report::getCef() const
     CefReport report;
     auto service_name = Singleton::Consume<I_Environment>::by<Report>()->get<string>("Service Name");
 
+    auto i_time = Singleton::Consume<I_TimeGet>::by<Report>();
+    string time_stamp = i_time->getWalltimeStr(time);
+    if (time_stamp.size() > 7 && time_stamp[time_stamp.size() - 7] == '.') {
+        time_stamp.erase(time_stamp.size() - 3); // downscale micro-sec resollution to milli-sec
+    }
+
     if (service_name.ok()) {
         string tmp = service_name.unpack();
         tmp.erase(remove(tmp.begin(), tmp.end(), ' '), tmp.end());
@@ -205,9 +211,10 @@ Report::getCef() const
     report.pushMandatory(title);
     report.pushMandatory(TagAndEnumManagement::convertToString(priority));
 
-    string origin_cef = origin.getCef();
-    string event_data_cef = event_data.getCef();
+    string origin_cef = origin.getSyslogAndCef();
+    string event_data_cef = event_data.getSyslogAndCef();
 
+    report.pushExtension("eventTime=" + time_stamp);
     if (!origin_cef.empty()) {
         report.pushExtension(origin_cef);
     }

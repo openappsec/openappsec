@@ -129,17 +129,7 @@ HTTPDecoder::handleBody()
     auto maybe_transfer_encoding = unpacked_headers.getHeaderVal("transfer-encoding");
     if (maybe_transfer_encoding.ok()) {
         auto transfer_encoding_type = maybe_transfer_encoding.unpack();
-        if (transfer_encoding_type == "chunked") {
-            if (Singleton::exists<I_EnvDetails>()) {
-                I_EnvDetails *env_details = Singleton::Consume<I_EnvDetails>::by<HTTPDecoder>();
-                EnvType env_type = env_details->getEnvType();
-                if (env_type == EnvType::K8S) {
-                    dbgDebug(D_COMMUNICATION) << "Getting Chunked Response in a k8s env";
-                    return getChunkedResponseK8s();
-                }
-            }
-            return getChunkedResponse();
-        }
+        if (transfer_encoding_type == "chunked") return getChunkedResponse();
     }
 
     auto connection_header = unpacked_headers.getHeaderVal("connection");
@@ -157,90 +147,42 @@ HTTPDecoder::getChunkedResponse()
 {
     if(!isLegalChunkedResponse(response)) return false;
 
-    stringstream ss(response);
     string line;
+    string res = response;
     string chunk_body = "";
-    size_t chunk_length = 0;
-    while (getline(ss, line) && line != "\r") {
-        if (chunk_body.length() == chunk_length) {
-            body += chunk_body;
-            chunk_body = "";
-            try {
-                chunk_length = stoi(line, nullptr, 16);
-            } catch (const exception& err) {
-                dbgDebug(D_COMMUNICATION) << "Failed to convert chunk length to a number. Line: " << line;
-                return false;
-            }
-        } else if (chunk_body.length() > chunk_length) {
-            dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure.";
+    string CRLF = "\r\n";
+    size_t chunk_size = 0;
+
+    for (auto end_of_line = res.find(CRLF); end_of_line != string::npos; end_of_line = res.find(CRLF)) {
+        line = res.substr(0, end_of_line);
+        try {
+            chunk_size = stoi(line, nullptr, 16);
+        } catch (const exception& err) {
+            dbgDebug(D_COMMUNICATION) << "Failed to convert chunk length to a number. Line: " << line;
             return false;
-        } else {
-            if (line.back() == '\r') {
-                line.pop_back();
-            }
-            if (!chunk_body.empty()) {
-                chunk_body += '\n';
-            }
-            chunk_body += line;
         }
+
+        if (end_of_line + 2 + chunk_size > res.length()) {
+            dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure - chunk-size is bigger than chunk-data";
+            return false;
+        }
+        chunk_body = res.substr(end_of_line + 2, chunk_size);
+        res = res.substr(end_of_line + 2 + chunk_size);
+
+        if (res.find(CRLF) != 0) {
+            dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure - chunk-data missing final CRLF sequence";
+            return false;
+        }
+        res = res.substr(2);
+        body += chunk_body;
     }
 
-    if (chunk_length != 0) {
-        dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure.";
+    if (chunk_size != 0) {
+        dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure - last-chunk of the body is not sized 0";
         return false;
     }
     return true;
 }
-
-// LCOV_EXCL_START Reason: Will be deleted in INXT-31454
-bool
-HTTPDecoder::getChunkedResponseK8s()
-{
-    if(!isLegalChunkedResponse(response)) return false;
-
-    stringstream ss(response);
-    string line;
-    string chunk_body = "";
-    size_t chunk_length = 0;
-    while (getline(ss, line)) {
-        if(line == "\r"){
-            continue;
-        }
-        if (chunk_body.length() == chunk_length) {
-            body += chunk_body;
-            chunk_body = "";
-            try {
-                chunk_length = stoi(line, nullptr, 16);
-            } catch (const exception& err) {
-                dbgDebug(D_COMMUNICATION) << "Failed to convert chunk length to a number. Line: " << line;
-                return false;
-            }
-        } else if (chunk_body.length() > chunk_length) {
-            dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure.";
-            return false;
-        } else {
-            if (line.back() == '\r') {
-                line.pop_back();
-            }
-            if (!chunk_body.empty()) {
-                chunk_body += '\n';
-                chunk_length = chunk_length + 1;
-            }
-            chunk_body += line;
-        }
-    }
-
-    if (chunk_length != 0) {
-        dbgDebug(D_COMMUNICATION) << "Invalid chunked data structure.";
-        if (chunk_body.length() == chunk_length) {
-            body += chunk_body;
-            return true;
-        }
-        return false;
-    }
-    return true;
-}
-// LCOV_EXCL_STOP
 
 bool
 HTTPDecoder::isLegalChunkedResponse(const string &res)

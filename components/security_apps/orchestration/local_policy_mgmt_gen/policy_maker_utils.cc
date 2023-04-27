@@ -144,7 +144,6 @@ PolicyMakerUtils::dumpPolicyToFile(const PolicyWrapper &policy, const string &po
         policy.save(ar);
     }
     string policy_str = ss.str();
-    dbgTrace(D_NGINX_POLICY) << "policy: " << policy_str;
     try {
         ofstream policy_file(policy_path);
         policy_file << policy_str;
@@ -365,6 +364,7 @@ createLogTriggerSection(
     bool webHeaders = trigger_spec.getAppsecTriggerExtendedLogging().isHttpHeaders();
     bool webBody = trigger_spec.getAppsecTriggerExtendedLogging().isRequestBody();
     bool logToCloud = trigger_spec.getAppsecTriggerLogDestination().getCloud();
+    bool logToK8sService = trigger_spec.getAppsecTriggerLogDestination().isK8SNeeded();
     bool logToAgent = trigger_spec.getAppsecTriggerLogDestination().isAgentLocal();
     bool beautify_logs = trigger_spec.getAppsecTriggerLogDestination().shouldBeautifyLogs();
     bool logToCef = trigger_spec.getAppsecTriggerLogDestination().isCefNeeded();
@@ -391,6 +391,7 @@ createLogTriggerSection(
         logToAgent,
         logToCef,
         logToCloud,
+        logToK8sService,
         logToSyslog,
         responseBody,
         tpDetect,
@@ -757,4 +758,55 @@ PolicyMakerUtils::createPolicyElements(
     for (const ParsedRule &rule : rules) {
         createPolicyElementsByRule(rule, default_rule, policy, policy_name);
     }
+}
+
+void
+PolicyMakerUtils::createAgentPolicyFromAppsecPolicy(const string &policy_name, const AppsecLinuxPolicy &appsec_policy)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Proccesing policy, name: " << policy_name;
+
+    ParsedRule default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
+
+    // add default rule to policy
+    createPolicyElementsByRule(default_rule, default_rule, appsec_policy, policy_name);
+
+    vector<ParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
+    createPolicyElements(specific_rules, default_rule, appsec_policy, policy_name);
+}
+
+string
+PolicyMakerUtils::proccesSingleAppsecPolicy(
+    const string &policy_path,
+    const string &policy_version,
+    const string &local_appsec_policy_path)
+{
+    Maybe<AppsecLinuxPolicy> maybe_policy = openPolicyAsJson(policy_path);
+    if (!maybe_policy.ok()){
+        dbgWarning(D_LOCAL_POLICY) << maybe_policy.getErr();
+        return "";
+    }
+    createAgentPolicyFromAppsecPolicy(getPolicyName(policy_path), maybe_policy.unpack());
+
+    PolicyWrapper policy_wrapper = combineElementsToPolicy(policy_version);
+    return dumpPolicyToFile(
+        policy_wrapper,
+        local_appsec_policy_path
+    );
+}
+
+string
+PolicyMakerUtils::proccesMultipleAppsecPolicies(
+    const map<string, AppsecLinuxPolicy> &appsec_policies,
+    const string &policy_version,
+    const string &local_appsec_policy_path)
+{
+    for (const auto &appsec_policy : appsec_policies) {
+        createAgentPolicyFromAppsecPolicy(appsec_policy.first, appsec_policy.second);
+    }
+
+    PolicyWrapper policy_wrapper = combineElementsToPolicy(policy_version);
+    return dumpPolicyToFile(
+        policy_wrapper,
+        local_appsec_policy_path
+    );
 }

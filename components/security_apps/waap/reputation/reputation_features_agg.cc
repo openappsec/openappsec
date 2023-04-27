@@ -68,6 +68,11 @@ public:
     void
     init()
     {
+        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<ReputationFeaturesAgg>();
+
+        if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
+            return;
+        }
         registerListener();
         I_MainLoop* i_mainLoop = Singleton::Consume<I_MainLoop>::by<ReputationFeaturesAgg>();
         I_MainLoop::Routine routine = [this]() { reportReputationFeatures(); };
@@ -77,6 +82,11 @@ public:
     void
     fini()
     {
+        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<ReputationFeaturesAgg>();
+
+        if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
+            return;
+        }
         unregisterListener();
     }
 

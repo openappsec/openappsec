@@ -130,19 +130,17 @@ public:
     expectDetailsResolver()
     {
         Maybe<tuple<string, string, string>> no_nginx(genError("No nginx"));
-        EXPECT_CALL(mock_details_resolver, getPlatform()).WillOnce(Return(string("linux")));
-        EXPECT_CALL(mock_details_resolver, getArch()).WillOnce(Return(string("x86_64")));
-        EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillOnce(Return(false));
-        EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillOnce(Return(false));
-        EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillOnce(Return(false));
-        EXPECT_CALL(mock_details_resolver, isVersionEqualOrAboveR8110()).WillOnce(Return(false));
-        EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillOnce(Return(no_nginx));
-        EXPECT_CALL(mock_details_resolver, getAgentVersion())
-            .WillOnce(Return("1.1.1"))
-            .WillOnce(Return("1.1.1"));
+        EXPECT_CALL(mock_details_resolver, getPlatform()).WillRepeatedly(Return(string("linux")));
+        EXPECT_CALL(mock_details_resolver, getArch()).WillRepeatedly(Return(string("x86_64")));
+        EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isVersionEqualOrAboveR8110()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillRepeatedly(Return(no_nginx));
+        EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("1.1.1"));
 
         map<string, string> resolved_mgmt_details({{"kernel_version", "4.4.0-87-generic"}});
-        EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillOnce(Return(resolved_mgmt_details));
+        EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_mgmt_details));
     }
 
     string
@@ -561,6 +559,7 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
     string host_address = "1.2.3.5";
     string new_host_address = "6.2.3.5";
@@ -603,6 +602,8 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path))
         .WillOnce(Return(policy_response))
         .WillOnce(Return(new_policy_response));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
@@ -727,6 +728,7 @@ TEST_F(OrchestrationTest, startOrchestrationPoliceWithFailures)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
 
     string host_address = "1.2.3.5";
@@ -853,6 +855,7 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
 
     string host_address = "1.2.3.5";
@@ -987,6 +990,7 @@ TEST_F(OrchestrationTest, manifestUpdate)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
 
     string host_address = "1.2.3.5";
@@ -1139,7 +1143,9 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
+    string new_policy_path = "policy path";
 
     string manifest_checksum = "manifest";
     string policy_checksum = "policy";
@@ -1166,6 +1172,8 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
 
@@ -1194,7 +1202,7 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
             Package::ChecksumTypes::SHA256,
             policy_file
         )
-    ).WillOnce(Return(Maybe<std::string>(string("policy path"))));
+    ).WillOnce(Return(Maybe<std::string>(string(new_policy_path))));
     string manifest = "";
     string policy = "111111";
     string setting = "";
@@ -1284,6 +1292,7 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
 
     string host_address = "1.2.3.5";
@@ -1445,6 +1454,7 @@ TEST_P(OrchestrationTest, orchestrationFirstRun)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
 
     string host_address = "1.2.3.5";
@@ -1665,6 +1675,7 @@ TEST_F(OrchestrationTest, dataUpdate)
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
     string data_file_path = "/etc/cp/conf/data.json";
 
     string host_address = "1.2.3.5";

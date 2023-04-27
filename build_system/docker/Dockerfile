@@ -4,7 +4,6 @@ RUN apk add --no-cache -u busybox
 RUN apk add --no-cache -u zlib
 RUN apk add --no-cache bash
 RUN apk add --no-cache libstdc++
-RUN apk add --no-cache libexecinfo
 RUN apk add --no-cache boost
 RUN apk add --no-cache icu-libs
 RUN apk add --no-cache curl

@@ -201,6 +201,13 @@ DetailsResolver::Impl::isVersionEqualOrAboveR8110()
     return false;
 }
 
+static bool
+isNoResponse(const string &cmd)
+{
+    auto res = DetailsResolvingHanlder::getCommandOutput(cmd);
+    return !res.ok() || res.unpack().empty();
+}
+
 Maybe<tuple<string, string, string>>
 DetailsResolver::Impl::parseNginxMetadata()
 {
@@ -215,9 +222,8 @@ DetailsResolver::Impl::parseNginxMetadata()
         output_path;
 
     dbgTrace(D_ORCHESTRATOR) << "Details resolver, srcipt exe cmd: " << srcipt_exe_cmd;
-    auto is_nginx_exist = DetailsResolvingHanlder::getCommandOutput("which nginx");
-    if (!is_nginx_exist.ok() || is_nginx_exist.unpack().size() == 0) {
-        return genError("Nginx isn't installed");
+    if (isNoResponse("which nginx") && isNoResponse("which kong")) {
+        return genError("Nginx or Kong isn't installed");
     }
 
     auto script_output = DetailsResolvingHanlder::getCommandOutput(srcipt_exe_cmd);
@@ -259,6 +265,7 @@ DetailsResolver::Impl::parseNginxMetadata()
     for(string &line : lines) {
         if (line.size() == 0) continue;
         if (line.find("RELEASE_VERSION") != string::npos) continue;
+        if (line.find("KONG_VERSION") != string::npos) continue;
         if (line.find("--with-cc=") != string::npos) continue;
         if (line.find("NGINX_VERSION") != string::npos) {
             auto eq_index = line.find("=");

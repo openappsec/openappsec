@@ -17,6 +17,7 @@
 #include <fstream>
 #include <algorithm>
 #include <string>
+#include <unordered_map>
 #include "kiss_patterns.h"
 #include "kiss_thin_nfa_impl.h"
 
@@ -132,17 +133,41 @@ PMHook::scanBufWithOffset(const Buffer &buf) const
 }
 
 void
-PMHook::scanBufWithOffsetLambda(const Buffer &buf, function<void(uint, const PMPattern&)> cb) const
+PMHook::scanBufWithOffsetLambda(const Buffer &buf, I_PMScan::CBFunction cb) const
 {
     dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
 
+    unordered_map<uint, uint> match_counts;
     vector<pair<uint, uint>> pm_matches;
+    static const uint maxCbCount = 3;
+    uint totalCount = 0;
+
     kiss_thin_nfa_exec(handle.get(), buf, pm_matches);
     dbgTrace(D_PM) << pm_matches.size() << " raw matches found";
 
     for (auto &res : pm_matches) {
-        cb(res.second, patterns.at(res.first));
+        uint patIndex = res.first;
+        uint cbCount = match_counts[patIndex];
+        const PMPattern &pat = patterns.at(patIndex);
+        bool noRegex = pat.isNoRegex();
+        bool isShort = (pat.size() == 1);
+
+        // Limit the max number of callback calls per precondition, unless it's used as a regex substitute
+        // On the last callback call, make sure to add the pre/post-word associated preconditions
+        if (noRegex || cbCount < maxCbCount) {
+            bool matchAll = !noRegex && (cbCount == maxCbCount-1 || isShort);
+
+            totalCount++;
+            cb(res.second, pat, matchAll);
+
+            if (matchAll)
+                match_counts[patIndex] = maxCbCount;
+            else
+                match_counts[patIndex]++;
+        }
     }
+
+    dbgTrace(D_PM) << totalCount << " filtered matches found";
 }
 
 bool

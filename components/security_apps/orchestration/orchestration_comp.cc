@@ -13,6 +13,7 @@
 
 #include "orchestration_comp.h"
 
+#include <cereal/archives/json.hpp>
 #include <unordered_map>
 #include <fstream>
 #include <map>
@@ -157,7 +158,7 @@ private:
 class OrchestrationComp::Impl
 {
 public:
-    explicit Impl() {}
+    explicit Impl() : curr_agent_data_report(false) {}
 
     void
     init()
@@ -171,6 +172,7 @@ public:
         doEncrypt();
         health_check_status_listener.registerListener();
 
+        curr_agent_data_report.disableReportSending();
         auto rest = Singleton::Consume<I_RestApi>::by<OrchestrationComp>();
         rest->addRestCall<getStatusRest>(RestAction::SHOW, "orchestration-status");
         rest->addRestCall<AddProxyRest>(RestAction::ADD, "proxy");
@@ -197,6 +199,7 @@ public:
     fini()
     {
         Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->writeStatusToFile();
+        curr_agent_data_report.disableReportSending();
     }
 
 private:
@@ -514,6 +517,81 @@ private:
         return Maybe<void>();
     }
 
+    // LCOV_EXCL_START Reason: future changes will be done
+    bool
+    updateServiceConfigurationFromBackup()
+    {
+        auto policy_file_path = getConfigurationWithDefault<string>(
+            filesystem_prefix + "/conf/policy.json",
+            "orchestration",
+            "Policy file path"
+        );
+
+        auto orchestration_policy_file = getPolicyConfigPath("orchestration", Config::ConfigFileType::Policy);
+
+        auto settings_file_path = getConfigurationWithDefault<string>(
+            filesystem_prefix + "/conf/settings.json",
+            "orchestration",
+            "Settings file path"
+        );
+
+        dbgInfo(D_ORCHESTRATOR)
+            << "Enforcing new configuration. Policy file: "
+            << policy_file_path
+            << ", Settings file: "
+            << settings_file_path;
+
+        string backup_ext = getConfigurationWithDefault<string>(
+            ".bk",
+            "orchestration",
+            "Backup file extension"
+        );
+
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
+        auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
+
+        // Try to use the backup policy.json file and re-write the services's policies.
+        dbgInfo(D_ORCHESTRATOR) << "Updating services with the new policy.";
+        if (service_controller->updateServiceConfiguration(policy_file_path + backup_ext, settings_file_path)) {
+            dbgInfo(D_ORCHESTRATOR) << "Recovering the policy file from backup.";
+            if (!orchestration_tools->copyFile(policy_file_path + backup_ext, policy_file_path)) {
+                dbgWarning (D_ORCHESTRATOR)
+                    << "Failed to recover policy file from backup. File: "
+                    << policy_file_path + backup_ext;
+                return false;
+            }
+            return true;
+        }
+        dbgWarning (D_ORCHESTRATOR) << "Failed to load Orchestration policy.";
+        return false;
+    }
+    // LCOV_EXCL_STOP
+
+    string
+    updatePolicyAndFogAddress(const OrchestrationPolicy &orchestration_policy)
+    {
+        if (!updateFogAddress(orchestration_policy.getFogAddress())) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to update the new Fog address.";
+            if (!updateFogAddress(policy.getFogAddress())) {
+                dbgWarning(D_ORCHESTRATOR) << "Failed to restore the old Fog address.";
+            }
+            return "";
+        }
+
+        policy = orchestration_policy;
+
+        auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
+        string new_policy_version = service_controller->getPolicyVersion();
+        Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(new_policy_version);
+        auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
+        auto path_policy_version = update_communication->sendPolicyVersion(new_policy_version);
+        if (!path_policy_version.ok()) {
+            dbgWarning(D_ORCHESTRATOR) << path_policy_version.getErr();
+        }
+
+        return new_policy_version;
+    }
+
     Maybe<void>
     handlePolicyUpdate(const OrchPolicy &new_policy, const string &settings_path, const vector<string> &data_updates)
     {
@@ -529,6 +607,17 @@ private:
         );
         if (!new_policy_file.ok()) {
             return genError("Failed to download the new policy file. Error: " + new_policy_file.getErr());
+        }
+
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
+        auto conf_path = filesystem_prefix + "/conf/policy.json";
+        string last_ext = getConfigurationWithDefault<string>(
+            ".last",
+            "orchestration",
+            "last fog policy file extension"
+        );
+        if (!orchestration_tools->copyFile(new_policy_file.unpack(), conf_path + last_ext)) {
+                dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new policy file to " << conf_path + last_ext;
         }
 
         // Calculate the changes between the existing policy to the new one.
@@ -579,27 +668,29 @@ private:
             return genError("Failed to load new Orchestration policy file.");
         }
 
-        if (!updateFogAddress(orchestration_policy.unpack().getFogAddress())) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to update the new Fog address.";
-            if (!updateFogAddress(policy.getFogAddress())) {
-                dbgWarning(D_ORCHESTRATOR) << "Failed to restore the old Fog address.";
-            }
-            return genError("Failed to load Orchestration new policy file, fog update failed.");
-        }
-
-        policy = orchestration_policy.unpack();
-
-        string new_policy_version = service_controller->getPolicyVersion();
-        Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(new_policy_version);
-        auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
-        auto path_policy_version = update_communication->sendPolicyVersion(new_policy_version);
-        if (!path_policy_version.ok()) {
-            dbgWarning(D_ORCHESTRATOR) << path_policy_version.getErr();
+        string new_policy_version = updatePolicyAndFogAddress(orchestration_policy.unpack());
+        if (new_policy_version.empty()) {
+            return genError("Failed to load Orchestration new policy file.");
         }
 
         reloadConfiguration();
         if (getProfileAgentSettingWithDefault<bool>(false, "agent.config.orchestration.reportAgentDetail")) {
+            service_controller->clearFailedServices();
             reportAgentDetailsMetaData();
+            if(service_controller->doesFailedServicesExist()) {
+                dbgWarning(D_ORCHESTRATOR) << "Failed to enforce Orchestration policy.";
+                updateServiceConfigurationFromBackup();
+                // Reload the orchestration policy, in case of the policy updated
+                orchestration_policy = loadDefaultOrchestrationPolicy();
+                if (!orchestration_policy.ok()) {
+                    return genError("Failed to load new Orchestration policy file.");
+                }
+
+                new_policy_version = updatePolicyAndFogAddress(orchestration_policy.unpack());
+                if (new_policy_version.empty()) {
+                    return genError("Failed to load Orchestration new policy file.");
+                }
+            }
         }
 
         dbgTrace(D_ORCHESTRATOR)
@@ -1230,6 +1321,8 @@ private:
     reportAgentDetailsMetaData()
     {
         I_DetailsResolver *i_details_resolver = Singleton::Consume<I_DetailsResolver>::by<OrchestrationComp>();
+        i_details_resolver->getResolvedDetails();
+
         AgentDataReport agent_data_report;
         agent_data_report << AgentReportFieldWithLabel("agent_version", i_details_resolver->getAgentVersion());
 
@@ -1280,6 +1373,13 @@ private:
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER81", "true");
         }
 #endif // gaia || smb
+
+        if (agent_data_report == curr_agent_data_report) {
+            agent_data_report.disableReportSending();
+        } else {
+            curr_agent_data_report = agent_data_report;
+            curr_agent_data_report.disableReportSending();
+        }
     }
 
     void
@@ -1371,6 +1471,7 @@ private:
         while (true) {
             static int failure_count = 0;
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->startNewTrace(false);
+            reportAgentDetailsMetaData();
             auto check_update_result = checkUpdate();
             if (!check_update_result.ok()) {
                 failure_count++;
@@ -1477,7 +1578,7 @@ private:
     getAttribute(const string &setting, const string &env)
     {
         auto res = getSetting<string>(setting);
-        if (res.ok()) return res.unpack();
+        if (res.ok() && *res != "") return res.unpack();
         auto env_res = getenv(env.c_str());
         if (env_res != nullptr) return env_res;
         return "";
@@ -1705,6 +1806,7 @@ private:
     EnvDetails env_details;
 
     string filesystem_prefix = "";
+    AgentDataReport curr_agent_data_report;
 };
 
 OrchestrationComp::OrchestrationComp()

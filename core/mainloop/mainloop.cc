@@ -73,6 +73,8 @@ public:
 
     Maybe<RoutineID> getCurrentRoutineId() const override;
 
+    void updateCurrentStress(bool is_busy) override;
+
     void yield(bool force) override;
     void yield(chrono::microseconds time) override;
     void stopAll() override;
@@ -118,7 +120,6 @@ public:
 private:
     void reportStartupEvent();
     void stop(const RoutineMap::iterator &iter);
-    void updateCurrentStress(bool is_busy);
     uint32_t getCurrentTimeSlice(uint32_t current_stress);
     RoutineID getNextID();
 
