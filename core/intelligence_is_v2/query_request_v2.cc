@@ -13,6 +13,7 @@
 
 #include "intelligence_is_v2/query_request_v2.h"
 #include "debug.h"
+#include "enum_array.h"
 
 const uint QueryRequest::default_min_confidence = 500;
 const uint QueryRequest::default_assets_limit = 20;
@@ -21,6 +22,8 @@ using namespace std;
 using namespace Intelligence_IS_V2;
 
 USE_DEBUG_FLAG(D_INTELLIGENCE);
+
+static const EnumArray<ObjectType, string> object_type_to_string_array{ "asset", "zone", "configuration" };
 
 BulkQueryRequest::BulkQueryRequest(QueryRequest &_request, int _index)
         :
@@ -55,6 +58,17 @@ QueryRequest::QueryRequest(
     full_response = full_reponse;
 }
 
+Maybe<string>
+QueryRequest::convertObjectTypeToString() const
+{
+    if (!object_type.ok()) return object_type.passErr();
+    if (static_cast<uint>(*object_type) < static_cast<uint>(ObjectType::COUNT)) {
+        return object_type_to_string_array[*object_type];
+    }
+
+    return genError("Illegal Object Type.");
+}
+
 void
 QueryRequest::saveToJson(cereal::JSONOutputArchive &ar) const
 {
@@ -63,6 +77,13 @@ QueryRequest::saveToJson(cereal::JSONOutputArchive &ar) const
         cereal::make_nvp("fullResponse", full_response),
         cereal::make_nvp("query", query)
     );
+
+    auto objTypeString = convertObjectTypeToString();
+    if (objTypeString.ok()) {
+        ar(cereal::make_nvp("objectType", *objTypeString));
+    } else {
+        dbgTrace(D_INTELLIGENCE) << objTypeString.getErr();
+    }
 
     if (cursor.ok()) ar(cereal::make_nvp("cursor", cursor.unpack().second));
     requested_attributes.save(ar);
@@ -77,6 +98,13 @@ QueryRequest::save(cereal::JSONOutputArchive &ar) const
         cereal::make_nvp("fullResponse", full_response),
         cereal::make_nvp("query", query)
     );
+
+    auto objTypeString = convertObjectTypeToString();
+    if (objTypeString.ok()) {
+        ar(cereal::make_nvp("objectType", *objTypeString));
+    } else {
+        dbgTrace(D_INTELLIGENCE) << objTypeString.getErr();
+    }
 
     if (cursor.ok()) ar(cereal::make_nvp("cursor", cursor.unpack().second));
     requested_attributes.save(ar);
@@ -130,6 +158,12 @@ QueryRequest::setTenantsList(const vector<string> tenants)
 }
 
 void
+QueryRequest::setCrossTenantAssetDB(bool cross_tenant_asset_db)
+{
+    query_types.setQueryCrossTenantAssetDB(cross_tenant_asset_db);
+}
+
+void
 QueryRequest::setAssetsLimit(uint _assets_limit)
 {
     assets_limit = _assets_limit;
@@ -171,6 +205,12 @@ void
 QueryRequest::setCursor(CursorState state, const string &value)
 {
     cursor = RequestCursor(state, value);
+}
+
+void
+QueryRequest::setObjectType(const ObjectType &obj_type)
+{
+    object_type = obj_type;
 }
 
 QueryRequest

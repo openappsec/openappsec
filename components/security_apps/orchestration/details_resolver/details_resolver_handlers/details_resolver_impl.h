@@ -15,6 +15,15 @@
 #error details_resolver_handlers/details_resolver_impl.h should not be included directly.
 #endif // __DETAILS_RESOLVER_HANDLER_CC__
 
+// Retrieve artifacts by incorporating nano service names into additional metadata:
+// To include a required nano service in the additional metadata sent to the manifest generator,
+// add a handler in this file. The key to use is 'requiredNanoServices', and its value should be
+// a string representing an array of nano service prefix names, separated by semicolons.
+// For example: "httpTransactionHandler_linux;iotSnmp_gaia;"
+//
+// Handler example for reading the content of a configuration file:
+// FILE_CONTENT_HANDLER("requiredNanoServices", "/tmp/nano_services_list", getRequiredNanoServices)
+
 // use SHELL_CMD_HANDLER(key as string, shell command as string, ptr to Maybe<string> handler(const string&))
 // to return a string value for an attribute key based on a logic executed in a handler that receives
 // shell command execution output as its input

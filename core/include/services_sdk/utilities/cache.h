@@ -74,6 +74,7 @@ public:
     bool emplaceEntry(const Key &key, const Value &val);
     bool emplaceEntry(const Key &key, Value &&val);
     Value & getEntry(const Key &key);
+    Maybe<Value, void> getEntry(const Key &key) const;
     microseconds getEntryTimeLeft(const Key &key);
 };
 

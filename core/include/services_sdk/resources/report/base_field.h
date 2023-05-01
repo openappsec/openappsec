@@ -25,6 +25,8 @@
 #include "debug.h"
 #include "flags.h"
 #include "config.h"
+#include "virtual_container.h"
+#include "Log_modifiers.h"
 
 enum class LogFieldOption { XORANDB64, COUNT };
 
@@ -72,8 +74,7 @@ class LogField : Singleton::Consume<I_Environment>
 
         virtual void serialize(cereal::JSONOutputArchive &ar) const = 0;
         virtual void addFields(const LogField &log) = 0;
-        virtual std::string getSyslog() const = 0;
-        virtual std::string getCef() const = 0;
+        virtual std::string getSyslogAndCef() const = 0;
 
         template <typename ... Strings>
         Maybe<std::string, void>
@@ -107,15 +108,17 @@ class LogField : Singleton::Consume<I_Environment>
         }
 
         std::string
-        getSyslog() const override
+        getSyslogAndCef() const override
         {
-            return name + "='" + Details::getValueAsString(getValue()) + "'";
-        }
-
-        std::string
-        getCef() const override
-        {
-            return name + "=" + Details::getValueAsString(getValue());
+            std::string value(Details::getValueAsString(getValue()));
+            auto modifier1 = makeVirtualContainer<LogModifiers::ReplaceBackslash>(value);
+            auto modifier2 = makeVirtualContainer<LogModifiers::ReplaceCR>(modifier1);
+            auto modifier3 = makeVirtualContainer<LogModifiers::ReplaceLF>(modifier2);
+            auto modifier4 = makeVirtualContainer<LogModifiers::ReplaceDoubleOuotes>(modifier3);
+            auto modifier5 = makeVirtualContainer<LogModifiers::ReplaceQuote>(modifier4);
+            auto modifier6 = makeVirtualContainer<LogModifiers::ReplaceClosingBrace>(modifier5);
+            auto modifier7 = makeVirtualContainer<LogModifiers::ReplaceEqualSign>(modifier6);
+            return name + "=\"" + std::string(modifier7.begin(), modifier7.end()) + "\"";
         }
 
         // LCOV_EXCL_START Reason: seems that assert prevent the LCOV from identifying that method was tested
@@ -180,27 +183,14 @@ class LogField : Singleton::Consume<I_Environment>
         }
 
         std::string
-        getSyslog() const override
+        getSyslogAndCef() const override
         {
             if (fields.size() == 0) return "";
 
             std::string res;
             for (auto &field : fields) {
                 if (res.size() > 0) res += " ";
-                res += field.getSyslog();
-            }
-            return res;
-        }
-
-        std::string
-        getCef() const override
-        {
-            if (fields.size() == 0) return "";
-
-            std::string res;
-            for (auto &field : fields) {
-                if (res.size() > 0) res += " ";
-                res += field.getCef();
+                res += field.getSyslogAndCef();
             }
             return res;
         }
@@ -252,15 +242,9 @@ public:
     }
 
     std::string
-    getSyslog() const
+    getSyslogAndCef() const
     {
-        return field->getSyslog();
-    }
-
-    std::string
-    getCef() const
-    {
-        return field->getCef();
+        return field->getSyslogAndCef();
     }
 
     void

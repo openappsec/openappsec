@@ -1,5 +1,5 @@
 #include "declarative_policy_utils.h"
-#include "rest.h"
+
 #include "config.h"
 #include "log_generator.h"
 #include "agent_details.h"
@@ -54,10 +54,7 @@ DeclarativePolicyUtils::getLocalPolicyChecksum()
         return orchestration_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
     }
 
-    string policy_path = getConfigurationFlagWithDefault(
-        getFilesystemPathConfig() + "/conf/local_policy.yaml",
-        "local_mgmt_policy"
-    );
+    string policy_path = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getLocalPolicyPath();
 
     Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
         I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
@@ -97,7 +94,7 @@ DeclarativePolicyUtils::getPolicyChecksum()
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<DeclarativePolicyUtils>();
     Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
         I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-        Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getPolicyPath()
+        Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getAgentPolicyPath()
     );
 
     if (!file_checksum.ok()) {

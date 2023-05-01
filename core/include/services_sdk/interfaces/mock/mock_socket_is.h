@@ -5,6 +5,8 @@
 #include "cptest.h"
 #include "common.h"
 
+std::ostream & operator<<(std::ostream &os, const Maybe<std::vector<char>> &) { return os; }
+
 class MockSocketIS : public Singleton::Provide<I_Socket>::From<MockProvider<I_Socket>>
 {
 public:

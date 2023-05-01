@@ -1,0 +1,87 @@
+{
+	"assetCollections": [
+		{
+            "schemaVersion": 1,
+            "assetType": "not-crowdsec",
+            "assetTypeSchemaVersion": 1,
+            "permissionType": "allTenants",
+            "name": "050 Plus",
+            "objectType": "asset",
+            "class": "appiApplication",
+            "category": "cloud",
+            "family": "applicationsAndCategories",
+            "group": "appiObjects",
+            "order": "application",
+            "mainAttributes": {
+                "appiObjUuid": "00FA9E4440350F65E05308241DC22DA2"
+            },
+            "sources": [
+                {
+                    "tenantId": "27278218-0e7f-4cd8-bdfe-2a5897d68fd0",
+                    "sourceId": "434eabf4-651f-4a45-a9f7-159dc8183b78",
+                    "assetId": "2222222222222222222222222222222",
+                    "ttl": 86400,
+                    "expirationTime": "2023-03-29T15:16:11.367873254Z",
+                    "confidence": 900,
+                    "attributes": {
+                        "appType": "core",
+                        "blockOnAny": false,
+                        "categoryId": 40000060,
+                        "categoryName": "VoIP",
+                        "categoryUuid": "00FA9E44404E0F65E05308241DC22DA2",
+                        "cpId": 60517839,
+                        "dataType": false,
+                        "type": "appfw_application"
+                    }
+                }
+            ]
+        },
+		{
+			"schemaVersion": 1,
+			"assetType": "data-cloud-ip-crowdSec",
+			"assetTypeSchemaVersion": 1,
+			"permissionType": "tenant",
+			"name": "1.2.3.4",
+			"objectType": "asset",
+			"class": "data",
+			"category": "cloud",
+			"family": "ip",
+			"group": "crowdSec",
+			"mainAttributes": {
+				"ipv4Addresses": [
+					"1.2.3.4"
+				]
+			},
+			"sources": [
+				{
+					"tenantId": "c6f606b1-e59b-4f94-b829-ce597bd03067",
+					"sourceId": "529185bd-9c91-4853-9c26-3140950ecad7",
+					"assetId": "YXNzZXQ7OztkYXRhOzs7Y2xvdWQ7OztpcDs7O2Nyb3dkU2VjOzs7Ozs7Ozs7eyJpcHY0QWRkcmVzc2VzIjpbIjEuMi4zLjQiXX0=",
+					"ttl": 86400,
+					"expirationTime": "2023-03-27T12:08:00.279Z",
+					"confidence": 500,
+					"attributes": {
+						"crowdsecId": 2253734,
+						"duration": "29m33.009472691s",
+						"ipv4Addresses": [
+							"1.2.3.4"
+						],
+						"ipv4AddressesRange": [
+							{
+								"max": "1.2.3.4",
+								"min": "1.2.3.4"
+							}
+						],
+						"origin": "cscli",
+						"scenario": "manual 'ban' from 'localhost'",
+						"scope": "Ip",
+						"type": "ban"
+					}
+				}
+			]
+		}
+	],
+	"status": "done",
+	"totalNumAssets": 1,
+	"cursor": ""
+}

@@ -296,6 +296,10 @@ public:
         const string &service_id
     ) override;
 
+    bool doesFailedServicesExist() override;
+
+    void clearFailedServices() override;
+
 private:
     void cleanUpVirtualFiles();
 
@@ -323,6 +327,7 @@ private:
     string update_policy_version;
     string settings_path;
     map<int, ReconfStatus> services_reconf_status;
+    map<int, ReconfStatus> failed_services;
     map<int, string> services_reconf_names;
     map<int, string> services_reconf_ids;
     string filesystem_prefix;
@@ -387,8 +392,23 @@ ServiceController::Impl::getUpdatedReconfStatus()
 
         if (res < service_and_reconf_status.second)  res = service_and_reconf_status.second;
     }
+
     return res;
 }
+
+// LCOV_EXCL_START Reason: future fix will be done
+void
+ServiceController::Impl::clearFailedServices()
+{
+    failed_services.clear();
+}
+
+bool
+ServiceController::Impl::doesFailedServicesExist()
+{
+    return (failed_services.size() > 0);
+}
+// LCOV_EXCL_STOP
 
 void
 ServiceController::Impl::init()
@@ -775,17 +795,10 @@ ServiceController::Impl::updateServiceConfiguration(
         if (new_policy_path.compare(config_file_path) == 0) {
             dbgDebug(D_ORCHESTRATOR) << "Enforcing the default policy file";
             policy_version = version_value;
-
             return true;
         }
 
         string backup_ext = getConfigurationWithDefault<string>(".bk", "orchestration", "Backup file extension");
-
-        // Save the new configuration file.
-        if (!orchestration_tools->copyFile(new_policy_path, config_file_path)) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to save the policy file.";
-            return false;
-        }
 
         // Backup the current configuration file.
         uint max_backup_attempts = 3;
@@ -794,7 +807,7 @@ ServiceController::Impl::updateServiceConfiguration(
         I_MainLoop *mainloop = Singleton::Consume<I_MainLoop>::by<ServiceController>();
 
         for (size_t i = 0; i < max_backup_attempts; i++) {
-            if (orchestration_tools->copyFile(new_policy_path, backup_file)) {
+            if (orchestration_tools->copyFile(config_file_path, backup_file)) {
                 is_backup_succeed = true;
                 break;
             }
@@ -807,6 +820,12 @@ ServiceController::Impl::updateServiceConfiguration(
         }
 
         policy_version = version_value;
+
+        // Save the new configuration file.
+        if (!orchestration_tools->copyFile(new_policy_path, config_file_path)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to save the policy file.";
+            return false;
+        }
     }
 
     return was_policy_updated;
@@ -835,7 +854,7 @@ ServiceController::Impl::sendSignalForServices(
         }
 
         if (reconf_status == ReconfStatus::FAILED) {
-            dbgDebug(D_ORCHESTRATOR) << "The reconfiguration failed for serivce " << service_id;
+            dbgDebug(D_ORCHESTRATOR) << "The reconfiguration failed for serivce: " << service_id;
             services_reconf_status.clear();
             services_reconf_names.clear();
             return false;
@@ -972,6 +991,10 @@ ServiceController::Impl::getUpdatePolicyVersion() const
 void
 ServiceController::Impl::updateReconfStatus(int id, ReconfStatus status)
 {
+    if (status == ReconfStatus::FAILED) {
+        failed_services.emplace(id, status);
+    }
+
     if (services_reconf_status.find(id) == services_reconf_status.end()) {
         dbgError(D_ORCHESTRATOR) << "Service reconfiguration monitor received illegal id :" << id;
         return;

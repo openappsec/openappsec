@@ -127,6 +127,7 @@ private:
         const string &operation;
     };
 
+    map<string, string> persistant_attributes;
     map<string, string> new_attributes;
     map<string, string> attributes;
 
@@ -139,6 +140,12 @@ metaDataReport::operator<<(const pair<string, string> &data)
 {
     agent_details.insert(data);
     return *this;
+}
+
+bool
+metaDataReport::operator==(const metaDataReport &other) const
+{
+    return agent_details == other.agent_details;
 }
 
 void
@@ -169,7 +176,12 @@ AgentDetailsReporter::Impl::addAttr(const string &key, const string &val, bool a
         }
     }
 
+    if (persistant_attributes[key] == val) {
+        dbgDebug(D_AGENT_DETAILS) << "Attribute " << key << " did not change. Value: " << val;
+        return true;
+    }
     new_attributes[key] = val;
+    persistant_attributes[key] = val;
     dbgDebug(D_AGENT_DETAILS) << "Successfully added new attribute";
 
     return true;
@@ -194,6 +206,7 @@ AgentDetailsReporter::Impl::deleteAttr(const string &key)
     dbgDebug(D_AGENT_DETAILS) << "Deleting existing attributes. Key: " << key;
     attributes.erase(key);
     new_attributes.erase(key);
+    persistant_attributes.erase(key);
 }
 
 bool

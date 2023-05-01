@@ -31,6 +31,8 @@ public:
     ngx_http_cp_verdict_e getManagerVerdict() const { return manager_verdict; }
     ngx_http_cp_verdict_e getCurrVerdict() const;
     void saveCurrentDataToCache(const Buffer &full_data);
+    void setUserDefinedValue(const std::string &value) { user_defined_value = value; }
+    Maybe<std::string> getUserDefinedValue() const { return user_defined_value; }
     const Buffer & getPreviousDataCache() const { return prev_data_cache; }
     uint getAggeregatedPayloadSize() const { return aggregated_payload_size; }
     void updatePayloadSize(const uint curr_payload);
@@ -50,6 +52,7 @@ private:
     ngx_http_cp_verdict_e manager_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
     Buffer prev_data_cache;
     uint aggregated_payload_size = 0;
+    Maybe<std::string> user_defined_value = genError("uninitialized");
 };
 
 #endif // __HTTP_MANAGER_OPAQUE_H__

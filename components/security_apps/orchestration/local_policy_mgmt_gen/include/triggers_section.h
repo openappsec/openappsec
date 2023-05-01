@@ -22,6 +22,8 @@
 #include "config.h"
 #include "debug.h"
 #include "local_policy_common.h"
+#include "i_agent_details.h"
+#include "i_env_details.h"
 
 class LogTriggerSection
 {
@@ -37,6 +39,7 @@ public:
         bool _logToAgent,
         bool _logToCef,
         bool _logToCloud,
+        bool _logToK8sService,
         bool _logToSyslog,
         bool _responseBody,
         bool _tpDetect,
@@ -68,6 +71,7 @@ private:
     bool logToAgent;
     bool logToCef;
     bool logToCloud;
+    bool logToK8sService;
     bool logToSyslog;
     bool responseBody;
     bool tpDetect;
@@ -233,7 +237,11 @@ private:
     std::string format;
 };
 
-class AppsecTriggerLogDestination : public ClientRest
+class AppsecTriggerLogDestination
+        :
+    public ClientRest,
+    Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_EnvDetails>
 {
 public:
     void load(cereal::JSONInputArchive &archive_in);
@@ -244,6 +252,7 @@ public:
     bool shouldBeautifyLogs() const;
 
     bool getCloud() const;
+    bool isK8SNeeded() const;
     bool isCefNeeded() const;
     bool isSyslogNeeded() const;
     const std::string & getSyslogServerIpv4Address() const;
@@ -254,6 +263,7 @@ private:
     const LoggingService & getCefServiceData() const;
 
     bool cloud = false;
+    bool k8s_service = false;
     bool agent_local = true;
     bool beautify_logs = true;
     LoggingService syslog_service;

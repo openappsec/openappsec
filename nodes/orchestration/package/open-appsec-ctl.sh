@@ -48,6 +48,8 @@ NO_COLOR='\033[0m'
 pidof_cmd="pidof -x"
 is_alpine_release=
 
+var_last_policy_modification_time=0
+
 ls -l /etc/ | grep release > /dev/null 2>&1
 retval=$?
 
@@ -120,6 +122,14 @@ load_paths()
 
 load_paths
 
+AGENT_POLICY_PATH="${FILESYSTEM_PATH}/${cp_nano_conf_location}/policy.json"
+CUSTOM_POLICY_CONF_FILE="${FILESYSTEM_PATH}/${cp_nano_conf_location}/custom_policy.cfg"
+if [ -f ${CUSTOM_POLICY_CONF_FILE} ]; then
+    . $CUSTOM_POLICY_CONF_FILE
+else
+    var_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+fi
+
 is_arm32=
 if [ -n "$(uname -a | grep armv7l)" ]; then
     pidof_cmd="pidof"
@@ -144,7 +154,7 @@ lines_to_skip=$((PACKAGE_LIST_LINE_OFFSET))
 } <"${FILESYSTEM_PATH}/${CP_SCRIPTS_PATH}/${CP_NANO_PACKAGE_LIST_NAME}"
 
 is_valid_var_name() # Initials - ivvn
-{ 
+{
     ivvn_var_name=$1
     # Check that string $ivvn_var_name is a valid variable name
     # 	[[:alnum:]] - Alphanumeric [a-z A-Z 0-9]
@@ -949,14 +959,14 @@ run_status() # Initials - rs
         rs_temp_old_status=$(echo "$rs_orch_status" | sed -r "${rs_line_count},${rs_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
     else
         rs_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
-        rs_policy_load_time="$(cat /etc/cp/conf/orchestration_status.json | grep "Last policy update" | sed "s|\"||g" | sed "s|,||g")"
+        rs_policy_load_time="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "Last policy update" | sed "s|\"||g" | sed "s|,||g")"
     fi
 
-    if [ -n "$(cat /etc/cp/conf/agent_details.json | grep "hybrid_mode")" ]; then
+    if [ -n "$(cat ${FILESYSTEM_PATH}/conf/agent_details.json | grep "hybrid_mode")" ]; then
         add_policy_file=true
         rs_mgmt_mode_text="Local management"
     else
-        if [ -n "$(cat /etc/cp/conf/settings.json | grep "\"profileManagedMode\":\"management\"")" ]; then
+        if [ -n "$(cat ${FILESYSTEM_PATH}/conf/settings.json | grep "\"profileManagedMode\":\"management\"")" ]; then
             add_policy_file=false
             rs_mgmt_mode_text="Cloud management (Fully managed)"
         else
@@ -968,9 +978,9 @@ run_status() # Initials - rs
 
     if [ "${add_policy_file}" = "true" ]; then
         echo "Policy files: "
-        echo "    /etc/cp/conf/local_policy.yaml"
+        echo "    ${var_policy_file}"
     else
-        policy=`cat /etc/cp/conf/policy.json`
+        policy=`cat ${AGENT_POLICY_PATH}`
         version="version"
         policy_version=${policy#*version}
         policy_version=`echo $policy_version | cut -d"\"" -f3`
@@ -1475,7 +1485,7 @@ set_mode()
 
     rm ${FILESYSTEM_PATH}/${cp_nano_conf_location}/agent_details.json
     rm ${FILESYSTEM_PATH}/${cp_nano_conf_location}/orchestration_status.json
-    echo '{}'>${FILESYSTEM_PATH}/${cp_nano_conf_location}/policy.json
+    echo '{}'>${AGENT_POLICY_PATH}
 
     if [ -f ${FILESYSTEM_PATH}/data/data5.a ]; then
         rm ${FILESYSTEM_PATH}/data/data5.a
@@ -1588,9 +1598,31 @@ stop_service() # Initials - stops
 
 record_command() # Initials - rc
 {
-    touch /var/log/nano_agent/operations.log
-    echo "$(tail -99 /var/log/nano_agent/operations.log)" > /var/log/nano_agent/operations.log
-    echo $(date "+%Y.%m.%d-%H.%M.%S") ": " $0 $@ >> /var/log/nano_agent/operations.log
+    touch ${LOG_FILE_PATH}/nano_agent/operations.log
+    echo "$(tail -99 ${LOG_FILE_PATH}/nano_agent/operations.log)" > ${LOG_FILE_PATH}/nano_agent/operations.log
+    echo $(date "+%Y.%m.%d-%H.%M.%S") ": " $0 $@ >> ${LOG_FILE_PATH}/nano_agent/operations.log
+}
+
+is_apply_policy_needed()
+{
+    if [ "${var_policy_file}" != "${var_new_policy_file}" ]; then
+        var_policy_file=$var_new_policy_file
+        return 0
+    fi
+    local_policy_modification_time=$(stat -c %Y ${var_policy_file})
+    if [ "${local_policy_modification_time}" -eq "${last_local_policy_modification_time}" ] || [ -z ${last_local_policy_modification_time} ]; then
+        return 1
+    fi
+    return 0
+}
+
+is_policy_file_changed()
+{
+    new_modification_time=$(stat -c %Y ${AGENT_POLICY_PATH})
+    if [ "${new_modification_time}" -gt "${var_last_policy_modification_time}" ]; then
+        return 1
+    fi
+    return 0
 }
 
 run() # Initials - r
@@ -1680,35 +1712,63 @@ run() # Initials - r
     elif [ "-vp" = "$1" ] || [ "--view-policy" = "$1" ]; then
         record_command $@
         shift
-        var_policy_file=$1
-        if [ -z ${var_policy_file} ]; then
-            var_policy_file="/etc/cp/conf/local_policy.yaml"
+        if [ ! -z $1 ]; then
+            var_policy_file=$1
         fi
         less ${var_policy_file}
     elif [ "-ep" = "$1" ] || [ "--edit-policy" = "$1" ]; then
         record_command $@
         shift
-        var_policy_file=$1
-        if [ -z ${var_policy_file} ]; then
-            var_policy_file="/etc/cp/conf/local_policy.yaml"
+        if [ ! -z $1 ]; then
+            var_policy_file=$1
         fi
         vi ${var_policy_file}
     elif [ "-ap" = "$1" ] || [ "--apply-policy" = "$1" ]; then
         record_command $@
-        curl_apply_policy=$(${curl_cmd} -S  -w "%{http_code}\n" -m 1 --noproxy "*" --header "Content-Type: application/json" \
-        --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/set-apply-policy 2>&1)
-        while [ /etc/cp/conf/local_policy.yaml -nt /etc/cp/conf/policy.json ]; do
+        shift
+        if [ ! -z $1 ]; then
+            if [ "-d" = "$1" ] || [ "--default-policy" = "$1" ]; then
+                var_new_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+            elif [ -f $1 ]; then
+                var_new_policy_file=$1
+            else
+                echo "Invalid policy path: $1"
+                exit 1
+            fi
+        else
+            var_new_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+        fi
+
+        is_apply_policy_needed
+        if [ $? -eq 1 ]; then
+            echo "Policy didn't changed. Policy path: ${var_policy_file}"
+            exit 0
+        fi
+        echo "Applying new policy. Policy path: ${var_policy_file}"
+        var_last_policy_modification_time=$(stat -c %Y ${AGENT_POLICY_PATH})
+        curl_apply_policy=$(${curl_cmd} -S  -w "%{http_code}\n" -m 1 --noproxy "*" \
+            --header "Content-Type: application/json" --request POST --data '{"policy_path":"'"${var_policy_file}"'"}' \
+            http://127.0.0.1:"$(extract_api_port 'orchestration')"/set-apply-policy 2>&1)
+        is_policy_file_changed
+        is_changed=$?
+        while [ ${is_changed} -eq 0 ]; do
             echo -n "."
             sleep 3
+            is_policy_file_changed
+            is_changed=$?
         done
+
+        var_last_policy_modification_time=$(stat -c %Y ${AGENT_POLICY_PATH})
+        echo "var_policy_file=${var_policy_file}" > ${CUSTOM_POLICY_CONF_FILE}
+        echo "last_local_policy_modification_time=$(stat -c %Y ${var_policy_file})" >> ${CUSTOM_POLICY_CONF_FILE}
         echo "New policy applied."
         exit 1
     elif [ "-lp" = "$1" ] || [ "--list-policies" = "$1" ]; then
         record_command $@
-        echo "/etc/cp/conf/local_policy.yaml"
+        echo $var_policy_file
     elif [ "-vl" = "$1" ] || [ "--view-logs" = "$1" ]; then
         record_command $@
-        less /var/log/nano_agent/cp-nano-http-transaction-handler.log?
+        less $LOG_FILE_PATH/nano_agent/cp-nano-http-transaction-handler.log?
     else
         usage
     fi
@@ -1718,4 +1778,3 @@ load_paths
 run "${@}"
 
 exit 0
-

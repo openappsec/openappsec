@@ -61,6 +61,8 @@ public:
 
     virtual Maybe<I_MainLoop::RoutineID> getCurrentRoutineId() const = 0;
 
+    virtual void updateCurrentStress(bool is_busy) = 0;
+
     virtual void run() = 0;
 
     // When a routine yields the scheduler may choose to let it continue to run (in the case the routine didn't use

@@ -50,14 +50,9 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
-const static string local_appsec_policy_path = "/tmp/local_appsec.policy";
-const static string open_appsec_io = "openappsec.io/";
-const static string policy_key = "policy";
-const static string syslog_key = "syslog";
-const static string mode_key = "mode";
-const static string local_mgmt_policy_path = "/conf/local_policy.yaml";
+const static string default_local_appsec_policy_path = "/tmp/local_appsec.policy";
+const static string default_local_mgmt_policy_path = "/conf/local_policy.yaml";
 
-// LCOV_EXCL_STOP
 class LocalPolicyMgmtGenerator::Impl
         :
     public Singleton::Provide<I_LocalPolicyMgmtGen>::From<LocalPolicyMgmtGenerator>,
@@ -66,7 +61,6 @@ class LocalPolicyMgmtGenerator::Impl
 {
 
 public:
-// LCOV_EXCL_START Reason: no test exist
     void
     init()
     {
@@ -74,6 +68,7 @@ public:
         env_type = env_details->getEnvType();
         if (env_type == EnvType::LINUX) {
             dbgInfo(D_LOCAL_POLICY) << "Initializing Linux policy generator";
+            local_policy_path = getFilesystemPathConfig() + default_local_mgmt_policy_path;
             return;
         }
         dbgInfo(D_LOCAL_POLICY) << "Initializing K8S policy generator";
@@ -97,36 +92,10 @@ public:
     {
         dbgFlow(D_LOCAL_POLICY) << "Starting to parse policy - embedded environment";
 
-        string policy_path = getConfigurationFlagWithDefault(
-            getFilesystemPathConfig() + local_mgmt_policy_path,
-            "local_mgmt_policy"
-        );
-
-        Maybe<AppsecLinuxPolicy> maybe_policy = policy_maker_utils.openPolicyAsJson(policy_path);
-        if (!maybe_policy.ok()){
-            dbgWarning(D_LOCAL_POLICY) << maybe_policy.getErr();
-            return "";
-        }
-        AppsecLinuxPolicy policy = maybe_policy.unpack();
-        string policy_name = policy_maker_utils.getPolicyName(policy_path);
-        dbgTrace(D_LOCAL_POLICY) << "Proccesing policy, name: " << policy_name;
-
-        ParsedRule default_rule = policy.getAppsecPolicySpec().getDefaultRule();
-
-        // add default rule to policy
-        policy_maker_utils.createPolicyElementsByRule(default_rule, default_rule, policy, policy_name);
-
-        vector<ParsedRule> specific_rules = policy.getAppsecPolicySpec().getSpecificRules();
-        policy_maker_utils.createPolicyElements(
-                specific_rules,
-                default_rule,
-                policy,
-                policy_name
-        );
-        PolicyWrapper policy_wrapper = policy_maker_utils.combineElementsToPolicy(policy_version);
-        return policy_maker_utils.dumpPolicyToFile(
-            policy_wrapper,
-            local_appsec_policy_path
+        return policy_maker_utils.proccesSingleAppsecPolicy(
+            local_policy_path,
+            policy_version,
+            default_local_appsec_policy_path
         );
     }
 
@@ -136,30 +105,10 @@ public:
         dbgFlow(D_LOCAL_POLICY) << "Starting to parse policy - K8S environment";
 
         map<string, AppsecLinuxPolicy> appsec_policies = k8s_policy_utils.createAppsecPoliciesFromIngresses();
-
-        for (const auto &appsec_policy : appsec_policies) {
-            string policy_name = appsec_policy.first;
-            dbgTrace(D_LOCAL_POLICY) << "Proccesing policy, name: " << policy_name;
-            AppsecLinuxPolicy policy = appsec_policy.second;
-
-            ParsedRule default_rule = policy.getAppsecPolicySpec().getDefaultRule();
-
-            // add default rule to policy
-            policy_maker_utils.createPolicyElementsByRule(default_rule, default_rule, policy, policy_name);
-
-            vector<ParsedRule> specific_rules = policy.getAppsecPolicySpec().getSpecificRules();
-            policy_maker_utils.createPolicyElements(
-                    specific_rules,
-                    default_rule,
-                    policy,
-                    policy_name
-            );
-        }
-
-        PolicyWrapper policy_wrapper = policy_maker_utils.combineElementsToPolicy(policy_version);
-        return policy_maker_utils.dumpPolicyToFile(
-            policy_wrapper,
-            local_appsec_policy_path
+        return policy_maker_utils.proccesMultipleAppsecPolicies(
+            appsec_policies,
+            policy_version,
+            default_local_appsec_policy_path
         );
     }
 
@@ -169,7 +118,9 @@ public:
         return isK8sEnv() ? parseK8sPolicy(policy_version) : parseLinuxPolicy(policy_version);
     }
 
-    const string & getPolicyPath(void) const override { return local_appsec_policy_path; }
+    const string & getAgentPolicyPath(void) const override { return default_local_appsec_policy_path; }
+    const string & getLocalPolicyPath(void) const override { return local_policy_path; }
+    void setPolicyPath(const string &new_local_policy_path) override { local_policy_path = new_local_policy_path; }
 
 private:
     bool
@@ -182,6 +133,7 @@ private:
     EnvType env_type;
     PolicyMakerUtils policy_maker_utils;
     K8sPolicyUtils k8s_policy_utils;
+    string local_policy_path;
 
 };
 

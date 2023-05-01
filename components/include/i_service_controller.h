@@ -47,6 +47,10 @@ public:
         const bool last_iteration = false
     ) = 0;
 
+    virtual bool doesFailedServicesExist() = 0;
+
+    virtual void clearFailedServices() = 0;
+
     virtual bool isServiceInstalled(const std::string &service_name) = 0;
 
     virtual void registerServiceConfig(

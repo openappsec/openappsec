@@ -50,6 +50,7 @@ public:
     void setNewTime(I_TimeGet *timer) { timer != nullptr ? time = timer->getMonotonicTime() : microseconds(0); }
     bool isExpired(const microseconds &expired) const { return time < expired; }
     Value & getValue() { return val; }
+    const Value & getValue() const { return val; }
     microseconds getTime() { return time; }
 
 private:

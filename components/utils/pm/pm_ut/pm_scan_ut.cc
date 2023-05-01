@@ -461,20 +461,69 @@ TEST(pm_scan, pm_offsets_test_pat_getIndex_method)
 TEST(pm_scan, pm_offsets_lambda_test_pat_getIndex_method)
 {
     set<PMPattern> initPatts;
+
     initPatts.insert(PMPattern("ABC", false, false)); // initialized with the default index 0
     initPatts.insert(PMPattern("ABCD", false, false, 4));
     initPatts.insert(PMPattern("CDE", false, false, 7));
+    initPatts.insert(PMPattern("DCB", false, false));
+    initPatts.insert(PMPattern("*", false, false));
+
     PMHook pm;
     EXPECT_TRUE(pm.prepare(initPatts).ok());
 
-    Buffer buf("12345ABCDEF5678");
+    Buffer buf("12345ABCDEF5678 * DCB * DCB * DCB * DCB");
     std::set<std::pair<u_int, PMPattern>> results;
-    pm.scanBufWithOffsetLambda(buf, [&] (uint offset, const PMPattern &pat) { results.emplace(offset, pat); });
+    pm.scanBufWithOffsetLambda(buf, [&] (uint offset, const PMPattern &pat, bool matchAll)
+            { results.emplace(offset, pat); (void)matchAll; } );
 
+    // limit to 1 cb call for 1 character long matches, and 3 cb calles for longer matches
     std::set<std::pair<uint, PMPattern>> expected{
         {8, {"ABCD", false, false, 4}},
         {7, {"ABC", false, false, 0}},
-        {9, {"CDE", false, false, 7}}
+        {9, {"CDE", false, false, 7}},
+        {20, {"DCB", false, false, 0}},
+        {26, {"DCB", false, false, 0}},
+        {32, {"DCB", false, false, 0}},
+        {22, {"*", false, false, 0}}
+    };
+
+    EXPECT_EQ(results, expected);
+}
+
+TEST(pm_scan, pm_offsets_lambda_test_pat_limit_noregex)
+{
+    set<PMPattern> initPatts;
+
+    initPatts.insert(PMPattern("ABC", false, false)); // initialized with the default index 0
+    initPatts.insert(PMPattern("ABCD", false, false));
+    initPatts.insert(PMPattern("CDE", false, false));
+    initPatts.insert(PMPattern("DCB", false, false, 0, true));
+    initPatts.insert(PMPattern("*", false, false, 0, true));
+
+    PMHook pm;
+    EXPECT_TRUE(pm.prepare(initPatts).ok());
+
+    Buffer buf("12345ABCDEF5678 * DCB * DCB * DCB * DCB");
+    std::set<std::pair<u_int, PMPattern>> results;
+    pm.scanBufWithOffsetLambda(buf, [&] (uint offset, const PMPattern &pat, bool matchAll)
+        {
+            results.emplace(offset, pat);
+            EXPECT_FALSE(matchAll);
+        } );
+
+    // don't limit no. of cb when noregex is set
+    std::set<std::pair<uint, PMPattern>> expected{
+        {8, {"ABCD", false, false, 0}},
+        {7, {"ABC", false, false, 0}},
+        {9, {"CDE", false, false, 0}},
+        {20, {"DCB", false, false, 0, true}},
+        {26, {"DCB", false, false, 0, true}},
+        {32, {"DCB", false, false, 0, true}},
+        {38, {"DCB", false, false, 0, true}},
+        {16, {"*", false, false, 0, true}},
+        {22, {"*", false, false, 0, true}},
+        {28, {"*", false, false, 0, true}},
+        {34, {"*", false, false, 0, true}}
     };
 
     EXPECT_EQ(results, expected);

@@ -39,7 +39,6 @@ private:
     bool handleBody();
 
     bool getChunkedResponse();
-    bool getChunkedResponseK8s();
     bool isLegalChunkedResponse(const std::string &res);
 
     I_Messaging::Method method;

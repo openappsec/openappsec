@@ -30,17 +30,22 @@ class AgentDataReport
 {
 public:
     AgentDataReport() = default;
+    AgentDataReport(bool disable_report_sending) { should_report = disable_report_sending; }
     ~AgentDataReport();
 
     AgentDataReport & operator<<(const std::pair<std::string, std::string> &data);
+
+    bool operator==(const AgentDataReport& other) const;
 
     void setPolicyVersion(const std::string &policy_version);
     void setPlatform(const std::string &platform);
     void setArchitecture(const std::string &architecture);
     void setAgentVersion(const std::string &_agent_version);
+    void disableReportSending();
 
 private:
     metaDataReport agent_details;
+    bool should_report = true;
     Maybe<std::string> policy_version = genError("Not set");
     Maybe<std::string> platform = genError("Not set");
     Maybe<std::string> architecture = genError("Not set");

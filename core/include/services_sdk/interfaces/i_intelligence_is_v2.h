@@ -15,6 +15,7 @@
 #define __I_INTELLIGENCE_IS_V2_H__
 
 #include <chrono>
+#include <string>
 
 #include "maybe_res.h"
 #include "i_messaging.h"
@@ -129,6 +130,14 @@ private:
                 MessageTypeTag::INTELLIGENCE
             );
         }
+
+        dbgTrace(D_INTELLIGENCE)
+            << "Sending intelligence request with IP: "
+            << ip
+            << " port: "
+            << server_port
+            << " query_uri: "
+            << query_uri;
 
         return i_message->sendObject(
             intelligence_query,
@@ -248,10 +257,11 @@ private:
             "intelligence",
             is_primary_port ? primary_port_setting : secondary_port_setting
         );
+
         if (!server_port.ok()) return false;
 
         conn_flags.reset();
-
+        
         if (intelligence_query.getPagingStatus().ok()) {
             return sendPagingQueryMessage(
                 intelligence_query,
@@ -275,12 +285,22 @@ private:
         auto i_message = getMessaging();
         Flags<MessageConnConfig> conn_flags;
 
+        bool crowdsec_enabled = std::getenv("CROWDSEC_ENABLED") ?
+            std::string(std::getenv("CROWDSEC_ENABLED")) == "true" :
+            false;
+
+        crowdsec_enabled = getProfileAgentSettingWithDefault<bool>(
+            crowdsec_enabled,
+            "layer7AccessControl.crowdsec.enabled"
+        );
+
         bool use_local_intelligence = getProfileAgentSettingWithDefault<bool>(
             false,
             "agent.config.useLocalIntelligence"
         );
+
         auto server_ip = getSetting<std::string>("intelligence", "local intelligence server ip");
-        if (server_ip.ok() && use_local_intelligence) {
+        if (server_ip.ok() && (use_local_intelligence || crowdsec_enabled)) {
             if (sendQueryObjectToLocalServer(
                     intelligence_query,
                     query_uri,

@@ -254,7 +254,7 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -346,7 +346,7 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -465,7 +465,7 @@ TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -606,7 +606,7 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(l4_firewall));
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
@@ -697,7 +697,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -743,7 +743,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(l4_firewall));
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
@@ -849,7 +849,7 @@ TEST_F(ServiceControllerTest, backup)
         mock_orchestration_tools,
         writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true)
     );
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -963,7 +963,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
         writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true)
     );
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(false))
         .WillOnce(Return(false))
         .WillOnce(Return(true));
@@ -1078,7 +1078,7 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
 
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, writeFile(orchestration, orchestration_policy_path)).WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -1136,7 +1136,7 @@ TEST_F(ServiceControllerTest, emptyServices)
         Return(json_parser_return)
     );
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
@@ -1355,19 +1355,17 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
             _
         )
     ).WillRepeatedly(Return(string("not-registered")));
-    EXPECT_CALL(
-        mock_orchestration_tools,
-        copyFile(file_name, policy_file_path)
-    ).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
 
-    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
     EXPECT_THAT(
         capture_debug.str(),
         HasSubstr("Service mock access control is inactive")
     );
     EXPECT_FALSE(i_service_controller->isServiceInstalled("family1_id2"));
-    EXPECT_NE(i_service_controller->getPolicyVersion(), version_value);
-    EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
+    EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 }
 
@@ -1567,7 +1565,7 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
         );
 
         string new_policy_file_path = "/etc/cp/conf/tenant_" + tenant + "_profile_" + profile + "/" + "policy.json";
-        EXPECT_CALL(mock_orchestration_tools, copyFile(conf_file_name, new_policy_file_path + backup_extension))
+        EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_file_path, new_policy_file_path + backup_extension))
             .WillOnce(Return(true));
         EXPECT_CALL(mock_orchestration_tools, copyFile(conf_file_name, new_policy_file_path)).WillOnce(Return(true));
 
@@ -1664,7 +1662,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path + backup_extension))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_ml, yield(false)).Times(AnyNumber());

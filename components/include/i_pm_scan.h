@@ -27,12 +27,13 @@ class PMPattern
 {
 public:
     PMPattern() {}
-    PMPattern(const std::string &pat, bool start, bool end, uint index = 0)
+    PMPattern(const std::string &pat, bool start, bool end, uint index = 0, bool noRegex = false)
             :
         pattern(pat),
         match_start(start),
         match_end(end),
-        index(index)
+        index(index),
+        noRegex(noRegex)
     {}
 
     bool operator<(const PMPattern &other) const;
@@ -44,18 +45,20 @@ public:
     size_t size() const { return pattern.size(); }
     bool empty() const { return pattern.empty(); }
     uint getIndex() const { return index; }
+    bool isNoRegex() const { return noRegex; }
 
 private:
     std::string pattern;
     bool match_start = false;
     bool match_end = false;
     uint index;
+    bool noRegex = false;
 };
 
 class I_PMScan
 {
 public:
-    using CBFunction =  std::function<void(uint, const PMPattern &)>;
+    using CBFunction =  std::function<void(uint, const PMPattern &, bool)>;
 
     virtual std::set<PMPattern> scanBuf(const Buffer &buf) const = 0;
     virtual std::set<std::pair<uint, uint>> scanBufWithOffset(const Buffer &buf) const = 0;

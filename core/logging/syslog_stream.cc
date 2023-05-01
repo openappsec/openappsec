@@ -54,29 +54,30 @@ SyslogStream::sendLog(const Report &log)
     vector<char> data(syslog_report.begin(), syslog_report.end());
     mainloop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Offline,
-        [this, data] ()
-        {
-            if (!socket.ok()) {
-                connect();
-                if (!socket.ok()) {
-                    dbgWarning(D_REPORT) << "Failed to connect to the syslog server, Log will not be sent.";
-                    return;
-                }
-                dbgTrace(D_REPORT) << "Successfully connect to the syslog server";
-            }
-
-            int tries = 1;
-            for (; tries <=3; tries++) {
-                if (i_socket->writeData(socket.unpack(), data)) {
-                    dbgTrace(D_REPORT) << "log was sent to syslog server";
-                    return;
-                } else {
-                    dbgWarning(D_REPORT) << "Failed to send log to syslog server";
-                }
-            }
-        },
+        [this, data] () { sendLog(data); },
         "Logging Syslog stream messaging"
     );
+}
+
+void
+SyslogStream::sendLog(const vector<char> &data)
+{
+    for (int tries = 0; tries < 3; ++tries) {
+        if (!socket.ok()) {
+            connect();
+            if (!socket.ok()) {
+                dbgWarning(D_REPORT) << "Failed to connect to the syslog server, Log will not be sent.";
+                return;
+            }
+            dbgTrace(D_REPORT) << "Successfully connect to the syslog server";
+        }
+
+        if (i_socket->writeData(socket.unpack(), data)) {
+            dbgTrace(D_REPORT) << "log was sent to syslog server";
+            return;
+        }
+    }
+    dbgWarning(D_REPORT) << "Failed to send log to syslog server";
 }
 
 void

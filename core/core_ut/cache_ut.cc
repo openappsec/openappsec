@@ -78,6 +78,18 @@ TEST(TempCaching, value_emplace)
     EXPECT_EQ(val, 9);
 }
 
+TEST(TempCaching, value_get_const)
+{
+    TemporaryCache<int, Int> cache;
+    cache.emplaceEntry(3, 27);
+
+    auto &const_cache = const_cast<const TemporaryCache<int, Int> &>(cache);
+
+    EXPECT_FALSE(const_cache.getEntry(0).ok());
+    EXPECT_TRUE(const_cache.getEntry(3).ok());
+    EXPECT_EQ(const_cache.getEntry(3).unpack(), 27);
+}
+
 TEST(TempCaching, get_uninitialized_value)
 {
     TemporaryCache<int, Int> cache;

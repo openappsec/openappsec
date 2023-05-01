@@ -1186,7 +1186,7 @@ static const SingleRegex base64_key_value_detector_re(
         err,
         "base64_key_value");
 static const SingleRegex json_key_value_detector_re(
-        "^[^<>{};,&\\?|=\\s]+={.+:.+}\\z",
+        "^[^<>{};,&\\?|=\\s]+={.+(?s):.+(?s)}\\z",
         err,
         "json_key_value");
 static const SingleRegex base64_key_detector_re(

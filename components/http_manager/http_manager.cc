@@ -90,6 +90,23 @@ public:
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
 
+        HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
+        string event_key = static_cast<string>(event.getKey());
+        if (event_key == getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging")) {
+            string event_value = static_cast<string>(event.getValue());
+            dbgTrace(D_HTTP_MANAGER)
+                << "Found header key and value - ("
+                << event_key
+                << ": "
+                << event_value
+                << ") that matched agent settings";
+            state.setUserDefinedValue(event_value);
+        }
+
+        if (state.getUserDefinedValue().ok()) {
+            ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
+        }
+
         auto event_responds =
             is_request ?
             HttpRequestHeaderEvent(event).performNamedQuery() :
@@ -118,6 +135,9 @@ public:
 
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
+        if (state.getUserDefinedValue().ok()) {
+            ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
+        }
 
         FilterVerdict verdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
         if (!is_request && event.getData().size() == 0 && !event.isLastChunk()) {
@@ -148,6 +168,11 @@ public:
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
 
+        HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
+        if (state.getUserDefinedValue().ok()) {
+            ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
+        }
+
         return handleEvent(ResponseCodeEvent(event).performNamedQuery());
     }
 
@@ -164,6 +189,9 @@ public:
 
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
+        if (state.getUserDefinedValue().ok()) {
+            ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
+        }
 
         return handleEvent(EndRequestEvent().performNamedQuery());
     }
@@ -181,6 +209,9 @@ public:
 
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
+        if (state.getUserDefinedValue().ok()) {
+            ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
+        }
 
         return handleEvent(EndTransactionEvent().performNamedQuery());
     }
@@ -195,6 +226,11 @@ public:
 
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
+
+        HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
+        if (state.getUserDefinedValue().ok()) {
+            ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
+        }
 
         return handleEvent(WaitTransactionEvent().performNamedQuery());
     }

@@ -67,6 +67,7 @@ namespace Waap {
             WordIndex napreWordIndex;
             WordIndex baseWordIndex;
             std::string wordStr;
+            bool      noRegex;
 
             WordInfo()
             :
@@ -74,7 +75,8 @@ namespace Waap {
             napostWordIndex(emptyWordIndex),
             napreWordIndex(emptyWordIndex),
             baseWordIndex(0),
-            wordStr()
+            wordStr(),
+            noRegex(false)
             {
             }
         };

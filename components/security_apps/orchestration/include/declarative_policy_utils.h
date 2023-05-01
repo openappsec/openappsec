@@ -25,6 +25,7 @@
 #include "i_env_details.h"
 #include "maybe_res.h"
 #include "event.h"
+#include "rest.h"
 
 class ApplyPolicyEvent : public Event<ApplyPolicyEvent>
 {
@@ -46,13 +47,15 @@ public:
     class ApplyPolicyRest : public ServerRest
     {
     public:
-        // LCOV_EXCL_START Reason: no test exist
         void
         doCall() override
         {
+            Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->setPolicyPath(policy_path.get());
             ApplyPolicyEvent().notify();
         }
-        // LCOV_EXCL_STOP
+
+    private:
+        C2S_PARAM(std::string, policy_path);
     };
 
     void init();
