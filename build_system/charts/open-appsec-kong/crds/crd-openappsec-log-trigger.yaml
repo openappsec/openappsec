@@ -1,0 +1,107 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : logtriggers.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                access-control-logging:
+                  type: object
+                  properties:
+                    allow-events:
+                      type: boolean
+                    drop-events:
+                      type: boolean
+                appsec-logging:
+                  type: object
+                  properties:
+                    detect-events:
+                      type: boolean
+                    prevent-events:
+                      type: boolean
+                    all-web-requests:
+                      type: boolean
+                additional-suspicious-events-logging:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                    minimum-severity:
+                      type: string
+                      enum:
+                        - high
+                        - critical
+                    response-body:
+                      type: boolean
+                    response-code:
+                      type: boolean
+                extended-logging:
+                  type: object
+                  properties:
+                    url-path:
+                      type: boolean
+                    url-query:
+                      type: boolean
+                    http-headers:
+                      type: boolean
+                    request-body:
+                      type: boolean
+                log-destination:
+                  type: object
+                  properties:
+                    cloud:
+                      type: boolean
+                    syslog-service: #change to object array
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                    file:
+                      type: string
+                    stdout:
+                      type: object
+                      properties:
+                        format:
+                          type: string
+                          enum:
+                            - json
+                            - json-formatted
+                    cef-service:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                          proto:
+                            type: string
+                            enum:
+                              - tcp
+                              - udp
+
+  scope: Cluster
+  names:
+    plural: logtriggers
+    singular: logtrigger
+    kind: LogTrigger
+    shortNames:
+    - logtrigger

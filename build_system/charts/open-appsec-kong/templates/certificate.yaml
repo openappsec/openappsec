@@ -1,0 +1,77 @@
+{{- if and ( .Capabilities.APIVersions.Has "cert-manager.io/v1" ) .Values.certificates.enabled -}}
+
+{{- $genericCertificateConfig := dict -}}
+{{- $_ := set $genericCertificateConfig "fullName" (include "kong.fullname" .) -}}
+{{- $_ := set $genericCertificateConfig "namespace" (include "kong.namespace" .) -}}
+{{- $_ := set $genericCertificateConfig "metaLabels" (include "kong.metaLabels" .) -}}
+{{- $_ := set $genericCertificateConfig "globalIssuer" .Values.certificates.issuer -}}
+{{- $_ := set $genericCertificateConfig "globalClusterIssuer" .Values.certificates.clusterIssuer -}}
+{{- $_ := set $genericCertificateConfig "defaultIssuer" (printf "%s-%s-%s" .Release.Name .Chart.Name "selfsigned-issuer") -}}
+
+{{- if .Values.certificates.admin.enabled }}
+{{- $certificateConfig := mustMerge (mustDeepCopy $genericCertificateConfig) .Values.certificates.admin -}}
+{{- $_ := set $certificateConfig "serviceName" "admin" -}}
+{{- include "kong.certificate" $certificateConfig -}}
+{{- end }}
+
+{{- if (and .Values.certificates.portal.enabled .Values.enterprise.enabled) }}
+{{- $certificateConfig := mustMerge (mustDeepCopy $genericCertificateConfig) .Values.certificates.portal -}}
+{{- $_ := set $certificateConfig "serviceName" "portal" -}}
+{{- include "kong.certificate" $certificateConfig -}}
+{{- end }}
+
+{{- if .Values.certificates.proxy.enabled }}
+{{- $certificateConfig := mustMerge (mustDeepCopy $genericCertificateConfig) .Values.certificates.proxy -}}
+{{- $_ := set $certificateConfig "serviceName" "proxy" -}}
+{{- include "kong.certificate" $certificateConfig -}}
+{{- end }}
+
+{{- if .Values.certificates.cluster.enabled }}
+{{- $certificateConfig := dict -}}
+{{- $certificateConfig = mustMerge (mustDeepCopy $genericCertificateConfig) $certificateConfig -}}
+{{- $_ := set $certificateConfig "dnsNames" (list) -}}
+{{- $_ := set $certificateConfig "commonName" "kong_cluster" -}}
+{{- $certificateConfig = (mustMerge $certificateConfig .Values.certificates.cluster) -}}
+{{- $_ := set $certificateConfig "serviceName" "cluster" -}}
+{{- include "kong.certificate" $certificateConfig -}}
+{{- end }}
+
+{{- end }}
+
+{{- define "kong.certificate" }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .fullName }}-{{ .serviceName }}
+  namespace:  {{ .namespace }}
+  labels:
+    {{- .metaLabels | nindent 4 }}
+spec:
+  secretName: {{ .fullName }}-{{ .serviceName }}-cert
+  commonName: {{ .commonName }}
+  dnsNames:
+  {{- range (append .dnsNames .commonName) }}
+  - {{ . | quote }}
+  {{- end }}
+  renewBefore: 360h
+  duration: 2160h
+  isCA: false
+  {{ if .clusterIssuer -}}
+  issuerRef:
+    name: {{ .clusterIssuer }}
+    kind: ClusterIssuer
+  {{ else if .issuer -}}
+  issuerRef:
+    name: {{ .issuer }}
+    kind: Issuer
+  {{ else if .globalClusterIssuer -}}
+  issuerRef:
+    name: {{ .globalClusterIssuer}}
+    kind: ClusterIssuer
+  {{ else if .globalIssuer -}}
+  issuerRef:
+    name: {{ .globalIssuer }}
+    kind: Issuer
+  {{- end -}}
+{{- end }}

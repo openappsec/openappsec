@@ -1,0 +1,15 @@
+# install chart with default values
+# use single image strings instead of repository/tag
+
+image:
+  unifiedRepoTag: kong:2.6
+proxy:
+  type: NodePort
+
+env:
+  anonymous_reports: "off"
+ingressController:
+  env:
+    anonymous_reports: "false"
+  image:
+    unifiedRepoTag: kong/kubernetes-ingress-controller:2.0.2

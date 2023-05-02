@@ -1,0 +1,46 @@
+# Basic configuration for Kong Enterprise as a hybrid mode data plane node.
+# It depends on the presence of a control plane release, as shown in
+# https://github.com/Kong/charts/blob/main/charts/kong/example-values/minimal-kong-enterprise-hybrid-control.yaml
+#
+# The "env.cluster_control_plane" value must be changed to your control plane
+# instance's cluster Service hostname. Search "CHANGEME" to find it in this
+# example.
+#
+# Hybrid mode requires a certificate. See https://github.com/Kong/charts/blob/main/charts/kong/README.md#certificates
+# to create one.
+
+
+image:
+  repository: kong/kong-gateway
+  tag: "3.1"
+
+env:
+  role: data_plane
+  cluster_control_plane: CHANGEME-control-service.CHANGEME-namespace.svc.cluster.local:8005
+  cluster_telemetry_endpoint: CHANGEME-cluster-telemetry-service.CHANGEME-namespace.svc.cluster.local:8006
+  lua_ssl_trusted_certificate: /etc/secrets/kong-cluster-cert/tls.crt
+  cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
+  cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
+
+secretVolumes:
+- kong-cluster-cert
+
+ingressController:
+  enabled: false
+
+enterprise:
+  enabled: true
+  # See instructions regarding enterprise licenses at https://github.com/Kong/charts/blob/master/charts/kong/README.md#kong-enterprise-license
+  license_secret: kong-enterprise-license # CHANGEME
+  vitals:
+    enabled: false
+
+manager:
+  enabled: false
+
+portal:
+  enabled: false
+
+portalapi:
+  enabled: false
+

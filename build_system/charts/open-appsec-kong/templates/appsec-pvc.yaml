@@ -1,0 +1,51 @@
+{{- if (eq .Values.kind "AppSecStateful") -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ .Values.appsec.name }}-conf
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appsec.labels" . | nindent 4 }}
+    app.kubernetes.io/component: open-appsec
+    {{- with .Values.appsec.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.appsec.persistence.conf.size | quote }}
+{{- if .Values.appsec.persistence.storageClass }}
+{{- if (eq "-" .Values.appsec.persistence.storageClass) }}
+  storageClassName: ""
+{{- else }}
+  storageClassName: "{{ .Values.appsec.persistence.storageClass }}"
+{{- end -}}
+{{- end }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ .Values.appsec.name }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appsec.labels" . | nindent 4 }}
+    app.kubernetes.io/component: open-appsec
+    {{- with .Values.appsec.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.appsec.persistence.data.size | quote }}
+{{- if .Values.appsec.persistence.storageClass }}
+{{- if (eq "-" .Values.appsec.persistence.storageClass) }}
+  storageClassName: ""
+{{- else }}
+  storageClassName: "{{ .Values.appsec.persistence.storageClass }}"
+{{- end -}}
+{{- end }}
+{{- end }}

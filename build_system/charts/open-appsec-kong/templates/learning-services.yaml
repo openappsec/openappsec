@@ -1,0 +1,33 @@
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appsec.learning.name }}-svc
+  namespace:  {{ template "kong.namespace" . }}
+spec:
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 8080
+    - name: "https"
+      port: 443
+      targetPort: 8080
+  selector:
+    app: {{ .Values.appsec.learning.name }}-lbl
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appsec.storage.name }}-svc
+  namespace:  {{ template "kong.namespace" . }}
+spec:
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: 8080
+    - name: "https"
+      port: 443
+      targetPort: 8080
+  selector:
+    app: {{ .Values.appsec.storage.name }}-lbl
+{{- end }}

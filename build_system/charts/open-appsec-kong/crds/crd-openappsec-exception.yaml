@@ -1,0 +1,75 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: exceptions.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: array
+              items:
+                type: object
+                required:
+                  - action
+                properties:
+                  action:
+                    type: string
+                    enum:
+                      - skip
+                      - accept
+                      - drop
+                      - suppressLog
+                  sourceIp:
+                    type: array
+                    items:
+                      type: string
+                  url:
+                    type: array
+                    items:
+                      type: string
+                  sourceIdentifier:
+                    type: array
+                    items:
+                      type: string
+                  protectionName:
+                    type: array
+                    items:
+                      type: string
+                  paramValue:
+                    type: array
+                    items:
+                      type: string
+                  paramName:
+                    type: array
+                    items:
+                      type: string
+                  hostName:
+                    type: array
+                    items:
+                      type: string
+                  countryCode:
+                    type: array
+                    items:
+                      type: string
+                  countryName:
+                    type: array
+                    items:
+                      type: string
+                  comment:
+                    type: string
+
+  scope: Cluster
+  names:
+    plural: exceptions
+    singular: exception
+    kind: Exception
+    shortNames:
+      - exception

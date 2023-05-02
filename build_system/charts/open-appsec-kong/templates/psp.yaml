@@ -1,0 +1,53 @@
+{{- if and (.Values.podSecurityPolicy.enabled) (.Capabilities.APIVersions.Has "policy/v1beta1") }}
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: {{ template "kong.serviceAccountName" . }}-psp
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+  {{- with .Values.podSecurityPolicy.labels }}
+  {{- range $key, $value := . }}
+    {{ $key }}: {{ $value }}
+  {{- end }}
+  {{- end }}
+  {{- with .Values.podSecurityPolicy.annotations }}
+  annotations:
+  {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+spec:
+{{ .Values.podSecurityPolicy.spec | toYaml | indent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ template "kong.serviceAccountName" . }}-psp
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - policy
+    resources:
+      - podsecuritypolicies
+    verbs:
+      - use
+    resourceNames:
+      - {{ template "kong.serviceAccountName" . }}-psp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ template "kong.serviceAccountName" . }}-psp
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "kong.serviceAccountName" . }}
+    namespace: {{ template "kong.namespace" . }}
+roleRef:
+  kind: ClusterRole
+  name: {{ template "kong.serviceAccountName" . }}-psp
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

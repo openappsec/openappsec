@@ -1,0 +1,38 @@
+# Basic values.yaml for Kong for Kubernetes with Kong Enterprise (DB-less)
+# Several settings (search for the string "CHANGEME") require user-provided
+# Secrets. These Secrets must be created before installation.
+
+image:
+  repository: kong/kong-gateway
+  tag: "3.1"
+
+enterprise:
+  enabled: true
+  # See instructions regarding enterprise licenses at https://github.com/Kong/charts/blob/master/charts/kong/README.md#kong-enterprise-license
+  license_secret: kong-enterprise-license # CHANGEME
+  vitals:
+    enabled: false
+  portal:
+    enabled: false
+  rbac:
+    enabled: false
+
+manager:
+  enabled: false
+
+portal:
+  enabled: false
+
+portalapi:
+  enabled: false
+
+env:
+  database: "off"
+
+ingressController:
+  enabled: true
+
+proxy:
+  # Enable creating a Kubernetes service for the proxy
+  enabled: true
+  type: NodePort

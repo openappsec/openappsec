@@ -1,0 +1,74 @@
+# This tests the following unrelated aspects of Ingress Controller
+# - HPA enabled
+autoscaling:
+  enabled: true
+  args:
+    - --alsologtostderr
+# - ingressController deploys without a database (default)
+ingressController:
+  enabled: true
+# - webhook is enabled and deploys
+  admissionWebhook:
+    enabled: true
+# - environment variables can be injected into ingress controller container
+  env:
+    anonymous_reports: "false"
+    kong_admin_header: "foo:bar"
+# - annotations can be injected for service account
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::AWS_ACCOUNT_ID:role/IAM_ROLE_NAME
+  userDefinedVolumeMounts:
+  - name: "tmpdir"
+    mountPath: "/tmp/foo"
+    readOnly: true
+  - name: "controllerdir"
+    mountPath: "/tmp/controller"
+# - pod labels can be added to the deployment template
+podLabels:
+  app: kong
+  environment: test
+# - podSecurityPolicies are enabled
+podSecurityPolicy:
+  enabled: true
+# - ingress resources are created with hosts
+admin:
+  type: NodePort
+  ingress:
+    enabled: true
+    hostname: admin.kong.example
+    annotations: {}
+    path: /
+proxy:
+  type: NodePort
+  ingress:
+    enabled: true
+    hostname: proxy.kong.example
+    annotations: {}
+    path: /
+env:
+  anonymous_reports: "off"
+
+deployment:
+  initContainers:
+    - name: "bash"
+      image: "bash:latest"
+      command: ["/bin/sh", "-c", "true"]
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+      volumeMounts:
+      - name: "tmpdir"
+        mountPath: "/tmp/foo"
+  userDefinedVolumes:
+  - name: "tmpdir"
+    emptyDir: {}
+  - name: "controllerdir"
+    emptyDir: {}
+  userDefinedVolumeMounts:
+  - name: "tmpdir"
+    mountPath: "/tmp/foo"

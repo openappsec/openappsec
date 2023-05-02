@@ -1,0 +1,43 @@
+# CI test for testing dbless deployment without ingress controllers
+# - disable ingress controller
+ingressController:
+  enabled: false
+# - disable DB for kong
+env:
+  anonymous_reports: "off"
+  database: "off"
+postgresql:
+  enabled: false
+proxy:
+  type: NodePort
+deployment:
+  initContainers:
+    - name: "bash"
+      image: "bash:latest"
+      command: ["/bin/sh", "-c", "true"]
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+      volumeMounts:
+      - name: "tmpdir"
+        mountPath: "/opt/tmp"
+  userDefinedVolumes:
+  - name: "tmpdir"
+    emptyDir: {}
+  userDefinedVolumeMounts:
+  - name: "tmpdir"
+    mountPath: "/opt/tmp"
+dblessConfig:
+  config: |
+    _format_version: "1.1"
+    services:
+      - name: example.com
+        url: http://example.com
+        routes:
+        - name: example
+          paths:
+          - "/example"

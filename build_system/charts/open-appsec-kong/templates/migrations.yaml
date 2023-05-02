@@ -1,0 +1,98 @@
+{{- if .Values.deployment.kong.enabled }}
+{{- if .Release.IsInstall -}}
+{{/* .migrations.init isn't normally exposed in values.yaml, since it should
+     generally always run on install--there should never be any reason to
+     disable it, and at worst it's a no-op. However, https://github.com/helm/helm/issues/3308
+     means we cannot use the default function to create a hidden value, hence
+     the workaround with this $runInit variable.
+ */}}
+{{- $runInit := true -}}
+{{- if (hasKey .Values.migrations "init") -}}
+  {{- $runInit = .Values.migrations.init -}}
+{{- end -}}
+
+{{- if (and ($runInit) (not (eq .Values.env.database "off"))) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "kong.fullname" . }}-init-migrations
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+    app.kubernetes.io/component: init-migrations
+  annotations:
+  {{- range $key, $value := .Values.migrations.jobAnnotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  template:
+    metadata:
+      name: {{ template "kong.name" . }}-init-migrations
+      labels:
+        {{- include "kong.metaLabels" . | nindent 8 }}
+        app.kubernetes.io/component: init-migrations
+      {{- if .Values.migrations.annotations }}
+      annotations:
+      {{- range $key, $value := .Values.migrations.annotations }}
+        {{ $key }}: {{ $value | quote }}
+      {{- end }}
+      {{- end }}
+    spec:
+      {{- if or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name }}
+      serviceAccountName: {{ template "kong.serviceAccountName" . }}
+      {{- end }}
+      {{- if (and (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name) .Values.deployment.serviceAccount.automountServiceAccountToken) }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false
+      {{ end }}
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end }}
+      {{- end }}
+      {{- if (or (and (.Values.postgresql.enabled) .Values.waitImage.enabled) .Values.deployment.initContainers) }}
+      initContainers:
+      {{- if .Values.deployment.initContainers }}
+      {{- toYaml .Values.deployment.initContainers | nindent 6 }}
+      {{- end }}
+      {{- if (and (.Values.postgresql.enabled) .Values.waitImage.enabled) }}
+      {{- include "kong.wait-for-postgres" . | nindent 6 }}
+      {{- end }}
+      {{- end }}
+      containers:
+      {{- if .Values.migrations.sidecarContainers }}
+      {{- toYaml .Values.migrations.sidecarContainers | nindent 6 }}
+      {{- end }}
+      - name: {{ template "kong.name" . }}-migrations
+        image: {{ include "kong.getRepoTag" .Values.image }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+        {{ toYaml .Values.containerSecurityContext | nindent 10 }} 
+        env:
+        {{- include "kong.no_daemon_env" . | nindent 8 }}
+        args: [ "kong", "migrations", "bootstrap" ]
+        volumeMounts:
+        {{- include "kong.volumeMounts" . | nindent 8 }}
+        {{- include "kong.userDefinedVolumeMounts" .Values.deployment | nindent 8 }}
+        resources:
+        {{- toYaml .Values.migrations.resources | nindent 10 }}
+      securityContext:
+      {{- include "kong.podsecuritycontext" . | nindent 8 }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      restartPolicy: OnFailure
+      volumes:
+      {{- include "kong.volumes" . | nindent 6 -}}
+      {{- include "kong.userDefinedVolumes" . | nindent 6 -}}
+{{- end }}
+{{- end }}
+{{- end }}

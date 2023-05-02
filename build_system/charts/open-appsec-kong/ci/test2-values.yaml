@@ -1,0 +1,66 @@
+# This tests the following unrelated aspects of Ingress Controller
+# - ingressController deploys with a database
+# - stream listens work
+# - a mixture of controller, Kong, and shared volumes successfully mount
+# - watchNamespaces is set
+ingressController:
+  enabled: true
+  env:
+    anonymous_reports: "false"
+  customEnv:
+    TZ: "Europe/Berlin"
+  watchNamespaces:
+  - default
+postgresql:
+  enabled: true
+  auth:
+    username: kong
+    password: kong
+env:
+  anonymous_reports: "off"
+  database: "postgres"
+# - ingress resources are created without hosts
+admin:
+  type: NodePort
+  ingress:
+    enabled: true
+    hosts: []
+    path: /
+proxy:
+  type: NodePort
+  ingress:
+    enabled: true
+    hostname: proxy.kong.example
+    annotations: {}
+    path: /
+# - add stream listens
+  stream:
+  - containerPort: 9000
+    servicePort: 9000
+    parameters: []
+  - containerPort: 9001
+    servicePort: 9001
+    parameters:
+    - ssl
+
+# - PDB is enabled
+podDisruptionBudget:
+  enabled: true
+# update strategy
+updateStrategy:
+  type: "RollingUpdate"
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+deployment:
+  initContainers:
+    - name: "bash"
+      image: "bash:latest"
+      command: ["/bin/sh", "-c", "true"]
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "64Mi"
+        requests:
+          cpu: "100m"
+          memory: "64Mi"

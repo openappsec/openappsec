@@ -1,0 +1,19 @@
+{{- if .Values.deployment.kong.enabled }}
+{{- if .Values.enterprise.enabled }}
+{{- if and .Values.portalapi.enabled (or .Values.portalapi.http.enabled .Values.portalapi.tls.enabled) -}}
+{{- $serviceConfig := dict -}}
+{{- $serviceConfig := merge $serviceConfig .Values.portalapi -}}
+{{- $_ := set $serviceConfig "ingressVersion" (include "kong.ingressVersion" .) -}}
+{{- $_ := set $serviceConfig "fullName" (include "kong.fullname" .) -}}
+{{- $_ := set $serviceConfig "namespace" (include "kong.namespace" .) -}}
+{{- $_ := set $serviceConfig "metaLabels" (include "kong.metaLabels" .) -}}
+{{- $_ := set $serviceConfig "selectorLabels" (include "kong.selectorLabels" .) -}}
+{{- $_ := set $serviceConfig "serviceName" "portalapi" -}}
+{{- include "kong.service" $serviceConfig }}
+{{ if .Values.portalapi.ingress.enabled }}
+---
+{{ include "kong.ingress" $serviceConfig }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

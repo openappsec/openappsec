@@ -1,0 +1,56 @@
+# Basic values.yaml for Kong for Kubernetes with Kong Enterprise
+# Several settings (search for the string "CHANGEME") require user-provided
+# Secrets. These Secrets must be created before installation.
+#
+# This installation does not create an Ingress or LoadBalancer Service for
+# the Admin API or Kong Manager. They require port-forwards to access without
+# further configuration to add them:
+# kubectl port-forward deploy/your-deployment-kong 8001:8001 8002:8002
+
+image:
+  repository: kong/kong-gateway
+  tag: "3.1"
+
+admin:
+  enabled: true
+  http:
+    enabled: true
+    servicePort: 8001
+    containerPort: 8001
+
+enterprise:
+  enabled: true
+  # CHANGEME: https://github.com/Kong/charts/blob/main/charts/kong/README.md#kong-enterprise-license
+  license_secret: kong-enterprise-license
+  vitals:
+    enabled: false
+  portal:
+    enabled: false
+  rbac:
+    enabled: false
+  smtp:
+    enabled: false
+
+portal:
+  enabled: false
+
+portalapi:
+  enabled: false
+
+env:
+  prefix: /kong_prefix/
+  database: postgres
+  password:
+    valueFrom:
+      secretKeyRef:
+        name: kong-enterprise-superuser-password #CHANGEME
+        key: password #CHANGEME
+
+postgresql:
+  enabled: true
+  auth:
+    username: kong
+    database: kong
+
+ingressController:
+  enabled: true

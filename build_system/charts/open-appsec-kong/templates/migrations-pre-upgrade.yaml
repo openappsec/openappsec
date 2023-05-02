@@ -1,0 +1,93 @@
+{{- if .Values.deployment.kong.enabled }}
+{{- if (and .Values.migrations.preUpgrade (not (eq .Values.env.database "off"))) }}
+# Why is this Job duplicated and not using only helm hooks?
+# See: https://github.com/helm/charts/pull/7362
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "kong.fullname" . }}-pre-upgrade-migrations
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+    app.kubernetes.io/component: pre-upgrade-migrations
+  annotations:
+    helm.sh/hook: "pre-upgrade"
+    helm.sh/hook-delete-policy: "before-hook-creation"
+  {{- range $key, $value := .Values.migrations.jobAnnotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  template:
+    metadata:
+      name: {{ template "kong.name" . }}-pre-upgrade-migrations
+      labels:
+        {{- include "kong.metaLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pre-upgrade-migrations
+      {{- if .Values.migrations.annotations }}
+      annotations:
+      {{- range $key, $value := .Values.migrations.annotations }}
+        {{ $key }}: {{ $value | quote }}
+      {{- end }}
+      {{- end }}
+    spec:
+      {{- if or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name }}
+      serviceAccountName: {{ template "kong.serviceAccountName" . }}
+      {{- end }}
+      {{- if (and (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name) .Values.deployment.serviceAccount.automountServiceAccountToken) }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false
+      {{ end }}
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end }}
+      {{- end }}
+      {{- if (or (and (.Values.postgresql.enabled) .Values.waitImage.enabled) .Values.deployment.initContainers) }}
+      initContainers:
+      {{- if .Values.deployment.initContainers }}
+      {{- toYaml .Values.deployment.initContainers | nindent 6 }}
+      {{- end }}
+      {{- if (and (.Values.postgresql.enabled) .Values.waitImage.enabled) }}
+      {{- include "kong.wait-for-postgres" . | nindent 6 }}
+      {{- end }}
+      {{- end }}
+      containers:
+      {{- if .Values.migrations.sidecarContainers }}
+      {{- toYaml .Values.migrations.sidecarContainers | nindent 6 }}
+      {{- end }}
+      - name: {{ template "kong.name" . }}-upgrade-migrations
+      {{- if eq .Values.kind "Vanilla" }}
+        image: {{ include "kong.getRepoTag" .Values.image }}
+      {{- else }}
+        image: {{ include "kong.getRepoTag" .Values.appsec.kong.image }}
+      {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+        {{ toYaml .Values.containerSecurityContext | nindent 10 }}
+        env:
+        {{- include "kong.no_daemon_env" . | nindent 8 }}
+        args: [ "kong", "migrations", "up" ]
+        volumeMounts:
+        {{- include "kong.volumeMounts" . | nindent 8 }}
+        {{- include "kong.userDefinedVolumeMounts" .Values.deployment | nindent 8 }}
+        resources:
+        {{- toYaml .Values.migrations.resources| nindent 10 }}
+      securityContext:
+      {{- include "kong.podsecuritycontext" . | nindent 8 }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+      {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+      {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      restartPolicy: OnFailure
+      volumes:
+      {{- include "kong.volumes" . | nindent 6 -}}
+      {{- include "kong.userDefinedVolumes" . | nindent 6 -}}
+{{- end }}
+{{- end }}

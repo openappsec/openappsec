@@ -1,0 +1,21 @@
+To connect to Kong, please execute the following commands:
+{{ if contains "LoadBalancer" .Values.proxy.type }}
+HOST=$(kubectl get svc --namespace {{ template "kong.namespace" . }} {{ template "kong.fullname" . }}-proxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+PORT=$(kubectl get svc --namespace {{ template "kong.namespace" . }} {{ template "kong.fullname" . }}-proxy -o jsonpath='{.spec.ports[0].port}')
+{{ else if contains "NodePort" .Values.proxy.type }}HOST=$(kubectl get nodes --namespace {{ template "kong.namespace" . }} -o jsonpath='{.items[0].status.addresses[0].address}')
+PORT=$(kubectl get svc --namespace {{ template "kong.namespace" . }} {{ template "kong.fullname" . }}-proxy -o jsonpath='{.spec.ports[0].nodePort}')
+{{ end -}}
+export PROXY_IP=${HOST}:${PORT}
+curl $PROXY_IP
+
+Once installed, please follow along the getting started guide to start using
+Kong: https://docs.konghq.com/kubernetes-ingress-controller/latest/guides/getting-started/
+
+{{ $warnings := list -}}
+{{- if (hasKey .Values.ingressController "serviceAccount") -}}
+{{- if (or (hasKey .Values.ingressController.serviceAccount "name") (hasKey .Values.ingressController.serviceAccount "annotations")) -}}
+{{- $warnings = append $warnings "you have set either .ingressController.serviceAccount.name or .ingressController.serviceAccount.annotations. These settings have moved to .deployment.serviceAccount.name and .deployment.serviceAccount.annotations. You must move your configuration to the new location in values.yaml" -}}
+{{- end -}}
+{{- end -}}
+
+{{- include "kong.deprecation-warnings" $warnings -}}

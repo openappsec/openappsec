@@ -1,0 +1,141 @@
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appsec.learning.name }}-deployment
+  labels:
+    app: {{ .Values.appsec.learning.name }}-lbl
+  namespace:  {{ template "kong.namespace" . }}
+spec:
+  replicas: {{ .Values.appsec.learning.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appsec.learning.name }}-lbl
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appsec.learning.name }}-lbl
+        group: fog-core
+    spec:
+      securityContext:
+      {{- if eq .Values.appsec.persistence.enabled true }}
+        fsGroup: 2000
+        runAsGroup: 2000
+        runAsUser: 1000
+      {{- else }}
+        runAsUser: 0
+      {{- end }}
+      containers:
+        - name:  {{ .Values.appsec.learning.name }}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health/live
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 10
+          {{- with .Values.appsec.learning.image }}
+          image: {{ .registry }}/{{ .image }}:{{ .tag }}
+          {{- end }}
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 10
+          env:
+            - name: APPSEC_MODE
+              value: stand-alone
+            - name: RP_BASEURL
+              value: http://{{ .Values.appsec.storage.name }}-svc/api
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      {{- if eq .Values.appsec.persistence.enabled true }}
+          volumeMounts:
+            - mountPath: /tmp/locks/
+              name: flock
+      volumes:
+        - name: flock
+          persistentVolumeClaim:
+            claimName: {{ .Values.appsec.name }}-storage
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appsec.storage.name }}-deployment
+  labels:
+    app: {{ .Values.appsec.storage.name }}-lbl
+  namespace:  {{ template "kong.namespace" . }}
+spec:
+  replicas: {{ .Values.appsec.storage.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appsec.storage.name }}-lbl
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appsec.storage.name }}-lbl
+        group: fog-core
+    spec:
+      securityContext:
+      {{- if eq .Values.appsec.persistence.enabled true }}
+        fsGroup: 2000
+        runAsGroup: 2000
+        runAsUser: 1000
+      {{- else }}
+        runAsUser: 0
+      {{- end }}
+      containers:
+        - name:  {{ .Values.appsec.storage.name }}
+          imagePullPolicy: Always
+          {{- with .Values.appsec.storage.image }}
+          image: {{ .registry }}/{{ .image }}:{{ .tag }}
+          {{- end }}
+          env:
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health/live
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 10
+      {{- if eq .Values.appsec.persistence.enabled true }}
+          volumeMounts:
+            - mountPath: /db/
+              name: files-volume
+      volumes:
+        - name: files-volume
+          persistentVolumeClaim:
+            claimName: {{ .Values.appsec.name }}-storage
+      {{- end }}
+{{- end }}

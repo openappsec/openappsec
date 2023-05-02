@@ -1,0 +1,33 @@
+{{/* Default to not managing if unsupported or created outside this chart */}}
+{{- $includeIngressClass := false -}}
+{{- if (and .Values.ingressController.enabled (not (eq (include "kong.ingressVersion" .) "extensions/v1beta1"))) -}}
+  {{- if (.Capabilities.APIVersions.Has "networking.k8s.io/v1/IngressClass") -}}
+    {{- with (lookup "networking.k8s.io/v1" "IngressClass" "" .Values.ingressController.ingressClass) -}}
+      {{- if (hasKey .metadata "annotations") -}}
+        {{- if (eq $.Release.Name (get .metadata.annotations "meta.helm.sh/release-name")) -}}
+          {{/* IngressClass exists and is managed by this chart */}}
+          {{- $includeIngressClass = true -}}
+        {{- end -}}
+      {{- end -}}
+    {{- else -}}
+      {{/* IngressClass doesn't exist */}}
+      {{- $includeIngressClass = true -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if $includeIngressClass -}}
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: {{ .Values.ingressController.ingressClass }}
+  {{- if .Values.ingressController.ingressClassAnnotations }}
+  annotations:
+  {{- range $key, $value := .Values.ingressController.ingressClassAnnotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+  labels:
+  {{- include "kong.metaLabels" . | nindent 4 }}
+spec:
+  controller: ingress-controllers.konghq.com/kong
+{{- end -}}

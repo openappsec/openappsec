@@ -1,0 +1,127 @@
+{{- if .Values.ingressController.admissionWebhook.enabled }}
+{{- $certCert := "" -}}
+{{- $certKey := "" -}}
+{{- $caCert := "" -}}
+{{- $caKey := "" -}}
+{{- if not .Values.ingressController.admissionWebhook.certificate.provided }}
+{{- $cn := printf "%s.%s.svc" ( include "kong.service.validationWebhook" . ) ( include "kong.namespace" . ) -}}
+{{- $ca := genCA "kong-admission-ca" 3650 -}}
+{{- $cert := genSignedCert $cn nil (list $cn) 3650 $ca -}}
+{{- $certCert = $cert.Cert -}}
+{{- $certKey = $cert.Key -}}
+{{- $caCert = $ca.Cert -}}
+{{- $caKey = $ca.Key -}}
+
+{{- $caSecret := (lookup "v1" "Secret" (include "kong.namespace" .) (printf "%s-validation-webhook-ca-keypair" (include "kong.fullname" .))) -}}
+{{- $certSecret := (lookup "v1" "Secret" (include "kong.namespace" .) (printf "%s-validation-webhook-keypair" (include "kong.fullname" .))) -}}
+{{- if $certSecret }}
+{{- $certCert = (b64dec (get $certSecret.data "tls.crt")) -}}
+{{- $certKey = (b64dec (get $certSecret.data "tls.key")) -}}
+{{- end }}
+{{- if $caSecret }}
+{{- $caCert = (b64dec (get $caSecret.data "tls.crt")) -}}
+{{- $caKey = (b64dec (get $caSecret.data "tls.key")) -}}
+{{- end }}
+{{- end }}
+kind: ValidatingWebhookConfiguration
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1" }}
+apiVersion: admissionregistration.k8s.io/v1
+{{- else }}
+apiVersion: admissionregistration.k8s.io/v1beta1
+{{- end }}
+metadata:
+  name: {{ template "kong.fullname" . }}-validations
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+webhooks:
+- name: validations.kong.konghq.com
+  objectSelector:
+    matchExpressions:
+    - key: owner
+      operator: NotIn
+      values:
+      - helm
+  failurePolicy: {{ .Values.ingressController.admissionWebhook.failurePolicy }}
+  sideEffects: None
+  admissionReviewVersions: ["v1beta1"]
+  rules:
+  - apiGroups:
+    - configuration.konghq.com
+    apiVersions:
+    - '*'
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - kongconsumers
+    - kongplugins
+{{- if (semverCompare ">= 2.0.4" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+    - kongclusterplugins
+{{- end }}
+{{- if (semverCompare ">= 2.8.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+    - kongingresses
+{{- end }}
+  - apiGroups:
+    - ''
+    apiVersions:
+    - 'v1'
+    operations:
+    - UPDATE
+    resources:
+    - secrets
+  clientConfig:
+    {{- if not .Values.ingressController.admissionWebhook.certificate.provided }}
+    caBundle: {{ b64enc $caCert }}
+    {{- else }}
+    {{- if .Values.ingressController.admissionWebhook.certificate.caBundle }}
+    caBundle: {{ b64enc .Values.ingressController.admissionWebhook.certificate.caBundle }}
+    {{- end }}
+    {{- end }}
+    service:
+      name: {{ template "kong.service.validationWebhook" . }}
+      namespace: {{ template "kong.namespace" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "kong.service.validationWebhook" . }}
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+spec:
+  ports:
+  - name: webhook
+    port: 443
+    protocol: TCP
+    targetPort: webhook
+  selector:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+{{- if not .Values.ingressController.admissionWebhook.certificate.provided }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ template "kong.fullname" . }}-validation-webhook-ca-keypair
+  namespace:  {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+    tls.crt: {{ b64enc $caCert  }}
+    tls.key: {{ b64enc $caKey  }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ template "kong.fullname" . }}-validation-webhook-keypair
+  namespace:  {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ b64enc $certCert }}
+  tls.key: {{ b64enc $certKey }}
+{{- end }}
+{{- end }}

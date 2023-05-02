@@ -1,0 +1,20 @@
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.persistence.enabled true) -}}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ .Values.appsec.name }}-storage
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - {{ .Values.appsec.persistence.learning.storageClass.accessModes }}
+  resources:
+    requests:
+      storage: {{ .Values.appsec.persistence.learning.size | quote }}
+{{- if .Values.appsec.persistence.learning.storageClass.name }}
+  storageClassName: "{{ .Values.appsec.persistence.learning.storageClass.name }}"
+{{- else }}
+  storageClassName: {{ required "A storage class for learning data is required" .Values.appsec.persistence.learning.storageClass.name }}
+{{- end -}}
+{{- end }}

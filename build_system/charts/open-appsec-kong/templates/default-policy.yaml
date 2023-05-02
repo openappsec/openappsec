@@ -1,0 +1,49 @@
+apiVersion: openappsec.io/v1beta1
+kind: Practice
+metadata:
+  name: appsec-best-practice
+spec:
+  web-attacks:
+    override-mode: prevent-learn
+    minimum-confidence: high
+  anti-bot:
+    injected-URIs: []
+    validated-URIs: []
+  snort-signatures:
+    configmap: []
+  openapi-schema-validation:
+    configmap: []
+---
+apiVersion: openappsec.io/v1beta1
+kind: LogTrigger
+metadata:
+  name: appsec-log-trigger
+spec:
+  appsec-logging:
+    detect-events: true
+    prevent-events: true
+    all-web-requests: false
+  additional-suspicious-events-logging:
+    enabled: true
+    minimum-severity: high # {high|critical}
+    response-body: false
+    response-code: true
+  extended-logging:
+    url-path: true
+    url-query: true
+    http-headers: false
+    request-body: false
+  log-destination:
+    cloud: false
+    stdout:
+      format: json-formatted
+---
+apiVersion: openappsec.io/v1beta1
+kind: CustomResponse
+metadata:
+  name: 403-forbidden
+spec:
+  mode: response-code-only ## configurable modes: {block-page|redirect|response-code-only}
+  message-title: ""
+  message-body: ""
+  http-response-code: 403

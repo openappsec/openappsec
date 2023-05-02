@@ -1,0 +1,19 @@
+apiVersion: v2
+appVersion: "3.1"
+dependencies:
+- condition: postgresql.enabled
+  name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 11.9.13
+description: The Cloud-Native Ingress and API-management
+home: https://konghq.com/
+icon: https://s3.amazonaws.com/downloads.kong/universe/assets/icon-kong-inc-large.png
+maintainers:
+- email: harry@konghq.com
+  name: hbagdi
+- email: traines@konghq.com
+  name: rainest
+name: open-appsec-kong
+sources:
+- https://github.com/Kong/charts/tree/main/charts/kong
+version: 2.16.1

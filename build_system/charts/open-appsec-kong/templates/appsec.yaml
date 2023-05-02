@@ -1,0 +1,447 @@
+{{- if and (not (eq .Values.kind "Vanilla")) (or .Values.deployment.kong.enabled .Values.ingressController.enabled) }}
+apiVersion: apps/v1
+{{- if (eq .Values.kind "AppSec") }}
+{{- if .Values.deployment.daemonset }}
+kind: DaemonSet
+{{- else }}
+kind: Deployment
+{{- end }}
+{{- else if eq .Values.kind "AppSecStateful" }}
+kind: StatefulSet
+{{- end }} 
+metadata:
+  name: {{ template "kong.fullname" . }}
+  namespace:  {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+  {{- if .Values.deploymentAnnotations }}
+  annotations:
+  {{- range $key, $value := .Values.deploymentAnnotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  {{- if eq .Values.kind "AppSecStateful" }}
+  serviceName: "cp-appsec-stateful-set"
+  {{- end }}
+  {{- if or (not .Values.deployment.daemonset) (and (eq .Values.kind "AppSecStateful") ( .Values.deployment.daemonset )) }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "kong.selectorLabels" . | nindent 6 }}
+  {{- if .Values.updateStrategy }}
+  {{- if .Values.deployment.daemonset }}
+  updateStrategy:
+  {{- else }}
+  strategy:
+  {{- end }}
+{{ toYaml .Values.updateStrategy | indent 4 }}
+  {{- end }}
+  {{- if .Values.deployment.minReadySeconds }}
+  minReadySeconds: {{ .Values.deployment.minReadySeconds }}
+  {{- end }}
+
+  template:
+    metadata:
+      annotations:
+        {{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
+        kuma.io/service-account-token-volume: {{ template "kong.serviceAccountTokenName" . }}
+        {{- end }}
+        {{- if (and (not .Values.ingressController.enabled) (eq .Values.env.database "off" )) }}
+        {{- if .Values.dblessConfig.config }}
+        checksum/dbless.config: {{ toYaml .Values.dblessConfig.config | sha256sum }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.podAnnotations }}
+        {{- range $key, $value := .Values.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+        {{- end }}
+      labels:
+        {{- include "kong.metaLabels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+        app: {{ template "kong.fullname" . }}
+        version: {{ .Chart.AppVersion | quote }}
+        {{- if .Values.podLabels }}
+        {{ toYaml .Values.podLabels | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.deployment.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: "{{ .Values.priorityClassName }}"
+      {{- end }}
+      {{- if or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name }}
+      serviceAccountName: {{ template "kong.serviceAccountName" . }}
+      {{- end }}
+      {{- if (and (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name) .Values.deployment.serviceAccount.automountServiceAccountToken) }}
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false
+      {{ end }}
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end }}
+      {{- end }}
+      initContainers:
+      - name: clear-stale-pid
+        image: {{ include "kong.getRepoTag" .Values.image }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+        {{ toYaml .Values.containerSecurityContext | nindent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        command:
+        - "rm"
+        - "-vrf"
+        - "$KONG_PREFIX/pids"
+        env:
+        {{- include "kong.env" . | nindent 8 }}
+        volumeMounts:
+        {{- include "kong.volumeMounts" . | nindent 8 }}
+        {{- if .Values.deployment.initContainers }}
+        {{- toYaml .Values.deployment.initContainers | nindent 6 }}
+        {{- end }}
+        {{- if (and (not (eq .Values.env.database "off")) .Values.waitImage.enabled) }}
+        {{- include "kong.wait-for-db" . | nindent 6 }}
+        {{- end }}
+      {{- if .Values.deployment.hostAliases }}
+      hostAliases:
+        {{- toYaml .Values.deployment.hostAliases | nindent 6 }}
+      {{- end}}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy | quote }}
+      {{- end }}
+      {{- if .Values.dnsConfig }}
+      dnsConfig:
+{{ toYaml .Values.dnsConfig | indent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.appsec.name }}
+        readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - '[ -f /etc/cp/HttpTransactionHandler/cp-nano-http-transaction-handler ] && exit 0 || exit 1'
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 120
+            successThreshold: 1
+        securityContext:
+          {{ toYaml .Values.appsec.securityContext | nindent 12 }}
+        {{- with .Values.appsec.image }}
+        image: "{{- if .registry }}{{ .registry }}/{{- end }}{{- if .repository }}{{ .repository }}/{{- end }}{{ .image }}{{- if .tag }}:{{ .tag }}{{- end }}{{- if (.digest) -}} @{{.digest}} {{- end }}"
+        {{- end }}
+        command:
+        - {{ .Values.appsec.command }}
+        imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
+        args:
+      {{- if (eq "standalone" .Values.appsec.mode) }}
+        - --hybrid-mode
+        - --token
+        - cp-3fb5c718-5e39-47e6-8d5e-99b4bc5660b74b4b7fc8-5312-451d-a763-aaf7872703c0
+      {{- else }}
+        - --token
+        - {{ .Values.appsec.agentToken }}
+      {{- end }}
+      {{- if .Values.appsec.customFog.enabled }}
+        - --fog
+        - {{ .Values.appsec.customFog.fogAddress }}
+      {{- end }}
+      {{- if .Values.appsec.proxy }}
+        - --proxy
+        - {{ .Values.appsec.proxy }}
+      {{- end }}
+        imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
+        env:
+      {{- if eq .Values.appsec.playground false }}
+          - name: SHARED_STORAGE_HOST
+            value: {{ .Values.appsec.storage.name }}-svc
+          - name: LEARNING_HOST
+            value: {{ .Values.appsec.learning.name }}-svc
+      {{- else }}
+          - name: PLAYGROUND
+            value: "true"
+      {{- end }}
+      {{- if .Values.appsec.email }}
+        {{- if eq .Values.appsec.email "STUB" }}
+          {{- fail "Please replace STUB with an email address" }}
+        {{- end }}
+          - name: user_email
+            value: {{ .Values.appsec.email }}
+      {{- end }}
+          - name: registered_server
+            value: "Kong Server"
+        resources:
+          {{ toYaml .Values.resources | nindent 12 }}
+        {{- if eq .Values.kind "AppSecStateful" }}
+        volumeMounts:
+        - name: advanced-model
+          mountPath: /advanced-model
+        - name: appsec-conf
+          mountPath: /etc/cp/conf
+        - name: appsec-data
+          mountPath: /etc/cp/data
+        {{- end }} 
+      {{- if .Values.ingressController.enabled }}
+      {{- include "kong.controller-container" . | nindent 6 }}
+      {{ end }}
+      {{- if .Values.deployment.sidecarContainers }}
+      {{- toYaml .Values.deployment.sidecarContainers | nindent 6 }}
+      {{- end }}
+      {{- if .Values.deployment.kong.enabled }}
+      - name: "proxy"
+        {{- with .Values.appsec.kong.image }}
+        image: "{{ .repository }}:{{ .tag }}"
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+        {{ toYaml .Values.containerSecurityContext | nindent 10 }}
+        env:
+        {{- include "kong.no_daemon_env" . | nindent 8 }}
+        lifecycle:
+          {{- toYaml .Values.lifecycle | nindent 10 }}
+        ports:
+        {{- if (and .Values.admin.http.enabled .Values.admin.enabled) }}
+        - name: admin
+          containerPort: {{ .Values.admin.http.containerPort }}
+          {{- if .Values.admin.http.hostPort }}
+          hostPort: {{ .Values.admin.http.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.admin.tls.enabled .Values.admin.enabled) }}
+        - name: admin-tls
+          containerPort: {{ .Values.admin.tls.containerPort }}
+          {{- if .Values.admin.tls.hostPort }}
+          hostPort: {{ .Values.admin.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.proxy.http.enabled .Values.proxy.enabled) }}
+        - name: proxy
+          containerPort: {{ .Values.proxy.http.containerPort }}
+          {{- if .Values.proxy.http.hostPort }}
+          hostPort: {{ .Values.proxy.http.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.proxy.tls.enabled .Values.proxy.enabled)}}
+        - name: proxy-tls
+          containerPort: {{ .Values.proxy.tls.containerPort }}
+          {{- if .Values.proxy.tls.hostPort }}
+          hostPort: {{ .Values.proxy.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- range .Values.proxy.stream }}
+        - name: stream{{ if (eq (default "TCP" .protocol) "UDP") }}udp{{ end }}-{{ .containerPort }}
+          containerPort: {{ .containerPort }}
+          {{- if .hostPort }}
+          hostPort: {{ .hostPort }}
+          {{- end}}
+          protocol: {{ .protocol }}
+        {{- end }}
+        {{- range .Values.udpProxy.stream }}
+        - name: streamudp-{{ .containerPort }}
+          containerPort: {{ .containerPort }}
+          {{- if .hostPort }}
+          hostPort: {{ .hostPort }}
+          {{- end}}
+          protocol: {{ .protocol }}
+        {{- end }}
+        {{- if (and .Values.status.http.enabled .Values.status.enabled)}}
+        - name: status
+          containerPort: {{ .Values.status.http.containerPort }}
+          {{- if .Values.status.http.hostPort }}
+          hostPort: {{ .Values.status.http.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.status.tls.enabled .Values.status.enabled) }}
+        - name: status-tls
+          containerPort: {{ .Values.status.tls.containerPort }}
+          {{- if .Values.status.tls.hostPort }}
+          hostPort: {{ .Values.status.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.cluster.tls.enabled .Values.cluster.enabled) }}
+        - name: cluster-tls
+          containerPort: {{ .Values.cluster.tls.containerPort }}
+          {{- if .Values.cluster.tls.hostPort }}
+          hostPort: {{ .Values.cluster.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if .Values.enterprise.enabled }}
+        {{- if (and .Values.manager.http.enabled .Values.manager.enabled) }}
+        - name: manager
+          containerPort: {{ .Values.manager.http.containerPort }}
+          {{- if .Values.manager.http.hostPort }}
+          hostPort: {{ .Values.manager.http.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.manager.tls.enabled .Values.manager.enabled) }}
+        - name: manager-tls
+          containerPort: {{ .Values.manager.tls.containerPort }}
+          {{- if .Values.manager.tls.hostPort }}
+          hostPort: {{ .Values.manager.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.portal.http.enabled .Values.portal.enabled) }}
+        - name: portal
+          containerPort: {{ .Values.portal.http.containerPort }}
+          {{- if .Values.portal.http.hostPort }}
+          hostPort: {{ .Values.portal.http.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.portal.tls.enabled .Values.portal.enabled) }}
+        - name: portal-tls
+          containerPort: {{ .Values.portal.tls.containerPort }}
+          {{- if .Values.portal.tls.hostPort }}
+          hostPort: {{ .Values.portal.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.portalapi.http.enabled .Values.portalapi.enabled) }}
+        - name: portalapi
+          containerPort: {{ .Values.portalapi.http.containerPort }}
+          {{- if .Values.portalapi.http.hostPort }}
+          hostPort: {{ .Values.portalapi.http.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.portalapi.tls.enabled .Values.portalapi.enabled) }}
+        - name: portalapi-tls
+          containerPort: {{ .Values.portalapi.tls.containerPort }}
+          {{- if .Values.portalapi.tls.hostPort }}
+          hostPort: {{ .Values.portalapi.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- if (and .Values.clustertelemetry.tls.enabled .Values.clustertelemetry.enabled) }}
+        - name: clustert-tls
+          containerPort: {{ .Values.clustertelemetry.tls.containerPort }}
+          {{- if .Values.clustertelemetry.tls.hostPort }}
+          hostPort: {{ .Values.clustertelemetry.tls.hostPort }}
+          {{- end}}
+          protocol: TCP
+        {{- end }}
+        {{- end }}
+        volumeMounts:
+        {{- include "kong.volumeMounts" . | nindent 10 }}
+        {{- include "kong.userDefinedVolumeMounts" .Values.deployment | nindent 10 }}
+        readinessProbe:
+{{ toYaml .Values.readinessProbe | indent 10 }}
+        livenessProbe:
+{{ toYaml .Values.livenessProbe | indent 10 }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        {{- end }} {{/* End of Kong container spec */}}
+    {{- if .Values.affinity }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+    {{- end }}
+    {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.topologySpreadConstraints | indent 8 }}
+    {{- end }}
+      securityContext:
+      {{- include "kong.podsecuritycontext" . | nindent 8 }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+    {{- if .Values.tolerations }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+    {{- end }}
+      volumes:
+        - name: advanced-model
+          configMap:
+            name: advanced-model-config
+            optional: true
+      {{- include "kong.volumes" . | nindent 8 -}}
+      {{- include "kong.userDefinedVolumes" . | nindent 8 -}}
+      {{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
+        - name: {{ template "kong.serviceAccountTokenName" . }}
+          {{- /* Due to GKE versions (e.g. v1.23.15-gke.1900) we need to handle pre-release part of the version as well.
+          See the related documentation of semver module that Helm depends on for semverCompare:
+          https://github.com/Masterminds/semver#working-with-prerelease-versions
+          Related Helm issue: https://github.com/helm/helm/issues/3810 */}}
+          {{- if semverCompare ">=1.20.0-0" .Capabilities.KubeVersion.Version }}
+          projected:
+            sources:
+            - serviceAccountToken:
+                expirationSeconds: 3607
+                path: token
+            - configMap:
+                items:
+                - key: ca.crt
+                  path: ca.crt
+                name: kube-root-ca.crt
+            - downwardAPI:
+                items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+          {{- else }}
+          secret:
+            secretName: {{ template "kong.serviceAccountTokenName" . }}
+            items:
+            - key: token
+              path: token
+            - key: ca.crt
+              path: ca.crt
+            - key: namespace
+              path: namespace
+          {{- end -}}
+      {{- end }}
+  {{- if eq .Values.kind "AppSecStateful" }}
+  volumeClaimTemplates:
+  - metadata:
+      name: appsec-conf
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      # Need to create a storage class resource.
+    {{- if .Values.appsec.persistence.storageClass }}
+    {{- if (eq "-" .Values.appsec.persistence.storageClass) }}
+      storageClassName: ""
+    {{- else }}
+      storageClassName: "{{ .Values.appsec.persistence.storageClass }}"
+    {{- end -}}
+    {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.appsec.persistence.conf.size | quote }}
+  - metadata:
+      name: appsec-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      # Need to create a storage class resource.
+    {{- if .Values.appsec.persistence.storageClass }}
+    {{- if (eq "-" .Values.appsec.persistence.storageClass) }}
+      storageClassName: ""
+    {{- else }}
+      storageClassName: "{{ .Values.appsec.persistence.storageClass }}"
+    {{- end -}}
+    {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.appsec.persistence.data.size | quote }}
+  {{- end }}
+{{- end }}

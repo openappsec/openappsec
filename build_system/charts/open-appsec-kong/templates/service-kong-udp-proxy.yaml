@@ -1,0 +1,15 @@
+{{- if .Values.deployment.kong.enabled }}
+{{- if and .Values.udpProxy.enabled -}}
+{{- $serviceConfig := dict -}}
+{{- $serviceConfig := merge $serviceConfig .Values.udpProxy -}}
+{{- $_ := set $serviceConfig "ingressVersion" (include "kong.ingressVersion" .) -}}
+{{- $_ := set $serviceConfig "fullName" (include "kong.fullname" .) -}}
+{{- $_ := set $serviceConfig "namespace" (include "kong.namespace" .) -}}
+{{- $_ := set $serviceConfig "metaLabels" (include "kong.metaLabels" .) -}}
+{{- $_ := set $serviceConfig "selectorLabels" (include "kong.selectorLabels" .) -}}
+{{- $_ := set $serviceConfig "serviceName" "udp-proxy" -}}
+{{- $_ := set $serviceConfig "tls" (dict "enabled" false) -}}
+{{- $_ := set $serviceConfig "http" (dict "enabled" false) -}}
+{{- include "kong.service" $serviceConfig }}
+{{- end -}}
+{{- end -}}

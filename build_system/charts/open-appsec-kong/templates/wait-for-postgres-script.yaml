@@ -1,0 +1,15 @@
+{{ if (and (.Values.postgresql.enabled) .Values.waitImage.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "kong.fullname" . }}-bash-wait-for-postgres
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+data:
+  wait.sh: |
+    until timeout 2 bash -c "9<>/dev/tcp/${KONG_PG_HOST}/${KONG_PG_PORT}"
+      do echo "waiting for db - trying ${KONG_PG_HOST}:${KONG_PG_PORT}"
+      sleep 2
+    done
+{{ end }}

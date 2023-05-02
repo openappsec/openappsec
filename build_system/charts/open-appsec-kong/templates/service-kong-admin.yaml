@@ -1,0 +1,17 @@
+{{- if .Values.deployment.kong.enabled }}
+{{- if and .Values.admin.enabled (or .Values.admin.http.enabled .Values.admin.tls.enabled) -}}
+{{- $serviceConfig := dict -}}
+{{- $serviceConfig := merge $serviceConfig .Values.admin -}}
+{{- $_ := set $serviceConfig "ingressVersion" (include "kong.ingressVersion" .) -}}
+{{- $_ := set $serviceConfig "fullName" (include "kong.fullname" .) -}}
+{{- $_ := set $serviceConfig "namespace" (include "kong.namespace" .) -}}
+{{- $_ := set $serviceConfig "metaLabels" (include "kong.metaLabels" .) -}}
+{{- $_ := set $serviceConfig "selectorLabels" (include "kong.selectorLabels" .) -}}
+{{- $_ := set $serviceConfig "serviceName" "admin" -}}
+{{- include "kong.service" $serviceConfig }}
+{{ if .Values.admin.ingress.enabled }}
+---
+{{ include "kong.ingress" $serviceConfig }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
