@@ -3,7 +3,7 @@ on: workflow_dispatch
 
 jobs:
   build-on-aws-instace:
-    runs-on: [self-hosted,linux]
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
       name: 'check out repository'
@@ -15,8 +15,6 @@ jobs:
        username: ${{ github.actor }}                           
        password: ${{ secrets.GITHUB_TOKEN }}
        
-    - name: Build the hello-docker Docker image
+    - name: Build the agent
       run: |
-         docker build . --tag ghcr.io/orianelou/hello-docker-gcr-demo:latest
-         docker run ghcr.io/orianelou/hello-docker-gcr-demo:latest
-         docker push ghcr.io/orianelou/hello-docker-gcr-demo:latest
+         ./scripts/entry.sh agent ubuntu focal
