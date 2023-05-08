@@ -18,3 +18,10 @@ jobs:
     - name: Build the agent
       run: |
          ./scripts/entry.sh agent ubuntu focal
+    
+    - name: upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: openappsec-focal.tar.gz
+        path: output/agent/openappsec-focal.tar.gz
+    
