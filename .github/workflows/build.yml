@@ -1,0 +1,22 @@
+name: 'build'
+on: workflow_dispatch
+
+jobs:
+  build-on-aws-instace:
+    runs-on: [self-hosted,linux]
+    steps:
+    - uses: actions/checkout@v3
+      name: 'check out repository'
+    
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v1
+      with:
+       registry: ghcr.io
+       username: ${{ github.actor }}                           
+       password: ${{ secrets.GITHUB_TOKEN }}
+       
+    - name: Build the hello-docker Docker image
+      run: |
+         docker build . --tag ghcr.io/orianelou/hello-docker-gcr-demo:latest
+         docker run ghcr.io/orianelou/hello-docker-gcr-demo:latest
+         docker push ghcr.io/orianelou/hello-docker-gcr-demo:latest
