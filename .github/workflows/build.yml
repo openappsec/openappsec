@@ -1,5 +1,5 @@
 name: 'build'
-on: workflow_dispatch
+on: push
 
 jobs:
   build-on-aws-instace:
