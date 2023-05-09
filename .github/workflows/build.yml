@@ -23,5 +23,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: openappsec-focal.tar.gz    
-        path: output/agent/openappsec-focal.tar.gz
+        path: output/ubuntu/focal/agent/openappsec-focal.tar.gz
     
