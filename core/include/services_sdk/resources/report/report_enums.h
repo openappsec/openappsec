@@ -62,6 +62,7 @@ enum class Tags {
     DEPLOYMENT_EMBEDDED,
     DEPLOYMENT_K8S,
     LAYER_7_ACCESS_CONTROL,
+    HORIZON_TELEMETRY_METRICS,
 
     COUNT
 };
@@ -76,6 +77,7 @@ enum class AudienceTeam
     SIGNATURE_DEVELOPERS,
     FILE_UPLOAD,
     IDENTITY_AWARENESS,
+    HORIZON_TELEMETRY,
     NONE,
 
     COUNT
@@ -147,7 +149,8 @@ enum class IssuingEngine {
     IOT_NEXT,
     SDWAN,
     FILE_UPLOAD,
-    IDA_NEXT
+    IDA_NEXT,
+    HORIZON_TELEMETRY_METRICS
 };
 
 } // namespace ReportIS

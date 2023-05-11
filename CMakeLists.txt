@@ -28,6 +28,7 @@ include_directories(core/include/services_sdk/interfaces)
 include_directories(core/include/services_sdk/resources)
 include_directories(core/include/services_sdk/utilities)
 include_directories(core/include/attachments)
+include_directories(events/include)
 include_directories(components/include)
 
 add_subdirectory(build_system)

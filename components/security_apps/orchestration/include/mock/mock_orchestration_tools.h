@@ -31,13 +31,6 @@ operator<<(std::ostream &os, const std::map<T, S> &)
     return os;
 }
 
-template <typename T, typename S>
-std::ostream &
-operator<<(std::ostream &os, const Maybe<std::map<T, S>> &)
-{
-    return os;
-}
-
 class MockOrchestrationTools
         :
     public Singleton::Provide<I_OrchestrationTools>::From<MockProvider<I_OrchestrationTools>>
@@ -56,6 +49,7 @@ public:
         Maybe<std::map<std::string, std::string>>(const std::string &, const std::string &, const std::string &)
     );
     MOCK_CONST_METHOD1(doesFileExist,        bool(const std::string &));
+    MOCK_CONST_METHOD3(fillKeyInJson,        void(const std::string &, const std::string &, const std::string &));
     MOCK_CONST_METHOD1(createDirectory,      bool(const std::string &));
     MOCK_CONST_METHOD1(doesDirectoryExist,   bool(const std::string &));
     MOCK_CONST_METHOD1(executeCmd,           bool(const std::string &));

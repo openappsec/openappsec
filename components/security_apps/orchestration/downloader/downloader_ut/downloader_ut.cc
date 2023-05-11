@@ -345,6 +345,8 @@ TEST_F(DownloaderTest, download_virtual_policy)
     EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_0000_file, "/tmp/virtualPolicy_0000_profile_1234.download"))
         .WillOnce(Return(true));
 
+    EXPECT_CALL(mock_orchestration_tools, fillKeyInJson(_, _, _)).WillRepeatedly(Return());
+
     EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_1111_file, "/tmp/virtualPolicy_1111_profile_1235.download"))
         .WillOnce(Return(true));
 
@@ -428,6 +430,8 @@ TEST_F(DownloaderTest, download_virtual_settings)
             tenant_0000_path.str()
         )
     ).WillOnce(Return(true));
+
+    EXPECT_CALL(mock_orchestration_tools, fillKeyInJson(_, _, _)).WillRepeatedly(Return());
 
     stringstream file_path;
     file_path << "/tmp/virtualSettings_4c721b40-85df-4364-be3d-303a10ee9789"

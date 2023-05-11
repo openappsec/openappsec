@@ -68,6 +68,19 @@ makeDir(const string &path, mode_t permission)
     return true;
 }
 
+/// @brief Get basename of a path
+/// @param path path to a file
+/// @return base file name
+string
+getFileName(const string &path)
+{
+    dbgFlow(D_INFRA_UTILS) << "Trying to extract file name from path: " << path;
+    size_t pos = path.rfind("/");
+    if (pos != string::npos) return path.substr(pos+1, path.length() - pos);
+
+    return path;
+}
+
 bool
 makeDirRecursive(const string &path, mode_t permission)
 {

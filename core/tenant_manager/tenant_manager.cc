@@ -78,10 +78,11 @@ public:
     void uponNewTenants(const newTenantCB &cb) override;
     bool areTenantAndProfileActive(const string &tenant_id, const string &profile_id) const override;
 
-    vector<string> fetchAllActiveTenants() const override;
-    vector<string> fetchActiveTenants() const override;
-    vector<string> getInstances(const string &tenant_id, const string &profile_id) const override;
-    vector<string> fetchProfileIds(const string &tenant_id) const override;
+    map<string, set<string>> fetchActiveTenantsAndProfiles() const override;
+    set<string> fetchAllActiveTenants() const override;
+    set<string> fetchActiveTenants() const override;
+    set<string> getInstances(const string &tenant_id, const string &profile_id) const override;
+    set<string> fetchProfileIds(const string &tenant_id) const override;
 
     void addActiveTenantAndProfile(const string &tenant_id, const string &profile_id) override;
 
@@ -89,7 +90,11 @@ public:
 
     chrono::microseconds getTimeoutVal() const override;
 
-    vector<string> getProfileId(const string &tenant_id, const string &region, const string &account) const override;
+    set<string> getProfileIdsForRegionAccount(
+        const string &tenant_id,
+        const string &region,
+        const string &account
+    ) const override;
 
     void
     addInstance(const string &tenant_id, const string &profile_id, const string &instace_id)
@@ -111,9 +116,9 @@ public:
 private:
     void runUponNewTenants(const vector<string> &new_tenants);
     void sendTenantAndProfile(const string &tenant_id, const string &profile_id);
-    vector<string> getAllTenants() const;
-    vector<string> fetchAllProfileIds(const string &tenant_id) const;
-    vector<string> getProfileIds(const string &profile_id) const;
+    set<string> getAllTenants() const;
+    set<string> fetchAllProfileIds(const string &tenant_id) const;
+    set<string> getProfileIds(const string &tenant_id) const;
     bool sendWithCustomPort(const string &tenant_id, const string &profile_id, const uint16_t port);
 
     TemporaryCache<TenantProfilePair, void> active_tenants;
@@ -169,7 +174,7 @@ public:
         active_tenants = Singleton::Consume<I_TenantManager>::from<TenantManager>()->fetchAllActiveTenants();
     }
 
-    S2C_PARAM(std::vector<std::string>, active_tenants);
+    S2C_PARAM(set<string>, active_tenants);
 };
 
 class GetActiveTenants : public ClientRest
@@ -179,7 +184,7 @@ public:
 
     Maybe<string> genJson() const { return string("{}"); };
 
-    S2C_PARAM(vector<string>, active_tenants);
+    S2C_PARAM(set<string>, active_tenants);
 };
 
 class FetchProfileIds : public ServerRest
@@ -191,7 +196,7 @@ public:
         profile_ids = Singleton::Consume<I_TenantManager>::from<TenantManager>()->fetchProfileIds(tenant_id);
     }
 
-    S2C_PARAM(vector<string>, profile_ids);
+    S2C_PARAM(set<string>, profile_ids);
     C2S_PARAM(string, tenant_id);
 };
 
@@ -200,7 +205,7 @@ class GetProfileIds : public ClientRest
 public:
     GetProfileIds(const string &_tenant_id) : profile_ids(), tenant_id(_tenant_id) {};
 
-    S2C_PARAM(vector<string>, profile_ids);
+    S2C_PARAM(set<string>, profile_ids);
     C2S_PARAM(string, tenant_id);
 };
 
@@ -318,7 +323,7 @@ TenantManager::Impl::sendTenantAndProfile(const string &tenant_id, const string 
     }
 }
 
-vector<string>
+set<string>
 TenantManager::Impl::getAllTenants() const
 {
     dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a client. Requesting the active tenants";
@@ -348,7 +353,7 @@ TenantManager::Impl::getAllTenants() const
     return active_tenant.active_tenants.get();
 }
 
-vector<string>
+set<string>
 TenantManager::Impl::getProfileIds(const string &_tenant_id) const
 {
     dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a client. Requesting the active profiles";
@@ -379,22 +384,25 @@ TenantManager::Impl::getProfileIds(const string &_tenant_id) const
 }
 
 
-vector<string>
-TenantManager::Impl::getProfileId(const string &tenant_id, const string &region, const string &account_id = "") const
+set<string>
+TenantManager::Impl::getProfileIdsForRegionAccount(
+    const string &tenant_id,
+    const string &region,
+    const string &account_id = "") const
 {
     if (region.empty()) {
         dbgWarning(D_TENANT_MANAGER) << "Can't find the profile ID. Region is empty";
-        return vector<string>();
+        return set<string>();
     }
 
-    vector<string> profile_ids = fetchProfileIds(tenant_id);
+    set<string> profile_ids = fetchProfileIds(tenant_id);
 
     dbgTrace(D_TENANT_MANAGER) << "Fetched " << profile_ids.size() << " profiles";
 
     auto i_env = Singleton::Consume<I_Environment>::by<TenantManager>();
     auto unset_tenant_on_exit = make_scope_exit([&]() { i_env->unsetActiveTenantAndProfile(); });
 
-    vector<string> profiles_to_return;
+    set<string> profiles_to_return;
     for (const string &profile_id : profile_ids) {
         string account_dbg = account_id.empty() ? "" : (" in the account " + account_id);
         dbgDebug(D_TENANT_MANAGER)
@@ -413,20 +421,20 @@ TenantManager::Impl::getProfileId(const string &tenant_id, const string &region,
             auto account_region_set = maybe_account_region_set.unpack().getAccoutRegionPairs();
             if (account_region_set.empty()) {
                 dbgTrace(D_TENANT_MANAGER) << "Old profile with new hook. Resolving to profile ID: " << profile_id;
-                profiles_to_return.push_back(profile_id);
+                profiles_to_return.insert(profile_id);
                 return profiles_to_return;
             }
             for (const AccountRegionPair &account : account_region_set) {
                 if (region == account.getRegion() && (account_id.empty() || account_id == account.getAccountID())) {
                     dbgTrace(D_TENANT_MANAGER) << "Found a corresponding profile ID: " << profile_id;
-                    profiles_to_return.push_back(profile_id);
+                    profiles_to_return.insert(profile_id);
                 }
             }
         } else {
             auto maybe_region = getSetting<string>("region");
             if (maybe_region.ok() && region == maybe_region.unpack()) {
                 dbgDebug(D_TENANT_MANAGER) << "The region corresponds to profile ID " << profile_id;
-                profiles_to_return.push_back(profile_id);
+                profiles_to_return.insert(profile_id);
                 return profiles_to_return;
             } else {
                 if (maybe_region.ok()) {
@@ -448,7 +456,7 @@ TenantManager::Impl::getProfileId(const string &tenant_id, const string &region,
     }
 
     dbgWarning(D_TENANT_MANAGER) << "Found no corresponding profile ID";
-    return vector<string>();
+    return set<string>();
 }
 
 void
@@ -490,58 +498,69 @@ TenantManager::Impl::deactivateTenant(const string &tenant_id, const string &pro
     active_tenants.deleteEntry(TenantProfilePair(tenant_id, profile_id));
 }
 
-vector<string>
+map<string, set<string>>
+TenantManager::Impl::fetchActiveTenantsAndProfiles() const
+{
+    dbgFlow(D_TENANT_MANAGER) << "Fetching active teants and profiles map";
+    map<string, set<string>> active_tenants_and_profiles;
+    set<string> tenants = fetchAllActiveTenants();
+    for (const string &tenant : tenants) {
+        active_tenants_and_profiles[tenant] = fetchProfileIds(tenant);
+    }
+
+    return active_tenants_and_profiles;
+}
+
+set<string>
 TenantManager::Impl::fetchAllActiveTenants() const
 {
     dbgFlow(D_TENANT_MANAGER) << "Fetching all active tenants";
     return (type == TenantManagerType::CLIENT) ? getAllTenants() : fetchActiveTenants();
 }
 
-vector<string>
+set<string>
 TenantManager::Impl::fetchActiveTenants() const
 {
     dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a server. Fetching active tenants";
-    vector<string> tenants;
-    tenants.reserve(active_tenants.size());
-    for (auto iter = begin(active_tenants); iter != end(active_tenants); iter++) {
-        dbgDebug(D_TENANT_MANAGER) << "Found a tenant to return. Tenant ID: " << iter->first.getTenantId();
-        tenants.push_back(iter->first.getTenantId());
+    set<string> tenants;
+    for (const auto &iter : active_tenants) {
+        dbgDebug(D_TENANT_MANAGER) << "Found a tenant to return. Tenant ID: " << iter.first.getTenantId();
+        tenants.insert(iter.first.getTenantId());
     }
 
     return tenants;
 }
 
-vector<string>
+set<string>
 TenantManager::Impl::getInstances(const string &tenant_id, const string &profile_id) const
 {
-    vector<string> instances;
+    set<string> instances;
     auto tenant_profile_pair = TenantProfilePair(tenant_id, profile_id);
     auto tenant_instance_cache = mapper.find(tenant_profile_pair);
 
     if (tenant_instance_cache == mapper.end()) return instances;
 
-    instances.reserve(tenant_instance_cache->second.size());
     for (auto iter = begin(tenant_instance_cache->second); iter != end(tenant_instance_cache->second); iter++) {
-        instances.push_back(iter->first);
+        instances.insert(iter->first);
     }
     return instances;
 }
 
-vector<string>
+set<string>
 TenantManager::Impl::fetchAllProfileIds(const string &tenant_id) const
 {
-    vector<string> tenant_profile_ids;
+    set<string> tenant_profile_ids;
 
     for (auto iter = begin(active_tenants); iter != end(active_tenants); iter++) {
         if (iter->first.getTenantId() == tenant_id) {
             dbgTrace(D_TENANT_MANAGER) << "Returning a fetched profile ID: " << iter->first.getProfileId();
-            tenant_profile_ids.push_back(iter->first.getProfileId());
+            tenant_profile_ids.insert(iter->first.getProfileId());
         }
     }
     return tenant_profile_ids;
 }
 
-vector<string>
+set<string>
 TenantManager::Impl::fetchProfileIds(const string &tenant_id) const
 {
     dbgFlow(D_TENANT_MANAGER) << "Fetching all profile IDs for tenant " << tenant_id;

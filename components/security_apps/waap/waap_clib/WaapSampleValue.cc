@@ -37,5 +37,6 @@ SampleValue::getSampleString() const
 void
 SampleValue::findMatches(const Regex &pattern, std::vector<RegexMatch> &matches) const
 {
-    pattern.findAllMatches(m_sample, matches, m_regexPreconditions ? &m_pmWordSet : nullptr);
+    static const size_t maxMatchesPerSignature = 5;
+    pattern.findAllMatches(m_sample, matches, m_regexPreconditions ? &m_pmWordSet : nullptr, maxMatchesPerSignature);
 }

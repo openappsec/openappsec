@@ -40,6 +40,12 @@ public:
         downloadFileFromURL,
         Maybe<std::string>(const std::string &, const std::string &, Package::ChecksumTypes, const std::string &)
     );
+
+    MOCK_CONST_METHOD1(
+        getProfileFromMap,
+        std::string(const std::string &)
+    );
+
 };
 
 #endif // __MOCK_DOWNLOADER_H__

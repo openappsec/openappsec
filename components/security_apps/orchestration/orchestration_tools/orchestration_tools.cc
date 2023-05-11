@@ -45,6 +45,7 @@ public:
     bool removeFile(const string &path) const override;
     bool copyFile(const string &src_path, const string &dst_path) const override;
     bool doesFileExist(const string &file_path) const override;
+    void fillKeyInJson(const string &filename, const string &_key, const string &_val) const override;
     bool createDirectory(const string &directory_path) const override;
     bool doesDirectoryExist(const string &dir_path) const override;
     bool executeCmd(const string &cmd) const override;
@@ -77,6 +78,41 @@ checkExistence(const string &path, bool is_dir)
         return false;
     }
 }
+
+// LCOV_EXCL_START Reason: NSaaS upgrade WA
+void
+OrchestrationTools::Impl::fillKeyInJson(const string &filename, const string &_key, const string &_val) const
+{
+    // Load the JSON file into a string
+    std::ifstream ifs(filename);
+    std::string jsonStr((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+
+    dbgTrace(D_ORCHESTRATOR) << "Trying to parse " << filename;
+    // Parse the JSON string
+    Document doc;
+    doc.Parse(jsonStr.c_str());
+
+    // Check if the key exists
+    if (doc.HasMember(_key.c_str())) {
+        dbgTrace(D_ORCHESTRATOR) << _key << " already exists.";
+        return;
+    }
+
+    // Add the  key with value
+    Value key(_key.c_str(), doc.GetAllocator());
+    Value val(_val.c_str(), doc.GetAllocator());
+    doc.AddMember(key, val, doc.GetAllocator());
+
+    // Write the modified JSON to a new file
+    StringBuffer buffer;
+    Writer<StringBuffer> writer(buffer);
+    doc.Accept(writer);
+    std::ofstream ofs(filename);
+    ofs << buffer.GetString() << std::endl;
+
+    dbgTrace(D_ORCHESTRATOR) << _key << " added with val " << _val;
+}
+// LCOV_EXCL_STOP
 
 bool
 OrchestrationTools::Impl::doesFileExist(const string &file_path) const

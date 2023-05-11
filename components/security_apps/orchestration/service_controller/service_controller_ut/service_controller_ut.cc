@@ -1466,8 +1466,8 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
         make_pair("/etc/cp/conf/tenant2_profile_1235_policy.json", "")}
     };
 
-    vector<string> ids = {"family1_id2"};
-    vector<string> empty_ids;
+    set<string> ids = {"family1_id2"};
+    set<string> empty_ids;
 
     EXPECT_CALL(tenant_manager, getInstances("tenant1", "1234")).WillOnce(Return(ids));
     EXPECT_CALL(tenant_manager, getInstances("tenant2", "1235")).WillOnce(Return(empty_ids));
@@ -1592,7 +1592,7 @@ TEST_F(ServiceControllerTest, cleanup_virtual_files)
         "222222\n"
         "333333\n";
 
-    vector<string> active_tenants = {
+    set<string> active_tenants = {
         "222222"
     };
 

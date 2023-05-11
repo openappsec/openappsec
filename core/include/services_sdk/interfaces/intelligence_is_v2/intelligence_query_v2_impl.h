@@ -81,6 +81,7 @@ IntelligenceQuery<UserSerializableReplyAttr>::load(cereal::JSONInputArchive &ar)
         unsigned int valid_idx = 0;
         const auto &valid_response = bulk_response.getValid();
         const auto &errors = bulk_response.getErrors();
+        responses.clear();
         responses.reserve(requests.size());
         dbgTrace(D_INTELLIGENCE) << "Received response for bulk request with " << requests.size() << " items";
         for (unsigned int query_idx = 0; query_idx < requests.size(); query_idx++) {

@@ -265,14 +265,14 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
 
-    vector<string> active_tenants = { "1236", "1235" };
+    set<string> active_tenants = { "1236", "1235" };
     EXPECT_CALL(tenant_manager, fetchActiveTenants()).WillOnce(Return(active_tenants));
 
     EXPECT_CALL(tenant_manager, addActiveTenantAndProfile("1235", "2311"));
     EXPECT_CALL(tenant_manager, addActiveTenantAndProfile("1236", "2611"));
 
-    vector<string> first_tenant_profiles = { "2611" };
-    vector<string> second_tenant_profiles = { "2311"};
+    set<string> first_tenant_profiles = { "2611" };
+    set<string> second_tenant_profiles = { "2311"};
     EXPECT_CALL(
         tenant_manager,
         fetchProfileIds("1236")).WillRepeatedly(Return(first_tenant_profiles)

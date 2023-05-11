@@ -32,6 +32,8 @@ target_link_libraries(cp-nano-http-transaction-handler
 	waap
 	waap_clib
 	reputation
+        ips
+        keywords
 	-Wl,--end-group
 )
 

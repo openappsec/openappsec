@@ -22,7 +22,7 @@
 class I_Socket
 {
 public:
-    enum class SocketType { UNIX, TCP, UDP };
+    enum class SocketType { UNIX, UNIXDG, TCP, UDP };
     using socketFd = int;
 
     virtual Maybe<socketFd>

@@ -137,9 +137,13 @@ bool ConfidenceCalculator::postData()
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Sending the data to: " << url;
 
     WindowLogPost currentWindow(m_time_window_logger_backup);
-    return sendNoReplyObjectWithRetry(currentWindow,
+    bool ok = sendNoReplyObjectWithRetry(currentWindow,
         I_Messaging::Method::PUT,
         url);
+    if (!ok) {
+        dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
+    }
+    return ok;
 }
 
 void ConfidenceCalculator::pullData(const std::vector<std::string>& files)
@@ -149,7 +153,7 @@ void ConfidenceCalculator::pullData(const std::vector<std::string>& files)
         mergeProcessedFromRemote();
     }
     std::string url = getPostDataUrl();
-    std::string sentFile = url.erase(0, url.find_first_of('/') + 1);
+    std::string sentFile = url.erase(0, strlen("/storage/waap/"));
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "pulling files, skipping: " << sentFile;
     for (auto file : files)
     {
@@ -159,9 +163,14 @@ void ConfidenceCalculator::pullData(const std::vector<std::string>& files)
         }
         dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Pulling the file: " << file;
         WindowLogGet getWindow;
-        sendObjectWithRetry(getWindow,
+        bool ok = sendObjectWithRetry(getWindow,
             I_Messaging::Method::GET,
             getUri() + "/" + file);
+
+        if (!ok) {
+            dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get file: " << file;
+            continue;
+        }
 
         KeyValSourcesLogger remoteLogger = getWindow.getWindowLogger().unpack();
         for (auto& log : remoteLogger)
@@ -214,6 +223,10 @@ void ConfidenceCalculator::pullProcessedData(const std::vector<std::string>& fil
         {
             m_confidence_level = getConfFile.getConfidenceLevels().unpackMove();
         }
+    }
+    // is_first_pull = false -> at least one file was downloaded and merged
+    if (is_first_pull) {
+        dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the remote state";
     }
 }
 

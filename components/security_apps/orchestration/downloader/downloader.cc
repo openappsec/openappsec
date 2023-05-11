@@ -21,12 +21,42 @@
 #include "rest.h"
 #include "cereal/external/rapidjson/document.h"
 
+#include "customized_cereal_map.h"
+#include "cereal/archives/json.hpp"
+#include "cereal/types/vector.hpp"
+#include "cereal/types/string.hpp"
+
 #include <fstream>
 
 using namespace std;
 using namespace rapidjson;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
+
+// LCOV_EXCL_START Reason: WA for NSaaS upgrade
+class TenantProfileMap
+{
+public:
+    void
+    load(const string &raw_value)
+    {
+        vector<string> tenants_and_profiles;
+        {
+            stringstream string_stream(raw_value);
+            cereal::JSONInputArchive archive(string_stream);
+            cereal::load(archive, tenants_and_profiles);
+        }
+        for (const auto &tenant_profile_pair : tenants_and_profiles) {
+            value.push_back(tenant_profile_pair);
+        }
+    }
+
+    const vector<string> & getValue() const { return value; }
+private:
+    vector<string> value;
+};
+
+// LCOV_EXCL_STOP
 
 class Downloader::Impl : Singleton::Provide<I_Downloader>::From<Downloader>
 {
@@ -51,6 +81,9 @@ public:
         const string &service_name
     ) const override;
 
+    void createTenantProfileMap();
+    string getProfileFromMap(const string &tenant_id) const override;
+
 private:
     Maybe<string> downloadFileFromFogByHTTP(
         const GetResourceFile &resourse_file,
@@ -74,6 +107,7 @@ private:
     tuple<string, string> splitQuery(const string &query) const;
     string vectorToPath(const vector<string> &vec) const;
     string dir_path;
+    map<string, string> tenant_profile_map;
 };
 
 void
@@ -111,6 +145,42 @@ Downloader::Impl::downloadFileFromFog(
     return file_path;
 }
 
+void
+Downloader::Impl::createTenantProfileMap()
+{
+    dbgFlow(D_ORCHESTRATOR) << "Creating a tenant-profile map from the agent settings";
+    tenant_profile_map.clear();
+    auto maybe_tenant_profile_map = getProfileAgentSetting<TenantProfileMap>("TenantProfileMap");
+    if (maybe_tenant_profile_map.ok()) {
+        dbgTrace(D_ORCHESTRATOR) << "Managed to read the TenantProfileMap agent settings";
+        TenantProfileMap tpm = maybe_tenant_profile_map.unpack();
+        for (const string &str : tpm.getValue()) {
+            string delimiter = ":";
+            string tenant = str.substr(0, str.find(delimiter));
+            string profile = str.substr(str.find(delimiter) + 1);
+            dbgTrace(D_ORCHESTRATOR)
+                << "Loading into the map. Tenant: "
+                << tenant
+                << " Profile: "
+                << profile;
+            tenant_profile_map[tenant] = profile;
+        }
+    } else {
+        dbgTrace(D_ORCHESTRATOR) << "Couldn't load the TenantProfileMap agent settings";
+    }
+}
+
+// LCOV_EXCL_START Reason: NSaaS old profiles support
+string
+Downloader::Impl::getProfileFromMap(const string &tenant_id) const
+{
+    if (tenant_profile_map.find(tenant_id) == tenant_profile_map.end()) {
+        return "";
+    }
+    return tenant_profile_map.at(tenant_id);
+}
+// LCOV_EXCL_STOP
+
 Maybe<map<pair<string, string>, string>>
 Downloader::Impl::downloadVirtualFileFromFog(
     const GetResourceFile &resourse_file,
@@ -130,8 +200,10 @@ Downloader::Impl::downloadVirtualFileFromFog(
 
     Document document;
     document.Parse(downloaded_data.unpack().c_str());
-    if (document.HasParseError()) return genError("JSON file is not valid.");
-
+    if (document.HasParseError()) {
+        dbgWarning(D_ORCHESTRATOR) << "JSON file is not valid";
+        return genError("JSON file is not valid.");
+    }
     const Value &tenants_data = document[tenants_key.c_str()];
     for (Value::ConstValueIterator itr = tenants_data.Begin(); itr != tenants_data.End(); ++itr) {
 
@@ -145,9 +217,21 @@ Downloader::Impl::downloadVirtualFileFromFog(
 
         if (artifact_data != itr->MemberEnd()) {
             auto profile_id_obj = itr->FindMember(profile_id_key.c_str());
-            if (profile_id_obj == itr->MemberEnd()) continue;
+            string profile_id;
+            if (profile_id_obj == itr->MemberEnd()) {
+                if (tenant_profile_map.count(tenant_id)) {
+                    dbgWarning(D_ORCHESTRATOR)
+                        << "Forcing profile ID to be "
+                        << getProfileFromMap(tenant_id);
+                    profile_id = getProfileFromMap(tenant_id);
+                } else {
+                    dbgWarning(D_ORCHESTRATOR) << "Couldn't force profile ID";
+                    continue;
+                }
+            }
 
-            string profile_id =  profile_id_obj->value.GetString();
+            if (profile_id.empty()) profile_id = profile_id_obj->value.GetString();
+            dbgTrace(D_ORCHESTRATOR) << "Found a profile ID " << profile_id;
 
             string file_path =
                 dir_path + "/" + resourse_file.getFileName() + "_" +
@@ -161,6 +245,9 @@ Downloader::Impl::downloadVirtualFileFromFog(
             if (orchestration_tools->writeFile(buffer.GetString(), file_path)) {
                 res.insert({{tenant_id, profile_id}, file_path});
             }
+
+            orchestration_tools->fillKeyInJson(file_path, "profileID", profile_id);
+            orchestration_tools->fillKeyInJson(file_path, "tenantID", tenant_id);
             continue;
         }
 
@@ -387,4 +474,5 @@ Downloader::preload()
     registerExpectedConfiguration<string>("orchestration", "Default file download path");
     registerExpectedConfiguration<string>("orchestration", "Self signed certificates acceptable");
     registerExpectedConfiguration<bool>("orchestration", "Add tenant suffix");
+    registerConfigLoadCb([this]() { pimpl->createTenantProfileMap(); });
 }

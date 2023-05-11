@@ -96,9 +96,13 @@ bool TrustedSourcesConfidenceCalculator::postData()
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Sending the data to: " << url;
 
     TrsutedSourcesLogger logger(m_logger);
-    return sendNoReplyObjectWithRetry(logger,
+    bool ok = sendNoReplyObjectWithRetry(logger,
         I_Messaging::Method::PUT,
         url);
+    if (!ok) {
+        dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
+    }
+    return ok;
 }
 
 void TrustedSourcesConfidenceCalculator::pullData(const std::vector<std::string>& files)
@@ -116,7 +120,12 @@ void TrustedSourcesConfidenceCalculator::pullData(const std::vector<std::string>
         bool res = sendObjectWithRetry(getTrustFile,
             I_Messaging::Method::GET,
             getUri() + "/" + file);
-        if (res && getTrustFile.getTrustedLogs().ok())
+        if (!res)
+        {
+            dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get file: " << file;
+            continue;
+        }
+        if (getTrustFile.getTrustedLogs().ok())
         {
             mergeFromRemote(getTrustFile.getTrustedLogs().unpack());
         }
@@ -134,19 +143,21 @@ void TrustedSourcesConfidenceCalculator::updateState(const std::vector<std::stri
     pullProcessedData(files);
 }
 
-void TrustedSourcesConfidenceCalculator::pullProcessedData(const std::vector<std::string>& files)
-{
+void TrustedSourcesConfidenceCalculator::pullProcessedData(const std::vector<std::string>& files) {
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Fetching the logger object for trusted sources";
-    for (auto file : files)
-    {
+    bool pull_ok = false;
+    for (auto file: files) {
         GetTrustedFile getTrustFile;
         bool res = sendObjectWithRetry(getTrustFile,
             I_Messaging::Method::GET,
             getUri() + "/" + file);
-        if (res && getTrustFile.getTrustedLogs().ok())
-        {
+        if (res && getTrustFile.getTrustedLogs().ok()) {
             mergeFromRemote(getTrustFile.getTrustedLogs().unpack());
+            pull_ok = true;
         }
+    }
+    if (!pull_ok && !files.empty()) {
+        dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to pull state data";
     }
 }
 

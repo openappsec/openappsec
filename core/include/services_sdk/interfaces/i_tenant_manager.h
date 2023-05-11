@@ -16,6 +16,8 @@
 
 #include <string>
 #include <vector>
+#include <set>
+#include <map>
 #include <chrono>
 #include <functional>
 
@@ -27,13 +29,14 @@ public:
     virtual void uponNewTenants(const newTenantCB &cb) = 0;
     virtual bool areTenantAndProfileActive(const std::string &tenant_id, const std::string &profile_id) const = 0;
 
-    virtual std::vector<std::string> fetchActiveTenants() const = 0;
-    virtual std::vector<std::string> fetchAllActiveTenants() const = 0;
-    virtual std::vector<std::string> getInstances(
+    virtual std::set<std::string> fetchAllActiveTenants() const = 0;
+    virtual std::set<std::string> fetchActiveTenants() const = 0;
+    virtual std::set<std::string> getInstances(
         const std::string &tenant_id,
         const std::string &profile_id
     ) const = 0;
-    virtual std::vector<std::string> fetchProfileIds(const std::string &tenant_id) const = 0;
+    virtual std::map<std::string, std::set<std::string>> fetchActiveTenantsAndProfiles() const = 0;
+    virtual std::set<std::string> fetchProfileIds(const std::string &tenant_id) const = 0;
 
     virtual void deactivateTenant(const std::string &tenant_id, const std::string &profile_id) = 0;
 
@@ -41,7 +44,7 @@ public:
 
     virtual std::chrono::microseconds getTimeoutVal() const = 0;
 
-    virtual std::vector<std::string> getProfileId(
+    virtual std::set<std::string> getProfileIdsForRegionAccount(
         const std::string &tenant_id,
         const std::string &region,
         const std::string &account_id = ""

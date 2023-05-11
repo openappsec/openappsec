@@ -111,6 +111,10 @@ public:
     virtual bool removeFile(const std::string &path) const = 0;
     virtual bool copyFile(const std::string &src_path, const std::string &dst_path) const = 0;
     virtual bool doesFileExist(const std::string &file_path) const = 0;
+    virtual void fillKeyInJson(
+        const std::string &filename,
+        const std::string &_key,
+        const std::string &_val) const = 0;
     virtual bool createDirectory(const std::string &directory_path) const = 0;
     virtual bool doesDirectoryExist(const std::string &dir_path) const = 0;
     virtual bool executeCmd(const std::string &cmd) const = 0;

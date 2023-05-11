@@ -1113,17 +1113,26 @@ private:
         // Download virtual policy
         bool is_empty = true;
         GetResourceFile resource_v_policy_file(GetResourceFile::ResourceFileType::VIRTUAL_POLICY);
+        I_Downloader *downloader = Singleton::Consume<I_Downloader>::by<OrchestrationComp>();
         for (const auto &tenant: *updated_policy_tenants) {
             if (!tenant.getVersion().empty()) {
                 is_empty = false;
+
+                string profile_to_use = tenant.getProfileID().empty() ?
+                    downloader->getProfileFromMap(tenant.getTenantID()) :
+                    tenant.getProfileID();
+
                 dbgTrace(D_ORCHESTRATOR)
                     << "Adding a tenant to the multi-tenant list. Tenant: "
-                    << tenant.getTenantID();
+                    << tenant.getTenantID()
+                    << " Profile: "
+                    << profile_to_use;
                 auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
-                tenant_manager->addActiveTenantAndProfile(tenant.getTenantID(), tenant.getProfileID());
+
+                tenant_manager->addActiveTenantAndProfile(tenant.getTenantID(), profile_to_use);
                 resource_v_policy_file.addTenant(
                     tenant.getTenantID(),
-                    tenant.getProfileID(),
+                    profile_to_use,
                     tenant.getVersion(),
                     tenant.getChecksum()
                 );
@@ -1132,7 +1141,7 @@ private:
 
         if (!is_empty) {
             auto new_virtual_policy_files =
-                Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadVirtualFileFromFog(
+                downloader->downloadVirtualFileFromFog(
                     resource_v_policy_file,
                     I_OrchestrationTools::SELECTED_CHECKSUM_TYPE
                 );
@@ -1151,9 +1160,24 @@ private:
             for (const auto &tenant: *updated_settings_tenants) {
                 if (!tenant.getVersion().empty()) {
                     is_empty = false;
+
+                    string profile_to_use = tenant.getProfileID().empty() ?
+                        downloader->getProfileFromMap(tenant.getTenantID()) :
+                        tenant.getProfileID();
+
+                    dbgTrace(D_ORCHESTRATOR)
+                        << "Handling virtual settings: Tenant ID: "
+                        << tenant.getTenantID()
+                        << ", Profile ID: "
+                        << profile_to_use
+                        << ", version: "
+                        << tenant.getVersion()
+                        << ", checksum: "
+                        << tenant.getChecksum();
+
                     resource_v_settings_file.addTenant(
                         tenant.getTenantID(),
-                        tenant.getProfileID(),
+                        profile_to_use,
                         tenant.getVersion(),
                         tenant.getChecksum()
                     );
@@ -1169,6 +1193,11 @@ private:
                 if (new_virtual_settings_files.ok()) {
                     for (const auto &tenant_file: *new_virtual_settings_files) {
                         auto tenant_profile = TenantProfilePair(tenant_file.first.first, tenant_file.first.second);
+                        dbgTrace(D_ORCHESTRATOR)
+                            << "Downloaded a file from the FOG: Tenant ID: "
+                            << tenant_profile.getTenantId()
+                            << ", Profile ID: "
+                            << tenant_profile.getProfileId();
                         sorted_files[tenant_profile].push_back(tenant_file.second);
                     }
                 }
