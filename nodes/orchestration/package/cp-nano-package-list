@@ -27,4 +27,5 @@ sdwan="sdwan 1204 SD-WAN"
 sdwan_logger="sdwanLogger 2204 SD-WAN_Logger"
 cpview_metric_provider="cpviewMetricProvider 8282"
 hello_world="hello_world"
+crowdsec_aux="crowdsecAux 8081"
 # ** Please do not remove this comment - newline at end of file required.

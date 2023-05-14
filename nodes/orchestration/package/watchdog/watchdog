@@ -667,7 +667,7 @@ load_services()
             fi
 
             log "load_services" "Respawn ${service}"
-            if [ "${service}" == "/etc/cp/agentIntelligence/redis/redis-server" ]; then
+            if [ "${service}" == "/etc/cp/agentIntelligence/redis/redis-server" ] || [ "${service}" = "/etc/cp/crowdsecAux/cp-nano-crowdsec-aux" ]; then
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} &"
             else
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} &"
