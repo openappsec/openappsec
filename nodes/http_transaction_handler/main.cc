@@ -18,6 +18,8 @@
 #include "http_manager.h"
 #include "layer_7_access_control.h"
 #include "waap.h"
+#include "ips_comp.h"
+#include "keyword_comp.h"
 
 int
 main(int argc, char **argv)
@@ -28,7 +30,9 @@ main(int argc, char **argv)
         GradualDeployment,
         HttpManager,
         Layer7AccessControl,
-	WaapComponent
+        WaapComponent,
+        IPSComp,
+        KeywordComp
     > comps;
 
     comps.registerGlobalValue<bool>("Is Rest primary routine", true);

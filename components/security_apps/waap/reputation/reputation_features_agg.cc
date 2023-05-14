@@ -348,6 +348,10 @@ ReputationFeaturesAgg::Impl::reportReputationFeatures()
     I_MainLoop *i_mainLoop = Singleton::Consume<I_MainLoop>::by<ReputationFeaturesAgg>();
 
     string tenantId = agentDetails->getTenantId();
+    if (tenantId.empty())
+    {
+        tenantId = "Elpis";
+    }
     string agentId = agentDetails->getAgentId();
     if (Singleton::exists<I_InstanceAwareness>())
     {

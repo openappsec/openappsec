@@ -150,6 +150,8 @@ private:
     bool commitFailure(const string &error);
     bool reloadConfigurationImpl(const string &version, bool is_async);
     void reloadConfigurationContinuesWrapper(const string &version, uint id);
+    vector<string> fillMultiTenantConfigFiles(const map<string, set<string>> &tenants);
+    vector<string> fillMultiTenantExpectedConfigFiles(const map<string, set<string>> &tenants);
 
     string
     getActiveTenant() const
@@ -274,7 +276,7 @@ private:
     map<string, set<ConfigFileType>> expected_configuration_files;
     set<string> config_file_paths;
 
-    I_TenantManager *tenant_mananger = nullptr;
+    I_TenantManager *tenant_manager = nullptr;
 
     vector<ConfigCb> configuration_prepare_cbs;
     vector<ConfigCb> configuration_commit_cbs;
@@ -322,7 +324,7 @@ void
 ConfigComponent::Impl::init()
 {
     reloadFileSystemPaths();
-    tenant_mananger = Singleton::Consume<I_TenantManager>::by<ConfigComponent>();
+    tenant_manager = Singleton::Consume<I_TenantManager>::by<ConfigComponent>();
 
     if (!Singleton::exists<I_MainLoop>()) return;
     auto mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
@@ -338,7 +340,7 @@ ConfigComponent::Impl::init()
 
     mainloop->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
-        tenant_mananger->getTimeoutVal(),
+        tenant_manager->getTimeoutVal(),
         [this] () { clearOldTenants(); },
         "Config comp old tenant cleanup"
     );
@@ -681,7 +683,7 @@ bool
 ConfigComponent::Impl::areTenantAndProfileActive(const TenantProfilePair &tenant_profile) const
 {
     return (tenant_profile.getTenantId() == default_tenant_id && tenant_profile.getProfileId() == default_profile_id)
-        || tenant_mananger->areTenantAndProfileActive(tenant_profile.getTenantId(), tenant_profile.getProfileId());
+        || tenant_manager->areTenantAndProfileActive(tenant_profile.getTenantId(), tenant_profile.getProfileId());
 }
 
 void
@@ -817,6 +819,45 @@ ConfigComponent::Impl::commitFailure(const string &error)
     return false;
 }
 
+vector<string>
+ConfigComponent::Impl::fillMultiTenantConfigFiles(const map<string, set<string>> &active_tenants)
+{
+    vector<string> files;
+    for (const auto &tenant_profiles : active_tenants) {
+        const string &tenant = tenant_profiles.first;
+        const set<string> &profile_ids = tenant_profiles.second;
+        for (const auto &profile_id : profile_ids) {
+            string settings_path =
+                config_directory_path + "tenant_" + tenant + "_profile_" + profile_id + "_settings.json";
+            files.push_back(settings_path);
+        }
+    }
+    return files;
+}
+
+vector<string>
+ConfigComponent::Impl::fillMultiTenantExpectedConfigFiles(const map<string, set<string>> &active_tenants)
+{
+    vector<string> files;
+    for (const auto &config_file : expected_configuration_files) {
+        for (const auto &type : config_file.second) {
+            if (type == ConfigFileType::RawData) continue;
+            auto global_path = getPolicyConfigPath(config_file.first, type);
+            auto it = find(files.begin(), files.end(), global_path);
+            if (it == files.end()) files.push_back(global_path);
+            for (const pair<string, set<string>> &tenant_profiles : active_tenants) {
+                const string &tenant = tenant_profiles.first;
+                const set<string> &profile_ids = tenant_profiles.second;
+                for (const auto &profile_id : profile_ids) {
+                    auto tenant_path = getPolicyConfigPath(config_file.first, type, tenant, profile_id);
+                    files.push_back(tenant_path);
+                }
+            }
+        }
+    }
+    return files;
+}
+
 bool
 ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_async)
 {
@@ -831,38 +872,20 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
         files.emplace(fullpath, make_shared<ifstream>(fullpath));
     }
 
-    const auto &active_tenants = tenant_mananger ? tenant_mananger->fetchAllActiveTenants() : vector<string>();
+    map<string, set<string>> active_tenants =
+        tenant_manager ? tenant_manager->fetchActiveTenantsAndProfiles() : map<string, set<string>>();
 
     dbgTrace(D_CONFIG) << "Number of active tenants found while reloading configuration: " << active_tenants.size();
 
-    for (const auto &config_file : expected_configuration_files) {
-        for (const auto &type : config_file.second) {
-            if (type == ConfigFileType::RawData) continue;
-            auto global_path = getPolicyConfigPath(config_file.first, type);
-            if (files.find(global_path) == files.end()) {
-                files.emplace(global_path, make_shared<ifstream>(global_path));
-            }
-
-            for (auto &tenant : active_tenants) {
-                const vector<string> &profile_ids =
-                    tenant_mananger ? tenant_mananger->fetchProfileIds(tenant) : vector<string>();
-                for (auto &profile_id : profile_ids) {
-                    auto tenant_path = getPolicyConfigPath(config_file.first, type, tenant, profile_id);
-                    files.emplace(tenant_path, make_shared<ifstream>(tenant_path));
-                }
-            }
-        }
+    const vector<string> &config_files = fillMultiTenantConfigFiles(active_tenants);
+    const vector<string> &expected_config_files = fillMultiTenantExpectedConfigFiles(active_tenants);
+    for (const string &file : config_files) {
+        dbgTrace(D_CONFIG) << "Inserting " << file << " to the list of files to be handled";
+        files.emplace(file, make_shared<ifstream>(file));
     }
-
-    for (const string &tenant : active_tenants) {
-        const vector<string> &profile_ids =
-            tenant_mananger ? tenant_mananger->fetchProfileIds(tenant) : vector<string>();
-        for (auto &profile_id : profile_ids) {
-            string settings_path =
-                config_directory_path + "tenant_" + tenant + "_profile_"+ profile_id + "_settings.json";
-            dbgTrace(D_CONFIG) << "Inserting a settings path: " << settings_path;
-            files.emplace(settings_path, make_shared<ifstream>(settings_path));
-        }
+    for (const string &file : expected_config_files) {
+        dbgTrace(D_CONFIG) << "Inserting " << file << " to the list of files to be handled";
+        files.emplace(file, make_shared<ifstream>(file));
     }
 
     vector<shared_ptr<JSONInputArchive>> archives;
@@ -883,6 +906,7 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
 void
 ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version, uint id)
 {
+    dbgFlow(D_CONFIG) << "Running reloadConfigurationContinuesWrapper. Version: " << version << ", Id: " << id;
     auto mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
 
     LoadNewConfigurationStatus in_progress(id, false, false);

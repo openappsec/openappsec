@@ -100,9 +100,13 @@ bool ScannerDetector::postData()
     dbgTrace(D_WAAP) << "Sending the data to: " << url;
 
     SourcesMonitorPost currentWindow(m_sources_monitor_backup);
-    return sendNoReplyObjectWithRetry(currentWindow,
+    bool ok = sendNoReplyObjectWithRetry(currentWindow,
         I_Messaging::Method::PUT,
         url);
+    if (!ok) {
+        dbgError(D_WAAP) << "Failed to post collected data to: " << url;
+    }
+    return ok;
 }
 
 void ScannerDetector::pullData(const std::vector<std::string>& files)
@@ -118,9 +122,14 @@ void ScannerDetector::pullData(const std::vector<std::string>& files)
         }
         dbgTrace(D_WAAP) << "Pulling the file: " << file;
         SourcesMonitorGet getMonitor;
-        sendObjectWithRetry(getMonitor,
+        bool ok = sendObjectWithRetry(getMonitor,
             I_Messaging::Method::GET,
             getUri() + "/" + file);
+
+        if (!ok) {
+            dbgError(D_WAAP) << "Failed to get data from: " << file;
+            continue;
+        }
 
         SourceKeyValsMap remoteMonitor = getMonitor.getSourcesMonitor().unpack();
         for (const auto& srcData : remoteMonitor)

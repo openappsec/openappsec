@@ -489,6 +489,109 @@ private:
     struct sockaddr_un server;
 };
 
+class UnixDGSocket : public SocketInternal
+{
+public:
+    static Maybe<unique_ptr<UnixDGSocket>>
+    connectSock(bool _is_blocking, bool _is_server, const string &_address)
+    {
+        unique_ptr<UnixDGSocket> unix_socket(make_unique<UnixDGSocket>(_is_blocking, _is_server));
+        if (unix_socket->getSocket() <= 0) return genError("Failed to create socket");
+
+        unix_socket->server.sun_family = AF_UNIX;
+        strncpy(unix_socket->server.sun_path, _address.c_str(), sizeof(unix_socket->server.sun_path) - 1);
+
+        if (!unix_socket->isServerSock()) {
+            if (connect(
+                    unix_socket->getSocket(),
+                    reinterpret_cast<struct sockaddr *>(&unix_socket->server),
+                    sizeof(struct sockaddr_un)
+                ) == -1
+            ) {
+                return genError("Failed to connect socket");
+            }
+            return move(unix_socket);
+        }
+
+        static const int on = 1;
+        if (setsockopt(unix_socket->getSocket(), SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on)) < 0) {
+            dbgWarning(D_SOCKET) << "Failed to set the socket descriptor as reusable";
+            return genError("Failed to set the socket descriptor as reusable");
+        }
+
+        const int priority = 6;
+        if (setsockopt(unix_socket->getSocket(), SOL_SOCKET, SO_PRIORITY, (char *)&priority, sizeof(priority)) < 0) {
+            dbgWarning(D_SOCKET) << "Failed to set the socket priority to highest";
+            return genError("Failed to set the socket priority to highest");
+        }
+
+        if (ioctl(unix_socket->getSocket(), FIONBIO, (char *)&on) < 0) {
+            dbgWarning(D_SOCKET) << "Failed to set the socket as non-blocking";
+            return genError("Failed to set the socket as non-blocking");
+        }
+
+        unlink(unix_socket->server.sun_path);
+        if (bind(
+                unix_socket->getSocket(),
+                reinterpret_cast<struct sockaddr *>(&unix_socket->server),
+                sizeof(struct sockaddr_un)
+            ) == -1) {
+            dbgWarning(D_SOCKET) << "Failed to bind the socket: " << strerror(errno);
+            return genError("Failed to bind the socket");
+        }
+
+        chmod(unix_socket->server.sun_path, 0666);
+
+        return move(unix_socket);
+    }
+
+    void cleanServer() override
+    {
+        unlink(server.sun_path);
+    }
+
+    Maybe<vector<char>>
+    receiveDataBlocking(uint data_size) override
+    {
+        return receiveDGData(data_size, MSG_DONTWAIT);
+    }
+
+    Maybe<vector<char>>
+    receiveDataNonBlocking(uint data_size) override
+    {
+        return receiveDGData(data_size, 0);
+    }
+
+    Maybe<vector<char>>
+    receiveDGData(uint data_size, int flag)
+    {
+        if (data_size == 0) data_size = udp_max_packet_size;
+        dbgDebug(D_SOCKET) << "data_size: " << data_size;
+        vector<char> param_to_read(data_size, 0);
+        int res = recv(socket_int, param_to_read.data(), data_size, flag);
+
+        if (res == -1) {
+            string error_message = strerror(errno);
+            dbgWarning(D_SOCKET) << "Failed to read data, Error: " + error_message;
+            return genError(
+                "Failed to read data, Error: " + error_message
+            );
+        }
+        param_to_read.resize(res);
+        return param_to_read;
+    }
+
+    UnixDGSocket(bool _is_blocking, bool _is_server_socket)
+        :
+        SocketInternal(_is_blocking, _is_server_socket)
+    {
+        socket_int = socket(AF_UNIX, SOCK_DGRAM, 0);
+    }
+
+private:
+    struct sockaddr_un server;
+};
+
 class SocketIS::Impl
         :
     Singleton::Provide<I_Socket>::From<SocketIS>
@@ -527,6 +630,11 @@ SocketIS::Impl::genSocket(
         if (!unix_sock.ok()) return unix_sock.passErr();
         new_sock = unix_sock.unpackMove();
         socketTypeName = "UNIX";
+    } else if (type ==  SocketType::UNIXDG) {
+        Maybe<unique_ptr<SocketInternal>> unix_dg_sock = UnixDGSocket::connectSock(is_blocking, is_server, address);
+        if (!unix_dg_sock.ok()) return unix_dg_sock.passErr();
+        new_sock = unix_dg_sock.unpackMove();
+        socketTypeName = "UNIXDG";
     } else if (type == SocketType::TCP) {
         Maybe<unique_ptr<SocketInternal>> tcp_sock = TCPSocket::connectSock(is_blocking, is_server, address);
         if (!tcp_sock.ok()) return tcp_sock.passErr();

@@ -55,7 +55,8 @@ public:
         const std::string &regexMatchName="", const std::string &regexMatchValue="");
     ~SingleRegex();
     bool hasMatch(const std::string &s) const;
-    size_t findAllMatches(const std::string &s, std::vector<RegexMatch> &matches) const;
+    size_t findAllMatches(const std::string &s, std::vector<RegexMatch> &matches,
+            size_t max_matches = std::string::npos) const;
     size_t findMatchRanges(const std::string &s, std::vector<RegexMatchRange> &matchRanges) const;
     const std::string &getName() const;
 private:
@@ -76,8 +77,8 @@ public:
         std::shared_ptr<Waap::RegexPreconditions> regexPreconditions);
     ~Regex();
     bool hasMatch(const std::string &s) const;
-    size_t findAllMatches(const std::string &v, std::vector<RegexMatch> &maches,
-        const Waap::RegexPreconditions::PmWordSet *pmWordSet=nullptr) const;
+    size_t findAllMatches(const std::string &v, std::vector<RegexMatch> &matches,
+        const Waap::RegexPreconditions::PmWordSet *pmWordSet=nullptr, size_t max_matches = std::string::npos) const;
     std::string sub(const std::string &s, const std::string &repl="") const;
     // Run regex search, and for each found match - run callback.
     // The callback can cancel replacement of the match (leave source match "as-is"), provide a replacement string,

@@ -39,6 +39,8 @@ public:
         Package::ChecksumTypes checksum_type,
         const std::string &service_name
     ) const = 0;
+
+    virtual std::string getProfileFromMap(const std::string &tenant_id) const = 0;
 };
 
 #endif // __I_DOWNLOADER_H__

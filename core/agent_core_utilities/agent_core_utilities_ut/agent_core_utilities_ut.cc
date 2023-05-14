@@ -77,6 +77,7 @@ TEST_F(AgentCoreUtilUT, directoryTest)
     EXPECT_TRUE(NGEN::Filesystem::deleteDirectory("/tmp/1", true));
     EXPECT_FALSE(NGEN::Filesystem::exists("/tmp/1"));
 }
+
 TEST_F(AgentCoreUtilUT, printTest)
 {
     EXPECT_EQ(NGEN::Filesystem::convertToHumanReadable(0), "0 Bytes");
@@ -95,4 +96,10 @@ TEST_F(AgentCoreUtilUT, printTest)
     EXPECT_EQ(NGEN::Filesystem::convertToHumanReadable(1000*gigabyte - megabyte), "1000.00 GB");
     EXPECT_EQ(NGEN::Filesystem::convertToHumanReadable(1000*gigabyte), "1000.00 GB");
     EXPECT_EQ(NGEN::Filesystem::convertToHumanReadable(1024*gigabyte), "1024.00 GB");
+}
+
+
+TEST_F(AgentCoreUtilUT, fileBasenameTest)
+{
+    EXPECT_EQ(NGEN::Filesystem::getFileName("/test/base/file/name"), "name");
 }

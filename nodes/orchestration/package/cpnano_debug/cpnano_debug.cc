@@ -95,6 +95,7 @@ enum class Service {
     HELLO_WORLD,
     IDA,
     IOT_ACCESS_CONTROL,
+    HORIZON_TELEMETRY,
 
     COUNT
 };
@@ -171,6 +172,7 @@ getServiceString(const Service service)
         case (Service::HELLO_WORLD): return "hello-world";
         case (Service::IDA): return "identity-awareness";
         case (Service::IOT_ACCESS_CONTROL): return "iot-access-control";
+        case (Service::HORIZON_TELEMETRY): return "horizon-telemetry";
         default:
             cerr
                 << "Internal Error: the provided service ("
@@ -358,6 +360,11 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-iot-access-control-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-iot-access-control.dbg"
+            );
+        case (Service::HORIZON_TELEMETRY):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-horizon-telemetry-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-horizon-telemetry.dbg"
             );
         default:
             cerr
@@ -1287,6 +1294,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::IDA);
         } else if (getServiceString(Service::IOT_ACCESS_CONTROL).find(maybe_service) == 0) {
             services.push_back(Service::IOT_ACCESS_CONTROL);
+        } else if (getServiceString(Service::HORIZON_TELEMETRY).find(maybe_service) == 0) {
+            services.push_back(Service::HORIZON_TELEMETRY);
         } else {
             break;
         }

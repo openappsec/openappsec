@@ -104,7 +104,8 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"Kong Server", ReportIS::Tags::WEB_SERVER_KONG},
         {"Embedded Deployment", ReportIS::Tags::DEPLOYMENT_EMBEDDED},
         {"Kubernetes Deployment", ReportIS::Tags::DEPLOYMENT_K8S},
-        {"Layer 7 Access Control", ReportIS::Tags::LAYER_7_ACCESS_CONTROL}
+        {"Layer 7 Access Control", ReportIS::Tags::LAYER_7_ACCESS_CONTROL},
+        {"Horizon Telemetry Metrics", ReportIS::Tags::HORIZON_TELEMETRY_METRICS}
     };
 
     auto report_is_tag = strings_to_tags.find(tag);
@@ -264,6 +265,7 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::SDWAN: return "sdwanGwSharing";
         case IssuingEngine::FILE_UPLOAD: return "fileUpload";
         case IssuingEngine::IDA_NEXT: return "quantumMetaNotifyIdn";
+        case IssuingEngine::HORIZON_TELEMETRY_METRICS: return "horizonTelemetryMetrics";
     }
 
     dbgAssert(false) << "Reached impossible engine value of: " << static_cast<int>(issuing_engine);
@@ -302,7 +304,8 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Kong Server",
     "Embedded Deployment",
     "Kubernetes Deployment",
-    "Layer 7 Access Control"
+    "Layer 7 Access Control",
+    "Horizon Telemetry Metrics"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {
@@ -312,5 +315,6 @@ EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation 
     "Agent Intelligence",
     "cpviewMonitoring",
     "Signature Developers",
-    "Identity Awareness"
+    "Identity Awareness",
+    "unifiedMonitoring"
 };

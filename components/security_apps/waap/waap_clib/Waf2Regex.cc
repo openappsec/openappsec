@@ -140,7 +140,7 @@ bool SingleRegex::hasMatch(const std::string& s) const {
     return true;
 }
 
-size_t SingleRegex::findAllMatches(const std::string& s, std::vector<RegexMatch>& matches) const {
+size_t SingleRegex::findAllMatches(const std::string& s, std::vector<RegexMatch>& matches, size_t maxMatches) const {
     size_t matchesCount = 0;
 
     // Optimized regex that always immediately reports a "simulated" match without spending time to do a scan
@@ -234,7 +234,7 @@ size_t SingleRegex::findAllMatches(const std::string& s, std::vector<RegexMatch>
         // continue searching for next match starting from end of this match
         // (first two entries in ov[] are start and end offsets of current full match)
         startOffset = ov[1];
-    } while (true);
+    } while (matchesCount < maxMatches);
 
     return matchesCount;
 }
@@ -418,7 +418,7 @@ bool Regex::hasMatch(const std::string& s) const {
 }
 
 size_t Regex::findAllMatches(const std::string& s, std::vector<RegexMatch>& matches,
-    const Waap::RegexPreconditions::PmWordSet *pmWordSet) const {
+    const Waap::RegexPreconditions::PmWordSet *pmWordSet, size_t maxMatches) const {
     matches.clear();
 
     if (m_regexPreconditions && pmWordSet) {
@@ -442,7 +442,7 @@ size_t Regex::findAllMatches(const std::string& s, std::vector<RegexMatch>& matc
                 }
 
                 // Scan only regexes that are enabled by aho-corasick scan
-                m_sre[regexIndex]->findAllMatches(s, matches);
+                m_sre[regexIndex]->findAllMatches(s, matches, maxMatches);
                 dbgTrace(D_WAAP_REGEX) << "Regex['" << m_sre[regexIndex]->getName() <<
                     "',index=" << regexIndex << "]::findAllMatches(): " << matches.size() << " matches found (so far)";
 
@@ -453,7 +453,7 @@ size_t Regex::findAllMatches(const std::string& s, std::vector<RegexMatch>& matc
     else {
         // When optimization is disabled - scan all regexes
         for (SingleRegex* pSingleRegex : m_sre) {
-            pSingleRegex->findAllMatches(s, matches);
+            pSingleRegex->findAllMatches(s, matches, maxMatches);
             dbgTrace(D_WAAP_REGEX) << "Regex['" << m_regexName << "']['" << pSingleRegex->getName() <<
                 "']::findAllMatches(): " << matches.size() << " matches found (so far)";
         }

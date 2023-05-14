@@ -42,6 +42,8 @@ bool deleteFile(const std::string &path);
 
 std::string convertToHumanReadable(uint64_t size_in_bytes);
 
+std::string getFileName(const std::string &path);
+
 }// namespace Filesystem
 
 namespace Regex

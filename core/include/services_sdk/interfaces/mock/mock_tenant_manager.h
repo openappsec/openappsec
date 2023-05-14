@@ -15,19 +15,20 @@ class MockTenantManager : public Singleton::Provide<I_TenantManager>::From<MockP
 public:
     MOCK_METHOD1(uponNewTenants,                    void(const I_TenantManager::newTenantCB &cb));
 
-    MOCK_CONST_METHOD0(fetchActiveTenants,          std::vector<std::string>());
-    MOCK_CONST_METHOD0(fetchAllActiveTenants,       std::vector<std::string>());
-    MOCK_CONST_METHOD1(fetchProfileIds,             std::vector<std::string>(const std::string &));
+    MOCK_CONST_METHOD0(fetchActiveTenantsAndProfiles,     std::map<std::string, std::set<std::string>>());
+    MOCK_CONST_METHOD0(fetchActiveTenants,          std::set<std::string>());
+    MOCK_CONST_METHOD0(fetchAllActiveTenants,       std::set<std::string>());
+    MOCK_CONST_METHOD1(fetchProfileIds,             std::set<std::string>(const std::string &));
     MOCK_CONST_METHOD2(
         getInstances,
-        std::vector<std::string>(const std::string &, const std::string &)
+        std::set<std::string>(const std::string &, const std::string &)
     );
     MOCK_CONST_METHOD2(areTenantAndProfileActive,   bool(const std::string &, const std::string &));
     MOCK_METHOD2(addActiveTenantAndProfile,         void(const std::string &, const std::string &));
     MOCK_METHOD2(deactivateTenant,                  void(const std::string &, const std::string &));
     MOCK_CONST_METHOD3(
-        getProfileId,
-        std::vector<std::string>(const std::string &, const std::string &, const std::string &)
+        getProfileIdsForRegionAccount,
+        std::set<std::string>(const std::string &, const std::string &, const std::string &)
     );
 
     MOCK_CONST_METHOD0(getTimeoutVal,               std::chrono::microseconds());
