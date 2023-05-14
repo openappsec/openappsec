@@ -16,6 +16,7 @@
 #include "nginx_attachment.h"
 #include "gradual_deployment.h"
 #include "http_manager.h"
+#include "layer_7_access_control.h"
 #include "waap.h"
 #include "ips_comp.h"
 #include "keyword_comp.h"
@@ -28,7 +29,8 @@ main(int argc, char **argv)
         NginxAttachment,
         GradualDeployment,
         HttpManager,
-	WaapComponent,
+        Layer7AccessControl,
+        WaapComponent,
         IPSComp,
         KeywordComp
     > comps;

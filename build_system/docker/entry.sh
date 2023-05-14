@@ -1,5 +1,7 @@
 #!/bin/bash
 
+INTELLIGENCE_INSTALLATION_SCRIPT="install-cp-agent-intelligence-service.sh"
+CROWDSEC_INSTALLATION_SCRIPT="install-cp-crowdsec-aux.sh"
 HTTP_TRANSACTION_HANDLER_SERVICE="install-cp-nano-service-http-transaction-handler.sh"
 ATTACHMENT_REGISTRATION_SERVICE="install-cp-nano-attachment-registration-manager.sh"
 ORCHESTRATION_INSTALLATION_SCRIPT="install-cp-nano-agent.sh"
@@ -29,6 +31,9 @@ while true; do
     elif [ "$1" == "--token" ]; then
         shift
         var_token="$1"
+    elif [ "$1" == "--standalone" ]; then
+        var_mode="--hybrid_mode"
+        var_token="cp-3fb5c718-5e39-47e6-8d5e-99b4bc5660b74b4b7fc8-5312-451d-a763-aaf7872703c0"
     fi
     shift
 done
@@ -55,6 +60,11 @@ fi
 
 /nano-service-installers/$ATTACHMENT_REGISTRATION_SERVICE --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
+
+if [ ! -z $CROWDSEC_ENABLED ]; then
+    /nano-service-installers/$INTELLIGENCE_INSTALLATION_SCRIPT --install
+    /nano-service-installers/$CROWDSEC_INSTALLATION_SCRIPT --install
+fi
 
 # use advanced model if exist as data for agent
 FILE=/advanced-model/open-appsec-advanced-model.tgz
