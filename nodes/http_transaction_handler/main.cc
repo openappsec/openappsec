@@ -16,6 +16,7 @@
 #include "nginx_attachment.h"
 #include "gradual_deployment.h"
 #include "http_manager.h"
+#include "layer_7_access_control.h"
 #include "waap.h"
 
 int
@@ -26,6 +27,7 @@ main(int argc, char **argv)
         NginxAttachment,
         GradualDeployment,
         HttpManager,
+        Layer7AccessControl,
 	WaapComponent
     > comps;
 
