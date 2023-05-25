@@ -48,6 +48,8 @@ For any code-independent enhancements (such as docker-compose files, or instruct
 5. Push your changes back to your forked repository.
 6. Open a pull request (PR) against the main branch of the original repository.
 
+Please note that during the PR review we mgiht adjust the location of the contributions. 
+
 ## Proposing an enhancement
 
 Please [suggest your change via our open-appsec open-source distribution list](mailto:opensource@openappsec.io) before writing your code. We will contact you to make sure we understand the boundaries of the proposed fix, that the relevant coding style is clear for the proposed fix's location in the code, and that the suggested contribution is relevant and eligible. There may be additional considerations that we would like to discuss with you before implementing the enhancement.
