@@ -2,7 +2,7 @@
 
 Thank you for your interest in open-appsec. We welcome contributions of all kinds, there is no need to do code to be helpful! All of the following tasks are noble and worthy contributions that you can make without coding:
 
-- reporting security vulnerabilities
+- Reporting security vulnerabilities
 - Reporting a bug
 - Helping a member of the community
 - Notes about our documentation 
@@ -58,7 +58,7 @@ Please [suggest your change via our open-appsec open-source distribution list](m
 
 to propose changes to our [documentation](https://docs.openappsec.io/?utm_medium=web&utm_source=wix&utm_content=top_menu) you can either open a new issue using a relevant [issue form](https://github.com/github/docs/issues/new/choose) or, [contact us via our open-appsec open source distribution list](mailto:opensource@openappsec.io).
 
-# Final Thanks
+# Final thanks
 We value all efforts to read, suggest changes, and/or contribute to our open-source files. Thank you for your time and efforts.
 
 The open-appsec Team
