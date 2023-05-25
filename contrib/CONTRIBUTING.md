@@ -48,7 +48,7 @@ For any code-independent enhancements (such as docker-compose files, or instruct
 5. Push your changes back to your forked repository.
 6. Open a pull request (PR) against the main branch of the original repository.
 
-Please note that during the PR review we mgiht adjust the location of the contributions. 
+Please note that during the PR review we might adjust the location of the contributions. 
 
 ## Proposing an enhancement
 
