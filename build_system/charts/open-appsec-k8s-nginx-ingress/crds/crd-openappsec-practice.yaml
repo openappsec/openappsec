@@ -109,7 +109,7 @@ spec:
                     configmap:
                       type: array
                       items:
-                        type: string                
+                        type: string
                 openapi-schema-validation:
                   type: object
                   properties:

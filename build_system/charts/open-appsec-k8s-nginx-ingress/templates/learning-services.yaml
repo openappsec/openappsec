@@ -1,4 +1,4 @@
-{{- if and (eq "stand-alone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
 apiVersion: v1
 kind: Service
 metadata:

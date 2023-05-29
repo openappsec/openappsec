@@ -1,0 +1,8 @@
+controller:
+  service:
+    type: ClusterIP
+  extraModules:
+    - name: opentelemetry
+      image: busybox
+      containerSecurityContext:
+        allowPrivilegeEscalation: false

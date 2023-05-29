@@ -1,4 +1,4 @@
-{{- if and (eq "stand-alone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -53,7 +53,7 @@ spec:
             timeoutSeconds: 10
           env:
             - name: APPSEC_MODE
-              value: {{ .Values.appsec.mode }}
+              value: stand-alone
             - name: RP_BASEURL
               value: http://{{ .Values.appsec.storage.name }}-svc/api
             - name: K8S_NAMESPACE

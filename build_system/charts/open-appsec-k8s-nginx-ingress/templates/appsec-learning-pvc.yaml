@@ -1,4 +1,4 @@
-{{- if and (eq "stand-alone" .Values.appsec.mode) (eq .Values.appsec.persistence.enabled true) -}}
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.persistence.enabled true) -}}
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
