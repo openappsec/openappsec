@@ -1,0 +1,62 @@
+policies:
+  default:
+    triggers:
+    - appsec-default-log-trigger
+    mode: prevent-learn
+    practices:
+    - webapp-default-practice
+    custom-response: appsec-default-web-user-response
+  specific-rules: []
+
+practices:
+  - name: webapp-default-practice
+    openapi-schema-validation:
+      configmap: []
+      override-mode: prevent-learn
+    snort-signatures:
+      configmap: []
+      override-mode: prevent-learn
+    web-attacks:
+      max-body-size-kb: 1000000
+      max-header-size-bytes: 102400
+      max-object-depth: 40
+      max-url-size-bytes: 32768
+      minimum-confidence: critical
+      override-mode: prevent-learn
+      protections:
+        csrf-protection: prevent-learn
+        error-disclosure: prevent-learn
+        non-valid-http-methods: true
+        open-redirect: prevent-learn
+    anti-bot:
+      injected-URIs: []
+      validated-URIs: []
+      override-mode: prevent-learn
+
+log-triggers:
+  - name: appsec-default-log-trigger
+    access-control-logging:
+      allow-events: false
+      drop-events: true
+    additional-suspicious-events-logging:
+      enabled: true
+      minimum-severity: high
+      response-body: false
+    appsec-logging:
+      all-web-requests: false
+      detect-events: true
+      prevent-events: true
+    extended-logging:
+      http-headers: false
+      request-body: false
+      url-path: false
+      url-query: false
+    log-destination:
+      cloud: false
+      stdout:
+        format: json
+
+custom-responses:
+  - name: appsec-default-web-user-response
+    mode: response-code-only
+    http-response-code: 403
