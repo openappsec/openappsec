@@ -59,7 +59,7 @@ spec:
       {{- toYaml .Values.migrations.sidecarContainers | nindent 6 }}
       {{- end }}
       - name: {{ template "kong.name" . }}-upgrade-migrations
-      {{- if eq .Values.kind "Vanilla" }}
+{{- if eq .Values.kind "Vanilla" }}
         image: {{ include "kong.getRepoTag" .Values.image }}
       {{- else }}
         image: {{ include "kong.getRepoTag" .Values.appsec.kong.image }}

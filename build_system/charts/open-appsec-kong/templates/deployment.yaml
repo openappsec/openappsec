@@ -83,6 +83,7 @@ spec:
         - name: {{ . }}
       {{- end }}
       {{- end }}
+      {{- if .Values.deployment.kong.enabled }}
       initContainers:
       - name: clear-stale-pid
         image: {{ include "kong.getRepoTag" .Values.image }}
@@ -105,6 +106,7 @@ spec:
         {{- if (and (not (eq .Values.env.database "off")) .Values.waitImage.enabled) }}
         {{- include "kong.wait-for-db" . | nindent 6 }}
         {{- end }}
+      {{- end }}
       {{- if .Values.deployment.hostAliases }}
       hostAliases:
         {{- toYaml .Values.deployment.hostAliases | nindent 6 }}
@@ -271,6 +273,10 @@ spec:
 {{ toYaml .Values.readinessProbe | indent 10 }}
         livenessProbe:
 {{ toYaml .Values.livenessProbe | indent 10 }}
+        {{- if .Values.startupProbe }}
+        startupProbe:
+{{ toYaml .Values.startupProbe | indent 10 }}
+        {{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         {{- end }} {{/* End of Kong container spec */}}

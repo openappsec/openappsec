@@ -52,6 +52,7 @@ $ helm install kong/kong --generate-name
 - [Configuration](#configuration)
   - [Kong parameters](#kong-parameters)
     - [Kong Service Parameters](#kong-service-parameters)
+    - [Admin Service mTLS](#admin-service-mtls)
     - [Stream listens](#stream-listens)
   - [Ingress Controller Parameters](#ingress-controller-parameters)
     - [The `env` section](#the-env-section)
@@ -335,6 +336,9 @@ first and then upgrade the data plane release](https://docs.konghq.com/gateway/l
 
 #### Certificates
 
+> This example shows how to use Kong Hybrid mode with `cluster_mtls: shared`.
+> For an example of `cluster_mtls: pki` see the [hybrid-cert-manager example](https://github.com/Kong/charts/blob/main/charts/kong/example-values/hybrid-cert-manager/)
+
 Hybrid mode uses TLS to secure the CP/DP node communication channel, and
 requires certificates for it. You can generate these either using `kong hybrid
 gen_cert` on a local Kong installation or using OpenSSL:
@@ -431,7 +435,7 @@ admin:
 ```yaml
 env:
   role: data_plane
-  database: off
+  database: "off"
   cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
   cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
   lua_ssl_trusted_certificate: /etc/secrets/kong-cluster-cert/tls.crt
@@ -462,7 +466,7 @@ should, however, migrate to an issuer using a CA your clients trust for actual
 usage.
 
 The `proxy`, `admin`, `portal`, and `cluster` subsections under `certificates`
-let you choose hostnames or override issuers on a per-certificate basis for the
+let you choose hostnames, override issuers, set `subject` or set `privateKey` on a per-certificate basis for the
 proxy, admin API and Manager, Portal and Portal API, and hybrid mode mTLS
 services, respectively.
 
@@ -668,6 +672,7 @@ or `ingress` sections, as it is used only for stream listens.
 | SVC.tls.parameters                 | Array of additional listen parameters                                                 | `["http2"]`              |
 | SVC.type                           | k8s service type. Options: NodePort, ClusterIP, LoadBalancer                          |                          |
 | SVC.clusterIP                      | k8s service clusterIP                                                                 |                          |
+| SVC.loadBalancerClass              | loadBalancerClass to use for LoadBalancer provisionning                               |                          |
 | SVC.loadBalancerSourceRanges       | Limit service access to CIDRs if set and service type is `LoadBalancer`               | `[]`                     |
 | SVC.loadBalancerIP                 | Reuse an existing ingress static IP for the service                                   |                          |
 | SVC.externalIPs                    | IPs for which nodes in the cluster will also accept traffic for the servic            | `[]`                     |
@@ -681,6 +686,17 @@ or `ingress` sections, as it is used only for stream listens.
 | SVC.ingress.annotations            | Ingress annotations. See documentation for your ingress controller for details        | `{}`                     |
 | SVC.annotations                    | Service annotations                                                                   | `{}`                     |
 | SVC.labels                         | Service labels                                                                        | `{}`                     |
+
+#### Admin Service mTLS
+
+On top of the common parameters listed above, the `admin` service supports parameters for mTLS client verification. 
+If any of `admin.tls.client.caBundle` or `admin.tls.client.secretName` are set, the admin service will be configured to
+require mTLS client verification. If both are set, `admin.tls.client.caBundle` will take precedence.
+
+| Parameter                   | Description                                                                                 | Default |
+|-----------------------------|---------------------------------------------------------------------------------------------|---------|
+| admin.tls.client.caBundle   | CA certificate to use for TLS verification of the Admin API client (PEM-encoded).           | `""`    |
+| admin.tls.client.secretName | CA certificate secret name - must contain a `tls.crt` key with the PEM-encoded certificate. | `""`    |
 
 #### Stream listens
 
@@ -701,30 +717,46 @@ are configured using an array of objects under `proxy.stream` and `udpProxy.stre
 All of the following properties are nested under the `ingressController`
 section of `values.yaml` file:
 
-| Parameter                               | Description                                                                                                                                              | Default                            |
-|-----------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
-| enabled                                 | Deploy the ingress controller, rbac and crd                                                                                                              | true                               |
-| image.repository                        | Docker image with the ingress controller                                                                                                                 | kong/kubernetes-ingress-controller |
-| image.tag                               | Version of the ingress controller                                                                                                                        | 2.0                                |
-| image.effectiveSemver                   | Version of the ingress controller used for version-specific features when image.tag is not a valid semantic version                                      |                                    |
-| readinessProbe                          | Kong ingress controllers readiness probe                                                                                                                 |                                    |
-| livenessProbe                           | Kong ingress controllers liveness probe                                                                                                                  |                                    |
-| installCRDs                             | Legacy toggle for Helm 2-style CRD management. Should not be set [unless necessary due to cluster permissions](#removing-cluster-scoped-permissions).    | false                              |
-| env                                     | Specify Kong Ingress Controller configuration via environment variables                                                                                  |                                    |
-| customEnv                               | Specify custom environment variables (without the CONTROLLER_ prefix)                                                                                    |                                    |
-| ingressClass                            | The name of this controller's ingressClass                                                                                                               | kong                               |
-| ingressClassAnnotations                 | The ingress-class value for controller                                                                                                                   | kong                               |
-| args                                    | List of ingress-controller cli arguments                                                                                                                 | []                                 |
-| watchNamespaces                         | List of namespaces to watch. Watches all namespaces if empty                                                                                             | []                                 |
-| admissionWebhook.enabled                | Whether to enable the validating admission webhook                                                                                                       | true                              |
-| admissionWebhook.failurePolicy          | How unrecognized errors from the admission endpoint are handled (Ignore or Fail)                                                                         | Ignore                               |
-| admissionWebhook.port                   | The port the ingress controller will listen on for admission webhooks                                                                                    | 8080                               |
-| admissionWebhook.certificate.provided   | Use a provided certificate. When set to false, the chart will automatically generate a certificate.                                                      | false                              |
-| admissionWebhook.certificate.secretName | Name of the TLS secret for the provided webhook certificate                                                                                              |                                    |
-| admissionWebhook.certificate.caBundle   | PEM encoded CA bundle which will be used to validate the provided webhook certificate                                                                    |                                    |
-| deployment.userDefinedVolumes           | Create volumes. Please go to Kubernetes doc for the spec of the volumes                                                                                  |                                    |
-| deployment.userDefinedVolumeMounts      | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts                                                                        |                                    |
-| terminationGracePeriodSeconds           | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pod | 30                                 |
+| Parameter                                  | Description                                                                                                                                              | Default                            |
+|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| enabled                                    | Deploy the ingress controller, rbac and crd                                                                                                              | true                               |
+| image.repository                           | Docker image with the ingress controller                                                                                                                 | kong/kubernetes-ingress-controller |
+| image.tag                                  | Version of the ingress controller                                                                                                                        | 2.0                                |
+| image.effectiveSemver                      | Version of the ingress controller used for version-specific features when image.tag is not a valid semantic version                                      |                                    |
+| readinessProbe                             | Kong ingress controllers readiness probe                                                                                                                 |                                    |
+| livenessProbe                              | Kong ingress controllers liveness probe                                                                                                                  |                                    |
+| installCRDs                                | Legacy toggle for Helm 2-style CRD management. Should not be set [unless necessary due to cluster permissions](#removing-cluster-scoped-permissions).    | false                              |
+| env                                        | Specify Kong Ingress Controller configuration via environment variables                                                                                  |                                    |
+| customEnv                                  | Specify custom environment variables (without the CONTROLLER_ prefix)                                                                                    |                                    |
+| ingressClass                               | The name of this controller's ingressClass                                                                                                               | kong                               |
+| ingressClassAnnotations                    | The ingress-class value for controller                                                                                                                   | kong                               |
+| args                                       | List of ingress-controller cli arguments                                                                                                                 | []                                 |
+| watchNamespaces                            | List of namespaces to watch. Watches all namespaces if empty                                                                                             | []                                 |
+| admissionWebhook.enabled                   | Whether to enable the validating admission webhook                                                                                                       | true                               |
+| admissionWebhook.failurePolicy             | How unrecognized errors from the admission endpoint are handled (Ignore or Fail)                                                                         | Ignore                             |
+| admissionWebhook.port                      | The port the ingress controller will listen on for admission webhooks                                                                                    | 8080                               |
+| admissionWebhook.annotations               | Annotations for the Validation Webhook Configuration                                                                                                     |                                    |
+| admissionWebhook.certificate.provided      | Use a provided certificate. When set to false, the chart will automatically generate a certificate.                                                      | false                              |
+| admissionWebhook.certificate.secretName    | Name of the TLS secret for the provided webhook certificate                                                                                              |                                    |
+| admissionWebhook.certificate.caBundle      | PEM encoded CA bundle which will be used to validate the provided webhook certificate                                                                    |                                    |
+| admissionWebhook.namespaceSelector         | Add namespaceSelector to the webhook. Please go to [Kubernetes doc for the specs](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#matching-requests-namespaceselector)                                                                          |                                    |
+| userDefinedVolumes                         | Create volumes. Please go to Kubernetes doc for the spec of the volumes                                                                                  |                                    |
+| userDefinedVolumeMounts                    | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts                                                                        |                                    |
+| terminationGracePeriodSeconds              | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pod | 30                                 |
+| gatewayDiscovery.enabled                   | Enables Kong instance service discovery (for more details see [gatewayDiscovery section][gd_section])                                                    | false                              |
+| gatewayDiscovery.adminApiService.namespace | The namespace of the Kong admin API service (for more details see [gatewayDiscovery section][gd_section])                                                | `.Release.Namespace`               |
+| gatewayDiscovery.adminApiService.name      | The name of the Kong admin API service (for more details see [gatewayDiscovery section][gd_section])                                                     | ""                                 |
+| konnect.enabled                            | Enable synchronisation of data plane configuration with Konnect Runtime Group                                                                            | false                              |
+| konnect.runtimeGroupID                     | Konnect Runtime Group's unique identifier.                                                                                                               |                                    |
+| konnect.apiHostname                        | Konnect API hostname. Defaults to a production US-region.                                                                                                | us.kic.api.konghq.com              |
+| konnect.tlsClientCertSecretName            | Name of the secret that contains Konnect Runtime Group's client TLS certificate.                                                                         | konnect-client-tls                 |
+| konnect.license.enabled                    | Enable automatic license provisioning for Gateways managed by Ingress Controller in Konnect mode.                                                        | false                              |
+| adminApi.tls.client.enabled                | Enable TLS client verification for the Admin API. By default, Helm will generate certificates automatically.                                             | false                              |
+| adminApi.tls.client.certProvided           | Use user-provided certificates. If set to false, Helm will generate certificates.                                                                        | false                              |
+| adminApi.tls.client.secretName             | Client TLS certificate/key pair secret name. Can be also set when `certProvided` is false to enforce a generated secret's name.                          | ""                                 |
+| adminApi.tls.client.caSecretName           | CA TLS certificate/key pair secret name. Can be also set when `certProvided` is false to enforce a generated secret's name.                              | ""                                 |
+
+[gd_section]: #the-gatewayDiscovery-section
 
 #### The `env` section
 For a complete list of all configuration values you can set in the
@@ -745,6 +777,46 @@ kong:
     customEnv:
       TZ: "Europe/Berlin"
 ```
+
+#### The `gatewayDiscovery` section
+
+Kong Ingress Controller v2.9 has introduced gateway discovery which allows
+the controller to discover Gateway instances that it should configure using
+an Admin API Kubernetes service.
+
+You'll be able to configure this feature through configuration section under
+`ingressController.gatewayDiscovery`:
+
+- If `ingressController.gatewayDiscovery.enabled` is set to `false`: the ingress controller
+  will control a pre-determined set of Gateway instances based on Admin API URLs
+  (provided under the hood via `CONTROLLER_KONG_ADMIN_URL` environment variable).
+
+- If `ingressController.gatewayDiscovery.enabled` is set to `true`: the ingress controller
+  will dynamically locate Gateway instances by watching the specified Kubernetes
+  service.
+  (provided under the hood via `CONTROLLER_KONG_ADMIN_SVC` environment variable).
+
+  The following admin API Service flags have to be provided in order for gateway
+  discovery to work:
+
+  - `ingressController.gatewayDiscovery.adminApiService.name`
+  - `ingressController.gatewayDiscovery.adminApiService.namespace`
+
+Using this feature requires a split release installation of Gateways and Ingress Controller.
+For exemplar `values.yaml` files which use this feature please see: [examples README.md](./example-values/README.md).
+
+When using `gatewayDiscovery`, you should consider configuring the Admin service to use mTLS client verification to make
+this interface secure. Without that, anyone who can access the Admin API from inside the cluster can configure the Gateway
+instances.
+
+On the controller release side, that can be achieved by setting `ingressController.adminApi.tls.client.enabled` to `true`.
+By default, Helm will generate a certificate Secret named `<release name>-admin-api-keypair` and
+a CA Secret named `<release name>-admin-api-ca-keypair` for you.
+
+To provide your own cert, set `ingressController.adminApi.tls.client.certProvided` to
+`true`, `ingressController.adminApi.tls.client.secretName` to the name of the Secret containing your client cert, and `ingressController.adminApi.tls.client.caSecretName` to the name of the Secret containing your CA cert.
+
+On the Gateway release side, set either `admin.tls.client.secretName` to the name of your CA Secret or set `admin.tls.client.caBundle` to the CA certificate string.
 
 ### General Parameters
 
@@ -772,6 +844,7 @@ kong:
 | updateStrategy                     | update strategy for deployment                                                        | `{}`                |
 | readinessProbe                     | Kong readiness probe                                                                  |                     |
 | livenessProbe                      | Kong liveness probe                                                                   |                     |
+| startupProbe                       | Kong startup probe                                                                    |                     |
 | lifecycle                          | Proxy container lifecycle hooks                                                       | see `values.yaml`   |
 | terminationGracePeriodSeconds      | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pods | 30                  |
 | affinity                           | Node/pod affinities                                                                   |                     |
@@ -794,7 +867,7 @@ kong:
 | priorityClassName                  | Set pod scheduling priority class for Kong pods                                       | `""`                |
 | secretVolumes                      | Mount given secrets as a volume in Kong container to override default certs and keys. | `[]`                |
 | securityContext                    | Set the securityContext for Kong Pods                                                 | `{}`                |
-| containerSecurityContext           | Set the securityContext for Containers                                                | `{}`                |
+| containerSecurityContext           | Set the securityContext for Containers                                                | `{"readOnlyRootFilesystem": true}`                |
 | serviceMonitor.enabled             | Create ServiceMonitor for Prometheus Operator                                         | `false`             |
 | serviceMonitor.interval            | Scraping interval                                                                     | `30s`               |
 | serviceMonitor.namespace           | Where to create ServiceMonitor                                                        |                     |

@@ -1,4 +1,4 @@
-{{- if .Values.ingressController.admissionWebhook.enabled }}
+{{- if (and .Values.ingressController.admissionWebhook.enabled .Values.ingressController.enabled) }}
 {{- $certCert := "" -}}
 {{- $certKey := "" -}}
 {{- $caCert := "" -}}
@@ -34,8 +34,18 @@ metadata:
   namespace: {{ template "kong.namespace" . }}
   labels:
     {{- include "kong.metaLabels" . | nindent 4 }}
+  {{- if .Values.ingressController.admissionWebhook.annotations }}
+  annotations:
+  {{- range $key, $value := .Values.ingressController.admissionWebhook.annotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
 webhooks:
 - name: validations.kong.konghq.com
+  {{- with .Values.ingressController.admissionWebhook.namespaceSelector }}
+  namespaceSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   objectSelector:
     matchExpressions:
     - key: owner
@@ -89,6 +99,9 @@ metadata:
   namespace: {{ template "kong.namespace" . }}
   labels:
     {{- include "kong.metaLabels" . | nindent 4 }}
+    {{- if .Values.ingressController.admissionWebhook.service.labels }}
+      {{- toYaml .Values.ingressController.admissionWebhook.service.labels | nindent 4 }}
+    {{- end }}
 spec:
   ports:
   - name: webhook

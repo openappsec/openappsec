@@ -35,12 +35,14 @@ rules:
       - configmaps
     verbs:
       - create
+{{- if (semverCompare "< 2.10.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
   - apiGroups:
       - ""
     resources:
       - endpoints
     verbs:
       - get
+{{- end }}
   # Begin KIC 2.x leader permissions
   - apiGroups:
       - ""
@@ -67,7 +69,6 @@ rules:
       - ""
     resources:
       - services
-      - endpoints
     verbs:
       - get
 ---

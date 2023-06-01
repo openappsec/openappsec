@@ -1,0 +1,25 @@
+env:
+  role: control_plane
+  database: postgres
+  pg_host: postgres-postgresql.db.svc.cluster.local
+  pg_user: kong
+  pg_password: super_secret
+
+cluster:
+  enabled: true
+  tls:
+    enabled: true
+
+certificates:
+  enabled: true
+  issuer: my-ca-issuer
+  cluster:
+    enabled: true
+    commonName: custom.example.com
+
+proxy:
+  enabled: false
+
+ingressController:
+  env:
+    publish_service: kong/kong-cp-kong-proxy

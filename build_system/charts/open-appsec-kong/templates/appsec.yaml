@@ -171,15 +171,6 @@ spec:
           - name: PLAYGROUND
             value: "true"
       {{- end }}
-      {{- if .Values.appsec.email }}
-        {{- if eq .Values.appsec.email "STUB" }}
-          {{- fail "Please replace STUB with an email address" }}
-        {{- end }}
-          - name: user_email
-            value: {{ .Values.appsec.email }}
-      {{- end }}
-          - name: registered_server
-            value: "Kong Server"
         resources:
           {{ toYaml .Values.resources | nindent 12 }}
         {{- if eq .Values.kind "AppSecStateful" }}

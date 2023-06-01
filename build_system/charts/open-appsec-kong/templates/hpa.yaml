@@ -17,10 +17,10 @@ spec:
   behavior:
     {{- toYaml .Values.autoscaling.behavior | nindent 4 }}
   {{- end }}
-  {{- if not (.Capabilities.APIVersions.Has "autoscaling/v2beta2") }}
-  targetCPUUtilizationPercentage: {{ .Values.autoscaling.targetCPUUtilizationPercentage | default 80 }}
-  {{- else }}
+  {{- if contains "autoscaling/v2" (include "kong.autoscalingVersion" . ) }}
   metrics:
     {{- toYaml .Values.autoscaling.metrics | nindent 4 }}
+  {{- else }}
+  targetCPUUtilizationPercentage: {{ .Values.autoscaling.targetCPUUtilizationPercentage | default 80 }}
   {{- end }}
 {{- end }}

@@ -153,6 +153,9 @@ spec:
   - {{ $cidr }}
   {{- end }}
   {{- end }}
+  {{- if .loadBalancerClass }}
+  loadBalancerClass: {{ .loadBalancerClass }}
+  {{- end }}
   {{- end }}
   {{- if .externalIPs }}
   externalIPs:
@@ -317,6 +320,32 @@ Create a single listen (IP+port+parameter combo)
 {{- end -}}
 
 {{/*
+Return the admin API service name for service discovery
+*/}}
+{{- define "kong.adminSvc" -}}
+{{- $gatewayDiscovery := .Values.ingressController.gatewayDiscovery -}}
+{{- if $gatewayDiscovery.enabled -}}
+  {{- $adminApiService := $gatewayDiscovery.adminApiService -}}
+  {{- $_ := required ".ingressController.gatewayDiscovery.adminApiService has to be provided when .Values.ingressController.gatewayDiscovery.enabled is set to true"  $adminApiService -}}
+
+  {{- if (semverCompare "< 2.9.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+  {{- fail (printf "Gateway discovery is available in controller versions 2.9 and up. Detected %s" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+  {{- end }}
+
+  {{- if .Values.deployment.kong.enabled }}
+  {{- fail "deployment.kong.enabled and ingressController.gatewayDiscovery.enabled are mutually exclusive and cannot be enabled at once. Gateway discovery requires a split release installation of Gateways and Ingress Controller." }}
+  {{- end }}
+
+  {{- $namespace := $adminApiService.namespace | default ( include "kong.namespace" . ) -}}
+  {{- $name := $adminApiService.name -}}
+  {{- $_ := required ".ingressController.gatewayDiscovery.adminApiService.name has to be provided when .Values.ingressController.gatewayDiscovery.enabled is set to true"  $name -}}
+  {{- printf "%s/%s" $namespace $name -}}
+{{- else -}}
+  {{- fail "Can't use gateway discovery when .Values.ingressController.gatewayDiscovery.enabled is set to false." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Return the local admin API URL, preferring HTTPS if available
 */}}
 {{- define "kong.adminLocalURL" -}}
@@ -370,16 +399,61 @@ The name of the service used for the ingress controller's validation webhook
 */}}
 
 {{- $autoEnv := dict -}}
-{{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_TLS_SKIP_VERIFY" true -}}
-{{- $_ := set $autoEnv "CONTROLLER_PUBLISH_SERVICE" (printf "%s/%s-proxy" ( include "kong.namespace" . ) (include "kong.fullname" .)) -}}
-{{- $_ := set $autoEnv "CONTROLLER_INGRESS_CLASS" .Values.ingressController.ingressClass -}}
-{{- $_ := set $autoEnv "CONTROLLER_ELECTION_ID" (printf "kong-ingress-controller-leader-%s" .Values.ingressController.ingressClass) -}}
-{{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_URL" (include "kong.adminLocalURL" .) -}}
-{{- if .Values.ingressController.admissionWebhook.enabled }}
-  {{- $_ := set $autoEnv "CONTROLLER_ADMISSION_WEBHOOK_LISTEN" (printf "0.0.0.0:%d" (int64 .Values.ingressController.admissionWebhook.port)) -}}
-{{- end }}
-{{- if (not (eq (len .Values.ingressController.watchNamespaces) 0)) }}
-  {{- $_ := set $autoEnv "CONTROLLER_WATCH_NAMESPACE" (.Values.ingressController.watchNamespaces | join ",") -}}
+  {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_TLS_SKIP_VERIFY" true -}}
+  {{- $_ := set $autoEnv "CONTROLLER_PUBLISH_SERVICE" (printf "%s/%s" ( include "kong.namespace" . ) ( .Values.proxy.nameOverride | default ( printf "%s-proxy" (include "kong.fullname" . )))) -}}
+  {{- $_ := set $autoEnv "CONTROLLER_INGRESS_CLASS" .Values.ingressController.ingressClass -}}
+  {{- $_ := set $autoEnv "CONTROLLER_ELECTION_ID" (printf "kong-ingress-controller-leader-%s" .Values.ingressController.ingressClass) -}}
+
+  {{- if .Values.ingressController.admissionWebhook.enabled }}
+    {{- $_ := set $autoEnv "CONTROLLER_ADMISSION_WEBHOOK_LISTEN" (printf "0.0.0.0:%d" (int64 .Values.ingressController.admissionWebhook.port)) -}}
+  {{- end }}
+  {{- if (not (eq (len .Values.ingressController.watchNamespaces) 0)) }}
+    {{- $_ := set $autoEnv "CONTROLLER_WATCH_NAMESPACE" (.Values.ingressController.watchNamespaces | join ",") -}}
+  {{- end }}
+
+{{/*
+    ====== ADMIN API CONFIGURATION ======
+*/}}
+
+  {{- if .Values.ingressController.gatewayDiscovery.enabled -}}
+    {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_SVC" (include "kong.adminSvc" . ) -}}
+  {{- else -}}
+    {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_URL" (include "kong.adminLocalURL" .) -}}
+  {{- end -}}
+
+  {{- if .Values.ingressController.adminApi.tls.client.enabled }}
+    {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_TLS_CLIENT_CERT_FILE" "/etc/secrets/admin-api-cert/tls.crt" -}}
+    {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_TLS_CLIENT_KEY_FILE" "/etc/secrets/admin-api-cert/tls.key" -}}
+  {{- end }}
+
+{{/*
+    ====== KONNECT ENVIRONMENT VARIABLES ======
+*/}}
+
+{{- if .Values.ingressController.konnect.enabled }}
+  {{- if (semverCompare "< 2.9.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+  {{- fail (printf "Konnect sync is available in controller versions 2.9 and up. Detected %s" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+  {{- end }}
+
+  {{- if not .Values.ingressController.gatewayDiscovery.enabled }}
+  {{- fail "ingressController.gatewayDiscovery.enabled has to be true when ingressController.konnect.enabled"}}
+  {{- end }}
+
+  {{- $konnect := .Values.ingressController.konnect -}}
+  {{- $_ := required "ingressController.konnect.runtimeGroupID is required when ingressController.konnect.enabled" $konnect.runtimeGroupID -}}
+
+  {{- $_ = set $autoEnv "CONTROLLER_KONNECT_SYNC_ENABLED" true -}}
+  {{- $_ = set $autoEnv "CONTROLLER_KONNECT_RUNTIME_GROUP_ID" $konnect.runtimeGroupID -}}
+  {{- $_ = set $autoEnv "CONTROLLER_KONNECT_ADDRESS" (printf "https://%s" .Values.ingressController.konnect.apiHostname) -}}
+
+  {{- $tlsCert := include "secretkeyref" (dict "name" $konnect.tlsClientCertSecretName "key" "tls.crt") -}}
+  {{- $tlsKey := include "secretkeyref" (dict "name" $konnect.tlsClientCertSecretName "key" "tls.key") -}}
+  {{- $_ = set $autoEnv "CONTROLLER_KONNECT_TLS_CLIENT_CERT" $tlsCert -}}
+  {{- $_ = set $autoEnv "CONTROLLER_KONNECT_TLS_CLIENT_KEY" $tlsKey -}}
+
+  {{- if $konnect.license.enabled }}
+  {{- $_ = set $autoEnv "CONTROLLER_KONNECT_LICENSING_ENABLED" true -}}
+  {{- end }}
 {{- end }}
 
 {{/*
@@ -420,10 +494,10 @@ The name of the service used for the ingress controller's validation webhook
 
 {{- define "kong.volumes" -}}
 - name: {{ template "kong.fullname" . }}-prefix-dir
-  emptyDir: 
+  emptyDir:
     sizeLimit: {{ .Values.deployment.prefixDir.sizeLimit }}
 - name: {{ template "kong.fullname" . }}-tmp
-  emptyDir: 
+  emptyDir:
     sizeLimit: {{ .Values.deployment.tmpDir.sizeLimit }}
 {{- if and ( .Capabilities.APIVersions.Has "cert-manager.io/v1" ) .Values.certificates.enabled -}}
 {{- if .Values.certificates.cluster.enabled }}
@@ -478,8 +552,9 @@ The name of the service used for the ingress controller's validation webhook
 
 {{- if (and (not .Values.ingressController.enabled) (eq .Values.env.database "off")) }}
   {{- $dblessSourceCount := (add (.Values.dblessConfig.configMap | len | min 1) (.Values.dblessConfig.secret | len | min 1) (.Values.dblessConfig.config | len | min 1)) -}}
-    {{- if gt $dblessSourceCount 1 -}}
-      {{- fail "Ambiguous configuration: only one of of .Values.dblessConfig.configMap, .Values.dblessConfig.secret, and .Values.dblessConfig.config can be set." -}}
+  {{- if gt $dblessSourceCount 1 -}}
+    {{- fail "Ambiguous configuration: only one of of .Values.dblessConfig.configMap, .Values.dblessConfig.secret, and .Values.dblessConfig.config can be set." -}}
+  {{- else if eq $dblessSourceCount 1 }}
 - name: kong-custom-dbless-config-volume
     {{- if .Values.dblessConfig.configMap }}
   configMap:
@@ -494,7 +569,7 @@ The name of the service used for the ingress controller's validation webhook
   {{- end }}
 {{- end }}
 
-{{- if .Values.ingressController.admissionWebhook.enabled }}
+{{- if and .Values.ingressController.enabled .Values.ingressController.admissionWebhook.enabled }}
 - name: webhook-cert
   secret:
     {{- if .Values.ingressController.admissionWebhook.certificate.provided }}
@@ -503,6 +578,11 @@ The name of the service used for the ingress controller's validation webhook
     secretName: {{ template "kong.fullname" . }}-validation-webhook-keypair
     {{- end }}
 {{- end }}
+{{- if or $.Values.admin.tls.client.secretName $.Values.admin.tls.client.caBundle }}
+- name: admin-client-ca
+  configMap:
+    name: {{ template "kong.fullname" . }}-admin-client-ca
+{{- end -}}
 {{- range $secretVolume := .Values.secretVolumes }}
 - name: {{ . }}
   secret:
@@ -518,6 +598,19 @@ The name of the service used for the ingress controller's validation webhook
   secret:
     secretName: {{ .name }}
 {{- end }}
+{{- if and .Values.ingressController.adminApi.tls.client.enabled .Values.ingressController.enabled }}
+- name: admin-api-cert
+  secret:
+    secretName: {{ template "adminApiService.certSecretName" . }}
+{{- end }}
+{{- end -}}
+
+{{- define "controller.adminApiCertVolumeMount" -}}
+{{- if and .Values.ingressController.adminApi.tls.client.enabled .Values.ingressController.enabled }}
+- name: admin-api-cert
+  mountPath: /etc/secrets/admin-api-cert
+  readOnly: true
+{{- end -}}
 {{- end -}}
 
 {{- define "kong.userDefinedVolumeMounts" -}}
@@ -552,12 +645,17 @@ The name of the service used for the ingress controller's validation webhook
 {{- end }}
 {{- end }}
 {{- $dblessSourceCount := (add (.Values.dblessConfig.configMap | len | min 1) (.Values.dblessConfig.secret | len | min 1) (.Values.dblessConfig.config | len | min 1)) -}}
-  {{- if gt $dblessSourceCount 1 -}}
+  {{- if eq $dblessSourceCount 1 -}}
     {{- if (and (not .Values.ingressController.enabled) (eq .Values.env.database "off")) }}
 - name: kong-custom-dbless-config-volume
   mountPath: /kong_dbless/
     {{- end }}
   {{- end }}
+{{- if or $.Values.admin.tls.client.caBundle $.Values.admin.tls.client.secretName }}
+- name: admin-client-ca
+  mountPath: /etc/admin-client-ca/
+  readOnly: true
+{{- end -}}
 {{- range .Values.secretVolumes }}
 - name:  {{ . }}
   mountPath: /etc/secrets/{{ . }}
@@ -638,7 +736,7 @@ The name of the service used for the ingress controller's validation webhook
 {{- if .effectiveSemver -}}
 {{- .effectiveSemver -}}
 {{- else -}}
-{{- .tag -}}
+{{- (trimSuffix "-redhat" .tag) -}}
 {{- end -}}
 {{- end -}}
 
@@ -702,6 +800,7 @@ The name of the service used for the ingress controller's validation webhook
     readOnly: true
 {{- end }}
   {{- include "kong.userDefinedVolumeMounts" .Values.ingressController | nindent 2 }}
+  {{- include "controller.adminApiCertVolumeMount" . | nindent 2 }}
 {{- end -}}
 
 {{- define "secretkeyref" -}}
@@ -758,10 +857,18 @@ the template that it itself is using form the above sections.
   {{- $listenConfig := merge $listenConfig . -}}
   {{- $_ := set $listenConfig "address" $address -}}
   {{- $_ := set $autoEnv "KONG_ADMIN_LISTEN" (include "kong.listen" $listenConfig) -}}
+
+  {{- if or .tls.client.secretName .tls.client.caBundle -}}
+    {{- $_ := set $autoEnv "KONG_NGINX_ADMIN_SSL_VERIFY_CLIENT" "on" -}}
+    {{- $_ := set $autoEnv "KONG_NGINX_ADMIN_SSL_CLIENT_CERTIFICATE" "/etc/admin-client-ca/tls.crt" -}}
+  {{- end -}}
+
 {{- end -}}
 
 {{- if and ( .Capabilities.APIVersions.Has "cert-manager.io/v1" ) .Values.certificates.enabled -}}
   {{- if (and .Values.certificates.cluster.enabled .Values.cluster.enabled) -}}
+    {{- $_ := set $autoEnv "KONG_CLUSTER_MTLS" "pki" -}}
+    {{- $_ := set $autoEnv "KONG_CLUSTER_SERVER_NAME" .Values.certificates.cluster.commonName -}}
     {{- $_ := set $autoEnv "KONG_CLUSTER_CA_CERT" "/etc/cert-manager/cluster/ca.crt" -}}
     {{- $_ := set $autoEnv "KONG_CLUSTER_CERT" "/etc/cert-manager/cluster/tls.crt" -}}
     {{- $_ := set $autoEnv "KONG_CLUSTER_CERT_KEY" "/etc/cert-manager/cluster/tls.key" -}}
@@ -914,7 +1021,7 @@ the template that it itself is using form the above sections.
 
 {{- if (and (not .Values.ingressController.enabled) (eq .Values.env.database "off")) }}
 {{- $dblessSourceCount := (add (.Values.dblessConfig.configMap | len | min 1) (.Values.dblessConfig.secret | len | min 1) (.Values.dblessConfig.config | len | min 1)) -}}
-{{- if gt $dblessSourceCount 1 -}}
+{{- if eq $dblessSourceCount 1 -}}
   {{- $_ := set $autoEnv "KONG_DECLARATIVE_CONFIG" "/kong_dbless/kong.yml" -}}
 {{- end }}
 {{- end }}
@@ -1040,24 +1147,18 @@ resource roles into their separate templates.
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  verbs:
+  - list
+{{- if (semverCompare "< 2.10.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - ""
+  resources:
   - endpoints
   verbs:
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - list
-- apiGroups:
-  - ""
-  resources:
-  - endpoints/status
-  verbs:
-  - get
-  - patch
-  - update
+{{- end }}
 - apiGroups:
   - ""
   resources:
@@ -1087,14 +1188,6 @@ resource roles into their separate templates.
   verbs:
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - ""
   resources:
@@ -1306,6 +1399,22 @@ resource roles into their separate templates.
   verbs:
   - get
   - update
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - grpcroutes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - grpcroutes/status
+  verbs:
+  - get
+  - patch
+  - update
 {{- end }}
 {{- if (.Capabilities.APIVersions.Has "networking.internal.knative.dev/v1alpha1") }}
 - apiGroups:
@@ -1341,6 +1450,14 @@ resource roles into their separate templates.
   - get
   - patch
   - update
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
 {{- end -}}
 
 {{/*
@@ -1373,6 +1490,15 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   - get
   - patch
   - update
+{{- if (semverCompare ">= 2.10.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - list
+  - watch
+{{- end }}
 {{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") }}
 - apiGroups:
   - gateway.networking.k8s.io
@@ -1411,9 +1537,9 @@ extensions/v1beta1
 {{- end -}}
 
 {{- define "kong.autoscalingVersion" -}}
-{{- if (.Capabilities.APIVersions.Has "autoscaling/v2") -}}
+{{- if (.Capabilities.APIVersions.Has "autoscaling/v2/HorizontalPodAutoscaler") -}}
 autoscaling/v2
-{{- else if (.Capabilities.APIVersions.Has "autoscaling/v2beta2") -}}
+{{- else if (.Capabilities.APIVersions.Has "autoscaling/v2beta2/HorizontalPodAutoscaler") -}}
 autoscaling/v2beta2
 {{- else -}}
 autoscaling/v1

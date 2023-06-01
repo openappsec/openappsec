@@ -448,8 +448,8 @@ spec:
             type: object
           upstream:
             description: Upstream represents a virtual hostname and can be used to
-              loadbalance incoming requests over multiple targets (e.g. Kubernetes
-              `Services` can be a target, OR `Endpoints` can be targets).
+              load balance incoming requests over multiple targets (e.g. Kubernetes
+              Services can be a target, or URLs can be targets).
             properties:
               algorithm:
                 description: Algorithm is the load balancing algorithm to use.

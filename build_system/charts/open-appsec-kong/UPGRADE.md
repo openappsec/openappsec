@@ -17,6 +17,7 @@ upgrading from a previous version.
 ## Table of contents
 
 - [Upgrade considerations for all versions](#upgrade-considerations-for-all-versions)
+- [2.17.0](#2170)
 - [2.13.0](#2130)
 - [2.8.0](#280)
 - [2.7.0](#270)
@@ -81,6 +82,26 @@ https://raw.githubusercontent.com/Kong/charts/kong-<version>/charts/kong/crds/cu
 
 For example, if your release is 2.6.4, you would apply
 `https://raw.githubusercontent.com/Kong/charts/kong-2.6.4/charts/kong/crds/custom-resource-definitions.yaml`.
+
+## 2.19.0
+
+2.19 sets a default [security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)
+that declares a read-only root filesystem for Kong containers. The base Kong and KIC
+images are compatible with this setting. The chart mounts temporary writeable
+emptyDir filesystems for locations that require writeable files (`/tmp` and
+`/kong_prefix/`).
+
+This setting limit attack surface and should be compatible with most
+installations. However, if you use custom plugins that write to disk, you must
+either mount a writeable emptyDir for them or override the new defaults by
+setting:
+
+```
+containerSecurityContext:
+  readOnlyRootFilesystem: false
+```
+
+in your values.yaml.
 
 ## 2.13.0
 

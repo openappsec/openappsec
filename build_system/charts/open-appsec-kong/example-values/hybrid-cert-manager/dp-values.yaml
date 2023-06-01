@@ -1,0 +1,22 @@
+env:
+  role: data_plane
+  database: "off"
+  cluster_control_plane: kong-cp-kong-cluster.kong.svc.cluster.local:8005
+
+cluster:
+  enabled: true
+  tls:
+    enabled: true
+
+certificates:
+  enabled: true
+  issuer: my-ca-issuer
+  cluster:
+    enabled: true
+    commonName: custom.example.com
+
+admin:
+  enabled: false
+
+ingressController:
+  enabled: false

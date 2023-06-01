@@ -15,3 +15,99 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "adminApiService.certSecretName" -}}
+  {{- default (printf "%s-admin-api-keypair" (include "kong.fullname" .)) .Values.ingressController.adminApi.tls.client.secretName -}}
+{{- end -}}
+
+{{- define "adminApiService.caSecretName" -}}
+  {{- default (printf "%s-admin-api-ca-keypair" (include "kong.fullname" .)) .Values.ingressController.adminApi.tls.client.caSecretName -}}
+{{- end -}}
+
+{{- $clientVerifyEnabled := .Values.ingressController.adminApi.tls.client.enabled -}}
+{{- $clientCertProvided := .Values.ingressController.adminApi.tls.client.certProvided -}}
+
+{{/* If the client verification is enabled but no secret was provided by the user, let's generate certificates. */ -}}
+{{- if and $clientVerifyEnabled (not $clientCertProvided) }}
+{{- $certCert := "" -}}
+{{- $certKey := "" -}}
+
+{{- $cn := printf "admin.%s.svc" ( include "kong.namespace" . ) -}}
+{{- $ca := genCA "admin-api-ca" 3650 -}}
+{{- $cert := genSignedCert $cn nil (list $cn) 3650 $ca -}}
+
+{{- $certCert = $cert.Cert -}}
+{{- $certKey = $cert.Key -}}
+{{/* Verify whether a secret with a given name already exists. If it does, let's use its cert and key data. */}}
+{{- $certSecret := (lookup "v1" "Secret" (include "kong.namespace" .) (include "adminApiService.certSecretName" .)) -}}
+{{- if $certSecret }}
+{{- $certCert = (b64dec (get $certSecret.data "tls.crt")) -}}
+{{- $certKey = (b64dec (get $certSecret.data "tls.key")) -}}
+{{- end }}
+
+{{- $caCert := $ca.Cert -}}
+{{- $caKey := $ca.Key -}}
+{{/* Verify whether a secret with a given name already exists. If it does, let's use its cert and key data. */ -}}
+{{- $caSecret := (lookup "v1" "Secret" (include "kong.namespace" .) (include "adminApiService.caSecretName" .))}}
+{{- if $caSecret }}
+{{- $caCert = (b64dec (get $caSecret.data "tls.crt")) -}}
+{{- $caKey = (b64dec (get $caSecret.data "tls.key")) -}}
+{{- end }}
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ template "adminApiService.certSecretName" . }}
+  namespace:  {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ b64enc $certCert }}
+  tls.key: {{ b64enc $certKey }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ template "adminApiService.caSecretName" . }}
+  namespace:  {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ b64enc $caCert }}
+  tls.key: {{ b64enc $caKey }}
+{{- end }}
+
+{{- /* Create a CA ConfigMap for Kong. */ -}}
+{{- $secretProvided := $.Values.admin.tls.client.secretName -}}
+{{- $bundleProvided := $.Values.admin.tls.client.caBundle -}}
+
+{{- if or $secretProvided $bundleProvided -}}
+{{- $cert := "" -}}
+
+{{- if $secretProvided -}}
+{{- $certSecret := (lookup "v1" "Secret" (include "kong.namespace" .) $.Values.admin.tls.client.secretName) -}}
+{{- if $certSecret }}
+{{- $cert = (b64dec (get $certSecret.data "tls.crt")) -}}
+{{- else -}}
+{{- fail (printf "%s/%s secret not found" (include "kong.namespace" .) $.Values.admin.tls.client.secretName) -}}
+{{- end }}
+{{- end }}
+
+{{- if $bundleProvided -}}
+{{- $cert = $.Values.admin.tls.client.caBundle -}}
+{{- end }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "kong.fullname" . }}-admin-client-ca
+  namespace: {{ template "kong.namespace" . }}
+  labels:
+    {{- include "kong.metaLabels" . | nindent 4 }}
+data:
+  tls.crt: {{ $cert | quote }}
+{{- end -}}

@@ -6,6 +6,8 @@
 {{- $_ := set $genericCertificateConfig "metaLabels" (include "kong.metaLabels" .) -}}
 {{- $_ := set $genericCertificateConfig "globalIssuer" .Values.certificates.issuer -}}
 {{- $_ := set $genericCertificateConfig "globalClusterIssuer" .Values.certificates.clusterIssuer -}}
+{{- $_ := set $genericCertificateConfig "globalSubject" .Values.certificates.subject -}}
+{{- $_ := set $genericCertificateConfig "globalPrivateKey" .Values.certificates.privateKey -}}
 {{- $_ := set $genericCertificateConfig "defaultIssuer" (printf "%s-%s-%s" .Release.Name .Chart.Name "selfsigned-issuer") -}}
 
 {{- if .Values.certificates.admin.enabled }}
@@ -28,10 +30,7 @@
 
 {{- if .Values.certificates.cluster.enabled }}
 {{- $certificateConfig := dict -}}
-{{- $certificateConfig = mustMerge (mustDeepCopy $genericCertificateConfig) $certificateConfig -}}
-{{- $_ := set $certificateConfig "dnsNames" (list) -}}
-{{- $_ := set $certificateConfig "commonName" "kong_cluster" -}}
-{{- $certificateConfig = (mustMerge $certificateConfig .Values.certificates.cluster) -}}
+{{- $certificateConfig = mustMerge (mustDeepCopy $genericCertificateConfig) .Values.certificates.cluster -}}
 {{- $_ := set $certificateConfig "serviceName" "cluster" -}}
 {{- include "kong.certificate" $certificateConfig -}}
 {{- end }}
@@ -54,9 +53,22 @@ spec:
   {{- range (append .dnsNames .commonName) }}
   - {{ . | quote }}
   {{- end }}
-  renewBefore: 360h
-  duration: 2160h
-  isCA: false
+  renewBefore: 360h0m0s
+  duration: 2160h0m0s
+  {{ if .subject -}}
+  subject:
+    {{- toYaml .subject | nindent 4 }}
+  {{ else if .globalSubject -}}
+  subject:
+    {{- toYaml .globalSubject | nindent 4 }}
+  {{- end }}
+  {{ if .privateKey -}}
+  privateKey:
+    {{- toYaml .privateKey | nindent 4 }}
+  {{ else if .globalPrivateKey -}}
+  privateKey:
+    {{- toYaml .globalPrivateKey | nindent 4 }}
+  {{- end }}
   {{ if .clusterIssuer -}}
   issuerRef:
     name: {{ .clusterIssuer }}

@@ -1,0 +1,33 @@
+deployment:
+  kong:
+    enabled: false
+
+proxy:
+  ## This must match the gateway release's proxy Service name.
+  ## The Service name uses the pattern "<release name>-kong-proxy".
+  ## In this example, the companion gateway release is named "gw"
+  nameOverride: gw-kong-proxy
+
+ingressController:
+  enabled: true
+
+  gatewayDiscovery:
+    enabled: true
+    adminApiService:
+      ## This must match the gateway release's admin Service name.
+      ## The Service name uses the pattern "<release name>-kong-admin".
+      ## In this example, the companion gateway release is named "gw"
+      name: gw-kong-admin
+
+  adminApi:
+    tls:
+      client:
+        # Enable TLS client authentication for the Admin API.
+        enabled: true
+        # We're specifying the name of the secret to have a static name that we
+        # will use in the gateway release.
+        caSecretName: "admin-api-ca-cert"
+
+  env:
+    # This must match the gateway release's proxy Service HTTPs port name.
+    kong_admin_svc_port_names: "kong-admin-tls"

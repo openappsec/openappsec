@@ -2,7 +2,7 @@
 
 image:
   repository: kong
-  tag: "3.1"
+  tag: "3.2"
 
 env:
   prefix: /kong_prefix/

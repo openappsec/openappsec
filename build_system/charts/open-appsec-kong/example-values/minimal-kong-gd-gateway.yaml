@@ -1,0 +1,17 @@
+admin:
+  enabled: true
+  type: ClusterIP
+  clusterIP: None
+  tls:
+    client:
+      secretName: "admin-api-ca-cert"
+
+ingressController:
+  enabled: false
+
+replicaCount: 3
+## This example creates a static 3-Pod Kong gateway Deployment.
+## To use autoscaling instead, comment the above replicaCount and uncomment
+## the autoscaling section below.
+# autoscaling:
+#   enabled: true

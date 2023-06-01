@@ -1,0 +1,24 @@
+deployment:
+  kong:
+    enabled: false
+
+proxy:
+  ## This must match the gateway release's proxy Service name.
+  ## The Service name uses the pattern "<release name>-kong-proxy".
+  ## In this example, the companion gateway release is named "gw"
+  nameOverride: gw-kong-proxy
+
+ingressController:
+  enabled: true
+
+  gatewayDiscovery:
+    enabled: true
+    adminApiService:
+      ## This must match the gateway release's admin Service name.
+      ## The Service name uses the pattern "<release name>-kong-admin".
+      ## In this example, the companion gateway release is named "gw"
+      name: gw-kong-admin
+
+  konnect:
+    enabled: true
+    runtimeGroupID: "00000000-0000-0000-0000-000000000000" # CHANGEME
