@@ -85,6 +85,8 @@ private:
         map<string, Package> &corrupted_packages
     );
 
+    bool isIgnoreFile(const string &new_manifest_file) const;
+
     ManifestDiffCalculator manifest_diff_calc;
     ManifestHandler manifest_handler;
 
@@ -158,6 +160,8 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
 {
     auto i_env = Singleton::Consume<I_Environment>::by<ManifestController>();
     auto span_scope = i_env->startNewSpanScope(Span::ContextType::CHILD_OF);
+
+    if (isIgnoreFile(new_manifest_file)) return true;
 
     dbgDebug(D_ORCHESTRATOR) << "Starting to update manifest file";
     auto ignored_settings_packages = getProfileAgentSetting<IgnoredPackages>("orchestration.IgnoredPackagesList");
@@ -427,6 +431,67 @@ ManifestController::Impl::handlePackage(
 
     dbgInfo(D_ORCHESTRATOR) << "Package was installed successfully. Package: " <<  package.getName();
     return true;
+}
+
+bool
+ManifestController::Impl::isIgnoreFile(const string &new_manifest_file) const
+{
+    ifstream manifest(new_manifest_file);
+
+    char ch;
+    manifest.get(ch);
+
+    while (manifest.good() && isspace(ch)) {
+        manifest.get(ch);
+    }
+
+    if (!manifest.good() || ch != '{') return false;
+    manifest.get(ch);
+
+    while (manifest.good() && isspace(ch)) {
+        manifest.get(ch);
+    }
+
+    if (!manifest.good() || ch != '"') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'p') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'a') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'c') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'k') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'a') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'g') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'e') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 's') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != '"') return false;
+    manifest.get(ch);
+
+    while (manifest.good() && isspace(ch)) {
+        manifest.get(ch);
+    }
+
+    if (!manifest.good() || ch != 'n') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'u') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'l') return false;
+    manifest.get(ch);
+    if (!manifest.good() || ch != 'l') return false;
+    manifest.get(ch);
+
+
+    while (manifest.good() && isspace(ch)) {
+        manifest.get(ch);
+    }
+
+    return manifest.good() && ch == '}';
 }
 
 ManifestController::ManifestController() : Component("ManifestController"), pimpl(make_unique<Impl>()) {}
