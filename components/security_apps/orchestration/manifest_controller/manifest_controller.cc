@@ -477,6 +477,13 @@ ManifestController::Impl::isIgnoreFile(const string &new_manifest_file) const
         manifest.get(ch);
     }
 
+    if (!manifest.good() || ch != ':') return false;
+    manifest.get(ch);
+
+    while (manifest.good() && isspace(ch)) {
+        manifest.get(ch);
+    }
+
     if (!manifest.good() || ch != 'n') return false;
     manifest.get(ch);
     if (!manifest.good() || ch != 'u') return false;
