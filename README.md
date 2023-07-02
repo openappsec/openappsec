@@ -130,17 +130,17 @@ To run a Nano-Agent as a container the following steps are required:
 2. If you are planning to manage the agent using the open-appsec UI, then make sure to obtain an agent token from the Management Portal and Enforce.
 3. Run the agent with the following command (where -e https_proxy parameter is optional):
 
-`docker run -d --name=agent-container --ipc=host -v=<path to persistent location for agent config>:/etc/cp/conf -v=<path to persistent location for agent data files>:/etc/cp/data -v=<path to persistent location for agent debugs and logs>:/var/log/nano_agent -e https_proxy=<user:password@Proxy address:port> -it <agent-image> /cp-nano-agent [--token <token> | --hybrid-mode]`
+`docker run -d --name=agent-container --ipc=host -v=<path to persistent location for agent config>:/etc/cp/conf -v=<path to persistent location for agent data files>:/etc/cp/data -v=<path to persistent location for agent debugs and logs>:/var/log/nano_agent -e https_proxy=<user:password@Proxy address:port> -it <agent-image> /cp-nano-agent [--token <token> | --standalone]`
 
 Example:
 ```bash
- $ docker run -d --name=agent-container --ipc=host -v=/home/admin/agent/conf:/etc/cp/conf -v=/home/admin/agent/data:/etc/cp/data -v=/home/admin/agent/logs:/var/log/nano_agent –e https_proxy=user:password@1.2.3.4:8080 -it agent-docker /cp-nano-agent --hybrid-mode
+ $ docker run -d --name=agent-container --ipc=host -v=/home/admin/agent/conf:/etc/cp/conf -v=/home/admin/agent/data:/etc/cp/data -v=/home/admin/agent/logs:/var/log/nano_agent –e https_proxy=user:password@1.2.3.4:8080 -it agent-docker /cp-nano-agent --standalone
  $ docker ps
 CONTAINER ID        IMAGE               COMMAND                          CREATED             STATUS              PORTS               NAMES
 1e67f2abbfd4        agent-docker        "/cp-nano-agent --hybrid-mode"   1 minute ago        Up 1 minute                             agent-container
 ```
 
- Note that you are not required to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --hybrid-mode flag in such cases. In addition, the volumes in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re-execution.
+ Note that you are not required to use a token from the Management Portal if you are managing your security policy locally. However, you are required to use the --standalone flag in such cases. In addition, the volumes in the command are mandatory only if you wish to have persistency upon restart/upgrade/crash of the agent and its re-execution.
  Lastly, --ipc=host argument is mandatory in order for the agent to have access to shared memory with a protected attachment (NGINX server).
 
 4. Create or replace the NGINX container using the [Attachment Repository](https://github.com/openappsec/attachment).
