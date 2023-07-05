@@ -24,6 +24,7 @@
 #include "hash_combine.h"
 
 using namespace std;
+using ProfilesPerTenantMap = map<string, set<string>>;
 
 USE_DEBUG_FLAG(D_TENANT_MANAGER);
 
@@ -75,10 +76,10 @@ public:
     void init();
     void fini();
 
-    void uponNewTenants(const newTenantCB &cb) override;
     bool areTenantAndProfileActive(const string &tenant_id, const string &profile_id) const override;
 
-    map<string, set<string>> fetchActiveTenantsAndProfiles() const override;
+    ProfilesPerTenantMap fetchActiveTenantsAndProfiles() const override;
+    ProfilesPerTenantMap fetchAndUpdateActiveTenantsAndProfiles(bool update) override;
     set<string> fetchAllActiveTenants() const override;
     set<string> fetchActiveTenants() const override;
     set<string> getInstances(const string &tenant_id, const string &profile_id) const override;
@@ -88,8 +89,6 @@ public:
 
     void deactivateTenant(const string &tenant_id, const string &profile_id) override;
 
-    chrono::microseconds getTimeoutVal() const override;
-
     set<string> getProfileIdsForRegionAccount(
         const string &tenant_id,
         const string &region,
@@ -97,33 +96,24 @@ public:
     ) const override;
 
     void
-    addInstance(const string &tenant_id, const string &profile_id, const string &instace_id)
+    addInstance(const string &tenant_id, const string &profile_id, const string &instace_id) override
     {
         auto tenant_profile_pair = TenantProfilePair(tenant_id, profile_id);
         auto tenant_cache = mapper.find(tenant_profile_pair);
         if (tenant_cache == mapper.end()) {
             tenant_cache = mapper.insert(make_pair(tenant_profile_pair, TemporaryCache<string, void>())).first;
-            tenant_cache->second.startExpiration(
-                getTimeoutVal(),
-                Singleton::Consume<I_MainLoop>::by<TenantManager>(),
-                Singleton::Consume<I_TimeGet>::by<TenantManager>()
-            );
         }
 
         tenant_cache->second.createEntry(instace_id);
     }
 
 private:
-    void runUponNewTenants(const vector<string> &new_tenants);
-    void sendTenantAndProfile(const string &tenant_id, const string &profile_id);
     set<string> getAllTenants() const;
     set<string> fetchAllProfileIds(const string &tenant_id) const;
     set<string> getProfileIds(const string &tenant_id) const;
-    bool sendWithCustomPort(const string &tenant_id, const string &profile_id, const uint16_t port);
 
     TemporaryCache<TenantProfilePair, void> active_tenants;
     map<TenantProfilePair, TemporaryCache<string, void>> mapper;
-    vector<I_TenantManager::newTenantCB> upon_cb;
 
     I_Messaging *i_messaging = nullptr;
     TenantManagerType type;
@@ -218,109 +208,18 @@ TenantManager::Impl::init()
     conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
     i_messaging = Singleton::Consume<I_Messaging>::by<TenantManager>();
 
-    auto cache_timeout = getTimeoutVal();
-
-    active_tenants.startExpiration(
-        cache_timeout,
-        Singleton::Consume<I_MainLoop>::by<TenantManager>(),
-        Singleton::Consume<I_TimeGet>::by<TenantManager>()
-    );
-
     if (type == TenantManagerType::SERVER) {
         auto rest = Singleton::Consume<I_RestApi>::by<TenantManager>();
         rest->addRestCall<LoadNewTenants>(RestAction::SET, "tenant-id");
         rest->addRestCall<FetchActiveTenants>(RestAction::SHOW, "active-tenants");
         rest->addRestCall<FetchProfileIds>(RestAction::SHOW, "profile-ids");
     }
-
-    if (type == TenantManagerType::CLIENT) {
-        auto interval = chrono::seconds(
-            getProfileAgentSettingWithDefault<uint32_t>(600, "agentConfig.tenantReportIntervalSeconds")
-        );
-        interval = chrono::seconds(
-            getConfigurationWithDefault(interval.count(), "Tenant Manager", "Report interval")
-        );
-
-        Singleton::Consume<I_MainLoop>::by<TenantManager>()->addRecurringRoutine(
-            I_MainLoop::RoutineType::System,
-            interval,
-            [this] ()
-            {
-                auto tenants_ids = fetchActiveTenants();
-                for (auto tenant_id : tenants_ids) {
-                    auto profile_ids = fetchAllProfileIds(tenant_id);
-                    for (auto profile_id : profile_ids) {
-                        sendTenantAndProfile(tenant_id, profile_id);
-                    }
-                }
-            },
-            "Tenant manager client reporter"
-        );
-    }
 }
 
 void
 TenantManager::Impl::fini()
 {
-    active_tenants.endExpiration();
     i_messaging = nullptr;
-}
-
-bool
-TenantManager::Impl::sendWithCustomPort(const string &tenant_id, const string &profile_id, const uint16_t port)
-{
-    if (i_messaging == nullptr) {
-        i_messaging = Singleton::Consume<I_Messaging>::by<TenantManager>();
-    }
-
-    SendNewTenants new_tenant_and_profile(tenant_id, profile_id);
-
-    return i_messaging->sendNoReplyObject(
-        new_tenant_and_profile,
-        I_Messaging::Method::POST,
-        "127.0.0.1",
-        port,
-        conn_flags,
-        "/set-tenant-id"
-    );
-}
-
-void
-TenantManager::Impl::runUponNewTenants(const vector<string> &new_tenants)
-{
-    for (auto &cb: upon_cb) {
-        Singleton::Consume<I_MainLoop>::by<TenantManager>()->addOneTimeRoutine(
-            I_MainLoop::RoutineType::System,
-            [this, cb, new_tenants] () { cb(new_tenants); },
-            "New tenant event handler"
-        );
-    }
-}
-
-void
-TenantManager::Impl::sendTenantAndProfile(const string &tenant_id, const string &profile_id)
-{
-    auto res = sendWithCustomPort(
-        tenant_id,
-        profile_id,
-        getConfigurationWithDefault<uint16_t>(
-            7777,
-            "Tenant Manager",
-            "Orchestrator's primary port"
-        )
-    );
-
-    if (!res) {
-        sendWithCustomPort(
-            tenant_id,
-            profile_id,
-            getConfigurationWithDefault<uint16_t>(
-                7778,
-                "Tenant Manager",
-                "Orchestrator's secondary port"
-            )
-        );
-    }
 }
 
 set<string>
@@ -459,12 +358,6 @@ TenantManager::Impl::getProfileIdsForRegionAccount(
     return set<string>();
 }
 
-void
-TenantManager::Impl::uponNewTenants(const newTenantCB &cb)
-{
-    upon_cb.push_back(cb);
-}
-
 bool
 TenantManager::Impl::areTenantAndProfileActive(const string &tenant_id, const string &profile_id) const
 {
@@ -485,24 +378,40 @@ TenantManager::Impl::addActiveTenantAndProfile(const string &tenant_id, const st
         << ", Profile ID: "
         << profile_id;
     active_tenants.createEntry(tenant_profile);
-    if (type == TenantManagerType::CLIENT) {
-        sendTenantAndProfile(tenant_id, profile_id);
-    } else {
-        runUponNewTenants({tenant_id});
-    }
 }
 
 void
 TenantManager::Impl::deactivateTenant(const string &tenant_id, const string &profile_id)
 {
+    dbgTrace(D_TENANT_MANAGER)
+        << "Deactivate tenant and profile. Tenant ID: "
+        << tenant_id
+        << ", Profile ID: "
+        << profile_id;
     active_tenants.deleteEntry(TenantProfilePair(tenant_id, profile_id));
 }
 
-map<string, set<string>>
+ProfilesPerTenantMap
+TenantManager::Impl::fetchAndUpdateActiveTenantsAndProfiles(bool update)
+{
+    if (!update) return fetchActiveTenantsAndProfiles();
+
+    active_tenants.clear();
+    ProfilesPerTenantMap update_active_tenants = fetchActiveTenantsAndProfiles();
+    for (const auto &tenant_profile_set : update_active_tenants) {
+        auto tenant_id = tenant_profile_set.first;
+        for (const auto &profile_id : tenant_profile_set.second) {
+            active_tenants.createEntry(TenantProfilePair(tenant_id, profile_id));
+        }
+    }
+    return update_active_tenants;
+}
+
+ProfilesPerTenantMap
 TenantManager::Impl::fetchActiveTenantsAndProfiles() const
 {
     dbgFlow(D_TENANT_MANAGER) << "Fetching active teants and profiles map";
-    map<string, set<string>> active_tenants_and_profiles;
+    ProfilesPerTenantMap active_tenants_and_profiles;
     set<string> tenants = fetchAllActiveTenants();
     for (const string &tenant : tenants) {
         active_tenants_and_profiles[tenant] = fetchProfileIds(tenant);
@@ -567,19 +476,6 @@ TenantManager::Impl::fetchProfileIds(const string &tenant_id) const
     return (type == TenantManagerType::CLIENT) ? getProfileIds(tenant_id) : fetchAllProfileIds(tenant_id);
 }
 
-chrono::microseconds
-TenantManager::Impl::getTimeoutVal() const
-{
-    auto cache_timeout = chrono::seconds(
-        getProfileAgentSettingWithDefault<uint32_t>(900, "Orchestration.TenantTimeoutSeconds")
-    );
-    cache_timeout = chrono::seconds(
-        getConfigurationWithDefault(cache_timeout.count(), "Tenant Manager", "Tenant timeout")
-    );
-
-    return chrono::duration_cast<chrono::microseconds>(cache_timeout);
-}
-
 TenantManager::TenantManager()
         :
     Component("TenantManager"),
@@ -604,7 +500,6 @@ TenantManager::fini()
 void
 TenantManager::preload()
 {
-    registerExpectedConfiguration<uint32_t>("Tenant Manager", "Tenant timeout");
     registerExpectedConfiguration<string>("Tenant Manager", "Tenant manager type");
     registerExpectedSetting<AccountRegionSet>("accountRegionSet");
     registerExpectedSetting<string>("region");

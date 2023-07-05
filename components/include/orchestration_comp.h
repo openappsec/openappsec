@@ -14,7 +14,6 @@
 #ifndef __ORCHESTRATION_COMP_H__
 #define __ORCHESTRATION_COMP_H__
 
-#include "i_messaging_downloader.h"
 #include "i_messaging.h"
 #include "i_mainloop.h"
 #include "i_shell_cmd.h"
@@ -49,7 +48,6 @@ class OrchestrationComp
     Singleton::Consume<I_DetailsResolver>,
     Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_TenantManager>,
-    Singleton::Consume<I_MessagingDownloader>,
     Singleton::Consume<I_PackageHandler>,
     Singleton::Consume<I_ServiceController>,
     Singleton::Consume<I_UpdateCommunication>,

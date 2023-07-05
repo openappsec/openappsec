@@ -27,20 +27,22 @@ template <typename UserSerializableReplyAttr>
 class IntelligenceQuery
 {
 public:
-    IntelligenceQuery(QueryRequest &filter)
+    IntelligenceQuery(QueryRequest &filter, bool is_pretty)
             :
         request(filter),
         response(),
         responses(),
-        is_bulk(false)
+        is_bulk(false),
+        is_pretty(is_pretty)
     {}
 
-    IntelligenceQuery(std::vector<QueryRequest> &filters)
+    IntelligenceQuery(std::vector<QueryRequest> &filters, bool is_pretty)
             :
         requests(filters),
         response(),
         responses(),
-        is_bulk(true)
+        is_bulk(true),
+        is_pretty(is_pretty)
     {}
 
     Maybe<std::string> genJson() const;
@@ -67,6 +69,7 @@ private:
     IntelligenceQueryResponse<UserSerializableReplyAttr> response;
     std::vector<IntelligenceQueryResponse<UserSerializableReplyAttr>> responses;
     bool is_bulk;
+    bool is_pretty;
 };
 
 #include "intelligence_query_v2_impl.h"

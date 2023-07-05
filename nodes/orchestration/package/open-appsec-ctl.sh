@@ -26,6 +26,8 @@ DEFAULT_HEALTH_CHECK_TMP_FILE_PATH="/tmp/cpnano_health_check_output.txt"
 var_default_fog_address="i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="inext-agents-us.cloud.ngen.checkpoint.com"
+var_default_au_fog_address="inext-agents-aus1.cloud.ngen.checkpoint.com"
+var_default_in_fog_address="inext-agents-ind1.cloud.ngen.checkpoint.com"
 
 #NOTE: open-appsec-ctl only supports nano services with name of the format cp-nano-<service>
 cp_nano_service_name_prefix="cp-nano"
@@ -92,7 +94,8 @@ fi
 
 get_basename()
 {
-    if command -v basename &>/dev/null; then
+    is_basename_exist=$(command -v basename)
+    if [ -n $is_basename_exist ]; then
         echo $(basename $1)
     else
         echo $(echo $1 | rev | cut -d / -f 1 | rev)
@@ -267,7 +270,7 @@ usage()
     uninstall_option="-u,  --uninstall"
     load_config_option="-lc, --load-config <$(get_installed_services '|')>"
     display_config_option="-dc, --display-config [$(get_installed_services '|')]"
-    cp_agent_info_option="-ai, --cp-agent-info [-wd|--with_dump|-u|--upload|-fms|--file_max_size|-an|--additional_name]"
+    cp_agent_info_option="-ai, --cp-agent-info [-wd|--with_dump|-fms|--file_max_size|-an|--additional_name]"
     display_policy_option="-dp, --display-policy"
     set_gradual_policy_option="-gp, --set-gradual-policy [access-control|http-manager] <ip-ranges>"
     delete_gradual_policy_option="-dg, --delete-gradual-policy [access-control|http-manager]"
@@ -1217,16 +1220,11 @@ run_ai() # Initials - ra
     ra_tenant_id=
     ra_agent_id=
     ra_token=
-    ra_upload_to_fog=false
     # we use this address as default and replace later if needed
     ra_fog_address="inext-agents.cloud.ngen.checkpoint.com"
 
     for arg; do
-        if [ "$arg" = "--upload" ] || [ "$arg" = "-u" ]; then
-            ra_upload_to_fog=true
-            shift
-            continue
-        elif [ "$arg" = "--verbose" ] || [ "$arg" = "-v" ]; then
+        if [ "$arg" = "--verbose" ] || [ "$arg" = "-v" ]; then
             AI_VERBOSE=true
         elif [ -z "$1" ]; then
             break
@@ -1234,14 +1232,6 @@ run_ai() # Initials - ra
         set -- "$@" "$arg"
         shift
     done
-
-    if [ "$ra_upload_to_fog" = "false" ]; then
-        printf "Should upload to Checkpoints' cloud? [y/n] " && read -r ra_should_upload
-        case $ra_should_upload in
-        [Yy] | [Yy][Ee][Ss]) ra_upload_to_fog=true ;;
-        *) ;;
-        esac
-    fi
 
     ra_https_prefix="https://"
     ra_agent_details=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/agent_details.json)
@@ -1274,49 +1264,6 @@ run_ai() # Initials - ra
         echo "Failed to calculate agent-info data."
         exit 1
     fi
-    if [ "$ra_upload_to_fog" = "true" ]; then
-        ra_token_data="$(curl_func "$(extract_api_port orchestration)"/show-access-token)"
-        ra_token_hex=$(echo "$ra_token_data" | grep "token" | cut -d '"' -f4 | base64 -d | od -t x1 -An)
-        ra_token_hex_formatted=$(echo $ra_token_hex | tr -d ' ')
-        ra_token="$(xor_decrypt "${ra_token_hex_formatted}")"
-
-        ra_proxy_val=""
-        if [ -n "${is_gaia}" ]; then
-            ra_gaia_proxy_address=$(dbget proxy:ip-address | tr -d '\n')
-            ra_gaia_proxy_ip=$(dbget proxy:port | tr -d '\n')
-
-            if [ -n "$ra_gaia_proxy_address" ] && [ -n "$ra_gaia_proxy_ip" ]; then
-                ra_proxy_val="--proxy http://${ra_gaia_proxy_address}:${ra_gaia_proxy_ip}"
-            fi
-        fi
-        if [ "$is_smb_release" = "1" ]; then
-            is_proxy_enabled=$(pt proxySettings | awk '{if ($1 == "useProxy") printf("%s", $3)}')
-            if [ "$is_proxy_enabled" = "true" ]; then
-                ra_smb_proxy_address=$(pt proxySettings | awk '{if ($1 == "ipAddress") printf("%s", $3)}')
-                ra_smb_proxy_port=$(pt proxySettings | awk '{if ($1 == "port") printf("%s", $3)}')
-
-                if [ ! -z $ra_smb_proxy_address ] && [ ! -z $ra_smb_proxy_port ]; then
-                    ra_proxy_val="--proxy http://${ra_smb_proxy_address}:${ra_smb_proxy_port}"
-                fi
-            fi
-        fi
-
-        echo "---- Uploading agent information to Check Point ----"
-        sleep 1
-
-        upload_ai "$ra_cp_info_path" "$ra_token" "$ra_fog_address" "$ra_tenant_id" "$ra_agent_id" "$ra_current_time" "$ra_file_dir"
-        if [ "$AI_UPLOAD_TOO_LARGE_FLAG" = "true" ]; then
-            echo "Files are too large - splitting to files of size of $SPLIT_FILE_SMALL_SIZE"
-            cat "$ra_cp_info_path"/* >"$ra_cp_info_path"/temp_reassembled_files
-            rm "$ra_cp_info_path"/*.*
-            split -b "$SPLIT_FILE_SMALL_SIZE" "$ra_cp_info_path"/temp_reassembled_files "$ra_cp_info_path"/cp-nano-info-"$ra_agent_id"-"$ra_current_time".tar.gz
-            rm "$ra_cp_info_path"/temp_reassembled_files
-            upload_ai "$ra_cp_info_path" "$ra_token" "$ra_fog_address" "$ra_tenant_id" "$ra_agent_id" "$ra_current_time" "$ra_file_dir"
-        fi
-        echo "File upload to cloud: Succeeded"
-    else
-        echo "ignore uploading file to the Fog."
-    fi
 }
 
 create_entries_file() # Initials - cef
@@ -1344,38 +1291,6 @@ create_entries_file() # Initials - cef
         echo "  ]"
         echo "}"
     } >>"$cef_entries_file_path"
-}
-
-upload_ai() # Initials - uai
-{
-    uai_cp_info_path="$1"
-    uai_token="$2"
-    uai_fog_address="$3"
-    uai_tenant_id="$4"
-    uai_agent_id="$5"
-    uai_current_time="$6"
-    uai_file_dir="$7"
-    create_entries_file "$uai_cp_info_path"
-    for file in "$uai_cp_info_path"/*; do
-        if [ "$AI_VERBOSE" = "true" ]; then
-            echo "Uploading file $file"
-        fi
-        if [ -z "${is_gaia}" -o "$is_smb_release" = "1" ]; then
-            uai_curl_output=$(${curl_cmd} -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1)
-        elif [ "${remove_curl_ld_path}" = "true" ]; then
-            uai_curl_output=$(LD_LIBRARY_PATH="" ${curl_cmd} --cacert ${FILESYSTEM_PATH}/certs/fog.pem "${uai_proxy_val}" -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1)
-        else
-            uai_curl_output=$(${curl_cmd} --cacert ${FILESYSTEM_PATH}/certs/fog.pem "${uai_proxy_val}" -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1)
-        fi
-        if [ "$AI_UPLOAD_TOO_LARGE_FLAG" = "false" ] && [ "$uai_curl_output" = "413" ]; then
-            AI_UPLOAD_TOO_LARGE_FLAG=true
-            return
-        fi
-        if test "$uai_curl_output" != "200"; then
-            echo "File upload to cloud: Failed Error code ${uai_curl_output}"
-            exit 1
-        fi
-    done
 }
 
 set_mode_usage_message()
@@ -1464,9 +1379,17 @@ set_mode()
             gem_prefix_uppercase="CP-"
             us_prefix="cp-us-"
             us_prefix_uppercase="CP-US-"
+            au_prefix="cp-au-"
+            au_prefix_uppercase="CP-AU-"
+            in_prefix="cp-in-"
+            in_prefix_uppercase="CP-IN-"
 
             if [ "${var_token#"$us_prefix"}" != "${var_token}" ] || [ "${var_token#"$us_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_us_fog_address"
+            elif [ "${var_token#$au_prefix}" != "${var_token}" ] || [ "${var_token#"$au_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_au_fog_address"
+            elif [ "${var_token#$in_prefix}" != "${var_token}" ] || [ "${var_token#"$in_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_in_fog_address"
             elif [ "${var_token#"$gem_prefix"}" != "${var_token}" ] || [ "${var_token#"$gem_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_gem_fog_address"
             else

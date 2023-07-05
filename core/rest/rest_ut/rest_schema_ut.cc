@@ -19,6 +19,7 @@
 #include <arpa/inet.h>
 #include <sstream>
 #include "customized_cereal_map.h"
+#include "customized_cereal_multimap.h"
 
 using namespace std;
 
@@ -175,6 +176,14 @@ class MustMapInt :  public ServerRest
     C2S_PARAM(mapStringInt, must_map_int);
 };
 
+class MustMultiMap :  public ServerRest
+{
+    void doCall() override {}
+
+    using mapStringInt = SerializableMultiMap<string, int>;
+    C2S_PARAM(mapStringInt, must_multimap);
+};
+
 TEST(RestSchema, must_map)
 {
     stringstream string_map_schema;
@@ -211,6 +220,32 @@ TEST(RestSchema, must_map)
         "    },\n"
         "    \"required\": [\n"
         "        \"must_map_int\"\n"
+        "    ]\n"
+        "}"
+    );
+
+    stringstream multi_map_schema;
+    MustMultiMap().performOutputingSchema(multi_map_schema);
+    EXPECT_EQ(
+        multi_map_schema.str(),
+        "{\n"
+        "    \"properties\": {\n"
+        "        \"must_multimap\": {\n"
+        "            \"type\": \"object\",\n"
+        "            \"additionalProperties\": {\n"
+        "                \"anyOf\": [\n"
+        "                    {\n"
+        "                        \"type\": \"string\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"type\": \"integer\"\n"
+        "                    }\n"
+        "                ]\n"
+        "            }\n"
+        "        }\n"
+        "    },\n"
+        "    \"required\": [\n"
+        "        \"must_multimap\"\n"
         "    ]\n"
         "}"
     );

@@ -1,4 +1,5 @@
 #include "log_generator.h"
+#include "log_utils.h"
 
 #include <sstream>
 #include <fstream>
@@ -466,6 +467,52 @@ TEST_F(LogTest, LogGen)
     );
     EXPECT_THAT(getMessages(), HasSubstr(str3));
     EXPECT_THAT(readLogFile(), HasSubstr(str3));
+
+
+    enum class TestErrors { CPU, MEMORY, DISK };
+    string str4(
+        "{\n"
+        "    \"eventTime\": \"0:0:0\",\n"
+        "    \"eventName\": \"Install policy\",\n"
+        "    \"eventSeverity\": \"Info\",\n"
+        "    \"eventPriority\": \"Low\",\n"
+        "    \"eventType\": \"Event Driven\",\n"
+        "    \"eventLevel\": \"Log\",\n"
+        "    \"eventLogLevel\": \"info\",\n"
+        "    \"eventAudience\": \"Internal\",\n"
+        "    \"eventAudienceTeam\": \"\",\n"
+        "    \"eventFrequency\": 0,\n"
+        "    \"eventTags\": [\n"
+        "        \"Policy Installation\"\n"
+        "    ],\n"
+        "    \"eventSource\": {\n"
+        "        \"agentId\": \"Unknown\",\n"
+        "        \"eventTraceId\": \"\",\n"
+        "        \"eventSpanId\": \"\",\n"
+        "        \"issuingEngineVersion\": \"" + Version::getFullVersion() + "\",\n"
+        "        \"serviceName\": \"007\"\n"
+        "    },\n"
+        "    \"eventData\": {\n"
+        "        \"logIndex\": 4,\n"
+        "        \"eventCode\": \"015-0002\"\n"
+        "    }\n"
+        "}"
+    );
+    EXPECT_EQ(
+        toJson(
+            LogGen(
+                "Install policy",
+                Audience::INTERNAL,
+                Severity::INFO,
+                Priority::LOW,
+                tag1,
+                Enreachments::BEAUTIFY_OUTPUT
+            ) << ErrorCode<ReportIS::Tags::IOT>::logError(TestErrors::DISK)
+        ),
+        str4
+    );
+    EXPECT_THAT(getMessages(), HasSubstr(str4));
+    EXPECT_THAT(readLogFile(), HasSubstr(str4));
 }
 
 TEST_F(LogTest, LogSpecificStream)

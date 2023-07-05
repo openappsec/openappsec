@@ -14,6 +14,7 @@
 #ifndef __QUERY_FILTER_V2_H__
 #define __QUERY_FILTER_V2_H__
 
+#include <boost/variant.hpp>
 #include <string>
 #include <chrono>
 #include <boost/functional/hash.hpp>
@@ -29,6 +30,8 @@ using namespace Intelligence_IS_V2;
 class SerializableQueryCondition
 {
 public:
+    typedef boost::variant<int64_t, std::string> ValueVariant;
+
     SerializableQueryCondition() {}
 
     SerializableQueryCondition(Condition _condition_type, std::string _key, std::string _value)
@@ -36,18 +39,25 @@ public:
         condition_type(_condition_type),
         key(_key),
         value(_value)
-    {};
+        {}
+
+    SerializableQueryCondition(Condition _condition_type, std::string _key, int64_t _value)
+            :
+        condition_type(_condition_type),
+        key(_key),
+        value(_value)
+        {}
 
     void save(cereal::JSONOutputArchive &ar) const;
 
     Condition getConditionType() const { return condition_type; }
     const std::string & getKey() const { return key; }
-    const std::string & getValue() const { return value; }
+    const ValueVariant & getValue() const { return value; }
 
 private:
     Condition condition_type = Condition::EQUALS;
     std::string key = "";
-    std::string value = "";
+    ValueVariant value = "";
 };
 
 class SerializableQueryFilter
@@ -55,22 +65,18 @@ class SerializableQueryFilter
 public:
     SerializableQueryFilter() {}
     SerializableQueryFilter(Condition condition_type, const std::string &key, const std::string &value);
-    SerializableQueryFilter(
-        Operator operator_type,
-        Condition condition_type,
-        const std::string &key,
-        const std::string &value
-    );
+    SerializableQueryFilter(Condition condition_type, const std::string &key, const int64_t &value);
 
     void save(cereal::JSONOutputArchive &ar) const;
 
     void addCondition(Condition condition_type, const std::string &key, const std::string &value);
+    void addCondition(Condition condition_type, const std::string &key, const int64_t &value);
 
     Operator getOperator() const { return operator_type; }
     const std::vector<SerializableQueryCondition> & getConditionOperands() const { return condition_operands; }
     const std::vector<SerializableQueryFilter> & getQueriesOperands() const { return queries_operands; }
 
-    const std::string & getConditionValueByKey(const std::string &key) const;
+    Maybe<SerializableQueryCondition::ValueVariant> getConditionValueByKey(const std::string &key) const;
 
     bool empty() const { return condition_operands.empty() && queries_operands.empty(); }
 
@@ -80,7 +86,8 @@ public:
 private:
     void saveCondition(cereal::JSONOutputArchive &ar) const;
     void saveOperation(cereal::JSONOutputArchive &ar) const;
-    SerializableQueryFilter calcOperator(const SerializableQueryFilter &other_query, const Operator &operator_type);
+    bool isOperatorComp(const Operator &oper) const;
+    SerializableQueryFilter calcOperator(const SerializableQueryFilter &other_query, const Operator &oper);
 
     Operator operator_type = Operator::NONE;
     std::vector<SerializableQueryFilter> queries_operands = {};

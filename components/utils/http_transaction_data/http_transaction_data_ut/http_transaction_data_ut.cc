@@ -102,6 +102,8 @@ TEST_F(HttpTransactionTest, TestTransactionDataFromBuf)
     EXPECT_EQ(data.getHttpProtocol(), "HTTP/1.1");
     EXPECT_EQ(data.getURI(), "/user-app/");
     EXPECT_EQ(data.getHttpMethod(), "GET");
+    EXPECT_EQ(data.getParsedURI(), "/user-app/");
+    EXPECT_EQ(data.getParsedHost(), "localhost");
 }
 
 TEST_F(HttpTransactionTest, TestTransactionDataBadVer)
@@ -124,4 +126,46 @@ TEST_F(HttpTransactionTest, TestTransactionDataBadAddress)
         "Could not deserialize listening address: "
         "Could not parse IP Address: String 'this.is.not.IP' is not a valid IPv4/IPv6 address"
     );
+}
+
+TEST_F(HttpTransactionTest, TestTransactionDataFromBufWIthParsedHostAndParsedUri)
+{
+    Buffer meta_data =
+        Buffer(encodeInt16(strlen("HTTP/1.1"))) +
+        Buffer("HTTP/1.1") +
+        encodeInt16(3) +
+        Buffer("GET") +
+        encodeInt16(9) +
+        Buffer("localhost") +
+        encodeInt16(7) +
+        Buffer("0.0.0.0") +
+        encodeInt16(443) +
+        encodeInt16(11) +
+        Buffer("//user-app/") +
+        encodeInt16(9) +
+        Buffer("127.0.0.1") +
+        encodeInt16(47423) +
+        encodeInt16(10) +
+        Buffer("localhost2") +
+        encodeInt16(10) +
+        Buffer("/user-app/");
+
+    HttpTransactionData data = HttpTransactionData::createTransactionData(meta_data).unpack();
+    stringstream data_stream;
+    data.print(data_stream);
+    string data_string(
+        "HTTP/1.1 GET\nFrom: 127.0.0.1:47423\nTo: localhost//user-app/ (listening on 0.0.0.0:443)\n"
+    );
+    EXPECT_EQ(data_stream.str(), data_string);
+
+    EXPECT_EQ(data.getSourceIP(), IPAddr::createIPAddr("127.0.0.1").unpack());
+    EXPECT_EQ(data.getSourcePort(), 47423);
+    EXPECT_EQ(data.getListeningIP(), IPAddr::createIPAddr("0.0.0.0").unpack());
+    EXPECT_EQ(data.getListeningPort(), 443);
+    EXPECT_EQ(data.getDestinationHost(), "localhost");
+    EXPECT_EQ(data.getHttpProtocol(), "HTTP/1.1");
+    EXPECT_EQ(data.getURI(), "//user-app/");
+    EXPECT_EQ(data.getHttpMethod(), "GET");
+    EXPECT_EQ(data.getParsedURI(), "/user-app/");
+    EXPECT_EQ(data.getParsedHost(), "localhost2");
 }

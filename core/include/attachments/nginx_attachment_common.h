@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <assert.h>
 
 #define MAX_NGINX_UID_LEN 32
 #define NUM_OF_NGINX_IPC_ELEMENTS 200
@@ -183,6 +184,10 @@ typedef enum ngx_http_meta_data
     CLIENT_ADDR_SIZE,
     CLIENT_ADDR_DATA,
     CLIENT_PORT,
+    PARSED_HOST_SIZE,
+    PARSED_HOST_DATA,
+    PARSED_URI_SIZE,
+    PARSED_URI_DATA,
 
     META_DATA_COUNT
 } ngx_http_meta_data_e;
@@ -242,12 +247,19 @@ typedef struct __attribute__((__packed__)) ngx_http_cp_web_response_data {
         } custom_response_data;
 
         struct __attribute__((__packed__)) ngx_http_cp_redirect_data {
+            uint8_t unused_dummy;
             uint8_t add_event_id;
             uint16_t redirect_location_size;
             char redirect_location[0];
         } redirect_data;
     } response_data;
 } ngx_http_cp_web_response_data_t;
+
+static_assert(
+    sizeof(((ngx_http_cp_web_response_data_t*)0)->response_data.custom_response_data) ==
+    sizeof(((ngx_http_cp_web_response_data_t*)0)->response_data.redirect_data),
+    "custom_response_data must be equal to redirect_data in size"
+);
 
 typedef union __attribute__((__packed__)) ngx_http_cp_modify_data {
     ngx_http_cp_inject_data_t inject_data[0];

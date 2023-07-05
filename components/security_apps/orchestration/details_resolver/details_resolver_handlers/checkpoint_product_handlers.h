@@ -71,6 +71,14 @@ checkHasSDWan(const string &command_output)
 }
 
 Maybe<string>
+checkCanUpdateSDWanData(const string &command_output)
+{
+    if (command_output == "true" || command_output == "false") return command_output;
+
+    return string("true");
+}
+
+Maybe<string>
 getMgmtObjType(const string &command_output)
 {
     if (!command_output.empty()) {
@@ -155,6 +163,14 @@ Maybe<string>
 getGWVersion(shared_ptr<istream> file_stream)
 {
     return getMgmtObjAttr(file_stream, "svn_version_name ");
+}
+
+Maybe<string>
+checkIfSdwanRunning(const string &command_output)
+{
+    if (command_output == "true" || command_output == "false") return command_output;
+
+    return genError("Could not determine if sd-wan is running or not");
 }
 
 Maybe<string>

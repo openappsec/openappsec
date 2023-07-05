@@ -90,6 +90,7 @@ std::string getConfigurationFlagWithDefault(const std::string &default_val, cons
 
 const std::string & getFilesystemPathConfig();
 const std::string & getLogFilesPathConfig();
+void clearOldTenants();
 
 std::string getPolicyConfigPath(
     const std::string &name,

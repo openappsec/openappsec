@@ -43,7 +43,9 @@ enum class Condition
     STARTS_WITH,
     CONTAINS,
     IN,
-    NOT_IN
+    NOT_IN,
+    GREATER_THAN,
+    LESS_THAN
 };
 
 enum class CursorState {

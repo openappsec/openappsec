@@ -9,6 +9,7 @@
 #include "mock/mock_messaging.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_time_get.h"
+#include "mock/mock_rest_api.h"
 
 using namespace std;
 using namespace testing;
@@ -35,8 +36,18 @@ public:
 
         EXPECT_CALL(
             mock_ml,
-            addRecurringRoutine(I_MainLoop::RoutineType::System, chrono::microseconds(600000000), _, _, _))
-                .WillRepeatedly(DoAll(SaveArg<2>(&routine), Return(0)));
+            addRecurringRoutine(I_MainLoop::RoutineType::System, chrono::microseconds(600000000), _, _, _)
+        ).WillRepeatedly(DoAll(SaveArg<2>(&routine), Return(0)));
+
+        EXPECT_CALL(
+            mock_ml,
+            addRecurringRoutine(I_MainLoop::RoutineType::System, chrono::microseconds(720000000), _, _, _)
+        ).WillRepeatedly(Return(0));
+
+        EXPECT_CALL(
+            mock_rest,
+            mockRestCall(_, "new-invalidation/source/invalidation", _)
+        ).WillRepeatedly(Return(true));
 
         string offline_intel_path = cptestFnameInExeDir("offline_intelligence_files_v2");
         setConfiguration<string>(offline_intel_path, string("intelligence"), string("offline intelligence path"));
@@ -52,6 +63,7 @@ public:
 
     stringstream debug_output;
     StrictMock<MockMainLoop> mock_ml;
+    StrictMock<MockRestApi> mock_rest;
     NiceMock<MockTimeGet> mock_time;
     ::Environment env;
     ConfigComponent conf;
@@ -852,4 +864,176 @@ TEST_F(IntelligenceComponentTestV2, bulkOnlineIntelligenceTest)
     iter = assets3_vec.begin();
     EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry2");
     EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing2");
+}
+
+TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
+{
+    string paging_in_progress_response_str(
+    "{\n"
+        "  \"assetCollections\": [\n"
+        "    {\n"
+        "      \"schemaVersion\": 1,\n"
+        "      \"assetType\": \"workload-cloud-fake-online-test\",\n"
+        "      \"assetTypeSchemaVersion\": 1,\n"
+        "      \"permissionType\": \"tenant\",\n"
+        "      \"permissionGroupId\": \"fake-online-test-group\",\n"
+        "      \"name\": \"fake-online-test-asset1\",\n"
+        "      \"class\": \"workload\",\n"
+        "      \"category\": \"cloud\",\n"
+        "      \"family\": \"fake-online-test1\",\n"
+        "      \"mainAttributes\": {\n"
+        "          \"deAssetId\": \"C0:3F:0E:A5:59:64_e1ea0005-6362-4a66-99bd-7f30932a2527\"\n"
+        "      },\n"
+        "      \"sources\": [\n"
+        "        {\n"
+        "          \"tenantId\": \"e1ea0005-6362-4a66-99bd-7f30932a2527\",\n"
+        "          \"sourceId\": \"fog-app-msrv-iot-assets\",\n"
+        "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "          \"ttl\": 120,\n"
+        "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "          \"confidence\": 500,\n"
+        "          \"attributes\": {\n"
+        "            \"phase\": \"fake online test1\",\n"
+        "            \"user\": \"Omry\",\n"
+        "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "          }\n"
+        "        }\n"
+        "      ]\n"
+        "    },\n"
+        "    {\n"
+        "      \"schemaVersion\": 1,\n"
+        "      \"assetType\": \"workload-cloud-fake-online-test\",\n"
+        "      \"assetTypeSchemaVersion\": 1,\n"
+        "      \"permissionType\": \"tenant\",\n"
+        "      \"permissionGroupId\": \"fake-online-test-group\",\n"
+        "      \"name\": \"fake-online-test-asset2\",\n"
+        "      \"class\": \"workload\",\n"
+        "      \"category\": \"cloud\",\n"
+        "      \"family\": \"fake-online-test2\",\n"
+        "      \"mainAttributes\": {\n"
+        "          \"deAssetId\": \"20:F8:5E:2F:6D:4C_e1ea0005-6362-4a66-99bd-7f30932a2527\"\n"
+        "      },\n"
+        "      \"sources\": [\n"
+        "        {\n"
+        "          \"tenantId\": \"e1ea0005-6362-4a66-99bd-7f30932a2527\",\n"
+        "          \"sourceId\": \"fog-app-msrv-iot-assets\",\n"
+        "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd2\",\n"
+        "          \"ttl\": 120,\n"
+        "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "          \"confidence\": 500,\n"
+        "          \"attributes\": {\n"
+        "            \"phase\": \"fake online test2\",\n"
+        "            \"user\": \"Max\",\n"
+        "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "          }\n"
+        "        }\n"
+        "      ]\n"
+        "    }\n"
+        "  ],\n"
+        "  \"status\": \"inProgress\",\n"
+        "  \"totalNumAssets\": 2,\n"
+        "  \"cursor\": \"efgh\"\n"
+    "}\n"
+    );
+
+    string paging_done_response_str(
+    "{\n"
+        "  \"assetCollections\": [\n"
+        "    {\n"
+        "      \"schemaVersion\": 1,\n"
+        "      \"assetType\": \"workload-cloud-fake-online-test\",\n"
+        "      \"assetTypeSchemaVersion\": 1,\n"
+        "      \"permissionType\": \"tenant\",\n"
+        "      \"permissionGroupId\": \"fake-online-test-group\",\n"
+        "      \"name\": \"fake-online-test-asset1\",\n"
+        "      \"class\": \"workload\",\n"
+        "      \"category\": \"cloud\",\n"
+        "      \"family\": \"fake-online-test1\",\n"
+        "      \"mainAttributes\": {\n"
+        "          \"deAssetId\": \"C0:3F:0E:A5:59:64_e1ea0005-6362-4a66-99bd-7f30932a2527\"\n"
+        "      },\n"
+        "      \"sources\": [\n"
+        "        {\n"
+        "          \"tenantId\": \"e1ea0005-6362-4a66-99bd-7f30932a2527\",\n"
+        "          \"sourceId\": \"fog-app-msrv-iot-assets\",\n"
+        "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "          \"ttl\": 120,\n"
+        "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "          \"confidence\": 500,\n"
+        "          \"attributes\": {\n"
+        "            \"phase\": \"fake online test1\",\n"
+        "            \"user\": \"Omry\",\n"
+        "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "          }\n"
+        "        }\n"
+        "      ]\n"
+        "    },\n"
+        "    {\n"
+        "      \"schemaVersion\": 1,\n"
+        "      \"assetType\": \"workload-cloud-fake-online-test\",\n"
+        "      \"assetTypeSchemaVersion\": 1,\n"
+        "      \"permissionType\": \"tenant\",\n"
+        "      \"permissionGroupId\": \"fake-online-test-group\",\n"
+        "      \"name\": \"fake-online-test-asset2\",\n"
+        "      \"class\": \"workload\",\n"
+        "      \"category\": \"cloud\",\n"
+        "      \"family\": \"fake-online-test2\",\n"
+        "      \"mainAttributes\": {\n"
+        "          \"deAssetId\": \"20:F8:5E:2F:6D:4C_e1ea0005-6362-4a66-99bd-7f30932a2527\"\n"
+        "      },\n"
+        "      \"sources\": [\n"
+        "        {\n"
+        "          \"tenantId\": \"e1ea0005-6362-4a66-99bd-7f30932a2527\",\n"
+        "          \"sourceId\": \"fog-app-msrv-iot-assets\",\n"
+        "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd2\",\n"
+        "          \"ttl\": 120,\n"
+        "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "          \"confidence\": 500,\n"
+        "          \"attributes\": {\n"
+        "            \"phase\": \"fake online test2\",\n"
+        "            \"user\": \"Max\",\n"
+        "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "          }\n"
+        "        }\n"
+        "      ]\n"
+        "    }\n"
+        "  ],\n"
+        "  \"status\": \"done\",\n"
+        "  \"totalNumAssets\": 2,\n"
+        "  \"cursor\": \"efgh\"\n"
+    "}\n"
+    );
+
+    EXPECT_CALL(
+        messaging_mock,
+        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE))
+        .WillOnce(Return(paging_in_progress_response_str))
+        .WillOnce(Return(paging_done_response_str));
+
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true, AttributeKeyType::NONE);
+    request.activatePaging();
+    request.setAssetsLimit(10);
+    vector<AssetReply<Profile>> objects_reply;
+    vector<string> objects_ids;
+    do {
+        auto object_result = intell->queryIntelligence<Profile>(request, true);
+        if (!object_result.ok()) {
+            if (object_result.getErr() == "Query intelligence response with InProgress status") continue;
+            break;
+        }
+
+        objects_reply = object_result.unpack();
+        if (objects_reply.empty()) break;
+
+        for (const AssetReply<Profile> &current_object : objects_reply) {
+            if (current_object.getMainAttributes().empty()) {
+                continue;
+            }
+            const string &id = current_object.getMainAttributes().begin()->second[0];
+            objects_ids.push_back(id);
+        }
+    } while (!request.isPagingFinished());
+
+    EXPECT_EQ(objects_ids.size(), 2);
 }

@@ -101,7 +101,7 @@ deserializeStrParam(const Buffer &data, uint &cur_pos)
         << to_string(*str_size);
 
     cur_pos += *str_size;
-    
+
     return move(res);
 }
 
@@ -185,6 +185,39 @@ HttpTransactionData::createTransactionData(const Buffer &transaction_raw_data)
         dbgTrace(D_NGINX_ATTACHMENT) << "Successfully deserialized client port: " << client_port.unpack();
     }
 
+    if (cur_pos == transaction_raw_data.size()) {
+        dbgDebug(D_NGINX_ATTACHMENT)
+            << "No extra data to read from buffer. This agent is working with an old "
+            << "attachment version that does not contain the parsed host and parsed uri elements.";
+
+        HttpTransactionData transaction(
+            http_protocol.unpackMove(),
+            http_method.unpackMove(),
+            host_name.unpackMove(),
+            listening_addr.unpackMove(),
+            listening_port.unpackMove(),
+            uri.unpackMove(),
+            client_addr.unpackMove(),
+            client_port.unpackMove()
+        );
+
+        return transaction;
+    }
+
+    Maybe<string> ngx_parsed_host = deserializeStrParam(transaction_raw_data, cur_pos);
+    if (!ngx_parsed_host.ok()) {
+        return genError("Could not deserialize nginx host: " + ngx_parsed_host.getErr());
+    } else {
+        dbgTrace(D_NGINX_ATTACHMENT) << "Successfully deserialized nginx_host: " << ngx_parsed_host.unpack();
+    }
+
+    Maybe<string> ngx_parsed_uri = deserializeStrParam(transaction_raw_data, cur_pos);
+    if (!ngx_parsed_uri.ok()) {
+        return genError("Could not deserialize parsed URI: " + ngx_parsed_uri.getErr());
+    } else {
+        dbgTrace(D_NGINX_ATTACHMENT) << "Successfully deserialized parsed URI: " << ngx_parsed_uri.unpack();
+    }
+
     // Fail if after parsing exact number of items, we didn't exactly consume whole buffer
     if (cur_pos != transaction_raw_data.size()) {
         dbgWarning(D_NGINX_ATTACHMENT) << "Nothing to deserialize, but raw data still remain";
@@ -195,14 +228,16 @@ HttpTransactionData::createTransactionData(const Buffer &transaction_raw_data)
         http_protocol.unpackMove(),
         http_method.unpackMove(),
         host_name.unpackMove(),
+        ngx_parsed_host.unpackMove(),
         listening_addr.unpackMove(),
         listening_port.unpackMove(),
         uri.unpackMove(),
+        ngx_parsed_uri.unpackMove(),
         client_addr.unpackMove(),
         client_port.unpackMove()
     );
 
-    return move(transaction);
+    return transaction;
 }
 
 HttpTransactionData::HttpTransactionData (
@@ -216,12 +251,42 @@ HttpTransactionData::HttpTransactionData (
     uint16_t _client_port
 )
         :
+    HttpTransactionData::HttpTransactionData(
+        _http_proto,
+        _method,
+        _host_name,
+        _host_name,
+        _listening_ip,
+        _listening_port,
+        _uri,
+        _uri,
+        _client_ip,
+        _client_port
+    )
+{
+}
+
+HttpTransactionData::HttpTransactionData (
+    string _http_proto,
+    string _method,
+    string _host_name,
+    string _parsed_host,
+    IPAddr _listening_ip,
+    uint16_t _listening_port,
+    string _uri,
+    string _parsed_uri,
+    IPAddr _client_ip,
+    uint16_t _client_port
+)
+        :
     http_proto(move(_http_proto)),
     method(move(_method)),
     host_name(move(_host_name)),
+    parsed_host(move(_parsed_host)),
     listening_ip(move(_listening_ip)),
     listening_port(move(_listening_port)),
     uri(move(_uri)),
+    parsed_uri(move(_parsed_uri)),
     client_ip(move(_client_ip)),
     client_port(move(_client_port)),
     is_request(true),
@@ -235,8 +300,10 @@ HttpTransactionData::HttpTransactionData()
         "",
         "GET",
         "",
+        "",
         IPAddr(),
         -1,
+        "",
         "",
         IPAddr(),
         -1

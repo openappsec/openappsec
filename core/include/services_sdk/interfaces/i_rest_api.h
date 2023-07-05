@@ -48,6 +48,8 @@ public:
         return addRestCall(oper, uri, std::make_unique<SpecificRestInit<T>>());
     }
 
+    virtual uint16_t getListeningPort() const = 0;
+
 protected:
     ~I_RestApi() {}
     virtual bool addRestCall(RestAction oper, const std::string &uri, std::unique_ptr<RestInit> &&init) = 0;

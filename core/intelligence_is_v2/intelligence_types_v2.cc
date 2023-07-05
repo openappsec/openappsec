@@ -36,6 +36,8 @@ Intelligence_IS_V2::convertConditionTypeToString(const Condition &condition_type
         {Condition::CONTAINS, "contains"},
         {Condition::IN, "in"},
         {Condition::NOT_IN, "notIn"},
+        {Condition::GREATER_THAN, "greaterThan"},
+        {Condition::LESS_THAN, "lessThan"},
     };
 
     auto condition_str = condition_type_to_string_map.find(condition_type);

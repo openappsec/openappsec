@@ -58,6 +58,18 @@ QueryRequest::QueryRequest(
     full_response = full_reponse;
 }
 
+QueryRequest::QueryRequest(
+    Condition condition_type,
+    const string &key,
+    const int64_t &value,
+    bool full_reponse,
+    AttributeKeyType attribute_type
+) {
+    query = SerializableQueryFilter(condition_type, createAttributeString(key, attribute_type), value);
+    assets_limit = default_assets_limit;
+    full_response = full_reponse;
+}
+
 Maybe<string>
 QueryRequest::convertObjectTypeToString() const
 {
@@ -134,6 +146,16 @@ QueryRequest::addCondition (
     Condition condition_type,
     const string &key,
     const string &value,
+    AttributeKeyType attribute_type
+) {
+    query.addCondition(condition_type, createAttributeString(key, attribute_type), value);
+}
+
+void
+QueryRequest::addCondition (
+    Condition condition_type,
+    const string &key,
+    const int64_t &value,
     AttributeKeyType attribute_type
 ) {
     query.addCondition(condition_type, createAttributeString(key, attribute_type), value);

@@ -160,6 +160,7 @@ private:
     bool setSocket();
     bool connect(const string &host, const string &overwrite_port);
     bool shouldIgnoreSslValidation()const;
+    bool isBioSocketReady() const;
     Maybe<string> calculatePublicKey(const BioUniquePtr<X509> &cert) const;
     Maybe<string> getPinnedCertificate();
     bool verifyCertPinning(const BioUniquePtr<X509> &cert);
@@ -1431,6 +1432,11 @@ MessageConnection::doHandshake(const BioUniquePtr<BIO> &bio)
     );
     auto end_time = timer->getMonotonicTime() + timeout;
     while (timer->getMonotonicTime() < end_time) {
+        if (!isBioSocketReady()) {
+            dbgDebug(D_COMMUNICATION) << "Socket is not ready for use.";
+            if (mainloop != nullptr) mainloop->yield(true);
+            continue;
+        }
         if (BIO_do_handshake(bio.get()) > 0 || shouldIgnoreSslValidation()) {
             return Maybe<void>();
         }
@@ -1534,6 +1540,17 @@ MessageConnection::setSocket()
 }
 
 bool
+MessageConnection::isBioSocketReady() const
+{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(OPENSSL_NO_SOCK)
+    return BIO_socket_wait(BIO_get_fd(bio.get(), NULL), 0, time(NULL));
+#else // OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(OPENSSL_NO_SOCK)
+    return true;
+#endif // OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(OPENSSL_NO_SOCK)
+}
+
+
+bool
 MessageConnection::connect(const string &host, const string &overwrite_port)
 {
     string address = host + ":" + overwrite_port;
@@ -1547,6 +1564,11 @@ MessageConnection::connect(const string &host, const string &overwrite_port)
 
     while (timer->getMonotonicTime() < end_time) {
         counter++;
+        if (!isBioSocketReady()) {
+            dbgDebug(D_COMMUNICATION) << "Socket is not ready for use.";
+            if (mainloop != nullptr) mainloop->yield(true);
+            continue;
+        }
         if (BIO_do_connect(bio.get()) > 0) {
             dbgDebug(D_COMMUNICATION)
                 << "Successfully established new BIO connection. "
@@ -1595,6 +1617,11 @@ MessageConnection::receiveResponse(I_MessageDecoder<T> &decoder)
     uint counter = 0;
     char buf[1000];
     while (timer->getMonotonicTime() < end_time) {
+        if (!isBioSocketReady()) {
+            dbgDebug(D_COMMUNICATION) << "Socket is not ready for use.";
+            if (mainloop != nullptr) mainloop->yield(true);
+            continue;
+        }
         int len_or_error_ret_val = BIO_read(bio.get(), buf, sizeof(buf) - 1);
         if (len_or_error_ret_val <= 0) {
             if (!BIO_should_retry(bio.get())) {
@@ -1838,6 +1865,11 @@ MessageConnection::sendData(const string &data) const
     int remaining_data_len = data.length();
     while (timer->getMonotonicTime() < end_time) {
         int offset = data.length() - remaining_data_len;
+        if (!isBioSocketReady()) {
+            dbgDebug(D_COMMUNICATION) << "Socket is not ready for use.";
+            if (mainloop != nullptr) mainloop->yield(true);
+            continue;
+        }
         int data_sent_len = BIO_write(bio.get(), data.c_str() + offset, remaining_data_len);
         if (data_sent_len > 0) {
             if (remaining_data_len - data_sent_len < 0) {

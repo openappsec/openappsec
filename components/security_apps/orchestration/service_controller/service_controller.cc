@@ -181,6 +181,11 @@ ServiceDetails::serialize(Archive &ar)
 ReconfStatus
 ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy_version)
 {
+    if(!isServiceActive()) {
+        dbgDebug(D_ORCHESTRATOR) << "Service " << service_name << " is inactive";
+        return ReconfStatus::INACTIVE;
+    }
+
     SendConfigurations new_config(configuration_id, policy_version);
 
     I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ServiceController>();
@@ -194,14 +199,12 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
         conn_flags,
         "/set-new-configuration"
     );
+
     if (!res) {
-        if(!isServiceActive()) {
-            dbgDebug(D_ORCHESTRATOR) << "Service " << service_name << " is inactive";
-            return ReconfStatus::INACTIVE;
-        }
         dbgDebug(D_ORCHESTRATOR) << "Service " << service_name << " didn't respond to new configuration request";
         return ReconfStatus::FAILED;
     }
+
     auto service_details = Singleton::Consume<I_ServiceController>::by<ServiceDetails>();
 
     if (new_config.finished.get()) {
@@ -300,6 +303,8 @@ public:
 
     void clearFailedServices() override;
 
+    set<string> && moveChangedPolicies() override;
+
 private:
     void cleanUpVirtualFiles();
 
@@ -320,6 +325,8 @@ private:
     void loadRegisteredServicesFromFile();
     void writeRegisteredServicesToFile();
 
+    bool backupConfigurationFile(const string &configuration_file_path);
+
     int configuration_id = 0;
     map<string, ServiceDetails> registered_services;
     map<string, ServiceDetails> pending_services;
@@ -332,6 +339,10 @@ private:
     map<int, string> services_reconf_ids;
     string filesystem_prefix;
     bool is_multi_tenant_env = false;
+    set<string> changed_policy_files;
+
+    I_OrchestrationTools *orchestration_tools = nullptr;
+    I_MainLoop *mainloop = nullptr;
 };
 
 class GetServicesPorts : public ServerRest
@@ -410,6 +421,12 @@ ServiceController::Impl::doesFailedServicesExist()
 }
 // LCOV_EXCL_STOP
 
+set<string> &&
+ServiceController::Impl::moveChangedPolicies()
+{
+    return move(changed_policy_files);
+}
+
 void
 ServiceController::Impl::init()
 {
@@ -417,6 +434,9 @@ ServiceController::Impl::init()
     rest->addRestCall<SetNanoServiceConfig>(RestAction::SET, "nano-service-config");
     rest->addRestCall<GetServicesPorts>(RestAction::SHOW, "all-service-ports");
     rest->addRestCall<ServiceReconfStatusMonitor>(RestAction::SET, "reconf-status");
+
+    orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
+    mainloop = Singleton::Consume<I_MainLoop>::by<ServiceController>();
 
     Singleton::Consume<I_MainLoop>::by<ServiceController>()->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
@@ -614,6 +634,29 @@ ServiceController::Impl::refreshPendingServices()
 }
 
 bool
+ServiceController::Impl::backupConfigurationFile(const string &config_file_path)
+{
+    uint max_backup_attempts = 3;
+    string backup_ext = getConfigurationWithDefault<string>(".bk", "orchestration", "Backup file extension");
+    string backup_file = config_file_path + backup_ext;
+
+    if (!orchestration_tools->doesFileExist(config_file_path)) {
+        dbgTrace(D_ORCHESTRATOR) << "File does not exist. File: " << config_file_path;
+        return true;
+    }
+
+    for (size_t i = 0; i < max_backup_attempts; i++) {
+        if (orchestration_tools->copyFile(config_file_path, backup_file)) {
+            return true;
+        }
+        mainloop->yield(false);
+    }
+
+    dbgWarning(D_ORCHESTRATOR) << "Failed to back up the file. File: " << config_file_path;
+    return false;
+}
+
+bool
 ServiceController::Impl::updateServiceConfiguration(
     const string &new_policy_path,
     const string &new_settings_path,
@@ -665,19 +708,23 @@ ServiceController::Impl::updateServiceConfiguration(
         return sendSignalForServices(nano_services_to_update, "");
     }
 
-    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
-    Maybe<string> loaded_json = orchestration_tools->readFile(new_policy_path);
-    if (!loaded_json.ok()) {
+    Maybe<string> loaded_policy_json = orchestration_tools->readFile(new_policy_path);
+    if (!loaded_policy_json.ok()) {
         dbgWarning(D_ORCHESTRATOR)
             << "Failed to load new file: "
             << new_policy_path
             << ". Error: "
-            << loaded_json.getErr();
+            << loaded_policy_json.getErr();
 
         return false;
     }
 
-    auto all_security_policies = orchestration_tools->jsonObjectSplitter(loaded_json.unpack(), tenant_id, profile_id);
+
+    auto all_security_policies = orchestration_tools->jsonObjectSplitter(
+        loaded_policy_json.unpack(),
+        tenant_id,
+        profile_id
+    );
 
     if (!all_security_policies.ok()) {
         dbgWarning(D_ORCHESTRATOR)
@@ -740,6 +787,7 @@ ServiceController::Impl::updateServiceConfiguration(
             was_policy_updated = false;
             continue;
         }
+        changed_policy_files.insert(policy_file_path);
 
         dbgInfo(D_ORCHESTRATOR) << "Successfully updated policy file. Policy name: " << single_policy.first;
 
@@ -779,7 +827,7 @@ ServiceController::Impl::updateServiceConfiguration(
         true :
         sendSignalForServices(nano_services_to_update, version_value);
 
-    dbgTrace(D_ORCHESTRATOR) << "was_policy_updated: " << (was_policy_updated ? "true" : "false");
+    dbgTrace(D_ORCHESTRATOR) << "was policy updated: " << (was_policy_updated ? "true" : "false");
 
     if (was_policy_updated) {
         string config_file_path;
@@ -798,24 +846,8 @@ ServiceController::Impl::updateServiceConfiguration(
             return true;
         }
 
-        string backup_ext = getConfigurationWithDefault<string>(".bk", "orchestration", "Backup file extension");
-
-        // Backup the current configuration file.
-        uint max_backup_attempts = 3;
-        bool is_backup_succeed = false;
-        string backup_file = config_file_path + backup_ext;
-        I_MainLoop *mainloop = Singleton::Consume<I_MainLoop>::by<ServiceController>();
-
-        for (size_t i = 0; i < max_backup_attempts; i++) {
-            if (orchestration_tools->copyFile(config_file_path, backup_file)) {
-                is_backup_succeed = true;
-                break;
-            }
-            mainloop->yield(false);
-        }
-
-        if (!is_backup_succeed) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to back up the policy file.";
+        if (!backupConfigurationFile(config_file_path)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to backup the policy file.";
             return false;
         }
 
@@ -921,7 +953,6 @@ ServiceController::Impl::updateServiceConfigurationFile(
 
     dbgFlow(D_ORCHESTRATOR) << "Updating configuration. Config Name: " << configuration_name;
 
-    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
     if (orchestration_tools->doesFileExist(configuration_file_path)) {
         Maybe<string> old_configuration = orchestration_tools->readFile(configuration_file_path);
         if (old_configuration.ok()) {

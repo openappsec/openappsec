@@ -52,14 +52,14 @@ NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_da
     ctx.registerValue("eventReferenceId", uuid, EnvKeyAttr::LogSection::DATA);
     ctx.registerValue<string>(HttpTransactionData::http_proto_ctx, transaction_data.getHttpProtocol());
     ctx.registerValue<string>(HttpTransactionData::method_ctx, transaction_data.getHttpMethod());
-    ctx.registerValue<string>(HttpTransactionData::host_name_ctx, transaction_data.getDestinationHost());
+    ctx.registerValue<string>(HttpTransactionData::host_name_ctx, transaction_data.getParsedHost());
     ctx.registerValue<uint16_t>(HttpTransactionData::listening_port_ctx, transaction_data.getListeningPort());
     ctx.registerValue<IPAddr>(HttpTransactionData::listening_ip_ctx, transaction_data.getListeningIP());
     ctx.registerValue<IPAddr>(HttpTransactionData::client_ip_ctx, transaction_data.getSourceIP());
     ctx.registerValue<uint16_t>(HttpTransactionData::client_port_ctx, transaction_data.getSourcePort());
     ctx.registerFunc<string>(HttpTransactionData::source_identifier, [this](){ return source_identifier; });
 
-    ctx.registerValue<string>(HttpTransactionData::uri_ctx, transaction_data.getURI());
+    ctx.registerValue<string>(HttpTransactionData::uri_ctx, transaction_data.getParsedURI());
     auto decoder = makeVirtualContainer<HexDecoder<'%'>>(transaction_data.getURI());
     string decoded_url(decoder.begin(), decoder.end());
     auto question_mark_location = decoded_url.find('?');

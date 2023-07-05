@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <unistd.h>
 
-#include "messaging_downloader_client.h"
 #include "time_proxy.h"
 #include "shell_cmd.h"
 #include "debug.h"
@@ -58,8 +57,6 @@
 using namespace std;
 
 #include "components_list.h"
-#include "messaging_downloader_server.h"
-#include "external_sdk_server.h"
 
 int
 main(int argc, char **argv)
@@ -77,7 +74,6 @@ main(int argc, char **argv)
         OrchestrationComp,
         HealthChecker,
         HealthCheckManager,
-        MessagingDownloaderClient,
         LocalPolicyMgmtGenerator
     > comps;
 

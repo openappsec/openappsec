@@ -91,7 +91,6 @@ enum class Service {
     CPVIEW_METRIC_PROVIDER,
     HTTP_TRANSACTION_HANDLER,
     DEDICATED_NETWORK_HANDLER,
-    MESSAGING_PROXY,
     HELLO_WORLD,
     IDA,
     IOT_ACCESS_CONTROL,
@@ -165,7 +164,6 @@ getServiceString(const Service service)
         case (Service::ATTACHMENT_REGISTRATOR): return "attachment-registrator";
         case (Service::CPVIEW_METRIC_PROVIDER): return "cpview-metric-provider";
         case (Service::DEDICATED_NETWORK_HANDLER): return "dedicated-network-handler";
-        case (Service::MESSAGING_PROXY): return "messaging-proxy";
         case (Service::SDWAN): return "sdwan";
         case (Service::LOGGER_SDWAN): return "logger-sdwan";
         case (Service::IOT_WLP): return "workload-protection";
@@ -320,11 +318,6 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-dedicated-network-handler-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-dedicated-network-handler.dbg"
-            );
-        case (Service::MESSAGING_PROXY):
-            return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-messaging-proxy-debug-conf.json",
-                log_files_path + "/nano_agent/cp-nano-messaging-proxy.dbg"
             );
         case (Service::SDWAN):
             return ServiceConfig(
@@ -1282,8 +1275,6 @@ extractServices(const vector<string> &args)
             services.push_back(Service::HTTP_TRANSACTION_HANDLER);
         } else if (getServiceString(Service::DEDICATED_NETWORK_HANDLER).find(maybe_service) == 0) {
             services.push_back(Service::DEDICATED_NETWORK_HANDLER);
-        } else if (getServiceString(Service::MESSAGING_PROXY).find(maybe_service) == 0) {
-            services.push_back(Service::MESSAGING_PROXY);
         } else if (getServiceString(Service::SDWAN).find(maybe_service) == 0) {
             services.push_back(Service::SDWAN);
         } else if (getServiceString(Service::LOGGER_SDWAN).find(maybe_service) == 0) {

@@ -27,7 +27,6 @@ target_link_libraries(
     update_communication
     orchestration_tools
     env_details
-    messaging_downloader_client
     local_policy_mgmt_gen
     curl
 

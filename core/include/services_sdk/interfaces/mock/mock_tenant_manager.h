@@ -13,8 +13,6 @@
 class MockTenantManager : public Singleton::Provide<I_TenantManager>::From<MockProvider<I_TenantManager>>
 {
 public:
-    MOCK_METHOD1(uponNewTenants,                    void(const I_TenantManager::newTenantCB &cb));
-
     MOCK_CONST_METHOD0(fetchActiveTenantsAndProfiles,     std::map<std::string, std::set<std::string>>());
     MOCK_CONST_METHOD0(fetchActiveTenants,          std::set<std::string>());
     MOCK_CONST_METHOD0(fetchAllActiveTenants,       std::set<std::string>());
@@ -26,13 +24,11 @@ public:
     MOCK_CONST_METHOD2(areTenantAndProfileActive,   bool(const std::string &, const std::string &));
     MOCK_METHOD2(addActiveTenantAndProfile,         void(const std::string &, const std::string &));
     MOCK_METHOD2(deactivateTenant,                  void(const std::string &, const std::string &));
+    MOCK_METHOD1(fetchAndUpdateActiveTenantsAndProfiles, std::map<std::string, std::set<std::string>>(bool));
     MOCK_CONST_METHOD3(
         getProfileIdsForRegionAccount,
         std::set<std::string>(const std::string &, const std::string &, const std::string &)
     );
-
-    MOCK_CONST_METHOD0(getTimeoutVal,               std::chrono::microseconds());
-
 private:
     MOCK_METHOD3(
         addInstance,

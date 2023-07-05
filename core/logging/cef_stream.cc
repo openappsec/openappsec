@@ -58,6 +58,9 @@ CefStream::sendLog(const Report &log)
     }
     dbgTrace(D_REPORT) << "Connected to socket.";
     string cef_report = log.getCef();
+    if (protocol == I_Socket::SocketType::TCP) {
+        cef_report = to_string(cef_report.length()) + " " + cef_report;
+    }
     vector<char> data(cef_report.begin(), cef_report.end());
     for (size_t tries = 0; tries < 3; tries++) {
         if (i_socket->writeData(socket.unpack(), data)) {

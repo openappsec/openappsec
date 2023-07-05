@@ -21,6 +21,7 @@
 #include "i_time_get.h"
 #include "i_instance_awareness.h"
 #include "component.h"
+#include "i_shell_cmd.h"
 
 enum class TenantManagerType { CLIENT, SERVER };
 
@@ -33,7 +34,8 @@ class TenantManager
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_Environment>,
-    Singleton::Consume<I_RestApi>
+    Singleton::Consume<I_RestApi>,
+    Singleton::Consume<I_ShellCmd>
 {
 public:
     TenantManager();

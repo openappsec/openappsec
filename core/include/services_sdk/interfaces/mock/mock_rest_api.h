@@ -8,6 +8,7 @@
 class MockRestApi : public Singleton::Provide<I_RestApi>::From<MockProvider<I_RestApi>>
 {
 public:
+    MOCK_CONST_METHOD0(getListeningPort, uint16_t());
     // You can't mock a function with an R-value reference. So mock a slightly different one
     MOCK_METHOD3(mockRestCall, bool(RestAction, const std::string &, const std::unique_ptr<RestInit> &));
 
