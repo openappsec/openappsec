@@ -42,19 +42,19 @@ install(TARGETS cp-nano-http-transaction-handler DESTINATION bin)
 install(TARGETS cp-nano-http-transaction-handler DESTINATION http_transaction_handler_service/bin)
 
 execute_process (
-	COMMAND bash -c "ldconfig -p | awk '/libpcre2-8.so/{sub(/[^/]*$/,\"\", $NF); path=$NF}END{system(\"ls \"path\"libpcre2-8.so*\")}' | awk '{printf $1\";\"}'"
+	COMMAND bash -c "find /usr/lib -name \"libpcre2-8.so*\" | awk '{printf $0\";\"}'"
 	OUTPUT_VARIABLE pcre2-8
 )
 install(FILES ${pcre2-8} DESTINATION http_transaction_handler_service/lib)
 
 execute_process (
-	COMMAND bash -c "ldconfig -p | awk '/libpcre2-posix.so/{sub(/[^/]*$/,\"\", $NF); path=$NF}END{system(\"ls \"path\"libpcre2-posix.so*\")}' | awk '{printf $1\";\"}'"
+	COMMAND bash -c "find /usr/lib -name \"libpcre2-posix.so*\" | awk '{printf $0\";\"}'"
 	OUTPUT_VARIABLE pcre2-posix
 )
 install(FILES ${pcre2-posix} DESTINATION http_transaction_handler_service/lib)
 
 execute_process (
-	COMMAND bash -c "ldconfig -p | awk '/libxml2.so/{sub(/[^/]*$/,\"\", $NF); path=$NF}END{system(\"ls \"path\"libxml2.so*\")}' | awk '{printf $1\";\"}'"
+	COMMAND bash -c "find /usr/lib -name \"libxml2.so*\" | awk '{printf $0\";\"}'"
 	OUTPUT_VARIABLE xml2
 )
 install(FILES ${xml2} DESTINATION http_transaction_handler_service/lib)
