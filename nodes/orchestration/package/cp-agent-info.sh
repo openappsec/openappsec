@@ -224,8 +224,8 @@ fi
 if [ -n "${SPLIT_DIR}" ]; then
     mkdir -p "$SPLIT_DIR"
     unsplited_tar="${CP_UNSPLITED_DIR}/agent-info.tar.gz"
-    if [ "$IS_SMB" != "1" ]; then
-        TAR_EXTRA_PARAMS="-P"
+    if [ `tar --help | grep absolute-names | wc -l` = "1" ]; then
+        TAR_EXTRA_PARAMS="--absolute-names"
     else
         TAR_EXTRA_PARAMS=""
     fi
