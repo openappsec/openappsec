@@ -1087,7 +1087,8 @@ private:
         vector<string> data_updates;
         update_results[OrchestrationStatusConfigType::DATA] = handleDataUpdate(orch_data, data_updates);
 
-        if (!orch_manifest.ok() && orch_policy.ok()) {
+        auto orch_mode = agent_details->getOrchestrationMode();
+        if ((!orch_manifest.ok() || orch_mode == OrchestrationMode::HYBRID) && orch_policy.ok()) {
             update_results[OrchestrationStatusConfigType::POLICY] = handlePolicyUpdate(
                 orch_policy,
                 settings_path,
