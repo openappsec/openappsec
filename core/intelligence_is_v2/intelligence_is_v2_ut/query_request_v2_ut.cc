@@ -10,29 +10,8 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 TEST(QueryRequestTestV2, QueryTest)
 {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
-    SerializableQueryFilter request_query1 = request.getQuery();
-    vector<SerializableQueryCondition> request_operands1 = request_query1.getConditionOperands();
-    SerializableQueryCondition request_condition = *request_operands1.begin();
-
-    EXPECT_EQ(request_query1.getOperator(), Operator::NONE);
-    EXPECT_EQ(request_condition.getKey(), "mainAttributes.phase");
-    EXPECT_EQ(request_condition.getValue(), "testing");
-
     request.addCondition(Condition::EQUALS, "user1", "Omry");
     request.addCondition(Condition::EQUALS, "user2", "Max");
-    SerializableQueryFilter request_query2 = request.getQuery();
-    vector<SerializableQueryCondition> request_operands2 = request_query2.getConditionOperands();
-
-    vector<SerializableQueryCondition>::iterator it = request_operands2.begin();
-    it++;
-
-    EXPECT_EQ(request_query2.getOperator(), Operator::AND);
-    EXPECT_EQ(it->getKey(), "mainAttributes.user1");
-    EXPECT_EQ(it->getValue(), "Omry");
-
-    it++;
-    EXPECT_EQ(it->getKey(), "mainAttributes.user2");
-    EXPECT_EQ(it->getValue(), "Max");
 
     string output_json =
     "{\n"
@@ -67,6 +46,38 @@ TEST(QueryRequestTestV2, QueryTest)
         request.saveToJson(out_ar);
     }
     EXPECT_EQ(out.str(), output_json);
+
+    QueryRequest request2(Condition::GREATER_THAN, "prev_time", 1676887025952, true);
+    request2.addCondition(Condition::LESS_THAN, "curr_time", 1676887025958);
+
+    string output_json2=
+    "{\n"
+    "    \"limit\": 20,\n"
+    "    \"fullResponse\": true,\n"
+    "    \"query\": {\n"
+    "        \"operator\": \"and\",\n"
+    "        \"operands\": [\n"
+    "            {\n"
+    "                \"operator\": \"greaterThan\",\n"
+    "                \"key\": \"mainAttributes.prev_time\",\n"
+    "                \"value\": 1676887025952\n"
+    "            },\n"
+    "            {\n"
+    "                \"operator\": \"lessThan\",\n"
+    "                \"key\": \"mainAttributes.curr_time\",\n"
+    "                \"value\": 1676887025958\n"
+    "            }\n"
+    "        ]\n"
+    "    }\n"
+    "}";
+
+
+    stringstream out2;
+    {
+        cereal::JSONOutputArchive out_ar2(out2);
+        request2.saveToJson(out_ar2);
+    }
+    EXPECT_EQ(out2.str(), output_json2);
 }
 
 TEST(QueryRequestTestV2, AttributesTest)
@@ -183,6 +194,104 @@ TEST(QueryRequestTestV2, OrQueryTest)
         "    }\n"
         "}";
     EXPECT_EQ(out.str(), output_json);
+}
+
+TEST(QueryRequestTestV2, AndQueryTestThree)
+{
+    QueryRequest request1(Condition::EQUALS, "phase", "testing1", true);
+    QueryRequest request2(Condition::EQUALS, "phase", "testing2", true);
+    QueryRequest request3(Condition::EQUALS, "phase", "testing3", true);
+    QueryRequest and_request_1_2 = request1 && (request2 && request3);
+    QueryRequest and_request_2_1 = (request1 && request2) && request3;
+
+    stringstream out_1_2;
+    {
+        cereal::JSONOutputArchive out_1_2_ar(out_1_2);
+        and_request_1_2.saveToJson(out_1_2_ar);
+    }
+
+    stringstream out_2_1;
+    {
+        cereal::JSONOutputArchive out_2_1_ar(out_2_1);
+        and_request_2_1.saveToJson(out_2_1_ar);
+    }
+
+    string output_json =
+        "{\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"and\",\n"
+        "        \"operands\": [\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.phase\",\n"
+        "                \"value\": \"testing1\"\n"
+        "            },\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.phase\",\n"
+        "                \"value\": \"testing2\"\n"
+        "            },\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.phase\",\n"
+        "                \"value\": \"testing3\"\n"
+        "            }\n"
+        "        ]\n"
+        "    }\n"
+        "}";
+    EXPECT_EQ(out_1_2.str(), output_json);
+    EXPECT_EQ(out_2_1.str(), output_json);
+}
+
+TEST(QueryRequestTestV2, OrQueryTestThree)
+{
+    QueryRequest request1(Condition::EQUALS, "phase", "testing1", true);
+    QueryRequest request2(Condition::EQUALS, "phase", "testing2", true);
+    QueryRequest request3(Condition::EQUALS, "phase", "testing3", true);
+    QueryRequest or_request_1_2 = request1 || (request2 || request3);
+    QueryRequest or_request_2_1 = (request1 || request2) || request3;
+
+    stringstream out_1_2;
+    {
+        cereal::JSONOutputArchive out_1_2_ar(out_1_2);
+        or_request_1_2.saveToJson(out_1_2_ar);
+    }
+
+    stringstream out_2_1;
+    {
+        cereal::JSONOutputArchive out_2_1_ar(out_2_1);
+        or_request_2_1.saveToJson(out_2_1_ar);
+    }
+
+    string output_json =
+        "{\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"or\",\n"
+        "        \"operands\": [\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.phase\",\n"
+        "                \"value\": \"testing1\"\n"
+        "            },\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.phase\",\n"
+        "                \"value\": \"testing2\"\n"
+        "            },\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.phase\",\n"
+        "                \"value\": \"testing3\"\n"
+        "            }\n"
+        "        ]\n"
+        "    }\n"
+        "}";
+    EXPECT_EQ(out_1_2.str(), output_json);
+    EXPECT_EQ(out_2_1.str(), output_json);
 }
 
 TEST(QueryRequestTestV2, AndWithConditionQueryTest)

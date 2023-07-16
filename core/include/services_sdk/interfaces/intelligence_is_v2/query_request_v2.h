@@ -37,6 +37,14 @@ public:
         AttributeKeyType type = AttributeKeyType::MAIN
     );
 
+    QueryRequest(
+        Condition condition_type,
+        const std::string &key,
+        const int64_t &value,
+        bool full_response,
+        AttributeKeyType type = AttributeKeyType::MAIN
+    );
+
     void saveToJson(cereal::JSONOutputArchive &ar) const;
     void save(cereal::JSONOutputArchive &ar) const;
 
@@ -48,6 +56,13 @@ public:
         Condition condition_type,
         const std::string &key,
         const std::string &value,
+        AttributeKeyType attribute_type = AttributeKeyType::MAIN
+    );
+
+    void addCondition(
+        Condition condition_type,
+        const std::string &key,
+        const int64_t &value,
         AttributeKeyType attribute_type = AttributeKeyType::MAIN
     );
 

@@ -51,6 +51,9 @@ void
 SyslogStream::sendLog(const Report &log)
 {
     string syslog_report = log.getSyslog();
+    if (protocol == I_Socket::SocketType::TCP) {
+        syslog_report = to_string(syslog_report.length()) + " " + syslog_report;
+    }
     vector<char> data(syslog_report.begin(), syslog_report.end());
     mainloop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Offline,

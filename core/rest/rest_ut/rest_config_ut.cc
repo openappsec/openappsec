@@ -99,6 +99,8 @@ TEST_F(RestConfigTest, alternative_port_used)
     );
     mainloop->run();
 
+    EXPECT_EQ(Singleton::Consume<I_RestApi>::from(rest_server)->getListeningPort(), *alternative_port);
+
     sa.sin_port = htons(alternative_port.unpack());
     EXPECT_EQ(bind(file_descriptor, reinterpret_cast<struct sockaddr *>(&sa), sizeof(struct sockaddr_in)), -1);
 

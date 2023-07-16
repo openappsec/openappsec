@@ -77,6 +77,12 @@ getFilesystemPathConfig()
     return Singleton::Consume<I_Config>::from<MockConfigProvider>()->getFilesystemPathConfig();
 }
 
+void
+clearOldTenants()
+{
+    Singleton::Consume<I_Config>::from<MockConfigProvider>()->clearOldTenants();
+}
+
 const string &
 getLogFilesPathConfig()
 {

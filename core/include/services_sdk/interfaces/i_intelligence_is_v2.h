@@ -25,12 +25,25 @@
 #include "intelligence_is_v2/intelligence_query_v2.h"
 #include "config.h"
 
+namespace Intelligence {
+
+class Invalidation;
+
+} // namespace Intelligence
+
 class I_Intelligence_IS_V2
 {
 public:
+    virtual bool sendInvalidation(const Intelligence::Invalidation &invalidation) const = 0;
+    virtual Maybe<uint> registerInvalidation(
+        const Intelligence::Invalidation &invalidation,
+        const std::function<void(const Intelligence::Invalidation &)> &callback
+    ) = 0;
+    virtual void unregisterInvalidation(uint id) = 0;
+
     template<typename Data>
     Maybe<std::vector<AssetReply<Data>>>
-    queryIntelligence(QueryRequest &query_request)
+    queryIntelligence(QueryRequest &query_request, bool ignore_in_progress = false, bool is_pretty = true)
     {
         uint assets_limit = query_request.getAssetsLimit();
         static const uint upper_assets_limit = 50;
@@ -50,7 +63,7 @@ public:
             return genError("Paging is activated and already finished. No need for more queries.");
         }
 
-        IntelligenceQuery<Data> intelligence_query(query_request);
+        IntelligenceQuery<Data> intelligence_query(query_request, is_pretty);
         static const std::string query_uri = "/api/v2/intelligence/assets/query";
 
         bool res = getIsOfflineOnly() ? false : sendQueryObject(intelligence_query, query_uri, assets_limit);
@@ -67,12 +80,15 @@ public:
             }
         }
 
+        if (ignore_in_progress && intelligence_query.getResponseStatus() == ResponseStatus::IN_PROGRESS) {
+            return genError("Query intelligence response with InProgress status");
+        }
         return intelligence_query.getData();
     }
 
     template<typename Data>
     Maybe<std::vector<Maybe<std::vector<AssetReply<Data>>>>>
-    queryIntelligence(std::vector<QueryRequest> &query_requests)
+    queryIntelligence(std::vector<QueryRequest> &query_requests, bool is_pretty = true)
     {
         static const uint upper_assets_limit = 50;
         static const uint upper_confidence_limit = 1000;
@@ -95,7 +111,7 @@ public:
                 );
             }
         }
-        IntelligenceQuery<Data> intelligence_query(query_requests);
+        IntelligenceQuery<Data> intelligence_query(query_requests, is_pretty);
         static const std::string query_uri = "/api/v2/intelligence/assets/queries";
 
         dbgTrace(D_INTELLIGENCE) << "Sending intelligence bulk request with " << query_requests.size() << " items";

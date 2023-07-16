@@ -51,6 +51,8 @@ public:
 
     virtual void clearFailedServices() = 0;
 
+    virtual std::set<std::string> && moveChangedPolicies() = 0;
+
     virtual bool isServiceInstalled(const std::string &service_name) = 0;
 
     virtual void registerServiceConfig(

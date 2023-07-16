@@ -101,6 +101,24 @@ inline unsigned char from_hex(unsigned char ch, bool &valid) {
     return ch;
 }
 
+inline bool str_starts_with(const std::string& value, const std::string& prefix)
+{
+    if (prefix.size() > value.size()) {
+        return false;
+    }
+
+    return value.compare(0, prefix.size(), prefix) == 0;
+}
+
+inline bool str_ends_with(const std::string& value, const std::string& ending)
+{
+    if (ending.size() > value.size()) {
+        return false;
+    }
+
+    return value.compare(value.size() - ending.size(), ending.size(), ending) == 0;
+}
+
 template<class _IT>
 _IT unquote_plus(_IT first, _IT last, bool decodeUrl=true, bool decodePlus=true) {
     _IT result = first;

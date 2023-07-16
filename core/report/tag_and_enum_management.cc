@@ -105,7 +105,9 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"Embedded Deployment", ReportIS::Tags::DEPLOYMENT_EMBEDDED},
         {"Kubernetes Deployment", ReportIS::Tags::DEPLOYMENT_K8S},
         {"Layer 7 Access Control", ReportIS::Tags::LAYER_7_ACCESS_CONTROL},
-        {"Horizon Telemetry Metrics", ReportIS::Tags::HORIZON_TELEMETRY_METRICS}
+        {"Horizon Telemetry Metrics", ReportIS::Tags::HORIZON_TELEMETRY_METRICS},
+        {"Crowdsec", ReportIS::Tags::CROWDSEC},
+        {"Playground", ReportIS::Tags::PLAYGROUND}
     };
 
     auto report_is_tag = strings_to_tags.find(tag);
@@ -305,7 +307,9 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Embedded Deployment",
     "Kubernetes Deployment",
     "Layer 7 Access Control",
-    "Horizon Telemetry Metrics"
+    "Horizon Telemetry Metrics",
+    "Crowdsec",
+    "Playground"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

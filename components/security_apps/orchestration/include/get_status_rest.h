@@ -14,7 +14,6 @@
 #ifndef __GET_STATUS_RES_H__
 #define __GET_STATUS_RES_H__
 
-#include "i_messaging_downloader.h"
 #include "i_messaging.h"
 #include "i_mainloop.h"
 #include "i_shell_cmd.h"

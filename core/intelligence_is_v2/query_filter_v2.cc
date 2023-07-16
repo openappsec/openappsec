@@ -23,19 +23,46 @@ using namespace Intelligence_IS_V2;
 
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
+struct Visitor : public boost::static_visitor<void>
+{
+    Visitor(cereal::JSONOutputArchive& _ar) : ar(_ar) {}
+
+    template <typename T>
+    void operator()(const T& value)
+    {
+        ar(cereal::make_nvp("value", value));
+    }
+
+private:
+    cereal::JSONOutputArchive &ar;
+};
+
 void
 SerializableQueryCondition::save(cereal::JSONOutputArchive &ar) const
 {
     ar(
         cereal::make_nvp("operator", string(convertConditionTypeToString(condition_type))),
-        cereal::make_nvp("key", key),
-        cereal::make_nvp("value", value)
+        cereal::make_nvp("key", key)
     );
+
+    Visitor visitor(ar);
+    boost::apply_visitor(visitor, value);
 }
 
-SerializableQueryFilter::SerializableQueryFilter(Condition condition_type, const string &key, const string &value)
-{
-    condition_operands.push_back(SerializableQueryCondition(condition_type, key, value));
+SerializableQueryFilter::SerializableQueryFilter(
+    Condition condition_type,
+    const std::string &key,
+    const std::string &value
+) {
+    condition_operands.emplace_back(condition_type, key, value);
+}
+
+SerializableQueryFilter::SerializableQueryFilter(
+    Condition condition_type,
+    const std::string &key,
+    const int64_t &value
+) {
+    condition_operands.emplace_back(condition_type, key, value);
 }
 
 void
@@ -52,31 +79,28 @@ void
 SerializableQueryFilter::addCondition(Condition condition_type, const string &key, const string &value)
 {
     if (queries_operands.size() > 0) {
-        SerializableQueryFilter new_query_filter(condition_type, key, value);
-        queries_operands.push_back(new_query_filter);
+        queries_operands.emplace_back(condition_type, key, value);
         return;
     }
-    if (condition_operands.size() == 1 && operator_type == Operator::NONE) {
-        operator_type = Operator::AND;
+    if (condition_operands.size() == 1 && operator_type == Operator::NONE) operator_type = Operator::AND;
+    condition_operands.emplace_back(condition_type, key, value);
+}
+
+void
+SerializableQueryFilter::addCondition(Condition condition_type, const string &key, const int64_t &value)
+{
+    if (queries_operands.size() > 0) {
+        queries_operands.emplace_back(condition_type, key, value);
+        return;
     }
-    SerializableQueryCondition cond(condition_type, key, value);
-    condition_operands.push_back(cond);
+    if (condition_operands.size() == 1 && operator_type == Operator::NONE) operator_type = Operator::AND;
+    condition_operands.emplace_back(condition_type, key, value);
 }
 
 void
 SerializableQueryFilter::saveCondition(cereal::JSONOutputArchive &ar) const
 {
-    SerializableQueryCondition cond = *condition_operands.begin();
-    Condition condition_type = cond.getConditionType();
-    string condition_str = convertConditionTypeToString(condition_type);
-    string filter_key = cond.getKey();
-    string filter_value = cond.getValue();
-
-    ar(
-        cereal::make_nvp("operator", condition_str),
-        cereal::make_nvp("key", filter_key),
-        cereal::make_nvp("value", filter_value)
-    );
+    condition_operands.begin()->save(ar);
 }
 
 void
@@ -101,7 +125,7 @@ SerializableQueryFilter::saveOperation(cereal::JSONOutputArchive &ar) const
     }
 }
 
-const string &
+Maybe<SerializableQueryCondition::ValueVariant>
 SerializableQueryFilter::getConditionValueByKey(const string &key) const
 {
     for (const SerializableQueryCondition &condition : condition_operands) {
@@ -110,21 +134,49 @@ SerializableQueryFilter::getConditionValueByKey(const string &key) const
         }
     }
 
-    static string empty_str = "";
-    return empty_str;
+    return genError("Key not found.");
+}
+
+bool
+SerializableQueryFilter::isOperatorComp(const Operator &oper) const
+{
+    return operator_type == Operator::NONE || operator_type == oper;
 }
 
 SerializableQueryFilter
-SerializableQueryFilter::calcOperator(const SerializableQueryFilter &other_query, const Operator &operator_type)
+SerializableQueryFilter::calcOperator(const SerializableQueryFilter &other_query, const Operator &oper)
 {
     SerializableQueryFilter query_filter_res;
-    vector<SerializableQueryFilter> new_queries_operands;
 
-    new_queries_operands.push_back(*this);
-    new_queries_operands.push_back(other_query);
+    query_filter_res.operator_type = oper;
 
-    query_filter_res.queries_operands = new_queries_operands;
-    query_filter_res.operator_type = operator_type;
+    if (isOperatorComp(oper) && other_query.isOperatorComp(oper)) {
+        size_t queries_size = queries_operands.size() + other_query.queries_operands.size();
+        size_t conditions_size = condition_operands.size() + other_query.condition_operands.size();
+        query_filter_res.queries_operands.reserve(queries_size);
+        query_filter_res.condition_operands.reserve(conditions_size);
+
+        for (const auto &subquery : queries_operands) {
+            query_filter_res.queries_operands.push_back(subquery);
+        }
+
+        for (const auto &condition : condition_operands) {
+            query_filter_res.condition_operands.push_back(condition);
+        }
+
+        for (const auto &subquery : other_query.queries_operands) {
+            query_filter_res.queries_operands.push_back(subquery);
+        }
+
+        for (const auto &condition : other_query.condition_operands) {
+            query_filter_res.condition_operands.push_back(condition);
+        }
+    } else {
+        query_filter_res.queries_operands.reserve(2);
+        query_filter_res.queries_operands.push_back(*this);
+        query_filter_res.queries_operands.push_back(other_query);
+    }
+
     return query_filter_res;
 }
 

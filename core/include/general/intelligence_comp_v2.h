@@ -20,6 +20,8 @@
 #include "i_messaging.h"
 #include "i_mainloop.h"
 #include "i_time_get.h"
+#include "i_agent_details.h"
+#include "i_rest_api.h"
 #include "component.h"
 
 class IntelligenceComponentV2
@@ -28,6 +30,8 @@ class IntelligenceComponentV2
     Singleton::Provide<I_Intelligence_IS_V2>,
     Singleton::Consume<I_Messaging>,
     Singleton::Consume<I_MainLoop>,
+    Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_TimeGet>
 {
 public:

@@ -31,6 +31,11 @@
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
+SHELL_CMD_HANDLER("canUpdateSDWanData", "cpsdwan get_data | jq -r .can_update_sdwan_data", checkCanUpdateSDWanData)
+SHELL_CMD_HANDLER(
+    "isSdwanRunning",
+    "[ -v $(pidof cp-nano-sdwan) ] && echo 'false' || echo 'true'",
+    checkIfSdwanRunning)
 #endif //gaia || smb
 
 #if defined(gaia)

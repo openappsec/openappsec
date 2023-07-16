@@ -160,15 +160,20 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
 {
     auto i_env = Singleton::Consume<I_Environment>::by<ManifestController>();
     auto span_scope = i_env->startNewSpanScope(Span::ContextType::CHILD_OF);
+    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ManifestController>();
 
-    if (isIgnoreFile(new_manifest_file)) return true;
+    if (isIgnoreFile(new_manifest_file)) {
+        if (!orchestration_tools->copyFile(new_manifest_file, manifest_file_path)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new manifest file";
+            return false;
+        }
+        return true;
+    }
 
     dbgDebug(D_ORCHESTRATOR) << "Starting to update manifest file";
     auto ignored_settings_packages = getProfileAgentSetting<IgnoredPackages>("orchestration.IgnoredPackagesList");
     set<string> packages_to_ignore = ignore_packages;
     if (ignored_settings_packages.ok()) packages_to_ignore = *(*ignored_settings_packages);
-
-    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ManifestController>();
 
     if (packages_to_ignore.count("all") > 0) {
         dbgTrace(D_ORCHESTRATOR) << "Nothing to update (\"ignore all\" turned on)";

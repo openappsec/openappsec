@@ -31,5 +31,6 @@ DEFINE_KDEBUG_FLAG(statefulValidation)
 DEFINE_KDEBUG_FLAG(statelessValidation)
 DEFINE_KDEBUG_FLAG(kernelMetric)
 DEFINE_KDEBUG_FLAG(tproxy)
+DEFINE_KDEBUG_FLAG(tenantStats)
 
 #endif // DEFINE_KDEBUG_FLAG

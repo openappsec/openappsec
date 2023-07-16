@@ -21,12 +21,11 @@
 #include <chrono>
 #include <functional>
 
+#include "tenant_profile_pair.h"
+
 class I_TenantManager
 {
 public:
-    using newTenantCB = std::function<void(const std::vector<std::string> &)>;
-
-    virtual void uponNewTenants(const newTenantCB &cb) = 0;
     virtual bool areTenantAndProfileActive(const std::string &tenant_id, const std::string &profile_id) const = 0;
 
     virtual std::set<std::string> fetchAllActiveTenants() const = 0;
@@ -36,13 +35,12 @@ public:
         const std::string &profile_id
     ) const = 0;
     virtual std::map<std::string, std::set<std::string>> fetchActiveTenantsAndProfiles() const = 0;
+    virtual std::map<std::string, std::set<std::string>> fetchAndUpdateActiveTenantsAndProfiles(bool update) = 0;
     virtual std::set<std::string> fetchProfileIds(const std::string &tenant_id) const = 0;
 
     virtual void deactivateTenant(const std::string &tenant_id, const std::string &profile_id) = 0;
 
     virtual void addActiveTenantAndProfile(const std::string &tenant_id, const std::string &profile_id) = 0;
-
-    virtual std::chrono::microseconds getTimeoutVal() const = 0;
 
     virtual std::set<std::string> getProfileIdsForRegionAccount(
         const std::string &tenant_id,

@@ -43,6 +43,8 @@ DEFAULT_SETTINGS_PATH="${CONF_PATH}/settings.json"
 var_default_fog_address="https://i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="https://inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="https://inext-agents-us.cloud.ngen.checkpoint.com"
+var_default_au_fog_address="https://inext-agents-aus1.cloud.ngen.checkpoint.com"
+var_default_in_fog_address="https://inext-agents-ind1.cloud.ngen.checkpoint.com"
 var_fog_address=
 var_certs_dir=
 var_public_key=
@@ -330,9 +332,17 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             gem_prefix_uppercase="CP-"
             us_prefix="cp-us-"
             us_prefix_uppercase="CP-US-"
+            au_prefix="cp-au-"
+            au_prefix_uppercase="CP-AU-"
+            in_prefix="cp-in-"
+            in_prefix_uppercase="CP-IN-"
 
             if [ "${var_token#"$us_prefix"}" != "${var_token}" ] || [ "${var_token#"$us_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_us_fog_address"
+            elif [ "${var_token#$au_prefix}" != "${var_token}" ] || [ "${var_token#"$au_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_au_fog_address"
+            elif [ "${var_token#$in_prefix}" != "${var_token}" ] || [ "${var_token#"$in_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_in_fog_address"
             elif [ "${var_token#"$gem_prefix"}" != "${var_token}" ] || [ "${var_token#"$gem_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_gem_fog_address"
             else
@@ -567,7 +577,7 @@ install_cp_nano_ctl()
     if [ -f ${FILESYSTEM_PATH}/${CONF_PATH}/CP_NANO_AGENT_CTL ]; then
         cp_exec "rm -rf ${FILESYSTEM_PATH}/${CONF_PATH}/$CP_NANO_AGENT_CTL"
     fi
-    
+
     if [ -f ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_AGENT_CTL_DEPRECATED} ]; then
         cp_exec "rm -f ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_AGENT_CTL_DEPRECATED} $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED}"
     fi
@@ -602,7 +612,7 @@ set_conf_temp_location()
         if ! cat ${FILESYSTEM_PATH}/${ORCHESTRATION_CONF_FILE} | grep -q "\"orchestration\":"; then
             sed -i -e "1 s/{/{\n\"orchestration\": {\"Default file download path\": [{\"value\":\""${escaped_temp_location}"\"}]},/" ${FILESYSTEM_PATH}/${ORCHESTRATION_CONF_FILE}
         else
-            sed -i -e "/\"orchestration\"/ s/\"orchestration\".*:.*{/\"orchestration\":{\"Default file download path\": [{\"value\":\""${escaped_temp_location}"\"}],/" ${FILESYSTEM_PATH}/${ORCHESTRATION_CONF_FILE}   
+            sed -i -e "/\"orchestration\"/ s/\"orchestration\".*:.*{/\"orchestration\":{\"Default file download path\": [{\"value\":\""${escaped_temp_location}"\"}],/" ${FILESYSTEM_PATH}/${ORCHESTRATION_CONF_FILE}
         fi
     fi
 }
@@ -753,6 +763,16 @@ install_public_key()
     fi
 }
 
+uninstall_messaging_proxy_if_needed()
+{
+    messaging_exec_path="${FILESYSTEM_PATH}/packages/messagingProxy/messagingProxy"
+    if [ -f ${messaging_exec_path} ]; then
+        chmod +x ${messaging_exec_path}
+        ${messaging_exec_path} --uninstall
+        rm -rf ${FILESYSTEM_PATH}/packages/messagingProxy
+    fi
+}
+
 install_orchestration()
 {
     INSTALLATION_TIME=$(date)
@@ -836,6 +856,8 @@ install_orchestration()
 
         install_watchdog
         cp_print "Upgrade to latest"
+
+        uninstall_messaging_proxy_if_needed
 
         ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration "$var_arch_flag" > /dev/null 2>&1
         if [ "$IS_K8S_ENV" = "true" ]; then
@@ -1043,19 +1065,19 @@ run_pre_install_test()
 run_post_install_test()
 {
     if [ $var_is_alpine = false ]; then
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_chrono.so ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_chrono.so* ]; then
             cp_print "Error, libboost_chrono .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_context.so ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_context.so* ]; then
             cp_print "Error, libboost_context .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_system.so ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_system.so* ]; then
             cp_print "Error, libboost_system .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_thread.so ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_thread.so* ]; then
             cp_print "Error, libboost_thread .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi

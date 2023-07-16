@@ -43,6 +43,19 @@ public:
         uint16_t client_port
     );
 
+    HttpTransactionData (
+        std::string http_proto,
+        std::string method,
+        std::string host_name,
+        std::string parsed_host,
+        IPAddr listening_ip,
+        uint16_t listening_port,
+        std::string uri,
+        std::string parsed_uri,
+        IPAddr client_ip,
+        uint16_t client_port
+    );
+
 // LCOV_EXCL_START - sync functions, can only be tested once the sync module exists
     template <class Archive>
     void
@@ -52,9 +65,11 @@ public:
             http_proto,
             method,
             host_name,
+            parsed_host,
             listening_ip,
             listening_port,
             uri,
+            parsed_uri,
             client_ip,
             client_port,
             response_content_encoding
@@ -69,9 +84,11 @@ public:
             http_proto,
             method,
             host_name,
+            parsed_host,
             listening_ip,
             listening_port,
             uri,
+            parsed_uri,
             client_ip,
             client_port,
             response_content_encoding
@@ -86,8 +103,10 @@ public:
     const IPAddr & getListeningIP() const { return listening_ip; }
     uint16_t getListeningPort() const { return listening_port; }
     const std::string & getDestinationHost() const { return host_name; }
+    const std::string & getParsedHost() const { return parsed_host; }
     const std::string & getHttpProtocol() const { return http_proto; }
     const std::string & getURI() const { return uri; }
+    const std::string & getParsedURI() const { return parsed_uri; }
     const std::string & getHttpMethod() const { return method; }
 
     void print(std::ostream &out_stream) const;
@@ -124,9 +143,11 @@ private:
     std::string http_proto;
     std::string method = "GET";
     std::string host_name;
+    std::string parsed_host;
     IPAddr listening_ip;
     uint16_t listening_port;
     std::string uri;
+    std::string parsed_uri;
     IPAddr client_ip;
     uint16_t client_port;
     bool is_request;

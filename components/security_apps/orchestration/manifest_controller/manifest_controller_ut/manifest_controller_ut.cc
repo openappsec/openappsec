@@ -740,6 +740,7 @@ TEST_F(ManifestControllerTest, selfUpdateWithOldCopyWithError)
                             orch_service_name;
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(path)).WillOnce(Return(false)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(path, path + backup_ext + temp_ext)).WillOnce(Return(false));
+    EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(hostname));
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
 

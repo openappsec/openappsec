@@ -145,23 +145,21 @@ ManifestHandler::downloadPackages(
                 }
             }
             downloaded_packages.clear();
+
+            auto agent_details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
+            auto hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
+            string err_hostname = (hostname.ok() ? "on host '" + *hostname : "'" + agent_details->getAgentId()) + "'";
             string install_error;
             if (is_clean_installation) {
-                string error_hostname_addition = "";
-                auto maybe_hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
-                if (maybe_hostname.ok()) {
-                    error_hostname_addition = " on host '" + maybe_hostname.unpack() + "'";
-                }
                 install_error =
-                    "Critical Error: Agent/Gateway was not fully deployed" +
-                    error_hostname_addition +
+                    "Critical Error: Agent/Gateway was not fully deployed " +
+                    err_hostname +
                     " and is not enforcing a security policy. Retry installation or contact Check Point support.";
             } else {
-                auto agent_details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
                 install_error =
-                    "Warning: Agent/Gateway '" +
-                    agent_details->getAgentId() +
-                    "' software update failed. Agent is running previous software. Contact Check Point support.";
+                    "Warning: Agent/Gateway " +
+                    err_hostname +
+                    " software update failed. Agent is running previous software. Contact Check Point support.";
             }
 
             auto orchestration_status = Singleton::Consume<I_OrchestrationStatus>::by<ManifestHandler>();
@@ -221,11 +219,13 @@ ManifestHandler::installPackages(
             orchestration_status->writeStatusToFile();
             bool self_update_status = selfUpdate(package, current_packages, package_handler_path);
             if (!self_update_status) {
-                auto agent_details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
+                auto details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
+                auto hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
+                string err_hostname = (hostname.ok() ? "on host '" + *hostname : "'" + details->getAgentId()) + "'";
                 string install_error =
-                    "Warning: Agent/Gateway '" +
-                    agent_details->getAgentId() +
-                    "' software update failed. Agent is running previous software. Contact Check Point support.";
+                    "Warning: Agent/Gateway " +
+                    err_hostname +
+                    " software update failed. Agent is running previous software. Contact Check Point support.";
                 if (orchestration_status->getManifestError().find("Gateway was not fully deployed") == string::npos) {
                     orchestration_status->setFieldStatus(
                         OrchestrationStatusFieldType::MANIFEST,
@@ -278,23 +278,20 @@ ManifestHandler::installPackages(
         }
 
         if (!current_result) {
+            auto agent_details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
+            auto hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
+            string err_hostname = (hostname.ok() ? "on host '" + *hostname : "'" +agent_details->getAgentId()) + "'";
             string install_error;
             if (is_clean_installation) {
-                string error_hostname_addition = "";
-                auto maybe_hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
-                if (maybe_hostname.ok()) {
-                    error_hostname_addition = " on host '" + maybe_hostname.unpack() + "'";
-                }
                 install_error =
-                    "Critical Error: Agent/Gateway was not fully deployed" +
-                    error_hostname_addition +
+                    "Critical Error: Agent/Gateway was not fully deployed " +
+                    err_hostname +
                     " and is not enforcing a security policy. Retry installation or contact Check Point support.";
             } else {
-                auto agent_details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
                 install_error =
-                    "Warning: Agent/Gateway '" +
-                    agent_details->getAgentId() +
-                    "' software update failed. Agent is running previous software. Contact Check Point support.";
+                    "Warning: Agent/Gateway " +
+                    err_hostname +
+                    " software update failed. Agent is running previous software. Contact Check Point support.";
             }
             corrupted_packages.insert(make_pair(package_name, package));
             dbgWarning(D_ORCHESTRATOR) << "Failed to install package. Package: " << package_name;

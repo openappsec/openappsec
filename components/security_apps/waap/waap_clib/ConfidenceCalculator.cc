@@ -208,12 +208,14 @@ void ConfidenceCalculator::pullProcessedData(const std::vector<std::string>& fil
 {
     dbgTrace(D_WAAP) << "Fetching the confidence set object";
     bool is_first_pull = true;
+    bool is_ok = false;
     for (auto file : files)
     {
         ConfidenceFileDecryptor getConfFile;
         bool res = sendObjectWithRetry(getConfFile,
             I_Messaging::Method::GET,
             getUri() + "/" + file);
+        is_ok |= res;
         if (res && getConfFile.getConfidenceSet().ok())
         {
             mergeFromRemote(getConfFile.getConfidenceSet().unpack(), is_first_pull);
@@ -224,8 +226,8 @@ void ConfidenceCalculator::pullProcessedData(const std::vector<std::string>& fil
             m_confidence_level = getConfFile.getConfidenceLevels().unpackMove();
         }
     }
-    // is_first_pull = false -> at least one file was downloaded and merged
-    if (is_first_pull) {
+    // is_ok = false -> no file was downloaded and merged
+    if (!is_ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the remote state";
     }
 }

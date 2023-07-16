@@ -7,6 +7,7 @@
 #include "mock/mock_http_manager.h"
 #include "mock/mock_logging.h"
 #include "mock/mock_messaging.h"
+#include "mock/mock_rest_api.h"
 #include "intelligence_comp_v2.h"
 #include "agent_details.h"
 
@@ -27,6 +28,7 @@ public:
         EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(Return(chrono::seconds(60)));
         EXPECT_CALL(mock_ml, doesRoutineExist(_)).WillRepeatedly(Return(true));
         EXPECT_CALL(mock_ml, stop(_)).WillRepeatedly(Return());
+        EXPECT_CALL(mock_ml, addRecurringRoutine(_, _, _, "Sending intelligence invalidation", _));
         env.preload();
         env.init();
         config.preload();
@@ -57,6 +59,7 @@ public:
     StrictMock<MockTimeGet>     mock_time;
     StrictMock<MockMainLoop>    mock_ml;
     StrictMock<MockMessaging>   messaging_mock;
+    NiceMock<MockRestApi>       mock_rest;
     AgentDetails                agent_details;
     IntelligenceComponentV2     intelligence_comp;
     Context ctx;
@@ -243,7 +246,8 @@ Layer7AccessControlTest::verifyReport(
     EXPECT_THAT(log, HasSubstr("\"httpMethod\": \"POST\""));
     EXPECT_THAT(log, HasSubstr("\"ipProtocol\": \"http\""));
     EXPECT_THAT(log, HasSubstr("\"destinationIP\": \"5.6.7.8\""));
-    EXPECT_THAT(log, HasSubstr("\"externalVendorName\": \"crowdsec\""));
+    EXPECT_THAT(log, HasSubstr("\"externalVendorName\": \"CrowdSec\""));
+    EXPECT_THAT(log, HasSubstr("\"waapIncidentType\": \"CrowdSec\""));
     EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendationId\": 2253734"));
     EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendedAction\": \"ban\""));
     EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendationOrigin\": \"cscli\""));

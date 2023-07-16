@@ -1,2 +1,0 @@
-add_subdirectory(downloader_server_ut)
-add_subdirectory(downloader_client_ut)

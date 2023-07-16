@@ -70,7 +70,7 @@ RestConn::parseConn() const
 
     string uri;
     os >> uri;
-    string identifier = uri.substr(uri.find_last_of('/') + 1);
+    string identifier = uri.substr(uri.find_first_of('/') + 1);
 
     uint len = 0;
     while (true) {

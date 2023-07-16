@@ -26,6 +26,10 @@ class MockServiceController :
 public:
     MOCK_METHOD0(refreshPendingServices, void());
 
+    MOCK_METHOD0(mockMoveChangedPolicies, std::set<std::string>());
+    std::set<std::string> tmp;
+    std::set<std::string> && moveChangedPolicies() override { tmp = mockMoveChangedPolicies(); return std::move(tmp); }
+
     MOCK_METHOD0(doesFailedServicesExist, bool());
 
     MOCK_METHOD0(clearFailedServices, void());

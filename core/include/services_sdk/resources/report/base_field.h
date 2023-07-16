@@ -25,8 +25,6 @@
 #include "debug.h"
 #include "flags.h"
 #include "config.h"
-#include "virtual_container.h"
-#include "Log_modifiers.h"
 
 enum class LogFieldOption { XORANDB64, COUNT };
 
@@ -111,14 +109,53 @@ class LogField : Singleton::Consume<I_Environment>
         getSyslogAndCef() const override
         {
             std::string value(Details::getValueAsString(getValue()));
-            auto modifier1 = makeVirtualContainer<LogModifiers::ReplaceBackslash>(value);
-            auto modifier2 = makeVirtualContainer<LogModifiers::ReplaceCR>(modifier1);
-            auto modifier3 = makeVirtualContainer<LogModifiers::ReplaceLF>(modifier2);
-            auto modifier4 = makeVirtualContainer<LogModifiers::ReplaceDoubleOuotes>(modifier3);
-            auto modifier5 = makeVirtualContainer<LogModifiers::ReplaceQuote>(modifier4);
-            auto modifier6 = makeVirtualContainer<LogModifiers::ReplaceClosingBrace>(modifier5);
-            auto modifier7 = makeVirtualContainer<LogModifiers::ReplaceEqualSign>(modifier6);
-            return name + "=\"" + std::string(modifier7.begin(), modifier7.end()) + "\"";
+
+            std::string encoded_value;
+            encoded_value.reserve(value.size() + 6);
+            for (char ch : value) {
+                switch (ch) {
+                    case '\\': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back('\\');
+                        break;
+                    }
+                    case '\n': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back('n');
+                        break;
+                    }
+                    case '\r': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back('r');
+                        break;
+                    }
+                    case '"': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back('"');
+                        break;
+                    }
+                    case '\'': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back('\'');
+                        break;
+                    }
+                    case ']': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back(']');
+                        break;
+                    }
+                    case '=': {
+                        encoded_value.push_back('\\');
+                        encoded_value.push_back('=');
+                        break;
+                    }
+                    default: {
+                        encoded_value.push_back(ch);
+                    }
+                }
+            }
+
+            return name + "=\"" + encoded_value + "\"";
         }
 
         // LCOV_EXCL_START Reason: seems that assert prevent the LCOV from identifying that method was tested

@@ -41,12 +41,21 @@
 #include "tenant_profile_pair.h"
 #include "env_details.h"
 #include "hybrid_communication.h"
+#include "agent_core_utilities.h"
 
 using namespace std;
 using namespace chrono;
 using namespace ReportIS;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
+
+
+static const string ls_prefix = "ls ";
+static const string extract_tenant_profile_suffix =
+    "| grep tenant "
+    "| cut -d '_' -f 2,4 "
+    "| sort --unique "
+    "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'";
 
 class HealthCheckStatusListener : public Listener<HealthCheckStatusEvent>
 {
@@ -193,6 +202,7 @@ public:
             ReportIS::Audience::INTERNAL
         );
         hybrid_mode_metric.registerListener();
+        loadExistingTenantsFromConfDir();
     }
 
     void
@@ -237,7 +247,9 @@ private:
             }
 
             policy_version = service_controller->getPolicyVersion();
-            Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(policy_version);
+            if (!policy_version.empty()) {
+                Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(policy_version);
+            }
         } else {
             dbgDebug(D_ORCHESTRATOR) << "Orchestration is running for the first time";
             enforce_policy_flag = true;
@@ -275,6 +287,59 @@ private:
             return Maybe<void>();
         }
         return authentication_res;
+    }
+
+    void
+    loadExistingTenantsFromConfDir()
+    {
+        dbgTrace(D_ORCHESTRATOR) << "Load existing tenants and profiles from the configuration folder";
+
+        string global_conf_dir = getConfigurationWithDefault<string>(
+            getFilesystemPathConfig()+ "/conf/",
+            "orchestration",
+            "Conf dir"
+        );
+        string shell_cmd_string = ls_prefix + global_conf_dir + extract_tenant_profile_suffix;
+        auto shell = Singleton::Consume<I_ShellCmd>::by<OrchestrationComp>();
+        Maybe<string> output_res = shell->getExecOutput(shell_cmd_string);
+
+        if (!output_res.ok()) {
+            dbgWarning(D_ORCHESTRATOR)
+                << "Failed to load existing tenants from configuration folder: " + output_res.getErr();
+            return;
+        }
+
+        auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
+        stringstream ss(output_res.unpack());
+        string tenant_id;
+        string profile_id;
+        while (!ss.eof() && getline(ss, tenant_id, ' ') && !ss.eof() && getline(ss, profile_id, ' ')) {
+            dbgTrace(D_ORCHESTRATOR) << "Add existing tenant_" + tenant_id + "_profile_" + profile_id;
+            tenant_manager->addActiveTenantAndProfile(tenant_id, profile_id);
+        }
+    }
+
+    void
+    deleteInactiveTenantProfileFiles(const string &tenant_id, const string &profile_id)
+    {
+        string global_conf_dir = getConfigurationWithDefault<string>(
+            getFilesystemPathConfig()+ "/conf/",
+            "orchestration",
+            "Conf dir"
+        );
+        string tenant_and_profile_suffix = "tenant_" + tenant_id + "_profile_" + profile_id;
+        string virtual_policy_dir = global_conf_dir + tenant_and_profile_suffix;
+
+        dbgTrace(D_ORCHESTRATOR) << "Delete virtual policy folder : " << virtual_policy_dir;
+        if (!NGEN::Filesystem::deleteDirectory(virtual_policy_dir, true)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to delete virtual policy folder : " << virtual_policy_dir;
+        }
+
+        string settings_file_path = virtual_policy_dir + "_settings.json";
+        dbgTrace(D_ORCHESTRATOR) << "Delete settings file " << settings_file_path;
+        if (!NGEN::Filesystem::deleteFile(settings_file_path)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to delete virtual policy settings file : " << settings_file_path;
+        }
     }
 
     Maybe<OrchestrationPolicy>
@@ -404,33 +469,30 @@ private:
         dbgInfo(D_ORCHESTRATOR) << "There is a new manifest file.";
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::MANIFEST);
         Maybe<string> new_manifest_file =
-        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromFog(
-            orch_manifest.unpack(),
-            I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-            resource_file
-        );
+            Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromFog(
+                orch_manifest.unpack(),
+                I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
+                resource_file
+            );
 
         auto orch_status = Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>();
         auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
         auto agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>();
         static int service_to_port_size = service_controller->getServiceToPortMap().size();
+        auto hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
+        string err_hostname = (hostname.ok() ? "on host '" + *hostname : "'" + agent_details->getAgentId()) + "'";
         if (!new_manifest_file.ok()) {
             string install_error;
             if (!service_to_port_size) {
-                string error_hostname_addition = "";
-                auto maybe_hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
-                if (maybe_hostname.ok()) {
-                    error_hostname_addition = " on host '" + maybe_hostname.unpack() + "'";
-                }
                 install_error =
-                    "Critical Error: Agent/Gateway was not fully deployed" +
-                    error_hostname_addition +
+                    "Critical Error: Agent/Gateway was not fully deployed " +
+                    err_hostname +
                     " and is not enforcing a security policy. Retry installation or contact Check Point support.";
             } else {
                 install_error =
-                    "Warning: Agent/Gateway '" +
-                    agent_details->getAgentId() +
-                    "' software update failed. Agent is running previous software. Contact Check Point support.";
+                    "Warning: Agent/Gateway " +
+                    err_hostname +
+                    " software update failed. Agent is running previous software. Contact Check Point support.";
             }
             dbgTrace(D_ORCHESTRATOR)
                 << "Manifest failed to be updated. Error: "
@@ -455,9 +517,9 @@ private:
         auto manifest_controller = Singleton::Consume<I_ManifestController>::by<OrchestrationComp>();
         if (!manifest_controller->updateManifest(new_manifest_file.unpack())) {
             string install_error =
-                "Warning: Agent/Gateway '" +
-                agent_details->getAgentId() +
-                "' software update failed. Agent is running previous software. Contact Check Point support.";
+                "Warning: Agent/Gateway " +
+                err_hostname +
+                " software update failed. Agent is running previous software. Contact Check Point support.";
             string current_error = orch_status->getManifestError();
             if (current_error.find("Gateway was not fully deployed") == string::npos) {
                 orch_status->setFieldStatus(
@@ -499,9 +561,9 @@ private:
         }
 
         string manifest_success_notification_message(
-            "Agent/Gateway '" +
-            agent_details->getAgentId() +
-            "' software update succeeded. Agent is running latest software."
+            "Agent/Gateway " +
+            err_hostname +
+            " software update succeeded. Agent is running latest software."
         );
         LogGen manifest_success_notification(
             manifest_success_notification_message,
@@ -517,7 +579,6 @@ private:
         return Maybe<void>();
     }
 
-    // LCOV_EXCL_START Reason: future changes will be done
     bool
     updateServiceConfigurationFromBackup()
     {
@@ -565,7 +626,6 @@ private:
         dbgWarning (D_ORCHESTRATOR) << "Failed to load Orchestration policy.";
         return false;
     }
-    // LCOV_EXCL_STOP
 
     string
     updatePolicyAndFogAddress(const OrchestrationPolicy &orchestration_policy)
@@ -582,7 +642,9 @@ private:
 
         auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
         string new_policy_version = service_controller->getPolicyVersion();
-        Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(new_policy_version);
+        if (!new_policy_version.empty()) {
+            Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(new_policy_version);
+        }
         auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
         auto path_policy_version = update_communication->sendPolicyVersion(new_policy_version);
         if (!path_policy_version.ok()) {
@@ -617,7 +679,7 @@ private:
             "last fog policy file extension"
         );
         if (!orchestration_tools->copyFile(new_policy_file.unpack(), conf_path + last_ext)) {
-                dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new policy file to " << conf_path + last_ext;
+            dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new policy file to " << conf_path + last_ext;
         }
 
         // Calculate the changes between the existing policy to the new one.
@@ -648,6 +710,11 @@ private:
                 "Settings file path"
             );
 
+            set<string> changed_policy_files = service_controller->moveChangedPolicies();
+            for (const string &changed_policy_file : changed_policy_files) {
+                orchestration_tools->writeFile("{}\n", changed_policy_file);
+            }
+
             service_controller->updateServiceConfiguration(policy_file, setting_file, data_updates);
             LogGen(
                 error_str,
@@ -661,6 +728,7 @@ private:
 
             return genError(error_str);
         }
+        service_controller->moveChangedPolicies();
 
         // Reload the orchestration policy, in case of the policy updated
         auto orchestration_policy = loadDefaultOrchestrationPolicy();
@@ -672,8 +740,6 @@ private:
         if (new_policy_version.empty()) {
             return genError("Failed to load Orchestration new policy file.");
         }
-
-        reloadConfiguration();
         if (getProfileAgentSettingWithDefault<bool>(false, "agent.config.orchestration.reportAgentDetail")) {
             service_controller->clearFailedServices();
             reportAgentDetailsMetaData();
@@ -1021,12 +1087,14 @@ private:
         vector<string> data_updates;
         update_results[OrchestrationStatusConfigType::DATA] = handleDataUpdate(orch_data, data_updates);
 
-        update_results[OrchestrationStatusConfigType::POLICY] = handlePolicyUpdate(
-            orch_policy,
-            settings_path,
-            data_updates
-        );
-
+        auto orch_mode = agent_details->getOrchestrationMode();
+        if ((!orch_manifest.ok() || orch_mode == OrchestrationMode::HYBRID) && orch_policy.ok()) {
+            update_results[OrchestrationStatusConfigType::POLICY] = handlePolicyUpdate(
+                orch_policy,
+                settings_path,
+                data_updates
+            );
+        }
         if (!orch_policy.ok() && (data_updates.size() > 0 || settings_path != "")) {
             auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
             bool res = service_controller->updateServiceConfiguration(
@@ -1046,22 +1114,19 @@ private:
             string recommended_fix;
             string msg;
             bool is_deploy_error = current_error.find("Critical") != string::npos;
+            auto hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
+            string err_hostname = (hostname.ok() ? "on host '" + *hostname : "'" + agent_details->getAgentId()) + "'";
             if (is_deploy_error) {
-                string error_hostname_addition = "";
-                auto maybe_hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
-                if (maybe_hostname.ok()) {
-                    error_hostname_addition = " on host '" + maybe_hostname.unpack() + "'";
-                }
                 msg =
-                    "Agent/Gateway was not fully deployed" +
-                    error_hostname_addition +
+                    "Agent/Gateway was not fully deployed " +
+                    err_hostname +
                     " and is not enforcing a security policy.";
                 recommended_fix = "Retry installation or contact Check Point support.";
             } else if (current_error.find("Warning") != string::npos) {
                 msg =
-                    "Agent/Gateway '" +
-                    agent_details->getAgentId() +
-                    "' software update failed. Agent is running previous software.";
+                    "Agent/Gateway " +
+                    err_hostname +
+                    " software update failed. Agent is running previous software.";
                 recommended_fix = "Contact Check Point support.";
             }
             if (!msg.empty() && !recommended_fix.empty()) {
@@ -1114,7 +1179,11 @@ private:
         bool is_empty = true;
         GetResourceFile resource_v_policy_file(GetResourceFile::ResourceFileType::VIRTUAL_POLICY);
         I_Downloader *downloader = Singleton::Consume<I_Downloader>::by<OrchestrationComp>();
+        auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
+        map<string, set<string>> profiles_to_be_deleted =
+            tenant_manager->fetchAndUpdateActiveTenantsAndProfiles(false);
         for (const auto &tenant: *updated_policy_tenants) {
+            profiles_to_be_deleted[tenant.getTenantID()].erase(tenant.getProfileID());
             if (!tenant.getVersion().empty()) {
                 is_empty = false;
 
@@ -1127,7 +1196,6 @@ private:
                     << tenant.getTenantID()
                     << " Profile: "
                     << profile_to_use;
-                auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
 
                 tenant_manager->addActiveTenantAndProfile(tenant.getTenantID(), profile_to_use);
                 resource_v_policy_file.addTenant(
@@ -1203,6 +1271,22 @@ private:
                 }
             }
         }
+
+        for (const auto &tenant_profile_set : profiles_to_be_deleted) {
+            auto tenant_id = tenant_profile_set.first;
+            for (const auto &profile_id: tenant_profile_set.second) {
+                dbgTrace(D_ORCHESTRATOR)
+                    << "Delete configuration files for inactive profile: "
+                    << "Tenant ID: "
+                    << tenant_id
+                    << ", Profile ID: "
+                    << profile_id;
+                tenant_manager->deactivateTenant(tenant_id, profile_id);
+                deleteInactiveTenantProfileFiles(tenant_id, profile_id);
+            }
+        }
+
+        clearOldTenants();
 
         for (auto it = sorted_files.begin(); it != sorted_files.end(); it++) {
             const auto &downloaded_files = *it;
@@ -1573,6 +1657,9 @@ private:
         string server_name = getAttribute("registered-server", "registered_server");
         auto server = TagAndEnumManagement::convertStringToTag(server_name);
         if (server.ok()) tags.insert(*server);
+
+        if (getAttribute("no-setting", "CROWDSEC_ENABLED") == "true") tags.insert(Tags::CROWDSEC);
+        if (getAttribute("no-setting", "PLAYGROUND") == "true") tags.insert(Tags::PLAYGROUND);
 
         Report registration_report(
             "Local Agent Data",

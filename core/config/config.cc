@@ -35,6 +35,8 @@ using namespace Config;
 
 USE_DEBUG_FLAG(D_CONFIG);
 
+static const string not_found = "";
+
 AgentProfileSettings AgentProfileSettings::default_profile_settings = AgentProfileSettings();
 
 class registerExpectedConfigUpdates : public ClientRest
@@ -107,7 +109,7 @@ public:
     PerContextValue getAllConfiguration(const std::vector<std::string> &paths) const;
     const TypeWrapper & getResource(const vector<string> &paths) const override;
     const TypeWrapper & getSetting(const vector<string> &paths) const override;
-    const string & getProfileAgentSetting(const string &setting_name) const override;
+    string getProfileAgentSetting(const string &setting_name) const override;
     vector<string> getProfileAgentSettings(const string &regex) const override;
 
     const string & getConfigurationFlag(const string &flag_name) const override;
@@ -139,9 +141,9 @@ public:
     void registerConfigPrepareCb(ConfigCb) override;
     void registerConfigLoadCb(ConfigCb) override;
     void registerConfigAbortCb(ConfigCb) override;
+    void clearOldTenants() override;
 
 private:
-    void clearOldTenants();
     bool areTenantAndProfileActive(const TenantProfilePair &tenant_profile) const;
     void periodicRegistrationRefresh();
 
@@ -152,6 +154,7 @@ private:
     void reloadConfigurationContinuesWrapper(const string &version, uint id);
     vector<string> fillMultiTenantConfigFiles(const map<string, set<string>> &tenants);
     vector<string> fillMultiTenantExpectedConfigFiles(const map<string, set<string>> &tenants);
+    map<string, string> getProfileAgentSetting() const;
 
     string
     getActiveTenant() const
@@ -262,7 +265,6 @@ private:
 
     unordered_map<TenantProfilePair, map<vector<string>, PerContextValue>> configuration_nodes;
     unordered_map<TenantProfilePair, map<vector<string>, TypeWrapper>> settings_nodes;
-    map<string, string> profile_settings;
     unordered_map<string, string> config_flags;
 
     map<vector<string>, TypeWrapper> new_resource_nodes;
@@ -337,13 +339,6 @@ ConfigComponent::Impl::init()
             false
         );
     }
-
-    mainloop->addRecurringRoutine(
-        I_MainLoop::RoutineType::System,
-        tenant_manager->getTimeoutVal(),
-        [this] () { clearOldTenants(); },
-        "Config comp old tenant cleanup"
-    );
 }
 
 static
@@ -428,13 +423,13 @@ ConfigComponent::Impl::getSetting(const vector<string> &paths) const
     return empty;
 }
 
-const string &
+string
 ConfigComponent::Impl::getProfileAgentSetting(const string &setting_name) const
 {
+    auto profile_settings = getProfileAgentSetting();
     auto setting_raw_val = profile_settings.find(setting_name);
     if (setting_raw_val != profile_settings.end()) return setting_raw_val->second;
 
-    const static string not_found = "";
     return not_found;
 }
 
@@ -447,7 +442,6 @@ ConfigComponent::Impl::getConfigurationFlag(const string &flag_name) const
     flag = config_flags.find(flag_name);
     if (flag != config_flags.end()) return flag->second;
 
-    const static string not_found = "";
     return not_found;
 }
 
@@ -535,6 +529,7 @@ ConfigComponent::Impl::getProfileAgentSettings(const string &regex) const
 {
     vector<string> setting_raw_values;
     boost::regex reg(regex);
+    auto profile_settings = getProfileAgentSetting();
     for (auto &setting : profile_settings) {
         if (NGEN::Regex::regexMatch(__FILE__, __LINE__, setting.first, reg)) {
             setting_raw_values.push_back(setting.second);
@@ -781,23 +776,6 @@ ConfigComponent::Impl::commitSuccess()
     configuration_nodes = move(new_configuration_nodes);
     settings_nodes = move(new_settings_nodes);
 
-    AgentProfileSettings profile_agent_settings = getSettingWithDefault<AgentProfileSettings>(
-        AgentProfileSettings::default_profile_settings,
-        "agentSettings"
-    );
-
-    AgentProfileSettings general_agent_settings = getSettingWithDefault<AgentProfileSettings>(
-        AgentProfileSettings::default_profile_settings,
-        "generalAgentSettings"
-    );
-
-    auto tmp_general_settings = general_agent_settings.getSettings();
-
-    for (const pair<string, string> &profile_setting : profile_agent_settings.getSettings()) {
-        tmp_general_settings.insert(profile_setting);
-    }
-
-    profile_settings = tmp_general_settings;
     reloadFileSystemPaths();
 
     for (auto &cb : configuration_commit_cbs) {
@@ -868,14 +846,16 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
 
     map<string, shared_ptr<ifstream>> files;
     for (const auto &path : config_file_paths) {
+        dbgTrace(D_CONFIG) << "Inserting " << path << " to the list of files to be handled";
         auto fullpath = config_directory_path + path;
         files.emplace(fullpath, make_shared<ifstream>(fullpath));
     }
 
     map<string, set<string>> active_tenants =
-        tenant_manager ? tenant_manager->fetchActiveTenantsAndProfiles() : map<string, set<string>>();
+        tenant_manager ? tenant_manager->fetchAndUpdateActiveTenantsAndProfiles(true) : map<string, set<string>>();
 
     dbgTrace(D_CONFIG) << "Number of active tenants found while reloading configuration: " << active_tenants.size();
+    clearOldTenants();
 
     const vector<string> &config_files = fillMultiTenantConfigFiles(active_tenants);
     const vector<string> &expected_config_files = fillMultiTenantExpectedConfigFiles(active_tenants);
@@ -901,6 +881,22 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
     bool res = loadConfiguration(archives, is_async);
     if (res) env->registerValue<string>("Current Policy Version", version);
     return res;
+}
+
+map<string, string>
+ConfigComponent::Impl::getProfileAgentSetting() const
+{
+    auto general_sets = getSettingWithDefault(AgentProfileSettings::default_profile_settings, "generalAgentSettings");
+
+    auto settings = general_sets.getSettings();
+
+    auto profile_sets = getSettingWithDefault(AgentProfileSettings::default_profile_settings, "agentSettings");
+    auto profile_settings = profile_sets.getSettings();
+    for (const auto &profile_setting : profile_settings) {
+        settings.insert(profile_setting);
+    }
+
+    return settings;
 }
 
 void

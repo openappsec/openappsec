@@ -39,7 +39,7 @@ public:
     virtual PerContextValue getAllConfiguration(const std::vector<std::string> &paths) const = 0;
     virtual const TypeWrapper & getResource(const std::vector<std::string> &paths) const = 0;
     virtual const TypeWrapper & getSetting(const std::vector<std::string> &paths) const = 0;
-    virtual const string & getProfileAgentSetting(const string &setting_name) const = 0;
+    virtual string getProfileAgentSetting(const string &setting_name) const = 0;
     virtual vector<string> getProfileAgentSettings(const string &setting_name_regex) const = 0;
 
     virtual const string & getConfigurationFlag(const string &flag_name) const = 0;
@@ -103,6 +103,8 @@ public:
     virtual void registerConfigPrepareCb(ConfigCb) = 0;
     virtual void registerConfigLoadCb(ConfigCb) = 0;
     virtual void registerConfigAbortCb(ConfigCb) = 0;
+
+    virtual void clearOldTenants() = 0;
 
 protected:
     virtual ~I_Config() {}

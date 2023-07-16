@@ -16,7 +16,6 @@
 #include "mock/mock_messaging.h"
 #include "mock/mock_time_get.h"
 #include "mock/mock_rest_api.h"
-#include "mock/mock_messaging_downloader.h"
 #include "mock/mock_tenant_manager.h"
 #include "config.h"
 #include "config_component.h"
@@ -95,6 +94,17 @@ public:
         )).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
 
         doEncrypt();
+        EXPECT_CALL(
+            mock_shell_cmd,
+            getExecOutput(
+                "ls /etc/cp/conf/"
+                "| grep tenant "
+                "| cut -d '_' -f 2,4 "
+                "| sort --unique "
+                "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'",
+                _,
+                _
+        )).WillOnce(Return(Maybe<string>(string(""))));
         orchestration_comp.init();
     }
 
@@ -138,6 +148,7 @@ public:
         EXPECT_CALL(mock_details_resolver, isVersionEqualOrAboveR8110()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillRepeatedly(Return(no_nginx));
         EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("1.1.1"));
+        EXPECT_CALL(mock_details_resolver, getHostname()).WillRepeatedly(Return(string("hostname")));
 
         map<string, string> resolved_mgmt_details({{"kernel_version", "4.4.0-87-generic"}});
         EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_mgmt_details));
@@ -277,7 +288,6 @@ public:
     unique_ptr<ServerRest> rest_status;
     StrictMock<MockOrchestrationTools> mock_orchestration_tools;
     StrictMock<MockDownloader> mock_downloader;
-    StrictMock<MockMessagingDownloader> mock_messaging_downloader;
     StrictMock<MockShellCmd> mock_shell_cmd;
     StrictMock<MockMessaging> mock_message;
     StrictMock<MockRestApi> rest;
@@ -538,6 +548,222 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
     EXPECT_THAT(message_body, HasSubstr("\"NGINX Server\""));
 }
 
+TEST_F(OrchestrationTest, orchestrationPolicyUpdatRollback)
+{
+    Debug::setUnitTestFlag(D_CONFIG, Debug::DebugLevel::TRACE);
+    waitForRestCall();
+    preload();
+
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(I_MainLoop::RoutineType::Offline, _, "Send policy update report", _)
+    ).WillOnce(Return(1));
+    EXPECT_CALL(
+        rest,
+        mockRestCall(RestAction::ADD, "proxy", _)
+    ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    EXPECT_CALL(mock_status, setFogAddress(host_url)).Times(2);
+
+    string config_json =
+        "{\n"
+        "\"agentSettings\": [{\n"
+                "\"key\": \"agent.config.orchestration.reportAgentDetail\",\n"
+                "\"id\": \"id1\",\n"
+                "\"value\": \"true\"\n"
+            "}]\n"
+        "}\n";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
+
+    init();
+
+    // All duplicates should be removed in INXT-35947
+    string orchestration_policy_file_path = "/etc/cp/conf/orchestration/orchestration.policy";
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string policy_file_path_bk = "/etc/cp/conf/policy.json.bk";
+    string last_policy_file_path = "/etc/cp/conf/policy.json.last";
+    string data_file_path = "/etc/cp/conf/data.json";
+    string host_address = "1.2.3.5";
+    string new_host_address = "6.2.3.5";
+    string new_host_url = "https://" + new_host_address + "/test/";
+    string new_policy_path = "/some-path";
+
+    string manifest_checksum = "manifest";
+    string policy_checksum = "policy";
+    string settings_checksum = "settings";
+    string data_checksum = "data";
+    string new_policy_checksum= "111111";
+
+    string second_val = "12";
+    string third_val = "13";
+
+    Maybe<string> policy_response(
+        string(
+            "{\n"
+            "    \"fog-address\": \"" + host_url + "\",\n"
+            "    \"agent-type\": \"test\",\n"
+            "    \"pulling-interval\": 25,\n"
+            "    \"error-pulling-interval\": 15\n"
+            "}"
+        )
+    );
+
+    Maybe<string> new_policy_response(
+        string(
+            "{\n"
+            "    \"fog-address\": \"" + new_host_url + "\",\n"
+            "    \"agent-type\": \"test\",\n"
+            "    \"pulling-interval\": 25,\n"
+            "    \"error-pulling-interval\": 15\n"
+            "}"
+        )
+    );
+
+    set<string> expected_changed_policies = {};
+    EXPECT_CALL(mock_service_controller, mockMoveChangedPolicies()).WillOnce(Return(expected_changed_policies));
+
+    EXPECT_CALL(mock_status, setFogAddress(new_host_url));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
+    // Rollback related test: The readFile function is called 3 times:
+    // 1. Read the current policy file
+    // 2. Read the new policy file - The one that should fail
+    // 3. Read the current policy file again - The one that should be restored
+    EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path))
+        .WillOnce(Return(policy_response))
+        .WillOnce(Return(new_policy_response))
+        .WillOnce(Return(policy_response));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC))
+        .Times(2).WillRepeatedly(Return(true));
+    EXPECT_CALL(mock_update_communication, setAddressExtenesion("")).Times(2);
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(manifest_checksum));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(settings_checksum));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(policy_checksum));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(data_checksum));
+
+    // Rollback related test: After failing to update the policy file, the policy version should be restored
+    EXPECT_CALL(mock_service_controller, getPolicyVersion())
+        .Times(5)
+        .WillOnce(ReturnRef(first_policy_version))
+        .WillOnce(ReturnRef(first_policy_version))
+        .WillOnce(ReturnRef(second_val))
+        .WillOnce(ReturnRef(third_val))
+        .WillOnce(ReturnRef(second_val)
+    );
+    EXPECT_CALL(mock_status, setPolicyVersion(third_val));
+    EXPECT_CALL(mock_status, setPolicyVersion(second_val));
+    EXPECT_CALL(mock_update_communication, sendPolicyVersion("13")).Times(1).WillOnce(Return(Maybe<void>()));
+    // Rollback related test: The old policy version 12 is restored
+    EXPECT_CALL(mock_update_communication, sendPolicyVersion("12")).Times(1).WillOnce(Return(Maybe<void>()));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
+        Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                EXPECT_THAT(req.getPolicy(), IsValue(policy_checksum));
+                EXPECT_THAT(req.getSettings(), IsValue(settings_checksum));
+                EXPECT_THAT(req.getManifest(), IsValue(manifest_checksum));
+                EXPECT_THAT(req.getData(), IsValue(data_checksum));
+                req = CheckUpdateRequest("", new_policy_checksum, "", "", "", "");
+                return Maybe<void>();
+            }
+        )
+    );
+
+    GetResourceFile policy_file(GetResourceFile::ResourceFileType::POLICY);
+    EXPECT_CALL(
+        mock_downloader,
+        downloadFileFromFog(new_policy_checksum, Package::ChecksumTypes::SHA256, policy_file)
+    ).WillOnce(Return(Maybe<std::string>(new_policy_path)));
+
+    vector<string> expected_data_types = {};
+    EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "", _)
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration(new_policy_path, "", expected_data_types, "", "", _)
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_message,
+        setActiveFog(new_host_address, 443, true, MessageTypeTag::GENERIC)
+    ).WillOnce(Return(true));
+    EXPECT_CALL(mock_update_communication, setAddressExtenesion("/test"));
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(
+        mock_status,
+        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
+    );
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
+    ).WillOnce(
+        Invoke(
+            [](EnumArray<OrchestrationStatusConfigType, bool> arr)
+            {
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::MANIFEST], false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::POLICY],   true);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::SETTINGS], false);
+            }
+        )
+    );
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(
+            Invoke(
+                [] (chrono::microseconds microseconds)
+                {
+                    EXPECT_EQ(1000000, microseconds.count());
+                }
+            )
+        )
+        .WillOnce(
+            Invoke(
+                [] (chrono::microseconds microseconds)
+                {
+                    EXPECT_EQ(25000000, microseconds.count());
+                    throw invalid_argument("stop while loop");
+                }
+            )
+        );
+    EXPECT_CALL(
+        mock_shell_cmd,
+        getExecOutput(_, _, _)
+    ).WillRepeatedly(Return(string("daniel\n1\n")));
+
+    EXPECT_CALL(mock_service_controller, clearFailedServices());
+    EXPECT_CALL(mock_service_controller, doesFailedServicesExist()).WillOnce(Return(true));
+    EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration(policy_file_path_bk, _, _, _, _, _)
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        copyFile(policy_file_path_bk, policy_file_path)
+    ).WillOnce(Return(true));
+
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument& e) {}
+}
+
 TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
 {
     waitForRestCall();
@@ -597,6 +823,9 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
         )
     );
 
+    set<string> expected_changed_policies = {};
+    EXPECT_CALL(mock_service_controller, mockMoveChangedPolicies()).WillOnce(Return(expected_changed_policies));
+
     EXPECT_CALL(mock_status, setFogAddress(new_host_url));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path))
@@ -628,7 +857,6 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
         .WillOnce(ReturnRef(second_val))
         .WillOnce(ReturnRef(third_val)
     );
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
     EXPECT_CALL(mock_status, setPolicyVersion(third_val));
     EXPECT_CALL(mock_update_communication, sendPolicyVersion("13")).Times(1).WillOnce(Return(Maybe<void>()));
 
@@ -781,7 +1009,6 @@ TEST_F(OrchestrationTest, startOrchestrationPoliceWithFailures)
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
 
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
@@ -910,7 +1137,6 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
             [&](CheckUpdateRequest &req)
@@ -1039,7 +1265,6 @@ TEST_F(OrchestrationTest, manifestUpdate)
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
             [&](CheckUpdateRequest &req)
@@ -1165,11 +1390,14 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     EXPECT_CALL(mock_status, setFogAddress(host_url));
 
     vector<string> expected_data_types = {};
+
     EXPECT_CALL(
         mock_service_controller,
         updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "", _)
     ).Times(2).WillRepeatedly(Return(true));
 
+    set<string> expected_changed_policies = {};
+    EXPECT_CALL(mock_service_controller, mockMoveChangedPolicies()).WillOnce(Return(expected_changed_policies));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
     EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
@@ -1215,7 +1443,6 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
         .WillOnce(ReturnRef(first_policy_version))
         .WillOnce(ReturnRef(second_val)
     );
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
     EXPECT_CALL(
         mock_status,
@@ -1250,8 +1477,8 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
 
     EXPECT_CALL(
         mock_service_controller,
-        updateServiceConfiguration(string("policy path"), "", expected_data_types, "", "", _)).WillOnce(Return(false)
-    );
+        updateServiceConfiguration(string("policy path"), "", expected_data_types, "", "", _)
+    ).WillOnce(Return(false));
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
         .WillOnce(
@@ -1343,7 +1570,6 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
             [&](CheckUpdateRequest &req)
@@ -1374,7 +1600,6 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
             manifest_err
         )
     ).Times(1);
-    EXPECT_CALL(mock_details_resolver, getHostname()).Times(2).WillRepeatedly(Return(string("hostname")));
     EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(manifest_err));
 
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
@@ -1398,13 +1623,6 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
             string("manifest-checksum"),
             Package::ChecksumTypes::SHA256,
             manifest_file
-        )
-    ).WillOnce(Return(download_error));
-    EXPECT_CALL(mock_downloader,
-            downloadFileFromFog(
-            string("policy-checksum"),
-            Package::ChecksumTypes::SHA256,
-            policy_file
         )
     ).WillOnce(Return(download_error));
     EXPECT_CALL(mock_downloader,
@@ -1754,7 +1972,6 @@ TEST_F(OrchestrationTest, dataUpdate)
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
-    EXPECT_CALL(mock_status, setPolicyVersion(first_policy_version));
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
             [&](CheckUpdateRequest &req)

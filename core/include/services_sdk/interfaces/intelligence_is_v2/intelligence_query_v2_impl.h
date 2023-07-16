@@ -18,6 +18,9 @@
 #error intelligence_query_impl_v2.h should not be included directly!
 #endif // __INTELLIGENCE_QUERY_V2_H__
 
+#include <sstream>
+#include "json_stream.h"
+
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
 template <typename UserSerializableReplyAttr>
@@ -32,9 +35,10 @@ Maybe<std::string>
 IntelligenceQuery<UserSerializableReplyAttr>::genJson() const
 {
     {
-        std::stringstream out;
+        std::stringstream str_stream;
+        JsonStream json_stream(&str_stream, is_pretty);
         {
-            cereal::JSONOutputArchive out_ar(out);
+            cereal::JSONOutputArchive out_ar(json_stream);
             if (is_bulk) {
                 std::vector<BulkQueryRequest> bulk_requests;
                 int index = 0;
@@ -46,7 +50,8 @@ IntelligenceQuery<UserSerializableReplyAttr>::genJson() const
                 request.saveToJson(out_ar);
             }
         }
-        return out.str();
+
+        return str_stream.str();
     }
 }
 

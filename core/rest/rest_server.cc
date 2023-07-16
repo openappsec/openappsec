@@ -47,6 +47,7 @@ public:
 
     bool bindRestServerSocket(struct sockaddr_in &addr, vector<uint16_t> port_range);
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
+    uint16_t getListeningPort() const override { return listening_port; }
     Maybe<std::string> getSchema(const std::string &uri) const override;
     Maybe<std::string> invokeRest(const std::string &uri, istream &in) const override;
 
@@ -60,7 +61,7 @@ private:
     I_MainLoop::RoutineID id;
     I_MainLoop *mainloop;
     map<string, unique_ptr<RestInit>> rest_calls;
-    uint16_t port_used = 0;
+    uint16_t listening_port = 0;
     vector<uint16_t> port_range;
 };
 
@@ -138,7 +139,7 @@ RestServer::Impl::init()
             is_primary.ok() && *is_primary
         );
 
-        uint16_t listening_port = ntohs(addr.sin_port);
+        listening_port = ntohs(addr.sin_port);
         dbgInfo(D_API) << "REST server started: " << listening_port;
         Singleton::Consume<I_Environment>::by<RestServer>()->registerValue<int>("Listening Port", listening_port);
     };

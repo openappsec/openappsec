@@ -17,7 +17,6 @@
 #include "mock/mock_time_get.h"
 #include "mock/mock_rest_api.h"
 #include "mock/mock_tenant_manager.h"
-#include "mock/mock_messaging_downloader.h"
 #include "config.h"
 #include "config_component.h"
 #include "agent_details.h"
@@ -35,7 +34,6 @@ public:
             mockRestCall(RestAction::SET, "new-configuration", _)
         ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationMultitenancyTest::setNewConfiguration)));
 
-        EXPECT_CALL(tenant_manager, getTimeoutVal()).WillOnce(Return(chrono::microseconds(0)));
         EXPECT_CALL(
             mock_ml,
             addRecurringRoutine(I_MainLoop::RoutineType::System, _, _, _, _)
@@ -76,6 +74,17 @@ public:
         ).WillOnce(Return(true));
 
         doEncrypt();
+        EXPECT_CALL(
+            mock_shell_cmd,
+            getExecOutput(
+                "ls /etc/cp/conf/"
+                "| grep tenant "
+                "| cut -d '_' -f 2,4 "
+                "| sort --unique "
+                "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'",
+                _,
+                _
+        )).WillOnce(Return(Maybe<string>(string(""))));
         orchestration_comp.init();
     }
 
@@ -173,7 +182,6 @@ public:
     StrictMock<MockServiceController> mock_service_controller;
     StrictMock<MockManifestController> mock_manifest_controller;
     StrictMock<MockUpdateCommunication> mock_update_communication;
-    StrictMock<MockMessagingDownloader> mock_messaging_downloader;
     StrictMock<MockTenantManager> tenant_manager;
 
     NiceMock<MockOrchestrationStatus> mock_status;
@@ -225,6 +233,10 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     string first_policy_version = "";
     string host_url = "https://" + host_address + "/";
 
+    stringstream debug_output;
+    Debug::setNewDefaultStdout(&debug_output);
+    Debug::setUnitTestFlag(D_ORCHESTRATOR, Debug::DebugLevel::TRACE);
+
     EXPECT_CALL(
         rest,
         mockRestCall(RestAction::ADD, "proxy", _)
@@ -266,7 +278,13 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
         .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
 
     set<string> active_tenants = { "1236", "1235" };
+    map<string, set<string>> old_tenant_profile_set;
+    set<string> old_profiles = { "123123" };
+    old_tenant_profile_set["321321"] = old_profiles;
     EXPECT_CALL(tenant_manager, fetchActiveTenants()).WillOnce(Return(active_tenants));
+    EXPECT_CALL(tenant_manager, fetchAndUpdateActiveTenantsAndProfiles(false))
+        .WillOnce(Return(old_tenant_profile_set));
+    EXPECT_CALL(tenant_manager, deactivateTenant("321321", "123123")).Times(1);
 
     EXPECT_CALL(tenant_manager, addActiveTenantAndProfile("1235", "2311"));
     EXPECT_CALL(tenant_manager, addActiveTenantAndProfile("1236", "2611"));
@@ -479,4 +497,9 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     try {
         runRoutine();
     } catch (const invalid_argument& e) {}
+    string debug_str_folder = "Delete virtual policy folder : /etc/cp/conf/tenant_321321_profile_123123";
+    string debug_str_settings = "Delete settings file /etc/cp/conf/tenant_321321_profile_123123_settings.json";
+    EXPECT_THAT(debug_output.str(), HasSubstr(debug_str_folder));
+    EXPECT_THAT(debug_output.str(), HasSubstr(debug_str_settings));
+    Debug::setNewDefaultStdout(&cout);
 }

@@ -155,7 +155,7 @@ Maybe<SettingType, Config::Errors>
 getProfileAgentSetting(const std::string &setting)
 {
     auto i_config = Singleton::Consume<Config::I_Config>::from<Config::MockConfigProvider>();
-    const std::string &value = i_config->getProfileAgentSetting(setting);
+    std::string value = i_config->getProfileAgentSetting(setting);
 
     if (value.empty()) return TypeWrapper::failMissing<SettingType>();
 

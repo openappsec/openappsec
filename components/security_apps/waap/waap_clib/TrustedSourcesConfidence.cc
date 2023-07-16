@@ -151,9 +151,9 @@ void TrustedSourcesConfidenceCalculator::pullProcessedData(const std::vector<std
         bool res = sendObjectWithRetry(getTrustFile,
             I_Messaging::Method::GET,
             getUri() + "/" + file);
+        pull_ok |= res;
         if (res && getTrustFile.getTrustedLogs().ok()) {
             mergeFromRemote(getTrustFile.getTrustedLogs().unpack());
-            pull_ok = true;
         }
     }
     if (!pull_ok && !files.empty()) {

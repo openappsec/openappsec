@@ -28,17 +28,11 @@
 #include <chrono>
 #include <boost/regex.hpp>
 
-#if defined(use_unwind)
-#if defined(alpine) || defined(PLATFORM_x86)
+#ifdef UNWIND_LIBRARY
 #define UNW_LOCAL_ONLY
 #include <cxxabi.h>
 #include <libunwind.h>
-#endif // defined(alpine) || defined(PLATFORM_x86)
-#endif // defined(use_unwind)
-
-#if !defined(alpine) && !defined(arm32_musl)
-#include <execinfo.h>
-#endif // not alpine && not arm32_musl
+#endif // UNWIND_LIBRARY
 
 #include "debug.h"
 #include "common.h"
@@ -82,11 +76,9 @@ public:
     Maybe<vector<string>>
     getBacktrace() override
     {
+#ifdef UNWIND_LIBRARY
+
         vector<string> symbols;
-#if defined(_UCLIBC_) || defined(arm32_musl) || !defined(use_unwind)
-    return genError("Could not print any backtrace entries using uclibc (backtrace_symbols not supported)");
-#else // not (_UCLIBC_ || arm32_musl)
-#if defined(alpine) || defined(PLATFORM_x86)
         unw_cursor_t cursor;
         unw_context_t context;
 
@@ -116,24 +108,14 @@ public:
             }
             symbols.push_back(buf);
         }
-#else // not (alpine || PLATFORM_x86)
-        auto stack_trace_list = vector<void *>(stack_trace_max_len);
 
-        uint trace_len = backtrace(stack_trace_list.data(), stack_trace_list.size());
-        if (trace_len == 0 ) return genError("Could not find any backtrace entries in the current process");
-
-        char **trace_prints = backtrace_symbols(stack_trace_list.data(), trace_len);
-        if (trace_prints == nullptr) return genError("Could not convert backtrace entries to symbol strings");
-
-        symbols.reserve(trace_len);
-        for (uint i = 0; i < trace_len; ++i) {
-            symbols.emplace_back(trace_prints[i]);
-        }
-        free(trace_prints);
-
-#endif // alpine || PLATFORM_x86
-#endif // _UCLIBC_
         return symbols;
+
+#else // UNWIND_LIBRARY
+
+        return genError("Could not print any backtrace entries using uclibc (backtrace_symbols not supported)");
+
+#endif // UNWIND_LIBRARY
     }
 
 private:
@@ -388,18 +370,13 @@ private:
     static void
     printStackTrace()
     {
+#ifdef UNWIND_LIBRARY
+
         if (out_trace_file_fd == -1) return;
 
         const char *stack_trace_title = "Stack trace:\n";
         writeData(stack_trace_title, strlen(stack_trace_title));
 
-#if defined(_UCLIBC_) || defined(arm32_musl) || !defined(use_unwind)
-        const char *uclibc_error =
-            "Could not print any backtrace entries using uclibc (backtrace_symbols not supported)\n";
-        writeData(uclibc_error, strlen(uclibc_error));
-        return;
-#else  // not (_UCLIBC_ || arm32_musl)
-#ifdef alpine
         unw_cursor_t cursor;
         unw_context_t uc;
         unw_getcontext(&uc);
@@ -426,19 +403,14 @@ private:
 
             if (unw_step(&cursor) <= 0) return;
         }
-#else // not alpine
-        void *stack_trace_list[stack_trace_max_len];
 
-        uint actual_trace_len = backtrace(stack_trace_list, stack_trace_max_len);
-        if (actual_trace_len == 0 ) {
-            const char *no_bt_found_error = "Could not find any backtrace entries in the current process\n";
-            writeData(no_bt_found_error, strlen(no_bt_found_error));
-            return;
-        }
+#else // UNWIND_LIBRARY
 
-        backtrace_symbols_fd(stack_trace_list, actual_trace_len, out_trace_file_fd);
-#endif // alpine
-#endif //  _UCLIBC_ || arm32_musl
+        const char *uclibc_error =
+            "Could not print any backtrace entries using uclibc (backtrace_symbols not supported)\n";
+        writeData(uclibc_error, strlen(uclibc_error));
+
+#endif // UNWIND_LIBRARY
     }
 // LCOV_EXCL_STOP
 
