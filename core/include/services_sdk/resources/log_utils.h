@@ -1,4 +1,4 @@
-i// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
+// Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // You may obtain a copy of the License at
