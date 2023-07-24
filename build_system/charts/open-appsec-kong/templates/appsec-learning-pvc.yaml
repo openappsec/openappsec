@@ -1,3 +1,4 @@
+{{- if not (eq .Values.kind "Vanilla") -}}
 {{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.persistence.enabled true) -}}
 kind: PersistentVolumeClaim
 apiVersion: v1
@@ -17,4 +18,5 @@ spec:
 {{- else }}
   storageClassName: {{ required "A storage class for learning data is required" .Values.appsec.persistence.learning.storageClass.name }}
 {{- end -}}
+{{- end }}
 {{- end }}

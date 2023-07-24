@@ -1,0 +1,32 @@
+{{- if not (eq .Values.kind "Vanilla") -}}
+{{- if .Values.appsec.configMapContent }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.appsec.configMapName | default "appsec-settings-configmap" | quote }}
+data:
+  {{- if .Values.appsec.configMapContent.crowdsec }}
+  CROWDSEC_ENABLED: {{ .Values.appsec.configMapContent.crowdsec.enabled | default "false"  | quote }}
+  {{- if .Values.appsec.configMapContent.crowdsec.api }}
+  CROWDSEC_API_URL: {{ .Values.appsec.configMapContent.crowdsec.api.url | default "http://crowdsec-service:8080/v1/decisions/stream" }}
+  {{- else }}
+  CROWDSEC_API_URL: "http://crowdsec-service:8080/v1/decisions/stream"
+  {{- end }}
+  {{- if .Values.appsec.configMapContent.crowdsec.auth }}
+  CROWDSEC_AUTH_METHOD: {{ .Values.appsec.configMapContent.crowdsec.auth.method | default "apikey" }}
+  {{- else }}
+  CROWDSEC_AUTH_METHOD: "apikey"
+  {{- end }}
+  {{- if .Values.appsec.configMapContent.crowdsec.mode }}
+  CROWDSEC_MODE: {{ .Values.appsec.configMapContent.crowdsec.mode | default "prevent" }}
+  {{- else }}
+  CROWDSEC_MODE: "prevent"
+  {{- end }}
+  {{- if .Values.appsec.configMapContent.crowdsec.logging }}
+  CROWDSEC_LOGGING: {{ .Values.appsec.configMapContent.crowdsec.logging | default "enabled" }}
+  {{- else }}
+  CROWDSEC_LOGGING: "enabled"
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}

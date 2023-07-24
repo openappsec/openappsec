@@ -1,6 +1,15 @@
-{{- if or (eq .Values.controller.kind "StatefulSet") (eq .Values.controller.kind "Both") -}}
+{{- if  (not (eq .Values.kind "Vanilla")) }}
+{{- include  "isControllerTagValid" . -}}
 apiVersion: apps/v1
+{{- if (eq .Values.kind "AppSec") }}
+{{- if (eq .Values.controller.kind "DaemonSet") }}
+kind: DaemonSet
+{{- else }}
+kind: Deployment
+{{- end }}
+{{- else if eq .Values.kind "AppSecStateful" }}
 kind: StatefulSet
+{{- end }}
 metadata:
   labels:
     {{- include "ingress-nginx.labels" . | nindent 4 }}
@@ -19,15 +28,25 @@ spec:
       {{- include "ingress-nginx.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: controller
   {{- if not .Values.controller.autoscaling.enabled }}
+  {{- if eq .Values.kind "AppSecStateful" }}
   serviceName: "open-appsec-stateful-set"
+  {{- end }}
+  {{- if or (not (eq .Values.controller.kind "DaemonSet")) (and (eq .Values.kind "AppSecStateful") (eq .Values.controller.kind "DaemonSet")) }}
   replicas: {{ .Values.controller.replicaCount }}
+  {{- end }}
   {{- end }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- if .Values.controller.updateStrategy }}
+  {{- if (and (not (eq .Values.kind "AppSecStateful")) (eq .Values.controller.kind "DaemonSet")) }}
+  updateStrategy:
+  {{- else }}
   strategy:
+  {{- end }}
     {{ toYaml .Values.controller.updateStrategy | nindent 4 }}
   {{- end }}
-  #minReadySeconds: {{ .Values.controller.minReadySeconds }}
+  {{- if (eq .Values.kind "AppSec") }}
+  minReadySeconds: {{ .Values.controller.minReadySeconds }}
+  {{- end }}
   template:
     metadata:
     {{- if .Values.controller.podAnnotations }}
@@ -79,6 +98,10 @@ spec:
         - name: {{ .Values.appsec.name }}
           securityContext:
             {{ toYaml .Values.appsec.securityContext | nindent 12 }}
+          {{- $tag := .Values.appsec.image.tag }}
+          {{- if .Values.appsec.configMapContent.crowdsec.enabled }}
+          {{- $tag = "crowdsec-1.2314-rc1" }}
+          {{- end }}
           {{- with .Values.appsec.image }}
           image: "{{- if .registry }}{{ .registry }}/{{- end }}{{- if .repository }}{{ .repository }}/{{- end }}{{ .image }}{{- if .tag }}:{{ .tag }}{{- end }}{{- if (.digest) -}} @{{.digest}} {{- end }}"
           {{- end }}
@@ -106,6 +129,8 @@ spec:
           env:
             - name: user_email
               value: {{ .Values.appsec.userEmail }}
+            - name: registered_server
+              value: "NGINX Server"
         {{- if eq .Values.appsec.playground false }}
             - name: SHARED_STORAGE_HOST
               value: {{ .Values.appsec.storage.name }}-svc
@@ -115,20 +140,29 @@ spec:
             - name: PLAYGROUND
               value: "true"
         {{- end }}
+          envFrom:
+          - configMapRef:
+              name: {{ .Values.appsec.configMapName | default "appsec-settings-configmap" }}
+          - secretRef:
+              name: {{ .Values.appsec.secretName | default "appsec-settings-secret" }}
           resources:
             {{ toYaml .Values.resources | nindent 12 }}
           volumeMounts:
           - name: advanced-model
             mountPath: /advanced-model
-        {{- if .Values.appsec.persistence.enabled }}
+        {{- if (eq .Values.appsec.persistence.enabled true) }}
           - name: appsec-conf
             mountPath: /etc/cp/conf
           - name: appsec-data
             mountPath: /etc/cp/data
         {{- end }}
         - name: {{ .Values.controller.containerName }}
-          {{- with .Values.controller.image }}
-          image: "{{- if .registry }}{{ .registry }}/{{- end }}{{- if .repository }}{{ .repository }}/{{- end }}{{ .image }}{{- if .tag }}:{{ .tag }}{{- end }}{{- if (.digest) -}} @{{.digest}} {{- end }}"
+          {{- $tag := .Values.appsec.nginx.image.tag }}
+          {{- if .Values.appsec.configMapContent.crowdsec.enabled }}
+          {{- $tag = "1.2303.1-rc1-v1.3.0" }}
+          {{- end }}
+          {{- with .Values.appsec.nginx.image }}
+          image: "{{ .repository }}:{{ .tag }}"
           {{- end }}
           imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
         {{- if .Values.controller.lifecycle }}
@@ -240,7 +274,11 @@ spec:
       {{- end }}
       {{- if .Values.controller.opentelemetry.enabled}}
           {{ $otelContainerSecurityContext := $.Values.controller.opentelemetry.containerSecurityContext | default $.Values.controller.containerSecurityContext }}
-          {{- include "extraModules" (dict "name" "opentelemetry" "image" .Values.controller.opentelemetry.image "containerSecurityContext" $otelContainerSecurityContext) | nindent 8}}
+          {{- if (and (not (eq .Values.kind "AppSecStateful")) (eq .Values.controller.kind "DaemonSet")) }}
+          {{- include "extraModules" (dict "name" "opentelemetry" "image" .Values.controller.opentelemetry.image "containerSecurityContext" $otelContainerSecurityContext ) | nindent 8}}
+          {{ else }}
+          {{- include "extraModules" (dict "name" "opentelemetry" "image" .Values.controller.opentelemetry.image "containerSecurityContext" $otelContainerSecurityContext "distroless" false) | nindent 8}}
+          {{- end }}
       {{- end}}
     {{- end }}
     {{- if .Values.controller.hostNetwork }}
@@ -266,6 +304,14 @@ spec:
           configMap:
             name: advanced-model-config
             optional: true
+      {{- if (and (eq .Values.kind "AppSec") .Values.appsec.persistence.enabled) }}
+        - name: appsec-conf
+          persistentVolumeClaim:
+            claimName: {{ .Values.appsec.name }}-conf
+        - name: appsec-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.appsec.name }}-data
+      {{- end }}
       {{- if (or .Values.controller.extraModules .Values.controller.opentelemetry.enabled)}}
         - name: modules
           emptyDir: {}
@@ -294,7 +340,7 @@ spec:
         {{ toYaml .Values.controller.extraVolumes | nindent 8 }}
       {{- end }}
     {{- end }}
-{{- if .Values.appsec.persistence.enabled }}
+  {{- if (and (eq .Values.kind "AppSecStateful") .Values.appsec.persistence.enabled) }}
   volumeClaimTemplates:
   - metadata:
       name: appsec-conf

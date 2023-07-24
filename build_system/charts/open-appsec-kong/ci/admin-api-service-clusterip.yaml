@@ -1,0 +1,6 @@
+admin:
+  enabled: true
+  type: ClusterIP
+
+ingressController:
+  enabled: false

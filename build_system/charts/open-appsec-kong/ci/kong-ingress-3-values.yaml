@@ -1,0 +1,10 @@
+# CI test for using ingress hosts configuration
+proxy:
+  type: NodePort
+  ingress:
+    enabled: true
+    hosts:
+    - host: proxy.kong.example
+      paths:
+      - path: /
+        pathType: ImplementationSpecific

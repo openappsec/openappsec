@@ -1,4 +1,4 @@
-{{- if or (eq .Values.controller.kind "Deployment") (eq .Values.controller.kind "Both") -}}
+{{- if and (eq .Values.kind "Vanilla") (or (eq .Values.controller.kind "Deployment") (eq .Values.controller.kind "Both")) -}}
 {{- include  "isControllerTagValid" . -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -76,59 +76,9 @@ spec:
       shareProcessNamespace: {{ .Values.controller.shareProcessNamespace }}
     {{- end }}
       containers:
-        - name: {{ .Values.appsec.name }}
-          securityContext:
-            {{ toYaml .Values.appsec.securityContext | nindent 12 }}
-          {{- with .Values.appsec.image }}
-          image: "{{- if .registry }}{{ .registry }}/{{- end }}{{- if .repository }}{{ .repository }}/{{- end }}{{ .image }}{{- if .tag }}:{{ .tag }}{{- end }}{{- if (.digest) -}} @{{.digest}} {{- end }}"
-          {{- end }}
-          command:
-          - {{ .Values.appsec.command }}
-          imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
-          args:
-        {{- if (eq "standalone" .Values.appsec.mode) }}
-          - --hybrid-mode
-          - --token
-          - cp-3fb5c718-5e39-47e6-8d5e-99b4bc5660b74b4b7fc8-5312-451d-a763-aaf7872703c0
-        {{- else }}
-          - --token
-          - {{ .Values.appsec.agentToken }}
-        {{- end -}}
-        {{- if .Values.appsec.customFog.enabled }}
-          - --fog
-          - {{ .Values.appsec.customFog.fogAddress }}
-        {{- end }}
-        {{- if .Values.appsec.proxy }}
-          - --proxy
-          - {{ .Values.appsec.proxy }}
-        {{- end }}
-          imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
-          env:
-            - name: user_email
-              value: {{ .Values.appsec.userEmail }}
-        {{- if eq .Values.appsec.playground false }}
-            - name: SHARED_STORAGE_HOST
-              value: {{ .Values.appsec.storage.name }}-svc
-            - name: LEARNING_HOST
-              value: {{ .Values.appsec.learning.name }}-svc
-        {{- else }}
-            - name: PLAYGROUND
-              value: "true"
-        {{- end }}
-          resources:
-            {{ toYaml .Values.resources | nindent 12 }}
-          volumeMounts:
-          - name: advanced-model
-            mountPath: /advanced-model
-        {{- if .Values.appsec.persistence.enabled }}
-          - name: appsec-conf
-            mountPath: /etc/cp/conf
-          - name: appsec-data
-            mountPath: /etc/cp/data
-        {{- end }}
         - name: {{ .Values.controller.containerName }}
           {{- with .Values.controller.image }}
-          image: "{{- if .registry }}{{ .registry }}/{{- end }}{{- if .repository }}{{ .repository }}/{{- end }}{{ .image }}{{- if .tag }}:{{ .tag }}{{- end }}{{- if (.digest) -}} @{{.digest}} {{- end }}"
+          image: "{{- if .repository -}}{{ .repository }}{{ else }}{{ .registry }}/{{ include "ingress-nginx.image" . }}{{- end -}}:{{ .tag }}{{ include "ingress-nginx.imageDigest" . }}"
           {{- end }}
           imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
         {{- if .Values.controller.lifecycle }}
@@ -240,7 +190,7 @@ spec:
       {{- end }}
       {{- if .Values.controller.opentelemetry.enabled}}
           {{ $otelContainerSecurityContext := $.Values.controller.opentelemetry.containerSecurityContext | default $.Values.controller.containerSecurityContext }}
-          {{- include "extraModules" (dict "name" "opentelemetry" "image" .Values.controller.opentelemetry.image "containerSecurityContext" $otelContainerSecurityContext) | nindent 8}}
+          {{- include "extraModules" (dict "name" "opentelemetry" "image" .Values.controller.opentelemetry.image "containerSecurityContext" $otelContainerSecurityContext "distroless" false) | nindent 8}}
       {{- end}}
     {{- end }}
     {{- if .Values.controller.hostNetwork }}
@@ -260,14 +210,8 @@ spec:
     {{- end }}
       serviceAccountName: {{ template "ingress-nginx.serviceAccountName" . }}
       terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
-      volumes:
-        - name: appsec-conf
-          persistentVolumeClaim:
-            claimName: {{ .Values.appsec.name }}-conf
-        - name: appsec-data
-          persistentVolumeClaim:
-            claimName: {{ .Values.appsec.name }}-data
     {{- if (or .Values.controller.customTemplate.configMapName .Values.controller.extraVolumeMounts .Values.controller.admissionWebhooks.enabled .Values.controller.extraVolumes .Values.controller.extraModules .Values.controller.opentelemetry.enabled) }}
+      volumes:
       {{- if (or .Values.controller.extraModules .Values.controller.opentelemetry.enabled)}}
         - name: modules
           emptyDir: {}
