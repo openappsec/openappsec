@@ -8,7 +8,7 @@ kind: Deployment
 {{- end }}
 {{- else if eq .Values.kind "AppSecStateful" }}
 kind: StatefulSet
-{{- end }} 
+{{- end }}
 metadata:
   name: {{ template "kong.fullname" . }}
   namespace:  {{ template "kong.namespace" . }}
@@ -18,13 +18,13 @@ metadata:
   {{- if .Values.deploymentAnnotations }}
   annotations:
   {{- range $key, $value := .Values.deploymentAnnotations }}
-    {{ $key }}: {{ $value | quote }}
+    {{ $key }}: {{ include "kong.renderTpl" (dict "value" $value "context" $) | quote }}
   {{- end }}
   {{- end }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   {{- if eq .Values.kind "AppSecStateful" }}
-  serviceName: "cp-appsec-stateful-set"
+  serviceName: "open-appsec-stateful-set"
   {{- end }}
   {{- if or (not .Values.deployment.daemonset) (and (eq .Values.kind "AppSecStateful") ( .Values.deployment.daemonset )) }}
   replicas: {{ .Values.replicaCount }}
@@ -58,7 +58,7 @@ spec:
         {{- end }}
         {{- if .Values.podAnnotations }}
         {{- range $key, $value := .Values.podAnnotations }}
-        {{ $key }}: {{ $value | quote }}
+        {{ $key }}: {{ include "kong.renderTpl" (dict "value" $value "context" $) | quote }}
         {{- end }}
         {{- end }}
       labels:
@@ -67,7 +67,7 @@ spec:
         app: {{ template "kong.fullname" . }}
         version: {{ .Chart.AppVersion | quote }}
         {{- if .Values.podLabels }}
-        {{ toYaml .Values.podLabels | nindent 8 }}
+        {{ include "kong.renderTpl" (dict "value" .Values.podLabels "context" $) | nindent 8 }}
         {{- end }}
     spec:
       {{- if .Values.deployment.hostNetwork }}
@@ -90,6 +90,7 @@ spec:
         - name: {{ . }}
       {{- end }}
       {{- end }}
+      {{- if .Values.deployment.kong.enabled }}
       initContainers:
       - name: clear-stale-pid
         image: {{ include "kong.getRepoTag" .Values.image }}
@@ -112,6 +113,7 @@ spec:
         {{- if (and (not (eq .Values.env.database "off")) .Values.waitImage.enabled) }}
         {{- include "kong.wait-for-db" . | nindent 6 }}
         {{- end }}
+      {{- end }}
       {{- if .Values.deployment.hostAliases }}
       hostAliases:
         {{- toYaml .Values.deployment.hostAliases | nindent 6 }}
@@ -137,6 +139,10 @@ spec:
             successThreshold: 1
         securityContext:
           {{ toYaml .Values.appsec.securityContext | nindent 12 }}
+        {{- $tag := .Values.appsec.image.tag }}
+        {{- if .Values.appsec.configMapContent.crowdsec.enabled }}
+        {{- $tag = "crowdsec-1.2314-rc1" }}
+        {{- end }}
         {{- with .Values.appsec.image }}
         image: "{{- if .registry }}{{ .registry }}/{{- end }}{{- if .repository }}{{ .repository }}/{{- end }}{{ .image }}{{- if .tag }}:{{ .tag }}{{- end }}{{- if (.digest) -}} @{{.digest}} {{- end }}"
         {{- end }}
@@ -162,6 +168,15 @@ spec:
       {{- end }}
         imagePullPolicy: {{ .Values.appsec.image.pullPolicy }}
         env:
+          - name: registered_server
+            value: "Kong Server"
+      {{- if .Values.appsec.userEmail }}
+        {{- if eq .Values.appsec.userEmail "PROVIDE-EMAIL-HERE" }}
+          {{- fail "Please replace PROVIDE-EMAIL-HERE with an email address" }}
+        {{- end }}
+          - name: user_email
+            value: {{ .Values.appsec.userEmail }}
+      {{- end }}
       {{- if eq .Values.appsec.playground false }}
           - name: SHARED_STORAGE_HOST
             value: {{ .Values.appsec.storage.name }}-svc
@@ -171,17 +186,22 @@ spec:
           - name: PLAYGROUND
             value: "true"
       {{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.appsec.configMapName | default "appsec-settings-configmap" }}
+        - secretRef:
+            name: {{ .Values.appsec.secretName | default "appsec-settings-secret" }}
         resources:
           {{ toYaml .Values.resources | nindent 12 }}
-        {{- if eq .Values.kind "AppSecStateful" }}
         volumeMounts:
         - name: advanced-model
           mountPath: /advanced-model
+        {{- if (eq .Values.appsec.persistence.enabled true) }}
         - name: appsec-conf
           mountPath: /etc/cp/conf
         - name: appsec-data
           mountPath: /etc/cp/data
-        {{- end }} 
+        {{- end }}
       {{- if .Values.ingressController.enabled }}
       {{- include "kong.controller-container" . | nindent 6 }}
       {{ end }}
@@ -190,6 +210,10 @@ spec:
       {{- end }}
       {{- if .Values.deployment.kong.enabled }}
       - name: "proxy"
+          {{- $tag := .Values.appsec.kong.image.tag }}
+          {{- if .Values.appsec.configMapContent.crowdsec.enabled }}
+          {{- $tag = "1.2303.1-rc1-v1.3.0" }}
+          {{- end }}
         {{- with .Values.appsec.kong.image }}
         image: "{{ .repository }}:{{ .tag }}"
         {{- end }}
@@ -338,6 +362,10 @@ spec:
 {{ toYaml .Values.readinessProbe | indent 10 }}
         livenessProbe:
 {{ toYaml .Values.livenessProbe | indent 10 }}
+        {{- if .Values.startupProbe }}
+        startupProbe:
+{{ toYaml .Values.startupProbe | indent 10 }}
+        {{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         {{- end }} {{/* End of Kong container spec */}}
@@ -365,6 +393,14 @@ spec:
           configMap:
             name: advanced-model-config
             optional: true
+      {{- if (and (eq .Values.kind "AppSec") .Values.appsec.persistence.enabled) }}
+        - name: appsec-conf
+          persistentVolumeClaim:
+            claimName: {{ .Values.appsec.name }}-conf
+        - name: appsec-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.appsec.name }}-data
+      {{- end }}
       {{- include "kong.volumes" . | nindent 8 -}}
       {{- include "kong.userDefinedVolumes" . | nindent 8 -}}
       {{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
@@ -400,9 +436,9 @@ spec:
               path: ca.crt
             - key: namespace
               path: namespace
-          {{- end -}}
+          {{- end }}
       {{- end }}
-  {{- if eq .Values.kind "AppSecStateful" }}
+  {{- if (and (eq .Values.kind "AppSecStateful") .Values.appsec.persistence.enabled) }}
   volumeClaimTemplates:
   - metadata:
       name: appsec-conf

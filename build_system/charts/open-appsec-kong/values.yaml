@@ -121,10 +121,10 @@ extraLabels: {}
 # Specify Kong's Docker image and repository details here
 image:
   repository: kong
-  tag: "3.2"
+  tag: "3.3"
   # Kong Enterprise
   # repository: kong/kong-gateway
-  # tag: "3.2"
+  # tag: "3.3"
 
   pullPolicy: IfNotPresent
   ## Optionally specify an array of imagePullSecrets.
@@ -334,16 +334,46 @@ proxy:
     # Enable/disable exposure using ingress.
     enabled: false
     ingressClassName:
-    # Ingress hostname
-    # TLS secret name.
-    # tls: kong-proxy.example.com-tls
-    hostname:
-    # Map of ingress annotations.
+    # To specify annotations or labels for the ingress, add them to the respective
+    # "annotations" or "labels" dictionaries below.
     annotations: {}
-    # Ingress path.
+    labels: {}
+    # Ingress hostname
+    hostname:
+    # Ingress path (when used with hostname above).
     path: /
-    # Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
+    # Each path in an Ingress is required to have a corresponding path type (when used with hostname above). (ImplementationSpecific/Exact/Prefix)
     pathType: ImplementationSpecific
+    # Ingress hosts. Use this instead of or in combination with hostname to specify multiple ingress host configurations
+    hosts: []
+    # - host: kong-proxy.example.com
+    #   paths:
+    #   # Ingress path.
+    #   - path: /*
+    #   # Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
+    #     pathType: ImplementationSpecific
+    # - host: kong-proxy-other.example.com
+    #   paths:
+    #   # Ingress path.
+    #   - path: /other
+    #   # Each path in an Ingress is required to have a corresponding path type. (ImplementationSpecific/Exact/Prefix)
+    #     pathType: ImplementationSpecific
+    #     backend:
+    #       service:
+    #         name: kong-other-proxy
+    #         port:
+    #           number: 80
+    #
+    # TLS secret(s)
+    # tls: kong-proxy.example.com-tls
+    # Or if multiple hosts/secrets needs to be configured:
+    # tls:
+    # - secretName: kong-proxy.example.com-tls
+    #   hosts:
+    #   - kong-proxy.example.com
+    # - secretName: kong-proxy-other.example.com-tls
+    #   hosts:
+    #   - kong-proxy-other.example.com
 
   # Optionally specify a static load balancer IP.
   # loadBalancerIP:
@@ -484,7 +514,7 @@ ingressController:
   enabled: true
   image:
     repository: kong/kubernetes-ingress-controller
-    tag: "2.9"
+    tag: "2.10"
     # Optionally set a semantic version for version-gated features. This can normally
     # be left unset. You only need to set this if your tag is not a semver string,
     # such as when you are using a "next" tag. Set this to the effective semantic
@@ -495,6 +525,7 @@ ingressController:
 
   gatewayDiscovery:
     enabled: false
+    generateAdminApiService: false
     adminApiService:
       namespace: ""
       name: ""
@@ -661,7 +692,7 @@ postgresql:
   image:
     # use postgres < 14 until is https://github.com/Kong/kong/issues/8533 resolved and released
     # enterprise (kong-gateway) supports postgres 14
-    tag: 13.6.0-debian-10-r52
+    tag: 13.11.0-debian-11-r20
   service:
     ports:
       postgresql: "5432"
@@ -1200,7 +1231,7 @@ appsec:
     repository: ghcr.io/openappsec
     image: agent
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
 
     securityContext:
       {}
@@ -1214,6 +1245,22 @@ appsec:
     image:
       repository: "ghcr.io/openappsec/kong-gateway-attachment"
       tag: "latest"
+  configMapName: appsec-settings-configmap
+  configMapContent:
+    crowdsec:
+      enabled: false
+      mode: prevent
+      logging: enabled
+      api:
+        url: http://crowdsec-service:8080/v1/decisions/stream
+      auth:
+        method: apikey
+  secretName: appsec-settings-secret
+  # If you would like to use your own secret with CrowdSec authentication data, please remove the following block
+  secretContent:
+    crowdsec:
+      auth:
+        data: "00000000000000000000000000000000"
   resources:
     #  limits:
     #    cpu: 100m

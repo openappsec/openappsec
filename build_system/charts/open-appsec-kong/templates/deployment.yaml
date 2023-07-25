@@ -14,7 +14,7 @@ metadata:
   {{- if .Values.deploymentAnnotations }}
   annotations:
   {{- range $key, $value := .Values.deploymentAnnotations }}
-    {{ $key }}: {{ $value | quote }}
+    {{ $key }}: {{ include "kong.renderTpl" (dict "value" $value "context" $) | quote }}
   {{- end }}
   {{- end }}
 spec:
@@ -51,7 +51,7 @@ spec:
         {{- end }}
         {{- if .Values.podAnnotations }}
         {{- range $key, $value := .Values.podAnnotations }}
-        {{ $key }}: {{ $value | quote }}
+        {{ $key }}: {{ include "kong.renderTpl" (dict "value" $value "context" $) | quote }}
         {{- end }}
         {{- end }}
       labels:
@@ -60,7 +60,7 @@ spec:
         app: {{ template "kong.fullname" . }}
         version: {{ .Chart.AppVersion | quote }}
         {{- if .Values.podLabels }}
-        {{ toYaml .Values.podLabels | nindent 8 }}
+        {{ include "kong.renderTpl" (dict "value" .Values.podLabels "context" $) | nindent 8 }}
         {{- end }}
     spec:
       {{- if .Values.deployment.hostNetwork }}

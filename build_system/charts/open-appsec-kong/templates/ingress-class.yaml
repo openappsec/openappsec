@@ -1,6 +1,6 @@
 {{/* Default to not managing if unsupported or created outside this chart */}}
 {{- $includeIngressClass := false -}}
-{{- if (and .Values.ingressController.enabled (not (eq (include "kong.ingressVersion" .) "extensions/v1beta1"))) -}}
+{{- if .Values.ingressController.enabled -}}
   {{- if (.Capabilities.APIVersions.Has "networking.k8s.io/v1/IngressClass") -}}
     {{- with (lookup "networking.k8s.io/v1" "IngressClass" "" .Values.ingressController.ingressClass) -}}
       {{- if (hasKey .metadata "annotations") -}}

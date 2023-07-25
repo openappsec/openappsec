@@ -28,9 +28,6 @@ ingressController:
 podLabels:
   app: kong
   environment: test
-# - podSecurityPolicies are enabled
-podSecurityPolicy:
-  enabled: true
 # - ingress resources are created with hosts
 admin:
   type: NodePort

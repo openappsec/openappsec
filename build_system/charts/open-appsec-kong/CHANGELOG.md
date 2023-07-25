@@ -1,6 +1,46 @@
 # Changelog
 
-## Unreleased
+## 2.25.0
+
+- Generate the `adminApiService.name` value from `.Release.Name` rather than
+  hardcoding to `kong`
+  [#839](https://github.com/Kong/charts/pull/839)
+
+## 2.24.0
+
+### Improvements
+
+* Running `tpl` against user-supplied labels and annotations used in Deployment
+  [#814](https://github.com/Kong/charts/pull/814)
+
+  Example:
+  ```yaml
+  podLabels:
+    version: "{{ .Values.image.tag }}"  # Will render dynamically when overridden downstream
+  ```
+
+* Fail to render templates when PodSecurityPolicy was requested but cluster doesn't
+  serve its API.
+  [#823](https://github.com/Kong/charts/pull/823)
+* Add support for multiple hosts and tls configurations for Kong proxy `Ingress`.
+  [#813](https://github.com/Kong/charts/pull/813)
+* Bump postgres default tag to `13.11.0-debian-11-r20` which includes arm64 images.
+  [#834](https://github.com/Kong/charts/pull/834)
+
+### Fixed
+
+* Fix Ingress and HPA API versions during capabilities checking
+  [#827](https://github.com/Kong/charts/pull/827)
+
+## 2.23.0
+
+### Improvements
+
+* Add custom label configuration option for Kong proxy `Ingress`.
+  [#812](https://github.com/Kong/charts/pull/812)
+* Bump default `kong/kubernetes-ingress-controller` image tag to 2.10.
+  Bump default `kong` image tag to 3.3.
+  [#815](https://github.com/Kong/charts/pull/815)
 
 ## 2.22.0
 
@@ -30,7 +70,7 @@
 
 ## 2.20.2
 
-### Fixed 
+### Fixed
 
 * Automatic license provisioning for Gateways managed by Ingress Controllers in Konnect mode
   is disabled by default.

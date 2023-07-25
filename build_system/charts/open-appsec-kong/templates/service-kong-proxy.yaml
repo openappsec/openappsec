@@ -2,7 +2,6 @@
 {{- if and .Values.proxy.enabled (or .Values.proxy.http.enabled .Values.proxy.tls.enabled) -}}
 {{- $serviceConfig := dict -}}
 {{- $serviceConfig := merge $serviceConfig .Values.proxy -}}
-{{- $_ := set $serviceConfig "ingressVersion" (include "kong.ingressVersion" .) -}}
 {{- $_ := set $serviceConfig "fullName" (include "kong.fullname" .) -}}
 {{- $_ := set $serviceConfig "namespace" (include "kong.namespace" .) -}}
 {{- $_ := set $serviceConfig "metaLabels" (include "kong.metaLabels" .) -}}

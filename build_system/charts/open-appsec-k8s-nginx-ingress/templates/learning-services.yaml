@@ -1,3 +1,4 @@
+{{- if not (eq .Values.kind "Vanilla") -}}
 {{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) }}
 apiVersion: v1
 kind: Service
@@ -30,4 +31,5 @@ spec:
       targetPort: 8080
   selector:
     app: {{ .Values.appsec.storage.name }}-lbl
+{{- end }}
 {{- end }}

@@ -679,11 +679,13 @@ or `ingress` sections, as it is used only for stream listens.
 | SVC.externalTrafficPolicy          | k8s service's externalTrafficPolicy. Options: Cluster, Local                          |                          |
 | SVC.ingress.enabled                | Enable ingress resource creation (works with SVC.type=ClusterIP)                      | `false`                  |
 | SVC.ingress.ingressClassName       | Set the ingressClassName to associate this Ingress with an IngressClass               |                          |
-| SVC.ingress.tls                    | Name of secret resource, containing TLS secret                                        |                          |
 | SVC.ingress.hostname               | Ingress hostname                                                                      | `""`                     |
 | SVC.ingress.path                   | Ingress path.                                                                         | `/`                      |
 | SVC.ingress.pathType               | Ingress pathType. One of `ImplementationSpecific`, `Exact` or `Prefix`                | `ImplementationSpecific` |
+| SVC.ingress.hosts                  | Slice of hosts configurations, including `hostname`, `path` and `pathType` keys       | `[]`                     |
+| SVC.ingress.tls                    | Name of secret resource or slice of `secretName` and `hosts` keys                     |                          |
 | SVC.ingress.annotations            | Ingress annotations. See documentation for your ingress controller for details        | `{}`                     |
+| SVC.ingress.labels                 | Ingress labels. Additional custom labels to add to the ingress.                       | `{}`                     |
 | SVC.annotations                    | Service annotations                                                                   | `{}`                     |
 | SVC.labels                         | Service labels                                                                        | `{}`                     |
 
@@ -744,6 +746,7 @@ section of `values.yaml` file:
 | userDefinedVolumeMounts                    | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts                                                                        |                                    |
 | terminationGracePeriodSeconds              | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pod | 30                                 |
 | gatewayDiscovery.enabled                   | Enables Kong instance service discovery (for more details see [gatewayDiscovery section][gd_section])                                                    | false                              |
+| gatewayDiscovery.generateAdminApiService   | Generate the admin API service name based on the release name (for more details see [gatewayDiscovery section][gd_section])                                                    | false                              |
 | gatewayDiscovery.adminApiService.namespace | The namespace of the Kong admin API service (for more details see [gatewayDiscovery section][gd_section])                                                | `.Release.Namespace`               |
 | gatewayDiscovery.adminApiService.name      | The name of the Kong admin API service (for more details see [gatewayDiscovery section][gd_section])                                                     | ""                                 |
 | konnect.enabled                            | Enable synchronisation of data plane configuration with Konnect Runtime Group                                                                            | false                              |
@@ -796,11 +799,15 @@ You'll be able to configure this feature through configuration section under
   service.
   (provided under the hood via `CONTROLLER_KONG_ADMIN_SVC` environment variable).
 
-  The following admin API Service flags have to be provided in order for gateway
+  The following admin API Service flags have to be present in order for gateway
   discovery to work:
 
   - `ingressController.gatewayDiscovery.adminApiService.name`
   - `ingressController.gatewayDiscovery.adminApiService.namespace`
+
+  If you set `ingressController.gatewayDiscovery.generateAdminApiService` to `true`,
+  the chart will generate values for `name` and `namespace` based on the current release name and
+  namespace. This is useful when consuming the `kong` chart as a subchart.
 
 Using this feature requires a split release installation of Gateways and Ingress Controller.
 For exemplar `values.yaml` files which use this feature please see: [examples README.md](./example-values/README.md).

@@ -1,4 +1,4 @@
-{{- if (eq .Values.controller.kind "Deployment") -}}
+{{- if (and (eq .Values.kind "AppSec") .Values.appsec.persistence.enabled) }}
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
