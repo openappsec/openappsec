@@ -87,6 +87,12 @@ install_waap()
     cp_exec "cp -f resources/cp-csrf.js /etc/cp/conf/waap/"
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-ab.js"
     cp_exec "chmod 777 /etc/cp/conf/waap/cp-csrf.js"
+
+    # use advanced model if exist as data for waap
+    ADVANCED_MODEL_FILE=/advanced-model/open-appsec-advanced-model.tgz
+    if [ -f "$ADVANCED_MODEL_FILE" ]; then
+        cp_exec "tar -xzf $ADVANCED_MODEL_FILE -C /etc/cp/conf/waap"
+    fi
 }
 
 set_debug_configuration()
