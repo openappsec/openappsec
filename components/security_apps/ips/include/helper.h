@@ -6,6 +6,7 @@
 namespace IPSHelper
 {
 
+bool hasDeobfuscation();
 std::string deobfuscateString(const std::string &str);
 std::string deobfuscateKeyword(const std::string &str);
 

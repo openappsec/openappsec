@@ -25,6 +25,8 @@ RuleSelector::selectSignatures() const
 {
     vector<IPSSignatureSubTypes::SignatureAndAction> res;
 
+    if (!IPSHelper::hasDeobfuscation()) return res;
+
     auto all_signatures = getResource<IPSSignaturesResource>("IPS", "protections");
     if (!all_signatures.ok()) return res;
     auto signatures_version = getResourceWithDefault<string>("", "IPS", "VersionId");

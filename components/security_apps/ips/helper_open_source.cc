@@ -7,6 +7,14 @@ using namespace std;
 namespace IPSHelper
 {
 
+bool has_deobfuscation = false;
+
+bool
+hasDeobfuscation()
+{
+    return has_deobfuscation;
+}
+
 string
 deobfuscateString(const string &str)
 {

@@ -23,6 +23,11 @@
 using namespace testing;
 using namespace std;
 
+namespace IPSHelper
+{
+extern bool has_deobfuscation;
+} // namespace IPSHelper
+
 MATCHER_P(IsLog, IteratableFields, "")
 {
     stringstream ss;
@@ -53,6 +58,7 @@ class SignatureTest : public Test
 public:
     SignatureTest()
     {
+        IPSHelper::has_deobfuscation = true;
         generic_rulebase.preload();
         EXPECT_CALL(logs, getCurrentLogId()).Times(AnyNumber());
         ON_CALL(table, getState(_)).WillByDefault(Return(&ips_state));
