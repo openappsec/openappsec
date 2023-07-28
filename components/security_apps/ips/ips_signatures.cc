@@ -505,6 +505,8 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
 void
 IPSSignaturesResource::load(cereal::JSONInputArchive &ar)
 {
+    if (!IPSHelper::hasDeobfuscation()) return;
+
     vector<CompleteSignature> sigs;
     cereal::load(ar, sigs);
 
