@@ -129,7 +129,7 @@ get_setting() # Initials - gs
     echo "$gs_setting_value"
 }
 
-. "/etc/environment"
+[ -f /etc/environment ] && . "/etc/environment"
 if [ -n "${CP_ENV_FILESYSTEM}" ] ; then
     FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
 fi
