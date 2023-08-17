@@ -1542,11 +1542,15 @@ MessageConnection::setSocket()
 bool
 MessageConnection::isBioSocketReady() const
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(OPENSSL_NO_SOCK)
-    return BIO_socket_wait(BIO_get_fd(bio.get(), NULL), 0, time(NULL));
-#else // OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(OPENSSL_NO_SOCK)
-    return true;
-#endif // OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(OPENSSL_NO_SOCK)
+    auto fd = BIO_get_fd(bio.get(), nullptr);
+
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+
+    struct timeval tv = { 0, 0 };
+
+    return select(fd + 1, nullptr, &rfds, nullptr, &tv) == 1;
 }
 
 
@@ -1564,11 +1568,6 @@ MessageConnection::connect(const string &host, const string &overwrite_port)
 
     while (timer->getMonotonicTime() < end_time) {
         counter++;
-        if (!isBioSocketReady()) {
-            dbgDebug(D_COMMUNICATION) << "Socket is not ready for use.";
-            if (mainloop != nullptr) mainloop->yield(true);
-            continue;
-        }
         if (BIO_do_connect(bio.get()) > 0) {
             dbgDebug(D_COMMUNICATION)
                 << "Successfully established new BIO connection. "
