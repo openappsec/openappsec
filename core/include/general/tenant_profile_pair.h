@@ -25,8 +25,13 @@ public:
             :
         tenant_id(_tenant_id),
         profile_id(_profile_id)
-    {
-    }
+    {}
+
+    TenantProfilePair(const std::pair<std::string, std::string> &tenant_profile_pair)
+            :
+        tenant_id(tenant_profile_pair.first),
+        profile_id(tenant_profile_pair.second)
+    {}
 
     size_t
     hash() const

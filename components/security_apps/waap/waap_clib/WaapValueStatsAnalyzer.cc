@@ -233,4 +233,30 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
     }
     // Detect URLEncode value
     isUrlEncoded = checkUrlEncoded(cur_val.data(), cur_val.size());
+
+    textual.clear();
+    textual.append("hasCharSlash = ");
+    textual +=(hasCharSlash ? "true" : "false");
+    textual.append("\nhasCharColon = ");
+    textual +=(hasCharColon ? "true" : "false");
+    textual.append("\nhasCharAmpersand = ");
+    textual +=(hasCharAmpersand ? "true" : "false");
+    textual.append("\nhasCharEqual = ");
+    textual +=(hasCharEqual ? "true" : "false");
+    textual.append("\nhasTwoCharsEqual = ");
+    textual +=(hasTwoCharsEqual ? "true" : "false");
+    textual.append("\nhasCharSemicolon = ");
+    textual +=(hasCharSemicolon ? "true" : "false");
+    textual.append("\nhasCharPipe = ");
+    textual +=(hasCharPipe ? "true" : "false");
+    textual.append("\nisUTF16 = ");
+    textual +=(isUTF16 ? "true" : "false");
+    textual.append("\ncanSplitSemicolon = ");
+    textual +=(canSplitSemicolon ? "true" : "false");
+    textual.append("\ncanSplitPipe = ");
+    textual +=(canSplitPipe ? "true" : "false");
+    textual.append("\nhasSpace = ");
+    textual +=(hasSpace ? "true" : "false");
+    textual.append("\nisUrlEncoded = ");
+    textual +=(isUrlEncoded ? "true" : "false");
 }

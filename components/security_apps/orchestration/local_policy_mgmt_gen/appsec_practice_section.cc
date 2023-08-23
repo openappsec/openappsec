@@ -34,6 +34,26 @@ AppSecWebBotsURI::getURI() const
     return uri;
 }
 
+std::vector<std::string>
+AppSecPracticeAntiBot::getIjectedUris() const
+{
+    vector<string> injected;
+    for (const AppSecWebBotsURI &uri : injected_uris) {
+        injected.push_back(uri.getURI());
+    }
+    return injected;
+}
+
+std::vector<std::string>
+AppSecPracticeAntiBot::getValidatedUris() const
+{
+    vector<string> validated;
+    for (const AppSecWebBotsURI &uri : validated_uris) {
+        validated.push_back(uri.getURI());
+    }
+    return validated;
+}
+
 void
 AppSecPracticeAntiBot::load(cereal::JSONInputArchive &archive_in)
 {
@@ -52,7 +72,7 @@ AppSecPracticeAntiBot::save(cereal::JSONOutputArchive &out_ar) const
     vector<string> injected;
     vector<string> validated;
     for (const AppSecWebBotsURI &uri : injected_uris) injected.push_back(uri.getURI());
-    for (const AppSecWebBotsURI &uri : validated_uris) injected.push_back(uri.getURI());
+    for (const AppSecWebBotsURI &uri : validated_uris) validated.push_back(uri.getURI());
     out_ar(
         cereal::make_nvp("injected", injected),
         cereal::make_nvp("validated", validated)
@@ -313,6 +333,16 @@ AppSecOverride::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
+void
+AppsecPracticeAntiBotSection::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("injected", injected_uris),
+        cereal::make_nvp("validated", validated_uris)
+    );
+}
+
+// LCOV_EXCL_START Reason: no test exist
 WebAppSection::WebAppSection(
     const string &_application_urls,
     const string &_asset_id,
@@ -321,6 +351,7 @@ WebAppSection::WebAppSection(
     const string &_rule_name,
     const string &_practice_id,
     const string &_practice_name,
+    const string &_context,
     const AppSecPracticeSpec &parsed_appsec_spec,
     const LogTriggerSection &parsed_log_trigger,
     const string &default_mode,
@@ -333,7 +364,7 @@ WebAppSection::WebAppSection(
     rule_name(_rule_name),
     practice_id(_practice_id),
     practice_name(_practice_name),
-    context("practiceId(" + practice_id +")"),
+    context(_context),
     web_attack_mitigation_severity(parsed_appsec_spec.getWebAttacks().getMinimumConfidence()),
     web_attack_mitigation_mode(parsed_appsec_spec.getWebAttacks().getMode(default_mode)),
     practice_advanced_config(parsed_appsec_spec),
@@ -352,6 +383,50 @@ WebAppSection::WebAppSection(
         overrides.push_back(AppSecOverride(source_ident));
     }
 }
+
+WebAppSection::WebAppSection(
+    const std::string &_application_urls,
+    const std::string &_asset_id,
+    const std::string &_asset_name,
+    const std::string &_rule_id,
+    const std::string &_rule_name,
+    const std::string &_practice_id,
+    const std::string &_practice_name,
+    const string &_context,
+    const std::string &_web_attack_mitigation_severity,
+    const std::string &_web_attack_mitigation_mode,
+    const PracticeAdvancedConfig &_practice_advanced_config,
+    const AppsecPracticeAntiBotSection &_anti_bots,
+    const LogTriggerSection &parsed_log_trigger,
+    const AppSecTrustedSources &parsed_trusted_sources)
+        :
+    application_urls(_application_urls),
+    asset_id(_asset_id),
+    asset_name(_asset_name),
+    rule_id(_rule_id),
+    rule_name(_rule_name),
+    practice_id(_practice_id),
+    practice_name(_practice_name),
+    context(_context),
+    web_attack_mitigation_severity(_web_attack_mitigation_severity),
+    web_attack_mitigation_mode(_web_attack_mitigation_mode),
+    practice_advanced_config(_practice_advanced_config),
+    anti_bots(_anti_bots),
+    trusted_sources({parsed_trusted_sources})
+{
+    web_attack_mitigation = true;
+    web_attack_mitigation_action =
+        web_attack_mitigation_severity == "critical" ? "low" :
+        web_attack_mitigation_severity == "high" ? "balanced" :
+        web_attack_mitigation_severity == "medium" ? "high" :
+        "Error";
+
+    triggers.push_back(TriggersInWaapSection(parsed_log_trigger));
+    for (const SourcesIdentifiers &source_ident : parsed_trusted_sources.getSourcesIdentifiers()) {
+        overrides.push_back(AppSecOverride(source_ident));
+    }
+}
+// LCOV_EXCL_STOP
 
 void
 WebAppSection::save(cereal::JSONOutputArchive &out_ar) const

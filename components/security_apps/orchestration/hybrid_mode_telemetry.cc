@@ -24,8 +24,8 @@ USE_DEBUG_FLAG(D_ORCHESTRATOR);
 static inline string &
 trim(string &in)
 {
-    in.erase(in.begin(), find_if(in.begin(), in.end(), not1(ptr_fun<int, int>(isspace))));
-    in.erase(find_if(in.rbegin(), in.rend(), not1(ptr_fun<int, int>(isspace))).base(), in.end());
+    in.erase(in.begin(), find_if(in.begin(), in.end(), [] (char c) { return !isspace(c); }));
+    in.erase(find_if(in.rbegin(), in.rend(), [] (char c) { return !isspace(c); }).base(), in.end());
     return in;
 }
 

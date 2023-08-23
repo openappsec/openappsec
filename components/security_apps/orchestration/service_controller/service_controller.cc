@@ -269,13 +269,13 @@ class ServiceController::Impl
 public:
     void init();
 
-    bool
+    Maybe<void>
     updateServiceConfiguration(
         const string &new_policy_path,
         const string &new_settings_path,
         const vector<string> &new_data_files,
-        const string &tenant_id,
-        const string &profile_id,
+        const string &child_tenant_id,
+        const string &child_profile_id,
         const bool last_iteration
     ) override;
 
@@ -291,6 +291,7 @@ public:
     void refreshPendingServices() override;
     const string & getPolicyVersion() const override;
     const string & getUpdatePolicyVersion() const override;
+    const string & getPolicyVersions() const override;
     void updateReconfStatus(int id, ReconfStatus status) override;
     void startReconfStatus(
         int id,
@@ -308,9 +309,11 @@ public:
 private:
     void cleanUpVirtualFiles();
 
-    bool sendSignalForServices(const set<string> &nano_services_to_update, const string &policy_version);
+    Maybe<void> sendSignalForServices(
+        const set<string> &nano_services_to_update,
+        const string &policy_version_to_update);
 
-    bool updateServiceConfigurationFile(
+    Maybe<void> updateServiceConfigurationFile(
         const string &configuration_name,
         const string &configuration_file_path,
         const string &new_configuration_path);
@@ -326,10 +329,12 @@ private:
     void writeRegisteredServicesToFile();
 
     bool backupConfigurationFile(const string &configuration_file_path);
+    bool createDirectoryForChildTenant(const string &child_tenant_id, const string &child_profile_id) const;
 
     int configuration_id = 0;
     map<string, ServiceDetails> registered_services;
     map<string, ServiceDetails> pending_services;
+    string policy_versions;
     string policy_version;
     string update_policy_version;
     string settings_path;
@@ -657,14 +662,45 @@ ServiceController::Impl::backupConfigurationFile(const string &config_file_path)
 }
 
 bool
+ServiceController::Impl::createDirectoryForChildTenant(
+    const string &child_tenant_id,
+    const string &child_profile_id) const
+{
+    if (child_tenant_id == "") return true;
+
+    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
+    string dir = getConfigurationWithDefault<string>(
+        filesystem_prefix + "/conf",
+        "orchestration",
+        "Configuration directory"
+    );
+
+    dir = dir + "/tenant_" + child_tenant_id + "_profile_" + child_profile_id;
+    if (orchestration_tools->doesDirectoryExist(dir)) return true;
+
+    if (!orchestration_tools->createDirectory(dir)) {
+        dbgError(D_ORCHESTRATOR)
+            << "Failed to create configuration directory for tenant "
+            << child_tenant_id;
+        return false;
+    }
+    dbgTrace(D_ORCHESTRATOR) << "Created new configuration directory for tenant " << child_tenant_id;
+    return true;
+}
+
+Maybe<void>
 ServiceController::Impl::updateServiceConfiguration(
     const string &new_policy_path,
     const string &new_settings_path,
     const vector<string> &new_data_files,
-    const string &tenant_id,
-    const string &profile_id,
+    const string &child_tenant_id,
+    const string &child_profile_id,
     const bool last_iteration)
 {
+    string tenant_and_profile_ids = "";
+    if (!child_tenant_id.empty()) {
+        tenant_and_profile_ids = " Child tenant id: " + child_tenant_id + ", Child profile id: " + child_profile_id;
+    }
     dbgFlow(D_ORCHESTRATOR)
         << "new_policy_path: "
         << new_policy_path
@@ -672,10 +708,8 @@ ServiceController::Impl::updateServiceConfiguration(
         << new_settings_path
         << ", new_data_files: "
         << makeSeparatedStr(new_data_files, ",")
-        << ". tenant_id: "
-        << tenant_id
-        << ". profile_id: "
-        << profile_id;
+        << "."
+        << tenant_and_profile_ids;
 
     if (!new_settings_path.empty()) {
         settings_path = new_settings_path;
@@ -704,8 +738,9 @@ ServiceController::Impl::updateServiceConfiguration(
 
     if (new_policy_path == "") {
         dbgDebug(D_ORCHESTRATOR) << "Policy file was not updated. Sending reload command regarding settings and data";
-
-        return sendSignalForServices(nano_services_to_update, "");
+        auto signal_services = sendSignalForServices(nano_services_to_update, "");
+        if (!signal_services.ok()) return signal_services.passErr();
+        return Maybe<void>();
     }
 
     Maybe<string> loaded_policy_json = orchestration_tools->readFile(new_policy_path);
@@ -716,14 +751,13 @@ ServiceController::Impl::updateServiceConfiguration(
             << ". Error: "
             << loaded_policy_json.getErr();
 
-        return false;
+        return genError("Failed to load new file: " + new_policy_path + ". Error: " + loaded_policy_json.getErr());
     }
-
 
     auto all_security_policies = orchestration_tools->jsonObjectSplitter(
         loaded_policy_json.unpack(),
-        tenant_id,
-        profile_id
+        child_tenant_id,
+        child_profile_id
     );
 
     if (!all_security_policies.ok()) {
@@ -733,12 +767,18 @@ ServiceController::Impl::updateServiceConfiguration(
             << ". Error: "
             << all_security_policies.getErr();
 
-        return false;
+        return genError("Failed to parse json file: " +
+            new_policy_path +
+            ". Error: " +
+            all_security_policies.getErr()
+        );
     }
 
     bool was_policy_updated = true;
     const string version_param = "version";
+    const string versions_param = "versions";
     string version_value;
+    string send_signal_for_services_err;
 
     for (auto &single_policy : all_security_policies.unpack()) {
         if (single_policy.first == version_param) {
@@ -747,33 +787,27 @@ ServiceController::Impl::updateServiceConfiguration(
             update_policy_version = version_value;
             continue;
         }
+        if (child_tenant_id.empty() && single_policy.first == versions_param) {
+            //In a multi-tenant env, only the parent should handle the versions parameter
+            policy_versions = single_policy.second;
+            dbgWarning(D_ORCHESTRATOR) << "Found versions parameter in policy file:" << policy_versions;
+        }
 
         dbgDebug(D_ORCHESTRATOR) << "Starting to update policy file. Policy type: " << single_policy.first;
 
-        string dir = getConfigurationWithDefault<string>(
-            filesystem_prefix + "/conf",
-            "orchestration",
-            "Configuration directory"
-        );
-
-        if (tenant_id != "") {
-            dir = dir + "/tenant_" + tenant_id + "_profile_" + profile_id;
-            if (!orchestration_tools->doesDirectoryExist(dir)) {
-                if (orchestration_tools->createDirectory(dir)) {
-                    dbgTrace(D_ORCHESTRATOR) << "Created new configuration directory for tenant " << tenant_id;
-                } else {
-                    dbgError(D_ORCHESTRATOR) << "Failed to create configuration directory for tenant "<< tenant_id;
-                    return false;
-                }
-            }
+        if (!createDirectoryForChildTenant(child_tenant_id, child_profile_id)) {
+            dbgWarning(D_ORCHESTRATOR)
+                << "Failed to create directory for child. Tenant id: " << child_tenant_id
+                << ", Profile id: " << child_profile_id;
+            return genError("Failed to create directory for child tenant");
         }
 
         string policy_file_path =
             getPolicyConfigPath(
                 single_policy.first,
                 Config::ConfigFileType::Policy,
-                tenant_id,
-                profile_id
+                child_tenant_id,
+                child_profile_id
             );
 
         auto update_config_result = updateServiceConfigurationFile(
@@ -782,8 +816,11 @@ ServiceController::Impl::updateServiceConfiguration(
             single_policy.second
         );
 
-        if (!update_config_result) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to update policy file. Policy name: " << single_policy.first;
+        if (!update_config_result.ok()) {
+            send_signal_for_services_err =  "Failed to update policy file. Policy name: " +
+                single_policy.first +
+                ". Error: " +
+                update_config_result.getErr();
             was_policy_updated = false;
             continue;
         }
@@ -798,10 +835,10 @@ ServiceController::Impl::updateServiceConfiguration(
             OrchestrationStatusConfigType::POLICY
         );
 
-        if (tenant_id != "") {
+        if (child_tenant_id != "") {
             auto instances = Singleton::Consume<I_TenantManager>::by<ServiceController>()->getInstances(
-                tenant_id,
-                profile_id
+                child_tenant_id,
+                child_profile_id
             );
             for (const auto &instance_id: instances) {
                 auto relevant_service = registered_services.find(instance_id);
@@ -823,18 +860,20 @@ ServiceController::Impl::updateServiceConfiguration(
     }
 
     // In a multi-tenant env, we send the signal to the services only on the last iteration
-    was_policy_updated &= (is_multi_tenant_env && !last_iteration) ?
-        true :
-        sendSignalForServices(nano_services_to_update, version_value);
+    if (!is_multi_tenant_env || last_iteration) {
+        auto is_send_signal_for_services = sendSignalForServices(nano_services_to_update, version_value);
+        was_policy_updated &= is_send_signal_for_services.ok();
+        if (!is_send_signal_for_services.ok()) send_signal_for_services_err = is_send_signal_for_services.getErr();
+    }
 
     dbgTrace(D_ORCHESTRATOR) << "was policy updated: " << (was_policy_updated ? "true" : "false");
 
     if (was_policy_updated) {
-        string config_file_path;
         string base_path =
             filesystem_prefix + "/conf/" +
-            (tenant_id != "" ? "tenant_" + tenant_id + "_profile_" + profile_id + "/" : "");
-        config_file_path = getConfigurationWithDefault<string>(
+            (child_tenant_id != "" ? "tenant_" + child_tenant_id + "_profile_" + child_profile_id + "/" : "");
+
+        string config_file_path = getConfigurationWithDefault<string>(
             base_path + "policy.json",
             "orchestration",
             "Policy file path"
@@ -843,12 +882,12 @@ ServiceController::Impl::updateServiceConfiguration(
         if (new_policy_path.compare(config_file_path) == 0) {
             dbgDebug(D_ORCHESTRATOR) << "Enforcing the default policy file";
             policy_version = version_value;
-            return true;
+            return Maybe<void>();
         }
 
         if (!backupConfigurationFile(config_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to backup the policy file.";
-            return false;
+            return genError("Failed to backup the policy file.");
         }
 
         policy_version = version_value;
@@ -856,17 +895,18 @@ ServiceController::Impl::updateServiceConfiguration(
         // Save the new configuration file.
         if (!orchestration_tools->copyFile(new_policy_path, config_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to save the policy file.";
-            return false;
+            return genError("Failed to save the policy file.");
         }
     }
 
-    return was_policy_updated;
+    if (!was_policy_updated && !send_signal_for_services_err.empty()) return genError(send_signal_for_services_err);
+    return Maybe<void>();
 }
 
-bool
+Maybe<void>
 ServiceController::Impl::sendSignalForServices(
     const set<string> &nano_services_to_update,
-    const string &policy_version)
+    const string &policy_version_to_update)
 {
     dbgFlow(D_ORCHESTRATOR);
     for (auto &service_id : nano_services_to_update) {
@@ -877,7 +917,7 @@ ServiceController::Impl::sendSignalForServices(
         }
 
         ++configuration_id;
-        auto reconf_status = nano_service->second.sendNewConfigurations(configuration_id, policy_version);
+        auto reconf_status = nano_service->second.sendNewConfigurations(configuration_id, policy_version_to_update);
 
         if (reconf_status == ReconfStatus::INACTIVE) {
             dbgWarning(D_ORCHESTRATOR) << "Erasing details regarding inactive service " << service_id;
@@ -889,7 +929,7 @@ ServiceController::Impl::sendSignalForServices(
             dbgDebug(D_ORCHESTRATOR) << "The reconfiguration failed for serivce: " << service_id;
             services_reconf_status.clear();
             services_reconf_names.clear();
-            return false;
+            return genError("The reconfiguration failed for serivce: " + service_id);
         }
     }
 
@@ -910,7 +950,7 @@ ServiceController::Impl::sendSignalForServices(
                 dbgDebug(D_ORCHESTRATOR) << "The reconfiguration was successfully completed for all the services";
                 services_reconf_status.clear();
                 services_reconf_names.clear();
-                return true;
+                return Maybe<void>();
             }
             case ReconfStatus::IN_PROGRESS: {
                 dbgTrace(D_ORCHESTRATOR) << "Reconfiguration in progress...";
@@ -918,8 +958,10 @@ ServiceController::Impl::sendSignalForServices(
                 break;
             }
             case ReconfStatus::FAILED: {
+                vector<string> failed_services_vec;
                 for(auto &status : services_reconf_status) {
                     if (status.second == ReconfStatus::FAILED) {
+                        failed_services_vec.push_back(services_reconf_names[status.first]);
                         dbgDebug(D_ORCHESTRATOR)
                             << "The reconfiguration failed for serivce "
                             << services_reconf_names[status.first];
@@ -927,13 +969,16 @@ ServiceController::Impl::sendSignalForServices(
                 }
                 services_reconf_status.clear();
                 services_reconf_names.clear();
-                return false;
+
+                string failed_services = makeSeparatedStr(failed_services_vec, ", ");
+
+                return genError("The reconfiguration failed for serivces: " + failed_services);
             }
             case ReconfStatus::INACTIVE: {
                 dbgError(D_ORCHESTRATOR) << "Reached inactive state in the middle of reconfiguration!";
                 services_reconf_status.clear();
                 services_reconf_names.clear();
-                return false;
+                return genError("Reached inactive state in the middle of reconfiguration!");
             }
         }
     }
@@ -941,10 +986,10 @@ ServiceController::Impl::sendSignalForServices(
     dbgDebug(D_ORCHESTRATOR) << "The reconfiguration has reached a timeout";
     services_reconf_status.clear();
     services_reconf_names.clear();
-    return false;
+    return genError("The reconfiguration has reached a timeout");
 }
 
-bool
+Maybe<void>
 ServiceController::Impl::updateServiceConfigurationFile(
     const string &configuration_name,
     const string &configuration_file_path,
@@ -959,7 +1004,7 @@ ServiceController::Impl::updateServiceConfigurationFile(
             bool service_changed = old_configuration.unpack().compare(new_configuration_path) != 0;
             if (service_changed == false) {
                 dbgDebug(D_ORCHESTRATOR) << "There is no update for policy file: " << configuration_file_path;
-                return true;
+                return Maybe<void>();
             }
             dbgDebug(D_ORCHESTRATOR)
                 << "Starting to update " << configuration_file_path << " to " << new_configuration_path;
@@ -972,7 +1017,7 @@ ServiceController::Impl::updateServiceConfigurationFile(
                 dbgDebug(D_ORCHESTRATOR) << "Backup of policy file has been created in: " << configuration_file_path;
             } else {
                 dbgWarning(D_ORCHESTRATOR) << "Failed to backup policy file";
-                return false;
+                return genError("Failed to backup policy file");
             }
         } else {
             dbgWarning(D_ORCHESTRATOR)
@@ -981,7 +1026,12 @@ ServiceController::Impl::updateServiceConfigurationFile(
                 << ". Error: "
                 << old_configuration.getErr();
 
-            return false;
+            return genError(
+                "Failed to read current policy file " +
+                configuration_file_path +
+                ". Error: " +
+                old_configuration.getErr()
+            );
         }
     }
 
@@ -989,12 +1039,12 @@ ServiceController::Impl::updateServiceConfigurationFile(
         dbgDebug(D_ORCHESTRATOR) << "New policy file has been saved in: " << configuration_file_path;
     } else {
         dbgWarning(D_ORCHESTRATOR) << "Failed to save new policy file";
-        return false;
+        return genError("Failed to save new policy file");
     }
 
     dbgInfo(D_ORCHESTRATOR) << "Successfully updated policy file: " << configuration_file_path;
 
-    return true;
+    return Maybe<void>();
 }
 
 ServiceController::ServiceController() : Component("ServiceController"), pimpl(make_unique<Impl>()) {}
@@ -1011,6 +1061,12 @@ const string &
 ServiceController::Impl::getPolicyVersion() const
 {
     return policy_version;
+}
+
+const string &
+ServiceController::Impl::getPolicyVersions() const
+{
+    return policy_versions;
 }
 
 const string &

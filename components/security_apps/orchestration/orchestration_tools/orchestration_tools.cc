@@ -18,6 +18,7 @@
 #include "cereal/external/rapidjson/document.h"
 #include "cereal/types/vector.hpp"
 #include "cereal/types/set.hpp"
+#include "agent_core_utilities.h"
 
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -27,6 +28,12 @@ using namespace std;
 using namespace rapidjson;
 
 static const string base64_base_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const string ls_prefix = "ls ";
+static const string extract_tenant_profile_suffix =
+    "| grep tenant "
+    "| cut -d '_' -f 2,4 "
+    "| sort --unique "
+    "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'";
 
 class OrchestrationTools::Impl : Singleton::Provide<I_OrchestrationTools>::From<OrchestrationTools>
 {
@@ -50,6 +57,12 @@ public:
     bool doesDirectoryExist(const string &dir_path) const override;
     bool executeCmd(const string &cmd) const override;
     bool isNonEmptyFile(const string &path) const override;
+    void loadTenantsFromDir(const string &dir_path) const override;
+    bool removeDirectory(const string &path, bool delete_content) const override;
+    void deleteVirtualTenantProfileFiles(
+        const std::string &tenant_id,
+        const std::string &profile_id,
+        const std::string &conf_path) const override;
 
     Maybe<string> calculateChecksum(Package::ChecksumTypes checksum_type, const string &path) const override;
 
@@ -204,6 +217,64 @@ OrchestrationTools::Impl::removeFile(const string &path) const
         dbgDebug(D_ORCHESTRATOR) << "Successfully deleted the file " << path;
     }
     return true;
+}
+
+bool
+OrchestrationTools::Impl::removeDirectory(const string &path, bool delete_content) const
+{
+    if (!NGEN::Filesystem::deleteDirectory(path, delete_content)) {
+        dbgDebug(D_ORCHESTRATOR) << "Deletion of the folder at path " << path << " failed.";
+        return false;
+    }
+    dbgDebug(D_ORCHESTRATOR) << "Successfully deleted folder at path " << path;
+    return true;
+}
+
+void
+OrchestrationTools::Impl::deleteVirtualTenantProfileFiles(
+    const string &tenant_id,
+    const string &profile_id,
+    const string &conf_path) const
+{
+    string tenant_and_profile_suffix = "tenant_" + tenant_id + "_profile_" + profile_id;
+    string virtual_policy_dir = conf_path + "/" + tenant_and_profile_suffix;
+    if (!removeDirectory(virtual_policy_dir, true)) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to delete virtual policy folder : " << virtual_policy_dir;
+    } else {
+        dbgDebug(D_ORCHESTRATOR) << "Virtual policy folder " << virtual_policy_dir << " deleted successfully.";
+    }
+
+    string settings_file_path = virtual_policy_dir + "_settings.json";
+    if (!removeFile(settings_file_path)) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to delete virtual policy settings file : " << settings_file_path;
+    } else {
+        dbgDebug(D_ORCHESTRATOR) << "Virtual policy settings file " << settings_file_path << " deleted successfully.";
+    }
+}
+
+void
+OrchestrationTools::Impl::loadTenantsFromDir(const string &dir_path) const
+{
+    dbgTrace(D_ORCHESTRATOR) << "Load existing tenants and profiles from the configuration folder";
+
+    string shell_cmd_string = ls_prefix + dir_path + extract_tenant_profile_suffix;
+    auto shell = Singleton::Consume<I_ShellCmd>::by<OrchestrationTools>();
+    Maybe<string> output_res = shell->getExecOutput(shell_cmd_string);
+
+    if (!output_res.ok()) {
+        dbgWarning(D_ORCHESTRATOR)
+            << "Failed to load existing tenants from configuration folder: " + output_res.getErr();
+        return;
+    }
+
+    auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationTools>();
+    stringstream ss(output_res.unpack());
+    string tenant_id;
+    string profile_id;
+    while (!ss.eof() && getline(ss, tenant_id, ' ') && !ss.eof() && getline(ss, profile_id, ' ')) {
+        dbgTrace(D_ORCHESTRATOR) << "Add existing tenant_" + tenant_id + "_profile_" + profile_id;
+        tenant_manager->addActiveTenantAndProfile(tenant_id, profile_id);
+    }
 }
 
 Maybe<string>

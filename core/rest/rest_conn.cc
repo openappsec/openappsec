@@ -71,6 +71,7 @@ RestConn::parseConn() const
     string uri;
     os >> uri;
     string identifier = uri.substr(uri.find_first_of('/') + 1);
+    dbgDebug(D_API) << "Call identifier: " << identifier;
 
     uint len = 0;
     while (true) {
@@ -88,6 +89,8 @@ RestConn::parseConn() const
         }
     }
 
+    dbgDebug(D_API) << "Message length: " << len;
+
     if (method=="POST" && len==0) {
         dbgWarning(D_API) << "No length was found - could be chunked, but we still do not support that";
         sendResponse("411 Length Required", "");
@@ -96,6 +99,8 @@ RestConn::parseConn() const
 
     stringstream body;
     body.str(readSize(len));
+
+    dbgTrace(D_API) << "Message content: " << body.str();
 
     Maybe<string> res = (method == "POST") ? invoke->invokeRest(identifier, body) : invoke->getSchema(identifier);
 

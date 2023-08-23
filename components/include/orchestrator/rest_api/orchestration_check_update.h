@@ -106,6 +106,42 @@ public:
         BOTH_LABEL_OPTIONAL_PARAM(TenantError, error, "error");
     };
 
+    class UpgradeSchedule : public ClientRest
+    {
+    public:
+        UpgradeSchedule() = default;
+
+        void init(const std::string &_upgrade_mode) { mode = _upgrade_mode; }
+
+        void
+        init(
+            const std::string &_upgrade_mode,
+            const std::string &_upgrade_time,
+            const uint &_upgrade_duration_hours)
+        {
+            init(_upgrade_mode);
+            time = _upgrade_time;
+            duration_hours = _upgrade_duration_hours;
+        }
+
+        void
+        init(
+            const std::string &_upgrade_mode,
+            const std::string &_upgrade_time,
+            const uint &_upgrade_duration_hours,
+            const std::vector<std::string> &_upgrade_days)
+        {
+            init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours);
+            days = _upgrade_days;
+        }
+
+    private:
+        C2S_LABEL_PARAM(std::string, mode, "upgradeMode");
+        C2S_LABEL_OPTIONAL_PARAM(std::string, time, "upgradeTime");
+        C2S_LABEL_OPTIONAL_PARAM(uint, duration_hours, "upgradeDurationHours");
+        C2S_LABEL_OPTIONAL_PARAM(std::vector<std::string>, days, "upgradeDay");
+    };
+
     CheckUpdateRequest(
         const std::string &_manifest,
         const std::string &_policy,
@@ -185,6 +221,28 @@ public:
 
     void setGreedyMode() { check_all_tenants = true; }
 
+    void
+    setUpgradeFields(const std::string &_upgrade_mode)
+    {
+        upgrade_schedule.setActive(true);
+        upgrade_schedule.get().init(_upgrade_mode);
+    }
+
+    void
+    setUpgradeFields(
+        const std::string &_upgrade_mode,
+        const std::string &_upgrade_time,
+        const uint &_upgrade_duration_hours,
+        const std::vector<std::string> &_upgrade_days)
+    {
+        upgrade_schedule.setActive(true);
+        if (!_upgrade_days.empty()) {
+            upgrade_schedule.get().init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours, _upgrade_days);
+            return;
+        }
+        upgrade_schedule.get().init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours);
+    }
+
 private:
     class VirtualConfig : public ClientRest
     {
@@ -238,6 +296,8 @@ private:
 
     C2S_LABEL_PARAM(std::string, checksum_type,  "checksum-type");
     C2S_LABEL_PARAM(std::string, policy_version, "policyVersion");
+
+    C2S_LABEL_OPTIONAL_PARAM(UpgradeSchedule, upgrade_schedule, "upgradeSchedule");
 
     S2C_LABEL_OPTIONAL_PARAM(VirtualConfig, in_virtual_policy,    "virtualPolicy");
     S2C_LABEL_OPTIONAL_PARAM(VirtualConfig, in_virtual_settings,  "virtualSettings");

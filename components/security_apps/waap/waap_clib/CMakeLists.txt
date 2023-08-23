@@ -83,6 +83,7 @@ add_library(waap_clib
     LogGenWrapper.cc
     WaapSampleValue.cc
     ParserGql.cc
+    ParserPercentEncode.cc
 )
 
 add_definitions("-Wno-unused-function")

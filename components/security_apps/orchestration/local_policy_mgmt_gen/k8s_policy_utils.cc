@@ -52,7 +52,7 @@ map<AnnotationKeys, string>
 K8sPolicyUtils::parseIngressAnnotations(const map<string, string> &annotations) const
 {
     map<AnnotationKeys, string> annotations_values;
-    for (const pair<string, string> &annotation : annotations) {
+    for (const auto &annotation : annotations) {
         string annotation_key = annotation.first;
         string annotation_val = annotation.second;
         if (annotation_key.find(convertAnnotationKeysTostring(AnnotationKeys::OpenAppsecIo)) != string::npos) {
@@ -134,6 +134,56 @@ K8sPolicyUtils::extractElementsNames(const vector<ParsedRule> &specific_rules, c
     return policy_elements_names;
 }
 
+// LCOV_EXCL_START Reason: no test exist
+void
+extractElementsFromNewRule(
+    const NewParsedRule &rule,
+    map<AnnotationTypes, unordered_set<string>> &policy_elements_names)
+{
+    policy_elements_names[AnnotationTypes::EXCEPTION].insert(
+        rule.getExceptions().begin(),
+        rule.getExceptions().end()
+    );
+    policy_elements_names[AnnotationTypes::THREAT_PREVENTION_PRACTICE].insert(
+        rule.getPractices().begin(),
+        rule.getPractices().end()
+    );
+    policy_elements_names[AnnotationTypes::ACCESS_CONTROL_PRACTICE].insert(
+        rule.getAccessControlPractices().begin(),
+        rule.getAccessControlPractices().end()
+    );
+    policy_elements_names[AnnotationTypes::TRIGGER].insert(
+        rule.getLogTriggers().begin(),
+        rule.getLogTriggers().end()
+    );
+    policy_elements_names[AnnotationTypes::WEB_USER_RES].insert(rule.getCustomResponse());
+    policy_elements_names[AnnotationTypes::SOURCE_IDENTIFIERS].insert(rule.getSourceIdentifiers());
+    policy_elements_names[AnnotationTypes::TRUSTED_SOURCES].insert(rule.getTrustedSources());
+}
+
+map<AnnotationTypes, unordered_set<string>>
+K8sPolicyUtils::extractElementsNamesV1beta2(
+    const vector<NewParsedRule> &specific_rules,
+    const NewParsedRule &default_rule) const
+{
+    map<AnnotationTypes, unordered_set<string>> policy_elements_names;
+    for (const NewParsedRule &specific_rule : specific_rules) {
+        extractElementsFromNewRule(specific_rule, policy_elements_names);
+    }
+    extractElementsFromNewRule(default_rule, policy_elements_names);
+
+    return policy_elements_names;
+}
+
+string
+getAppSecClassNameFromCluster()
+{
+    auto env_res = getenv("appsecClassName");
+    if (env_res != nullptr) return env_res;
+    return "";
+}
+// LCOV_EXCL_STOP
+
 template<class T>
 vector<T>
 K8sPolicyUtils::extractElementsFromCluster(
@@ -168,19 +218,52 @@ K8sPolicyUtils::extractElementsFromCluster(
     return elements;
 }
 
-Maybe<AppsecLinuxPolicy>
-K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &ingress_mode) const
+// LCOV_EXCL_START Reason: no test exist
+template<class T>
+vector<T>
+K8sPolicyUtils::extractV1Beta2ElementsFromCluster(
+    const string &crd_plural,
+    const unordered_set<string> &elements_names) const
 {
-    auto maybe_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<AppsecPolicySpec>>(
-        "/apis/openappsec.io/v1beta1/policies/" + policy_name
-    );
-    if (!maybe_appsec_policy_spec.ok()) {
-        dbgWarning(D_LOCAL_POLICY)
-            << "Failed to retrieve AppSec policy. Error: "
-            << maybe_appsec_policy_spec.getErr();
-        return genError("Failed to retrieve AppSec policy. Error: " + maybe_appsec_policy_spec.getErr());
+    dbgTrace(D_LOCAL_POLICY) << "Retrieve AppSec elements. type: " << crd_plural;
+    vector<T> elements;
+    for (const string &element_name : elements_names) {
+        dbgTrace(D_LOCAL_POLICY) << "AppSec element name: " << element_name;
+        auto maybe_appsec_element = getObjectFromCluster<AppsecSpecParser<T>>(
+            "/apis/openappsec.io/v1beta2/" + crd_plural + "/" + element_name
+        );
+
+        if (!maybe_appsec_element.ok()) {
+            dbgWarning(D_LOCAL_POLICY)
+                << "Failed to retrieve AppSec element. type: "
+                << crd_plural
+                << ", name: "
+                << element_name
+                << ". Error: "
+                << maybe_appsec_element.getErr();
+            continue;
+        }
+
+        AppsecSpecParser<T> appsec_element = maybe_appsec_element.unpack();
+        if (getAppSecClassNameFromCluster() != "" &&
+            appsec_element.getSpec().getAppSecClassName() != getAppSecClassNameFromCluster()) {
+            continue;
+        }
+
+        if (appsec_element.getSpec().getName() == "") {
+            appsec_element.setName(element_name);
+        }
+        elements.push_back(appsec_element.getSpec());
     }
-    AppsecSpecParser<AppsecPolicySpec> appsec_policy_spec = maybe_appsec_policy_spec.unpack();
+    return elements;
+}
+// LCOV_EXCL_STOP
+
+Maybe<AppsecLinuxPolicy>
+K8sPolicyUtils::createAppsecPolicyK8sFromV1beta1Crds(
+    const AppsecSpecParser<AppsecPolicySpec> &appsec_policy_spec,
+    const string &ingress_mode) const
+{
     ParsedRule default_rule = appsec_policy_spec.getSpec().getDefaultRule();
     vector<ParsedRule> specific_rules = appsec_policy_spec.getSpec().getSpecificRules();
 
@@ -236,11 +319,160 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
     return appsec_policy;
 }
 
-map<string, AppsecLinuxPolicy>
+// LCOV_EXCL_START Reason: no test exist
+Maybe<V1beta2AppsecLinuxPolicy>
+K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
+    const AppsecSpecParser<NewAppsecPolicySpec> &appsec_policy_spec,
+    const string &ingress_mode) const
+{
+    NewParsedRule default_rule = appsec_policy_spec.getSpec().getDefaultRule();
+    vector<NewParsedRule> specific_rules = appsec_policy_spec.getSpec().getSpecificRules();
+    string appsec_class_name = appsec_policy_spec.getSpec().getAppSecClassName();
+
+    if (getAppSecClassNameFromCluster() != "" &&
+        appsec_class_name != getAppSecClassNameFromCluster()) {
+        return genError("Unmached appsec class name!");
+    }
+
+    if (default_rule.getMode().empty() && !ingress_mode.empty()) {
+        default_rule.setMode(ingress_mode);
+    }
+
+    map<AnnotationTypes, unordered_set<string>> policy_elements_names = extractElementsNamesV1beta2(
+        specific_rules,
+        default_rule
+    );
+
+    vector<NewAppSecPracticeSpec> threat_prevention_practices =
+        extractV1Beta2ElementsFromCluster<NewAppSecPracticeSpec>(
+            "threatpreventionpractices",
+            policy_elements_names[AnnotationTypes::THREAT_PREVENTION_PRACTICE]
+        );
+
+    vector<AccessControlPracticeSpec> access_control_practices =
+        extractV1Beta2ElementsFromCluster<AccessControlPracticeSpec>(
+            "accesscontrolpractice",
+            policy_elements_names[AnnotationTypes::ACCESS_CONTROL_PRACTICE]
+        );
+
+    vector<NewAppsecLogTrigger> log_triggers = extractV1Beta2ElementsFromCluster<NewAppsecLogTrigger>(
+        "logtriggers",
+        policy_elements_names[AnnotationTypes::TRIGGER]
+    );
+
+    vector<NewAppSecCustomResponse> web_user_responses = extractV1Beta2ElementsFromCluster<NewAppSecCustomResponse>(
+        "customresponses",
+        policy_elements_names[AnnotationTypes::WEB_USER_RES]
+    );
+
+    vector<NewAppsecException> exceptions = extractV1Beta2ElementsFromCluster<NewAppsecException>(
+        "exceptions",
+        policy_elements_names[AnnotationTypes::EXCEPTION]
+    );
+
+    vector<NewSourcesIdentifiers> source_identifiers = extractV1Beta2ElementsFromCluster<NewSourcesIdentifiers>(
+        "sourcesidentifiers",
+        policy_elements_names[AnnotationTypes::SOURCE_IDENTIFIERS]
+    );
+
+    vector<NewTrustedSourcesSpec> trusted_sources = extractV1Beta2ElementsFromCluster<NewTrustedSourcesSpec>(
+        "trustedsources",
+        policy_elements_names[AnnotationTypes::TRUSTED_SOURCES]
+    );
+
+    V1beta2AppsecLinuxPolicy appsec_policy = V1beta2AppsecLinuxPolicy(
+        appsec_policy_spec.getSpec(),
+        threat_prevention_practices,
+        access_control_practices,
+        log_triggers,
+        web_user_responses,
+        exceptions,
+        trusted_sources,
+        source_identifiers
+    );
+    return appsec_policy;
+}
+// LCOV_EXCL_STOP
+
+bool
+doesVersionExist(const map<string, string> &annotations, const string &version)
+{
+    for (auto annotation : annotations) {
+        if(annotation.second.find(version) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+//need to refactor don't forget that
+std::tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>>
+K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &ingress_mode) const
+{
+    auto maybe_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<AppsecPolicySpec>>(
+        "/apis/openappsec.io/v1beta1/policies/" + policy_name
+    );
+
+    if (!maybe_appsec_policy_spec.ok() ||
+        !doesVersionExist(maybe_appsec_policy_spec.unpack().getMetaData().getAnnotations(), "v1beta1")
+    ) {
+        dbgWarning(D_LOCAL_POLICY)
+            << "Failed to retrieve Appsec policy with crds version: v1beta1, Trying version: v1beta2";
+        auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
+            "/apis/openappsec.io/v1beta2/policies/" + policy_name
+        );
+        if(!maybe_v1beta2_appsec_policy_spec.ok()) {
+            dbgWarning(D_LOCAL_POLICY)
+                << "Failed to retrieve AppSec policy. Error: "
+                << maybe_v1beta2_appsec_policy_spec.getErr();
+            return std::make_tuple(
+                genError("Failed to retrieve AppSec v1beta1 policy. Error: " + maybe_appsec_policy_spec.getErr()),
+                genError(
+                    "Failed to retrieve AppSec v1beta2 policy. Error: " + maybe_v1beta2_appsec_policy_spec.getErr()));
+        }
+        return std::make_tuple(
+            genError("There is no v1beta1 policy"),
+            createAppsecPolicyK8sFromV1beta2Crds(maybe_v1beta2_appsec_policy_spec.unpack(), ingress_mode));
+    }
+
+    return std::make_tuple(
+        createAppsecPolicyK8sFromV1beta1Crds(maybe_appsec_policy_spec.unpack(), ingress_mode),
+        genError("There is no v1beta2 policy"));
+}
+
+template<class T, class K>
+void
+K8sPolicyUtils::createPolicy(
+    T &appsec_policy,
+    map<std::string, T> &policies,
+    map<AnnotationKeys, string> &annotations_values,
+    const SingleIngressData &item) const
+{
+    for (const IngressDefinedRule &rule : item.getSpec().getRules()) {
+            string url = rule.getHost();
+            for (const IngressRulePath &uri : rule.getPathsWrapper().getRulePaths()) {
+                if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(url + uri.getPath())) {
+                    dbgTrace(D_LOCAL_POLICY)
+                        << "Inserting Host data to the specific asset set:"
+                        << "URL: '"
+                        << url
+                        << "' uri: '"
+                        << uri.getPath()
+                        << "'";
+                    K ingress_rule = K(url + uri.getPath());
+                    appsec_policy.addSpecificRule(ingress_rule);
+                }
+            }
+        }
+        policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
+}
+
+
+std::tuple<map<string, AppsecLinuxPolicy>, map<string, V1beta2AppsecLinuxPolicy>>
 K8sPolicyUtils::createAppsecPoliciesFromIngresses()
 {
     dbgFlow(D_LOCAL_POLICY) << "Getting all policy object from Ingresses";
-    map<string, AppsecLinuxPolicy> policies;
+    map<string, AppsecLinuxPolicy> v1bet1_policies;
+    map<string, V1beta2AppsecLinuxPolicy> v1bet2_policies;
     auto maybe_ingress = getObjectFromCluster<IngressData>("/apis/networking.k8s.io/v1/ingresses");
 
     if (!maybe_ingress.ok()) {
@@ -248,8 +480,9 @@ K8sPolicyUtils::createAppsecPoliciesFromIngresses()
         dbgWarning(D_LOCAL_POLICY)
             << "Failed to retrieve K8S Ingress configurations. Error: "
             << maybe_ingress.getErr();
-        return policies;
+        return make_tuple(v1bet1_policies, v1bet2_policies);
     }
+
 
     IngressData ingress = maybe_ingress.unpack();
     for (const SingleIngressData &item : ingress.getItems()) {
@@ -262,37 +495,34 @@ K8sPolicyUtils::createAppsecPoliciesFromIngresses()
             continue;
         }
 
-        Maybe<AppsecLinuxPolicy> maybe_appsec_policy = createAppsecPolicyK8s(
+        auto maybe_appsec_policy = createAppsecPolicyK8s(
             annotations_values[AnnotationKeys::PolicyKey],
             annotations_values[AnnotationKeys::ModeKey]
         );
-        if (!maybe_appsec_policy.ok()) {
+        if (!std::get<0>(maybe_appsec_policy).ok() && !std::get<1>(maybe_appsec_policy).ok()) {
             dbgWarning(D_LOCAL_POLICY)
                 << "Failed to create appsec policy. Error: "
-                << maybe_appsec_policy.getErr();
+                << std::get<1>(maybe_appsec_policy).getErr();
             continue;
         }
 
-        AppsecLinuxPolicy appsec_policy = maybe_appsec_policy.unpack();
-        for (const IngressDefinedRule &rule : item.getSpec().getRules()) {
-            string url = rule.getHost();
-            for (const IngressRulePath &uri : rule.getPathsWrapper().getRulePaths()) {
-                if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(url + uri.getPath())) {
-                    dbgTrace(D_LOCAL_POLICY)
-                        << "Inserting Host data to the specific asset set:"
-                        << "URL: '"
-                        << url
-                        << "' uri: '"
-                        << uri.getPath()
-                        << "'";
-                    ParsedRule ingress_rule = ParsedRule(url + uri.getPath());
-                    appsec_policy.addSpecificRule(ingress_rule);
-                }
-            }
+        if (!std::get<0>(maybe_appsec_policy).ok()) {
+            auto appsec_policy=std::get<1>(maybe_appsec_policy).unpack();
+            createPolicy<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+                appsec_policy,
+                v1bet2_policies,
+                annotations_values,
+                item);
+        } else {
+            auto appsec_policy=std::get<0>(maybe_appsec_policy).unpack();
+            createPolicy<AppsecLinuxPolicy, ParsedRule>(
+                appsec_policy,
+                v1bet1_policies,
+                annotations_values,
+                item);
         }
-        policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
     }
-    return policies;
+    return make_tuple(v1bet1_policies, v1bet2_policies);
 }
 
 bool

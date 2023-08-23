@@ -23,6 +23,8 @@ using namespace ReportIS;
 using namespace std;
 using MatchType = BaseSignature::MatchType;
 
+static const LogTriggerConf default_triger;
+
 static const map<IPSLevel, Severity> severities = {
     { IPSLevel::CRITICAL,   Severity::CRITICAL },
     { IPSLevel::HIGH,        Severity::HIGH },
@@ -396,7 +398,7 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
 
     dbgDebug(D_IPS) << "Signature matched - sending log";
 
-    auto &trigger = getConfigurationWithDefault(LogTriggerConf(), "rulebase", "log");
+    auto &trigger = getConfigurationWithDefault(default_triger, "rulebase", "log");
     bool is_prevent = get<0>(override_action) == IPSSignatureSubTypes::SignatureAction::PREVENT;
 
     auto severity = signature->getSeverity() < IPSLevel::HIGH ? Severity::HIGH : Severity::CRITICAL;

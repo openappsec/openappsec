@@ -1,6 +1,8 @@
 #include "orchestration_tools.h"
 
 #include "cptest.h"
+#include "mock/mock_tenant_manager.h"
+#include "mock/mock_shell_cmd.h"
 
 using namespace std;
 using namespace testing;
@@ -17,9 +19,6 @@ public:
     {
         str.erase(remove(str.begin(), str.end(), ' '), str.end());
     }
-
-    OrchestrationTools orchestration_tools;
-    I_OrchestrationTools *i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::from(orchestration_tools);
     string manifest_file = "manifest.json";
     string manifest_text =  "{"
                             "    \"packages\": ["
@@ -45,6 +44,11 @@ public:
                             "        }"
                             "    ]"
                             "}";
+
+    OrchestrationTools orchestration_tools;
+    I_OrchestrationTools *i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::from(orchestration_tools);
+    StrictMock<MockTenantManager> mock_tenant_manager;
+    StrictMock<MockShellCmd> mock_shell_cmd;
 };
 
 TEST_F(OrchestrationToolsTest, doNothing)
@@ -239,6 +243,97 @@ TEST_F(OrchestrationToolsTest, createDirectory)
     EXPECT_TRUE(i_orchestration_tools->doesDirectoryExist(path));
     // get True after the directory already exists
     EXPECT_TRUE(i_orchestration_tools->createDirectory(path));
+}
+
+TEST_F(OrchestrationToolsTest, removeDirectory)
+{
+    string dir_path = "/tmp/temp_dir2";
+    EXPECT_TRUE(i_orchestration_tools->createDirectory(dir_path));
+    EXPECT_TRUE(i_orchestration_tools->doesDirectoryExist(dir_path));
+
+    stringstream string_stream;
+    string_stream << "blah blah blah";
+    string file_path = dir_path + "/packages.json";
+    i_orchestration_tools->writeFile(string_stream.str(), file_path);
+
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(file_path));
+    EXPECT_FALSE(i_orchestration_tools->removeDirectory(dir_path, false));
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(file_path));
+
+    EXPECT_TRUE(i_orchestration_tools->removeDirectory(dir_path, true));
+    EXPECT_FALSE(i_orchestration_tools->doesFileExist(file_path));
+    EXPECT_FALSE(i_orchestration_tools->doesDirectoryExist(dir_path));
+}
+
+TEST_F(OrchestrationToolsTest, deleteVirtualTenantFiles)
+{
+    stringstream string_stream;
+    string_stream <<   "policy policy policy";
+    string conf_path = "/tmp/temp_conf";
+    EXPECT_TRUE(i_orchestration_tools->createDirectory(conf_path));
+
+    string policy_folder_path = conf_path + "/tenant_3fdbdd33_profile_c4c498d8";
+    string policy_file_path = policy_folder_path + "/policy.json";
+    EXPECT_TRUE(i_orchestration_tools->createDirectory(policy_folder_path));
+
+    string settings_file_path = conf_path + "/tenant_3fdbdd33_profile_c4c498d8_settings.json";
+    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path);
+    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path);
+
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(settings_file_path));
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(policy_file_path));
+    i_orchestration_tools->deleteVirtualTenantProfileFiles("3fdbdd33", "c4c498d8", conf_path);
+    EXPECT_FALSE(i_orchestration_tools->doesFileExist(settings_file_path));
+    EXPECT_FALSE(i_orchestration_tools->doesFileExist(policy_file_path));
+}
+
+TEST_F(OrchestrationToolsTest, loadTenants)
+{
+    stringstream string_stream;
+    string_stream <<   "policy policy policy";
+    string conf_path = "/tmp/temp_conf";
+    EXPECT_TRUE(i_orchestration_tools->createDirectory(conf_path));
+
+    string policy_folder_path1 = conf_path + "/tenant_3fdbdd33_profile_c4c498d8";
+    EXPECT_TRUE(i_orchestration_tools->createDirectory(policy_folder_path1));
+
+    string policy_folder_path2 = conf_path + "/tenant_123456_profile_654321";
+    EXPECT_TRUE(i_orchestration_tools->createDirectory(policy_folder_path2));
+
+    string settings_file_path1 = conf_path + "/tenant_3fdbdd33_profile_c4c498d8_settings.json";
+    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path1);
+
+    string settings_file_path2 = conf_path + "/tenant_123456_profile_654321_settings.json";
+    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path2);
+
+    string policy_file_path1 = policy_folder_path1 + "/policy.json";
+    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path1);
+
+    string policy_file_path2 = policy_folder_path2 + "/policy.json";
+    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path2);
+
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(settings_file_path1));
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(settings_file_path2));
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(policy_file_path1));
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist(policy_file_path2));
+
+    EXPECT_CALL(
+        mock_shell_cmd,
+        getExecOutput(
+            "ls /tmp/temp_conf| grep tenant "
+            "| cut -d '_' -f 2,4 | sort --unique "
+            "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'",
+            200,
+            false
+        )
+    ).WillOnce(Return(string("3fdbdd33 c4c498d8 123456 654321")));
+    EXPECT_CALL(mock_tenant_manager, addActiveTenantAndProfile("3fdbdd33", "c4c498d8")).Times(1);
+    EXPECT_CALL(mock_tenant_manager, addActiveTenantAndProfile("123456", "654321")).Times(1);
+
+    i_orchestration_tools->loadTenantsFromDir(conf_path);
+    i_orchestration_tools->deleteVirtualTenantProfileFiles("3fdbdd33", "c4c498d8", conf_path);
+    EXPECT_FALSE(i_orchestration_tools->doesFileExist(settings_file_path1));
+    EXPECT_FALSE(i_orchestration_tools->doesFileExist(policy_file_path1));
 }
 
 TEST_F(OrchestrationToolsTest, base64DecodeEncode)

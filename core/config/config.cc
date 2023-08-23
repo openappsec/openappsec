@@ -823,7 +823,7 @@ ConfigComponent::Impl::fillMultiTenantExpectedConfigFiles(const map<string, set<
             auto global_path = getPolicyConfigPath(config_file.first, type);
             auto it = find(files.begin(), files.end(), global_path);
             if (it == files.end()) files.push_back(global_path);
-            for (const pair<string, set<string>> &tenant_profiles : active_tenants) {
+            for (const auto &tenant_profiles : active_tenants) {
                 const string &tenant = tenant_profiles.first;
                 const set<string> &profile_ids = tenant_profiles.second;
                 for (const auto &profile_id : profile_ids) {

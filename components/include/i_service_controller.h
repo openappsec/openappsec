@@ -19,6 +19,7 @@
 #include <map>
 
 #include "connkey.h"
+#include "maybe_res.h"
 #include "rest.h"
 
 enum class ReconfStatus { SUCCEEDED, IN_PROGRESS, FAILED, INACTIVE };
@@ -27,6 +28,7 @@ class I_ServiceController
 {
 public:
     virtual void refreshPendingServices() = 0;
+    virtual const std::string & getPolicyVersions() const = 0;
     virtual const std::string & getPolicyVersion() const = 0;
     virtual const std::string & getUpdatePolicyVersion() const = 0;
     virtual void updateReconfStatus(int id, ReconfStatus status) = 0;
@@ -37,13 +39,13 @@ public:
         const std::string &service_id
     ) = 0;
 
-    virtual bool
+    virtual Maybe<void>
     updateServiceConfiguration(
         const std::string &new_policy_path,
         const std::string &new_settings_path,
         const std::vector<std::string> &new_data_files = {},
-        const std::string &tenant_id = "",
-        const std::string &profile_id = "",
+        const std::string &child_tenant_id = "",
+        const std::string &child_profile_id = "",
         const bool last_iteration = false
     ) = 0;
 

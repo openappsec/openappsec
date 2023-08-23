@@ -147,6 +147,40 @@ ExceptionMatch::ExceptionMatch(const AppsecExceptionSpec &parsed_exception)
     }
 }
 
+ExceptionMatch::ExceptionMatch(const NewAppsecException &parsed_exception)
+        :
+    match_type(MatchType::Operator),
+    op("and")
+{
+    if (!parsed_exception.getCountryCode().empty()) {
+        items.push_back(ExceptionMatch("countryCode", parsed_exception.getCountryCode()));
+    }
+    if (!parsed_exception.getCountryName().empty()) {
+        items.push_back(ExceptionMatch("countryName", parsed_exception.getCountryName()));
+    }
+    if (!parsed_exception.getHostName().empty()) {
+        items.push_back(ExceptionMatch("hostName", parsed_exception.getHostName()));
+    }
+    if (!parsed_exception.getParamName().empty()) {
+        items.push_back(ExceptionMatch("paramName", parsed_exception.getParamName()));
+    }
+    if (!parsed_exception.getParamValue().empty()) {
+        items.push_back(ExceptionMatch("paramValue", parsed_exception.getParamValue()));
+    }
+    if (!parsed_exception.getProtectionName().empty()) {
+        items.push_back(ExceptionMatch("protectionName", parsed_exception.getProtectionName()));
+    }
+    if (!parsed_exception.getSourceIdentifier().empty()) {
+        items.push_back(ExceptionMatch("sourceIdentifier", parsed_exception.getSourceIdentifier()));
+    }
+    if (!parsed_exception.getSourceIp().empty()) {
+        items.push_back(ExceptionMatch("sourceIp", parsed_exception.getSourceIp()));
+    }
+    if (!parsed_exception.getUrl().empty()) {
+        items.push_back(ExceptionMatch("url", parsed_exception.getUrl()));
+    }
+}
+
 void
 ExceptionMatch::save(cereal::JSONOutputArchive &out_ar) const
 {

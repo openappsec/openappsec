@@ -28,7 +28,7 @@ namespace Intelligence
 {
 
 enum class ClassifierType { CLASS, CATEGORY, FAMILY, GROUP, ORDER, KIND };
-enum class ObjectType { ASSET, ZONE, POLICY_PACKAGE, CONFIGURATION, SESSION };
+enum class ObjectType { ASSET, ZONE, POLICY_PACKAGE, CONFIGURATION, SESSION, SHORTLIVED };
 
 class Invalidation
 {

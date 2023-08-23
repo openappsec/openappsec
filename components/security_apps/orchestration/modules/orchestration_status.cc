@@ -449,7 +449,7 @@ public:
             << filesystem_prefix;
 
         map<string, string> service_policies_copy = status.getServicePolicies();
-        for (const pair<string, string> &policy: service_policies_copy) {
+        for (const auto &policy: service_policies_copy) {
             setServiceConfiguration(policy.first, policy.second, OrchestrationStatusConfigType::POLICY);
         }
 

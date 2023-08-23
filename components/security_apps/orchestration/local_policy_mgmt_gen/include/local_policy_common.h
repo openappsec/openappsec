@@ -22,10 +22,13 @@
 #include "config.h"
 #include "debug.h"
 #include "rest.h"
+#include "cereal/archives/json.hpp"
+#include <cereal/types/map.hpp>
+#include "customized_cereal_map.h"
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
-enum class PracticeType { WebApplication, WebAPI };
+enum class PracticeType { WebApplication, WebAPI, RateLimit };
 enum class TriggerType { Log, WebUserResponse };
 enum class MatchType { Condition, Operator };
 
@@ -36,7 +39,8 @@ static const std::unordered_map<std::string, MatchType> string_to_match_type = {
 
 static const std::unordered_map<std::string, PracticeType> string_to_practice_type = {
     { "WebApplication", PracticeType::WebApplication },
-    { "WebAPI", PracticeType::WebAPI }
+    { "WebAPI", PracticeType::WebAPI },
+    { "RateLimit", PracticeType::RateLimit }
 };
 
 static const std::unordered_map<std::string, TriggerType> string_to_trigger_type = {
@@ -73,6 +77,26 @@ parseAppsecJSONKey(
     }
 }
 
+class AppsecSpecParserMetaData
+{
+public:
+    void
+    load(cereal::JSONInputArchive &archive_in)
+    {
+        dbgTrace(D_LOCAL_POLICY) << "AppsecSpecParserMetaData load";
+        parseAppsecJSONKey<std::map<std::string, std::string>>("annotations", annotations, archive_in);
+    }
+
+    const std::map<std::string, std::string> &
+    getAnnotations() const
+    {
+        return annotations;
+    }
+
+private:
+    std::map<std::string, std::string> annotations;
+};
+
 template <typename T>
 class AppsecSpecParser : public ClientRest
 {
@@ -90,6 +114,7 @@ public:
         try {
             cereal::JSONInputArchive in_ar(ss);
             in_ar(cereal::make_nvp("spec", spec));
+            in_ar(cereal::make_nvp("metadata", meta_data));
         } catch (cereal::Exception &e) {
             dbgWarning(D_LOCAL_POLICY) << "Failed to load spec JSON. Error: " << e.what();
             return false;
@@ -103,10 +128,17 @@ public:
         spec.setName(_name);
     }
 
+    const AppsecSpecParserMetaData &
+    getMetaData() const
+    {
+        return meta_data;
+    }
+
     const T & getSpec() const { return spec; }
 
 private:
     T spec;
+    AppsecSpecParserMetaData meta_data;
 };
 
 #endif // __LOCAL_POLICY_COMMON_H__

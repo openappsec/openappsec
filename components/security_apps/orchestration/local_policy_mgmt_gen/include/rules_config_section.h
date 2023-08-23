@@ -121,6 +121,8 @@ public:
         std::vector<std::string> _identifier_values
     );
 
+    const std::string & getIdentifier() const;
+
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
@@ -140,6 +142,8 @@ public:
         const std::vector<std::string> &_identifier_values,
         const std::vector<UsersIdentifier> &_source_identifiers
     );
+
+    const std::string & getIdentifier() const;
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 

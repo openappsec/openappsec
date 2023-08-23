@@ -18,6 +18,7 @@
 #include "i_mainloop.h"
 #include "i_socket_is.h"
 #include "i_health_check_manager.h"
+#include "i_shell_cmd.h"
 #include "component.h"
 
 class HealthChecker
@@ -25,7 +26,8 @@ class HealthChecker
     public Component,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_Socket>,
-    Singleton::Consume<I_Health_Check_Manager>
+    Singleton::Consume<I_Health_Check_Manager>,
+    Singleton::Consume<I_ShellCmd>
 {
 public:
     HealthChecker();

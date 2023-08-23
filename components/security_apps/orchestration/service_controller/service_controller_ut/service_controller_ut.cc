@@ -251,6 +251,7 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
+    EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
 
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
@@ -288,8 +289,123 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
         )
     ).WillRepeatedly(Return(string("registered and running")));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
+    EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
+    EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
+}
+
+TEST_F(ServiceControllerTest, supportVersions)
+{
+    string versions = "["
+                    "  {"
+                    "    \"id\" : \"40c4a460-eb24-f002-decb-f4a7f00423fc\","
+                    "    \"name\" : \"Linux Embedded Agents\","
+                    "    \"version\" : 1"
+                    "  },"
+                    "  {"
+                    "    \"id\" : \"93788960-6969-11ee-be56-0242ac120002\","
+                    "    \"name\" : \"Linux SUPER Embedded Agents\","
+                    "    \"version\" : 420"
+                    "  }"
+                    "]";
+
+    string new_configuration =  "{"
+                                "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": " + versions +
+                                "   \"l4_firewall\":"
+                                "       {"
+                                "           \"app\": \"netfilter\","
+                                "           \"l4_firewall_rules\": ["
+                                "               {"
+                                "                   \"name\": \"allow_statefull_conns\","
+                                "                   \"flags\": [\"established\"],"
+                                "                   \"action\": \"accept\""
+                                "               },"
+                                "               {"
+                                "                   \"name\": \"icmp drop\","
+                                "                   \"flags\": [\"log\"],"
+                                "                   \"services\": [{\"name\":\"icmp\"}],"
+                                "                   \"action\": \"drop\""
+                                "               }"
+                                "           ]"
+                                "       }"
+                                "}";
+
+    string l4_firewall =        "{"
+                                "    \"app\": \"netfilter\","
+                                "    \"l4_firewall_rules\": ["
+                                "        {"
+                                "            \"name\": \"allow_statefull_conns\","
+                                "            \"flags\": [\"established\"],"
+                                "            \"action\": \"accept\""
+                                "        },"
+                                "        {"
+                                "            \"name\": \"icmp drop\","
+                                "            \"flags\": [\"log\"],"
+                                "            \"services\": [{\"name\":\"icmp\"}],"
+                                "            \"action\": \"drop\""
+                                "        }"
+                                "    ]"
+                                "}";
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    Maybe<map<string, string>> json_parser_return =
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+    EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
+        .WillOnce(Return(json_parser_return));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
+
+    EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
+    EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
+
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
+
+    string general_settings_path = "/my/settings/path";
+    string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
+
+    Flags<MessageConnConfig> conn_flags;
+    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
+    EXPECT_CALL(
+        mock_message,
+        sendMessage(
+            true,
+            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
+            I_Messaging::Method::POST,
+            string("127.0.0.1"),
+            l4_firewall_service_port,
+            conn_flags,
+            string("/set-new-configuration"),
+            string(),
+            _,
+            MessageTypeTag::GENERIC
+        )
+    ).WillOnce(Return(Maybe<string>(reply_msg)));
+
+    EXPECT_CALL(
+        mock_shell_cmd,
+        getExecOutput(
+            "/etc/cp/watchdog/cp-nano-watchdog --status --verbose --service mock access control"
+            " --family family1 --id id2",
+            _,
+            _
+        )
+    ).WillRepeatedly(Return(string("registered and running")));
+
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
+    EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
+    EXPECT_EQ(i_service_controller->getPolicyVersions(), versions);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 }
 
@@ -393,7 +509,7 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
         )
     ).WillOnce(Return(Maybe<string>(reply_msg)));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 }
@@ -501,7 +617,7 @@ TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
         )
     ).WillRepeatedly(Return(string("registered and running")));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
     EXPECT_EQ(orchestrationRegisteredServicesFileToString(registered_services_file_path), expected_json);
@@ -641,7 +757,7 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
         )
     ).WillRepeatedly(Return(string("registered and running")));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
 }
 
@@ -734,7 +850,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
     ).WillOnce(Return(Maybe<string>(reply_msg1)));
 
     // both policy and settings now being updated
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 
@@ -771,7 +887,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
         )
     ).WillRepeatedly(Return(Maybe<string>(reply_msg2)));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
 }
 
@@ -884,7 +1000,7 @@ TEST_F(ServiceControllerTest, backup)
     ).WillOnce(Return(Maybe<string>(reply_msg)));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
 }
 
@@ -999,7 +1115,7 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
     ).WillOnce(Return(Maybe<string>(reply_msg)));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
 }
 
@@ -1117,7 +1233,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
 }
 
@@ -1231,7 +1347,7 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
         )
     ).WillOnce(Return(Maybe<string>(reply_msg)));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     set<string> changed_policies = {
         "/etc/cp/conf/l4_firewall/l4_firewall.policy",
         "/etc/cp/conf/orchestration/orchestration.policy"
@@ -1249,7 +1365,7 @@ TEST_F(ServiceControllerTest, badJsonFile)
 {
     Maybe<string> err = genError("Error");
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(err));
-    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
 TEST_F(ServiceControllerTest, emptyServices)
@@ -1266,7 +1382,7 @@ TEST_F(ServiceControllerTest, emptyServices)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
 TEST_F(ServiceControllerTest, failingWhileLoadingCurrentConfiguration)
@@ -1317,7 +1433,7 @@ TEST_F(ServiceControllerTest, failingWhileLoadingCurrentConfiguration)
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(err));
-    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
 TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
@@ -1392,7 +1508,7 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
     ).WillOnce(Return(false));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 }
 
@@ -1468,7 +1584,7 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     EXPECT_THAT(
         capture_debug.str(),
         HasSubstr("Service mock access control is inactive")
@@ -1554,7 +1670,7 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
         writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(false)
     );
 
-    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, ""));
+    EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
 TEST_F(ServiceControllerTest, testPortsRest)
@@ -1690,7 +1806,13 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
         ).WillRepeatedly(Return(string("registered and running")));
 
         EXPECT_TRUE(
-            i_service_controller->updateServiceConfiguration(conf_file_name, settings_file_name, {}, tenant, profile)
+            i_service_controller->updateServiceConfiguration(
+                conf_file_name,
+                settings_file_name,
+                {},
+                tenant,
+                profile
+            ).ok()
         );
     }
 }
@@ -1821,7 +1943,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     EXPECT_CALL(mock_ml, yield(chrono::microseconds(2000000))).WillOnce(Invoke(func));
 
 
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path));
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 }

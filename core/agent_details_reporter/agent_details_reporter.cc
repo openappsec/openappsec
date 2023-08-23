@@ -192,7 +192,7 @@ AgentDetailsReporter::Impl::addAttr(const map<string, string> &attr, bool allow_
 {
     dbgFlow(D_AGENT_DETAILS);
     bool ret = true;
-    for (const pair<string, string> &single_attr : attr) {
+    for (const auto &single_attr : attr) {
         if (!addAttr(single_attr.first, single_attr.second, allow_override)) ret = false;
     }
 
@@ -219,7 +219,7 @@ AgentDetailsReporter::Impl::sendAttributes()
         return true;
     }
 
-    for (const pair<string, string> &new_attr : new_attributes) {
+    for (const auto &new_attr : new_attributes) {
         attributes[new_attr.first] = new_attr.second;
     }
 
@@ -354,7 +354,7 @@ void
 AgentDetailsReporter::Impl::fini()
 {
     if (!new_attributes.empty()) {
-        for (const pair<string, string> &new_attr : new_attributes) {
+        for (const auto &new_attr : new_attributes) {
             attributes[new_attr.first] = new_attr.second;
         }
     }
@@ -382,7 +382,7 @@ AgentDetailsReporter::Impl::sendReport(
     if (agent_version.ok()) additional_metadata.setAgentVersion(*agent_version);
 
     if (!new_attributes.empty()) {
-        for (const pair<string, string> &new_attr : new_attributes) {
+        for (const auto &new_attr : new_attributes) {
             attributes[new_attr.first] = new_attr.second;
         }
         AttrSerializer<ofstream, cereal::JSONOutputArchive>(attributes, "save");

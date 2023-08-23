@@ -348,12 +348,12 @@ void ScoreBuilder::calcScore(const std::string &poolName)
 void ScoreBuilder::snap()
 {
     // Copy data from all mutable score pools to "snapshot" keyword->scores map
-    for (const std::pair<std::string, KeywordsScorePool> &pool : m_keywordsScorePools) {
+    for (const auto &pool : m_keywordsScorePools) {
         const std::string &poolName = pool.first;
         const KeywordsScorePool& keywordScorePool = pool.second;
         m_snapshotKwScoreMap[poolName];
 
-        for (const std::pair<std::string, KeywordData> &kwData : keywordScorePool.m_keywordsDataMap)
+        for (const auto &kwData : keywordScorePool.m_keywordsDataMap)
         {
             const std::string &kwName = kwData.first;
             double kwScore = kwData.second.score;
@@ -408,7 +408,7 @@ unsigned int ScoreBuilder::getFpStoreCount()
 
 void ScoreBuilder::mergeScores(const ScoreBuilder& baseScores)
 {
-    for (const std::pair<std::string, KeywordsScorePool> &pool : baseScores.m_keywordsScorePools) {
+    for (const auto &pool : baseScores.m_keywordsScorePools) {
         const std::string &poolName = pool.first;
         if (m_keywordsScorePools.find(poolName) == m_keywordsScorePools.end()) {
             m_keywordsScorePools[poolName];

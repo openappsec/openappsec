@@ -33,7 +33,10 @@ public:
 
     Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) override;
     void setAddressExtenesion(const std::string &extension) override;
-    Maybe<void> sendPolicyVersion(const std::string &policy_version) const override;
+    Maybe<void> sendPolicyVersion(
+        const std::string &policy_version,
+        const std::string &policy_versions
+    ) const override;
 
 private:
     std::string getChecksum(const std::string &file_path);

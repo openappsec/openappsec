@@ -544,7 +544,7 @@ Debug::applyOverrides()
             }
         } else {
             auto should_add_file_stream = true;
-            for (const pair<string, shared_ptr<Debug::DebugStream>> &elem : active_streams) {
+            for (const auto &elem : active_streams) {
                 if (elem.first != "STDOUT" && elem.first != "FOG") should_add_file_stream = false;
                 break;
             }

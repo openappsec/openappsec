@@ -177,6 +177,16 @@ FogAuthenticator::registerAgent(
         request << details;
     }
 
+    auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<FogAuthenticator>();
+    if (
+        i_agent_details->getOrchestrationMode() == OrchestrationMode::HYBRID ||
+        getSettingWithDefault<string>("management", "profileManagedMode") == "declarative"
+    ) {
+        request << make_pair("managedMode", "declarative");
+    } else {
+        request << make_pair("managedMode", "management");
+    }
+
     if (details_resolver->isReverseProxy()) {
         request << make_pair("reverse_proxy", "true");
     }
@@ -202,7 +212,6 @@ FogAuthenticator::registerAgent(
     auto fog_messaging = Singleton::Consume<I_Messaging>::by<FogAuthenticator>();
     if (fog_messaging->sendObject(request, HTTPMethod::POST, fog_address_ex + "/agents")) {
         dbgDebug(D_ORCHESTRATOR) << "Agent has registered successfully.";
-        auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<FogAuthenticator>();
         i_agent_details->setAgentId(request.getAgentId());
         i_agent_details->setProfileId(request.getProfileId());
         i_agent_details->setTenantId(request.getTenantId());
@@ -252,7 +261,7 @@ FogAuthenticator::getAccessToken(const UserCredentials &user_credentials) const
         }
 
         dbgInfo(D_ORCHESTRATOR) << "New access token was saved";
-        fog_messaging->loadAccessToken();
+        Singleton::Consume<I_AgentDetails>::by<FogAuthenticator>()->loadAccessToken();
 
         return AccessToken(request.getAccessToken(), chrono::seconds(request.getExpirationTime()));
     }

@@ -55,5 +55,11 @@ public:
     MOCK_CONST_METHOD1(executeCmd,           bool(const std::string &));
     MOCK_CONST_METHOD1(base64Encode,         std::string(const std::string &));
     MOCK_CONST_METHOD1(base64Decode,         std::string(const std::string &));
+    MOCK_CONST_METHOD2(removeDirectory,      bool(const std::string &, bool delete_content));
+    MOCK_CONST_METHOD1(loadTenantsFromDir,   void(const std::string &));
+    MOCK_CONST_METHOD3(
+        deleteVirtualTenantProfileFiles,
+        void(const std::string &tenant_id, const std::string &profile_id, const std::string &conf_path)
+    );
 };
 #endif // __MOCK_ORCHESTRATION_TOOLS_H__

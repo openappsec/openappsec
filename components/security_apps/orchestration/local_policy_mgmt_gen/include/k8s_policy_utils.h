@@ -28,6 +28,7 @@
 #include "i_env_details.h"
 #include "i_agent_details.h"
 #include "appsec_practice_section.h"
+#include "new_appsec_linux_policy.h"
 #include "policy_maker_utils.h"
 
 enum class AnnotationKeys { PolicyKey, OpenAppsecIo, SyslogAddressKey, SyslogPortKey, ModeKey };
@@ -44,7 +45,8 @@ class K8sPolicyUtils
 public:
     void init();
 
-    std::map<std::string, AppsecLinuxPolicy> createAppsecPoliciesFromIngresses();
+    std::tuple<std::map<std::string, AppsecLinuxPolicy>, std::map<std::string, V1beta2AppsecLinuxPolicy>>
+    createAppsecPoliciesFromIngresses();
     bool getClusterId() const;
 
 private:
@@ -60,13 +62,41 @@ private:
         const ParsedRule &default_rule
     ) const;
 
+    std::map<AnnotationTypes, std::unordered_set<std::string>> extractElementsNamesV1beta2(
+        const std::vector<NewParsedRule> &specific_rules,
+        const NewParsedRule &default_rule
+    ) const;
+
     template<class T>
     std::vector<T> extractElementsFromCluster(
         const std::string &crd_plural,
         const std::unordered_set<std::string> &elements_names
     ) const;
 
-    Maybe<AppsecLinuxPolicy> createAppsecPolicyK8s(
+    template<class T>
+    std::vector<T> extractV1Beta2ElementsFromCluster(
+        const std::string &crd_plural,
+        const std::unordered_set<std::string> &elements_names
+    ) const;
+
+    Maybe<AppsecLinuxPolicy> createAppsecPolicyK8sFromV1beta1Crds(
+        const AppsecSpecParser<AppsecPolicySpec> &appsec_policy_spe,
+        const std::string &ingress_mode
+    ) const;
+
+    Maybe<V1beta2AppsecLinuxPolicy> createAppsecPolicyK8sFromV1beta2Crds(
+        const AppsecSpecParser<NewAppsecPolicySpec> &appsec_policy_spe,
+        const std::string &ingress_mode
+    ) const;
+
+    template<class T, class K>
+    void createPolicy(
+        T &appsec_policy,
+        std::map<std::string, T> &policies,
+        std::map<AnnotationKeys, std::string> &annotations_values,
+        const SingleIngressData &item) const;
+
+    std::tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>> createAppsecPolicyK8s(
         const std::string &policy_name,
         const std::string &ingress_mode
     ) const;

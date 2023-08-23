@@ -175,7 +175,7 @@ LocalCommunication::setAddressExtenesion(const string &)
 }
 
 Maybe<void>
-LocalCommunication::sendPolicyVersion(const string &) const
+LocalCommunication::sendPolicyVersion(const string &, const string &) const
 {
     dbgTrace(D_ORCHESTRATOR) << "Agent in offline mode, no need to send policy version";
     return Maybe<void>();

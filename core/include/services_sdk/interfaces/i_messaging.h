@@ -31,12 +31,6 @@
 
 USE_DEBUG_FLAG(D_COMMUNICATION);
 
-enum class ProxyProtocol
-{
-    HTTP,
-    HTTPS
-};
-
 enum class MessageTypeTag
 {
     GENERIC,
@@ -141,16 +135,8 @@ public:
         return genError("Failed to download file. Error: " + response.getErr());
     }
 
-    virtual Maybe<std::string> getProxyDomain(ProxyProtocol protocol)                                const = 0;
-    virtual Maybe<std::string> getProxyCredentials(ProxyProtocol protocol)                           const = 0;
-    virtual Maybe<uint16_t> getProxyPort(ProxyProtocol protocol)                                     const = 0;
-    virtual bool getProxyExists(ProxyProtocol protocol)                                              const = 0;
-    virtual Maybe<std::string> getProxyAddress(ProxyProtocol protocol)                               const = 0;
-    virtual Maybe<void> loadProxy()                                                                        = 0;
     virtual bool setActiveFog(MessageTypeTag tag)                                                          = 0;
-    virtual void loadAccessToken()                                                                         = 0;
     virtual bool setActiveFog(const string &host, const uint16_t port, bool is_secure, MessageTypeTag tag) = 0;
-    virtual std::string getAccessToken()                                                                   = 0;
 
 protected:
     ~I_Messaging() {}

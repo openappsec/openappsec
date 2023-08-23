@@ -535,16 +535,16 @@ HTTPClient::getFileSSL(const URLParser &url, ofstream &out_file, const string &t
             }
         }
         boost::asio::io_service io_service;
-        auto message = Singleton::Consume<I_Messaging>::by<HTTPClient>();
+        auto proxy_config = Singleton::Consume<I_ProxyConfiguration>::by<HTTPClient>();
 
         Client client(
             out_file,
             io_service,
             ctx,
             url,
-            message->getProxyDomain(ProxyProtocol::HTTPS),
-            message->getProxyPort(ProxyProtocol::HTTPS),
-            message->getProxyCredentials(ProxyProtocol::HTTPS),
+            proxy_config->getProxyDomain(ProxyProtocol::HTTPS),
+            proxy_config->getProxyPort(ProxyProtocol::HTTPS),
+            proxy_config->getProxyCredentials(ProxyProtocol::HTTPS),
             token
         );
 
@@ -581,15 +581,15 @@ HTTPClient::curlGetFileOverSSL(const URLParser &url, ofstream &out_file, const s
             );
         }
 
-        auto message = Singleton::Consume<I_Messaging>::by<HTTPClient>();
+        auto proxy_config = Singleton::Consume<I_ProxyConfiguration>::by<HTTPClient>();
 
         HttpsCurl ssl_curl_client(
             url,
             out_file,
             token,
-            message->getProxyDomain(ProxyProtocol::HTTPS),
-            message->getProxyPort(ProxyProtocol::HTTPS),
-            message->getProxyCredentials(ProxyProtocol::HTTPS),
+            proxy_config->getProxyDomain(ProxyProtocol::HTTPS),
+            proxy_config->getProxyPort(ProxyProtocol::HTTPS),
+            proxy_config->getProxyCredentials(ProxyProtocol::HTTPS),
             cert_file_path);
 
         ssl_curl_client.setCurlOpts();

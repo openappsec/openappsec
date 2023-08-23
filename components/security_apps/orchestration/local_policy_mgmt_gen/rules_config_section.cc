@@ -249,6 +249,14 @@ UsersIdentifier::UsersIdentifier(const string &_source_identifier, vector<string
     identifier_values(_identifier_values)
 {}
 
+// LCOV_EXCL_START Reason: no test exist
+const string &
+UsersIdentifier::getIdentifier() const
+{
+    return source_identifier;
+}
+// LCOV_EXCL_STOP
+
 void
 UsersIdentifier::save(cereal::JSONOutputArchive &out_ar) const
 {
@@ -269,6 +277,14 @@ UsersIdentifiersRulebase::UsersIdentifiersRulebase(
     identifier_values(_identifier_values),
     source_identifiers(_source_identifiers)
 {}
+
+// LCOV_EXCL_START Reason: no test exist
+const string &
+UsersIdentifiersRulebase::getIdentifier() const
+{
+    return source_identifiers[0].getIdentifier();
+}
+// LCOV_EXCL_STOP
 
 void
 UsersIdentifiersRulebase::save(cereal::JSONOutputArchive &out_ar) const

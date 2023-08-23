@@ -28,6 +28,7 @@
 #include "triggers_section.h"
 #include "exceptions_section.h"
 #include "trusted_sources_section.h"
+#include "new_practice.h"
 
 class AppSecWebBotsURI
 {
@@ -43,6 +44,9 @@ private:
 class AppSecPracticeAntiBot
 {
 public:
+    std::vector<std::string> getIjectedUris() const;
+    std::vector<std::string> getValidatedUris() const;
+
     void load(cereal::JSONInputArchive &archive_in);
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -152,6 +156,22 @@ public:
         url_max_size(parsed_appsec_spec.getWebAttacks().getMaxUrlSizeBytes())
     {}
 
+    // LCOV_EXCL_START Reason: no test exist
+    PracticeAdvancedConfig(
+        int _http_header_max_size,
+        int _http_request_body_max_size,
+        int _json_max_object_depth,
+        int _url_max_size)
+            :
+        http_header_max_size(_http_header_max_size),
+        http_illegal_methods_allowed(0),
+        http_request_body_max_size(_http_request_body_max_size),
+        json_max_object_depth(_json_max_object_depth),
+        url_max_size(_url_max_size)
+    {}
+    // LCOV_EXCL_STOP
+
+
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
@@ -194,6 +214,29 @@ private:
     std::map<std::string, std::string> parsed_match;
 };
 
+class AppsecPracticeAntiBotSection
+{
+public:
+    AppsecPracticeAntiBotSection() {};
+    // LCOV_EXCL_START Reason: no test exist
+    AppsecPracticeAntiBotSection(const NewAppSecPracticeAntiBot &anti_bot) :
+        injected_uris(anti_bot.getIjectedUris()),
+        validated_uris(anti_bot.getValidatedUris())
+    {};
+    // LCOV_EXCL_STOP
+
+    AppsecPracticeAntiBotSection(const AppSecPracticeAntiBot &anti_bot) :
+        injected_uris(anti_bot.getIjectedUris()),
+        validated_uris(anti_bot.getValidatedUris())
+    {};
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    std::vector<std::string> injected_uris;
+    std::vector<std::string> validated_uris;
+};
+
 class WebAppSection
 {
 public:
@@ -207,11 +250,28 @@ public:
         const std::string &_rule_name,
         const std::string &_practice_id,
         const std::string &_practice_name,
+        const std::string &_context,
         const AppSecPracticeSpec &parsed_appsec_spec,
         const LogTriggerSection &parsed_log_trigger,
         const std::string &default_mode,
         const AppSecTrustedSources &parsed_trusted_sources
     );
+
+    WebAppSection(
+    const std::string &_application_urls,
+    const std::string &_asset_id,
+    const std::string &_asset_name,
+    const std::string &_rule_id,
+    const std::string &_rule_name,
+    const std::string &_practice_id,
+    const std::string &_practice_name,
+    const std::string &_context,
+    const std::string &_web_attack_mitigation_severity,
+    const std::string &_web_attack_mitigation_mode,
+    const PracticeAdvancedConfig &_practice_advanced_config,
+    const AppsecPracticeAntiBotSection &_anti_bots,
+    const LogTriggerSection &parsed_log_trigger,
+    const AppSecTrustedSources &parsed_trusted_sources);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -230,7 +290,7 @@ private:
     bool web_attack_mitigation;
     std::vector<TriggersInWaapSection> triggers;
     PracticeAdvancedConfig practice_advanced_config;
-    AppSecPracticeAntiBot anti_bots;
+    AppsecPracticeAntiBotSection anti_bots;
     std::vector<AppSecTrustedSources> trusted_sources;
     std::vector<AppSecOverride> overrides;
 };
@@ -250,7 +310,7 @@ public:
         const std::string &_web_attack_mitigation_severity,
         const std::string &_web_attack_mitigation_mode,
         bool _web_attack_mitigation,
-        const AppSecPracticeSpec &parsed_appsec_spec)
+        const PracticeAdvancedConfig &_practice_advanced_config)
             :
         application_urls(_application_urls),
         asset_id(_asset_id),
@@ -264,7 +324,7 @@ public:
         web_attack_mitigation_severity(_web_attack_mitigation_severity),
         web_attack_mitigation_mode(_web_attack_mitigation_mode),
         web_attack_mitigation(_web_attack_mitigation),
-        practice_advanced_config(parsed_appsec_spec)
+        practice_advanced_config(_practice_advanced_config)
         {}
 
     void save(cereal::JSONOutputArchive &out_ar) const;
@@ -301,6 +361,7 @@ private:
     std::vector<WebAppSection> webApplicationPractices;
     std::vector<WebAPISection> webAPIPractices;
 };
+
 
 class AppSecWrapper
 {

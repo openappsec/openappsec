@@ -125,44 +125,54 @@ getMgmtObjName(shared_ptr<istream> file_stream)
 }
 
 Maybe<string>
-getGWIPAddress(shared_ptr<istream> file_stream)
+getGWHardware(const string &command_output)
 {
-    return getMgmtObjAttr(file_stream, "ipaddr ");
-}
-
-Maybe<string>
-getGWHardware(shared_ptr<istream> file_stream)
-{
-    Maybe<string> val = getMgmtObjAttr(file_stream, "appliance_type ");
-    if(val.ok()) {
-        if (val == string("software")) return string("Open server");
-        if (val == string("Maestro Gateway")) return string("Maestro");
+    if (!command_output.empty()) {
+        if (command_output == "software") return string("Open server");
+        if (command_output == "Maestro Gateway") return string("Maestro");
+        return string(command_output);
     }
-    return val;
+    return genError("GW Hardware was not found");
 }
 
 Maybe<string>
-getGWApplicationControlBlade(shared_ptr<istream> file_stream)
+getAttr(const string &command_output, const string &error)
 {
-    return getMgmtObjAttr(file_stream, "application_firewall_blade ");
+    if (!command_output.empty()) {
+        return string(command_output);
+    }
+
+    return genError(error);
 }
 
 Maybe<string>
-getGWURLFilteringBlade(shared_ptr<istream> file_stream)
+getGWApplicationControlBlade(const string &command_output)
 {
-    return getMgmtObjAttr(file_stream, "advanced_uf_blade ");
+    return getAttr(command_output, "Application Control Blade was not found");
 }
 
 Maybe<string>
-getGWIPSecVPNBlade(shared_ptr<istream> file_stream)
+getGWURLFilteringBlade(const string &command_output)
 {
-    return getMgmtObjAttr(file_stream, "VPN_1 ");
+    return getAttr(command_output, "URL Filtering Blade was not found");
 }
 
 Maybe<string>
-getGWVersion(shared_ptr<istream> file_stream)
+getGWIPSecVPNBlade(const string &command_output)
 {
-    return getMgmtObjAttr(file_stream, "svn_version_name ");
+    return getAttr(command_output, "IPSec VPN Blade was not found");
+}
+
+Maybe<string>
+getGWIPAddress(const string &command_output)
+{
+    return getAttr(command_output, "IP Address was not found");
+}
+
+Maybe<string>
+getGWVersion(const string &command_output)
+{
+    return getAttr(command_output, "GW Version was not found");
 }
 
 Maybe<string>
@@ -188,6 +198,33 @@ getSmbObjectName(const string &command_output)
         return genError("Failed to open the object file");
     }
     return getMgmtObjAttr(ifs, "name ");
+}
+
+Maybe<string>
+getSmbBlade(const string &command_output, const string &error)
+{
+    if (command_output.front() == '1') return string("installed");
+    if (command_output.front() == '0') return string("not-installed");
+
+    return genError(error);
+}
+
+Maybe<string>
+getSmbGWApplicationControlBlade(const string &command_output)
+{
+    return getSmbBlade(command_output, "Application Control Blade was not found");
+}
+
+Maybe<string>
+getSmbGWURLFilteringBlade(const string &command_output)
+{
+    return getSmbBlade(command_output, "URL Filterin Blade was not found");
+}
+
+Maybe<string>
+getSmbGWIPSecVPNBlade(const string &command_output)
+{
+    return getSmbBlade(command_output, "IPSec VPN Blade was not found");
 }
 
 Maybe<string>

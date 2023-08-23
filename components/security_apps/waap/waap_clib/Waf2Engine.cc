@@ -2277,7 +2277,7 @@ void Waf2Transaction::collectFoundPatterns()
 {
     if (m_scanResult)
     {
-        for (const std::pair<std::string, std::vector<std::string>> &found_pattern : m_scanResult->found_patterns)
+        for (const auto &found_pattern : m_scanResult->found_patterns)
         {
             const std::string &regex_name = found_pattern.first; // the regex name (key)
             m_found_patterns.insert(regex_name);

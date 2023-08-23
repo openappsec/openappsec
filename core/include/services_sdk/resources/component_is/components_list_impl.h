@@ -22,6 +22,7 @@
 
 #include "component.h"
 #include "time_proxy.h"
+#include "time_print.h"
 #include "debug.h"
 #include "config_component.h"
 #include "mainloop.h"

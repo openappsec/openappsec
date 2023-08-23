@@ -39,9 +39,9 @@ public:
     }
 
     Maybe<void>
-    sendPolicyVersion(const string &version)
+    sendPolicyVersion(const string &version, const string &policy_versions)
     {
-        return local_communication.sendPolicyVersion(version);
+        return local_communication.sendPolicyVersion(version, policy_versions);
     }
 
     Maybe<string>
@@ -228,6 +228,6 @@ TEST_F(LocalCommunicationTest, setAddressExtenesion)
 
 TEST_F(LocalCommunicationTest, sendPolicyVersion)
 {
-    auto res = sendPolicyVersion("12");
+    auto res = sendPolicyVersion("12", "");
     EXPECT_TRUE(res.ok());
 }

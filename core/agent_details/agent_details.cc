@@ -17,6 +17,8 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <boost/regex.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "config.h"
 #include "debug.h"
@@ -36,6 +38,46 @@ void
 AgentDetails::init()
 {
     registerMachineType();
+    loadAccessToken();
+    Singleton::Consume<I_MainLoop>::by<AgentDetails>()->addRecurringRoutine(
+        I_MainLoop::RoutineType::System,
+        chrono::seconds(60),
+        [this] () { loadAccessToken(); },
+        "Load access token"
+    );
+    proxies = {
+        {ProxyProtocol::HTTP, ProxyData()},
+        {ProxyProtocol::HTTPS, ProxyData()}
+    };
+
+    auto proxy_config = getProfileAgentSetting<string>("agent.config.message.proxy");
+    if (proxy_config.ok()) {
+        setProxy(*proxy_config);
+        writeAgentDetails();
+    }
+
+    registerConfigLoadCb(
+        [&]()
+        {
+            auto proxy_config = getProfileAgentSetting<string>("agent.config.message.proxy");
+            if (proxy_config.ok()) {
+                is_proxy_configured_via_settings = true;
+                setProxy(*proxy_config);
+                writeAgentDetails();
+            } else if (is_proxy_configured_via_settings) {
+                is_proxy_configured_via_settings = false;
+                setProxy(string(""));
+                writeAgentDetails();
+            }
+        }
+    );
+
+    auto load_env_proxy = loadProxy();
+    if (!load_env_proxy.ok()) {
+        dbgDebug(D_ORCHESTRATOR)
+            << "Could not initialize load proxy from environment, Error: "
+            << load_env_proxy.getErr();
+    }
 }
 
 bool
@@ -260,6 +302,36 @@ AgentDetails::getOrchestrationMode() const
     return orchestration_mode;
 }
 
+string
+AgentDetails::getAccessToken() const
+{
+    return access_token;
+}
+
+void
+AgentDetails::loadAccessToken()
+{
+    readAgentDetails();
+    auto data_path = getConfigurationWithDefault<string>(
+        getFilesystemPathConfig() + "/data/",
+        "encryptor",
+        "Data files directory"
+    );
+    ifstream token_file(data_path + session_token_file_name);
+    if (!token_file.is_open()) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to open session token file: " << data_path + session_token_file_name;
+        return;
+    }
+    stringstream token_steam;
+    token_steam << token_file.rdbuf();
+
+    auto new_token = token_steam.str();
+    if (access_token != new_token) {
+        access_token = new_token;
+        dbgTrace(D_ORCHESTRATOR) << "Loaded the new token";
+    }
+}
+
 Maybe<I_AgentDetails::MachineType>
 AgentDetails::getMachineTypeFromDmiTable()
 {
@@ -299,4 +371,236 @@ AgentDetails::registerMachineType()
         "MachineType", machine_type.unpack()
     );
     dbgInfo(D_ORCHESTRATOR) << "Setting machine type " << static_cast<int>(machine_type.unpack());
+}
+
+string
+AgentDetails::convertProxyProtocolToString(ProxyProtocol proto) const
+{
+    switch(proto) {
+        case ProxyProtocol::HTTP: return "http";
+        case ProxyProtocol::HTTPS: return "https";
+    }
+    dbgAssert(false) << "Unsupported Proxy Protocol " << static_cast<int>(proto);
+    return "";
+}
+
+Maybe<void>
+AgentDetails::verifyProxySyntax(
+    const string &protocol,
+    const string &auth,
+    const string &domain,
+    const string &port,
+    const string &env_proxy)
+{
+    stringstream verify_string;
+    verify_string
+        << protocol
+        << "://"
+        << (!auth.empty() ? auth + string("@") : "")
+        << domain
+        << ":"
+        << port
+        << (env_proxy.back() == '/' ? "/" : "");
+
+    if (env_proxy.compare(verify_string.str()) != 0) {
+        return genError(string("Provided proxy has the wrong syntax:" ) + env_proxy);
+    }
+    return Maybe<void>();
+}
+
+Maybe<string>
+AgentDetails::loadProxyType(const string &proxy_type)
+{
+    readAgentDetails();
+    auto proxy_config = getProxy();
+    if (proxy_config.ok()) {
+        if (proxy_config.unpack() == "none") {
+            return Maybe<string>(string());
+        }
+        return proxy_config;
+    }
+
+#ifdef gaia
+    I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<AgentDetails>();
+    auto proxy_ip = shell_cmd->getExecOutput("dbget proxy:ip-address| tr -d '\n'");
+    if (!proxy_ip.ok()) return proxy_ip;
+    auto proxy_port = shell_cmd->getExecOutput("dbget proxy:port| tr -d '\n'");
+    if (!proxy_port.ok()) return proxy_port;
+    if (*proxy_port != "" && *proxy_ip != "") return ("http://" + *proxy_ip + ":" + *proxy_port);
+
+    const string umis_file_path(string(getenv("CPDIR")) + "/tmp/umis_objects.C");
+
+    {
+        ifstream umis_file(umis_file_path.c_str());
+        if (!umis_file.good()) return Maybe<string>(string());
+    }
+
+    const string read_umis_cmd = "cat " + umis_file_path + " | grep -w \"";
+    const string parse_value_command = "\" | awk -F \"[ \\t]+\" '{printf $NF}' | tr -d \"()\"";
+
+    auto use_proxy = shell_cmd->getExecOutput(read_umis_cmd + "use_proxy" + parse_value_command);
+    if (!use_proxy.ok())
+        return genError("Failed to read use_proxy from " + umis_file_path + ": " + use_proxy.getErr());
+
+    if (use_proxy.unpack() == "true") {
+        auto umis_proxy_add = shell_cmd->getExecOutput(read_umis_cmd + "proxy_address" + parse_value_command);
+        if (!umis_proxy_add.ok() || *umis_proxy_add == "") return umis_proxy_add;
+        auto umis_proxy_port = shell_cmd->getExecOutput(read_umis_cmd + "proxy_port" + parse_value_command);
+        if (!umis_proxy_port.ok() || *umis_proxy_port == "") return umis_proxy_port;
+
+        return ("http://" + *umis_proxy_add + ":" + *umis_proxy_port);
+    } else {
+        dbgTrace(D_ORCHESTRATOR) << "Smart Console Proxy is turned off";
+    }
+    return Maybe<string>(string());
+#else // not gaia
+    char *proxy = getenv(proxy_type.c_str());
+    if (proxy) return string(proxy);
+
+    proxy = getenv(boost::algorithm::to_upper_copy(proxy_type).c_str());
+    if (proxy) return string(proxy);
+    return Maybe<string>(string());
+#endif // gaia
+}
+
+Maybe<void>
+AgentDetails::loadProxyType(ProxyProtocol protocol)
+{
+    dbgAssert(protocol == ProxyProtocol::HTTP || protocol == ProxyProtocol::HTTPS)
+        << "Unsupported Proxy Protocol " << static_cast<int>(protocol);
+
+    static const map<ProxyProtocol, string> env_var_name = {
+        {ProxyProtocol::HTTPS, "https_proxy"},
+        {ProxyProtocol::HTTP, "http_proxy"}
+    };
+    auto env_proxy = loadProxyType(env_var_name.at(protocol));
+    if (!env_proxy.ok()) return genError(env_proxy.getErr());
+    if (env_proxy.unpack().empty()) {
+        return Maybe<void>();
+    }
+
+    string protocol_regex = "(http|https)://";
+    const static boost::regex no_auth_proxy_regex(protocol_regex + "(.)*:[0-9]{0,5}(/|)");
+    const static boost::regex auth_proxy_regex(protocol_regex + "(.)*:(.)*@(.)*:[0-9]{0,5}(/|)");
+
+    ProxyData env_proxy_data;
+    env_proxy_data.is_exists = true;
+    string proxy_copy;
+    if (!NGEN::Regex::regexMatch(__FILE__, __LINE__, env_proxy.unpack(), boost::regex(protocol_regex + "(.)*"))) {
+        env_proxy = "http://" + env_proxy.unpack();
+    }
+    proxy_copy.assign(env_proxy.unpack());
+    env_proxy_data.protocol = env_proxy.unpack().substr(0, proxy_copy.find(":"));
+    proxy_copy.erase(0, proxy_copy.find(":") + 3); //remove "http://" or "https://"
+
+    if (NGEN::Regex::regexMatch(__FILE__, __LINE__, env_proxy.unpack(), auth_proxy_regex)) {
+        env_proxy_data.auth = string(&proxy_copy[0], &proxy_copy[proxy_copy.find("@")]);
+        proxy_copy.erase(0, proxy_copy.find("@") + 1); // remove "user:pass@"
+    } else if (!NGEN::Regex::regexMatch(__FILE__, __LINE__, env_proxy.unpack(), no_auth_proxy_regex)) {
+        return genError(string("Provided proxy has wrong syntax: ") + env_proxy.unpack());
+    }
+    env_proxy_data.domain = proxy_copy.substr(0, proxy_copy.find(":"));
+    proxy_copy.erase(0, proxy_copy.find(":") + 1); // remove "host:"
+    env_proxy_data.port = static_cast<uint16_t>(stoi(proxy_copy));
+
+    auto proxy_syntax = verifyProxySyntax(
+        env_proxy_data.protocol,
+        env_proxy_data.auth,
+        env_proxy_data.domain,
+        to_string(env_proxy_data.port),
+        env_proxy.unpack()
+    );
+    if (!proxy_syntax.ok()) return proxy_syntax;
+    if (env_proxy_data == proxies.at(protocol)) {
+        return Maybe<void>();
+    }
+
+    proxies.at(protocol) = env_proxy_data;
+    dbgInfo(D_ORCHESTRATOR)
+        << convertProxyProtocolToString(protocol)
+        << " proxy was successfully loaded, "
+        << getProxyAddress(protocol).unpack();
+
+    return Maybe<void>();
+}
+
+Maybe<string>
+AgentDetails::getProxyDomain(ProxyProtocol protocol) const
+{
+    if (proxies.find(protocol) == proxies.end()) {
+        return genError("Proxy type is not loaded in map, type: " + convertProxyProtocolToString(protocol));
+    }
+    if (proxies.at(protocol).domain.empty()) return genError(
+        convertProxyProtocolToString(protocol) + string(" proxy domain is unset")
+    );
+    return proxies.at(protocol).domain;
+}
+
+Maybe<string>
+AgentDetails::getProxyCredentials(ProxyProtocol protocol) const
+{
+    if (proxies.find(protocol) == proxies.end()) {
+        return genError("Proxy type is not loaded in map, type: " + convertProxyProtocolToString(protocol));
+    }
+    if (proxies.at(protocol).auth.empty()) return genError(
+        convertProxyProtocolToString(protocol) + string(" proxy auth is unset")
+    );
+    return proxies.at(protocol).auth;
+}
+
+Maybe<uint16_t>
+AgentDetails::getProxyPort(ProxyProtocol protocol) const
+{
+    if (proxies.find(protocol) == proxies.end()) {
+        return genError("Proxy type is not loaded in map, type: " + convertProxyProtocolToString(protocol));
+    }
+    if (proxies.at(protocol).port == 0) return genError(
+        convertProxyProtocolToString(protocol) + string(" proxy port is unset")
+    );
+    return proxies.at(protocol).port;
+}
+
+bool
+AgentDetails::getProxyExists(ProxyProtocol protocol) const
+{
+    if (proxies.find(protocol) == proxies.end()) {
+        dbgInfo(D_ORCHESTRATOR)
+            << "Proxy type is not loaded in map, type: "
+            << convertProxyProtocolToString(protocol);
+        return false;
+    }
+    return proxies.at(protocol).is_exists;
+}
+
+Maybe<string>
+AgentDetails::getProxyAddress(ProxyProtocol protocol) const
+{
+    if (proxies.find(protocol) == proxies.end()) {
+        return genError("Proxy type is not loaded in map, type: " + convertProxyProtocolToString(protocol));
+    }
+    if (proxies.at(protocol).protocol.empty() ||
+        proxies.at(protocol).domain.empty() ||
+        proxies.at(protocol).port == 0) {
+        return genError(
+            string("Can't construct ") +
+            convertProxyProtocolToString(protocol) +
+            string(" proxy address")
+        );
+    }
+    return proxies.at(protocol).protocol +
+        "://" +
+        proxies.at(protocol).domain +
+        ":" +
+        to_string(proxies.at(protocol).port);
+}
+
+Maybe<void>
+AgentDetails::loadProxy()
+{
+    if (getConfigurationFlag("orchestration-mode") == "offline_mode") return Maybe<void>();
+    for (const auto &proxy_type : proxies) {
+        auto loaded_proxy = loadProxyType(proxy_type.first);
+        if (!loaded_proxy.ok()) return loaded_proxy;
+    }
+    return Maybe<void>();
 }
