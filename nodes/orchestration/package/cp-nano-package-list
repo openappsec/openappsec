@@ -1,7 +1,7 @@
 # If you wish to add a package to the cp-nano-cli.sh shell script,
 # just add a variable at the end of the file in the following format
 # <variable_name>="<packageName(directory name under /etc/cp/)> <default_port(optional)> <Formatted-Name(optioanl)>"
-# ** Please do not change the starting line of the variables (6th)
+# ## Please do not change the starting line of the variables (6th)
 
 orchestration="orchestration 7777"
 access_control="accessControl 8000"
@@ -28,4 +28,4 @@ sdwan_logger="sdwanLogger 2204 SD-WAN_Logger"
 cpview_metric_provider="cpviewMetricProvider 8282"
 hello_world="hello_world"
 crowdsec_aux="crowdsecAux 8081"
-# ** Please do not remove this comment - newline at end of file required.
+# ## Please do not remove this comment - newline at end of file required.
