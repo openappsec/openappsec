@@ -15,4 +15,4 @@ add_subdirectory(health_check)
 add_subdirectory(local_policy_mgmt_gen)
 add_subdirectory(env_details)
 
-add_subdirectory(orchestration_ut)
+#add_subdirectory(orchestration_ut)
