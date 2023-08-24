@@ -109,6 +109,11 @@ public:
     virtual Maybe<std::string> readFile(const std::string &path) const = 0;
     virtual bool writeFile(const std::string &text, const std::string &path) const = 0;
     virtual bool removeFile(const std::string &path) const = 0;
+    virtual bool removeDirectory(const std::string &path, bool delete_content) const = 0;
+    virtual void deleteVirtualTenantProfileFiles(
+        const std::string &tenant_id,
+        const std::string &profile_id,
+        const std::string &conf_path) const = 0;
     virtual bool copyFile(const std::string &src_path, const std::string &dst_path) const = 0;
     virtual bool doesFileExist(const std::string &file_path) const = 0;
     virtual void fillKeyInJson(
@@ -118,6 +123,7 @@ public:
     virtual bool createDirectory(const std::string &directory_path) const = 0;
     virtual bool doesDirectoryExist(const std::string &dir_path) const = 0;
     virtual bool executeCmd(const std::string &cmd) const = 0;
+    virtual void loadTenantsFromDir(const std::string &dir_path) const = 0;
 
     virtual std::string base64Encode(const std::string &input) const = 0;
     virtual std::string base64Decode(const std::string &input) const = 0;

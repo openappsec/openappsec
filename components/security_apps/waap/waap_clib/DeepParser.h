@@ -34,6 +34,7 @@ public:
     virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags);
 
     void clear();
+    void showStats(std::string& buff, const ValueStatsAnalyzer& valueStats);
     void apiProcessKey(const char *v, size_t v_len);
     size_t depth() const;
     void setGlobalMaxObjectDepth(size_t depth) { m_globalMaxObjectDepth = depth; }

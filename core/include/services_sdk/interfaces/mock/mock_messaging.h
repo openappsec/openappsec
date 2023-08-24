@@ -57,20 +57,12 @@ public:
         )
     );
 
-    MOCK_METHOD0(loadAccessToken,   void());
     MOCK_METHOD0(setActiveFog,      bool());
     MOCK_METHOD1(setActiveFog,      bool(MessageTypeTag));
     MOCK_METHOD0(unsetFogProxy,     void());
     MOCK_METHOD0(loadFogProxy,      void());
     MOCK_METHOD4(setActiveFog,      bool(const string &, const uint16_t, const bool, MessageTypeTag));
-    MOCK_METHOD0(getAccessToken,    string());
 
-    MOCK_CONST_METHOD1(getProxyDomain, Maybe<std::string>(ProxyProtocol protocol));
-    MOCK_CONST_METHOD1(getProxyCredentials, Maybe<std::string>(ProxyProtocol protocol));
-    MOCK_CONST_METHOD1(getProxyPort, Maybe<uint16_t>(ProxyProtocol protocol));
-    MOCK_CONST_METHOD1(getProxyExists, bool(ProxyProtocol protocol));
-    MOCK_CONST_METHOD1(getProxyAddress, Maybe<std::string>(ProxyProtocol protocol));
-    MOCK_METHOD0(loadProxy, Maybe<void>());
 };
 
 #endif // __MOCK_MESSAGING_H__

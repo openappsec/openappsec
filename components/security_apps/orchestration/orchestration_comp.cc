@@ -49,13 +49,9 @@ using namespace ReportIS;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
-
-static const string ls_prefix = "ls ";
-static const string extract_tenant_profile_suffix =
-    "| grep tenant "
-    "| cut -d '_' -f 2,4 "
-    "| sort --unique "
-    "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'";
+#if defined(gaia) || defined(smb)
+static string fw_last_update_time = "";
+#endif // gaia || smb
 
 class HealthCheckStatusListener : public Listener<HealthCheckStatusEvent>
 {
@@ -202,7 +198,10 @@ public:
             ReportIS::Audience::INTERNAL
         );
         hybrid_mode_metric.registerListener();
-        loadExistingTenantsFromConfDir();
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
+        orchestration_tools->loadTenantsFromDir(
+            getConfigurationWithDefault<string>(getFilesystemPathConfig() + "/conf/", "orchestration", "Conf dir")
+        );
     }
 
     void
@@ -242,8 +241,14 @@ private:
             );
 
             auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
-            if (!service_controller->updateServiceConfiguration(policy_file_path, settings_file_path)) {
-                dbgWarning(D_ORCHESTRATOR) << "Failed to load the policy and settings";
+            auto is_update_config = service_controller->updateServiceConfiguration(
+                policy_file_path,
+                settings_file_path
+            );
+            if (!is_update_config.ok()) {
+                dbgWarning(D_ORCHESTRATOR)
+                    << "Failed to load the policy and settings, Error: "
+                    << is_update_config.getErr();
             }
 
             policy_version = service_controller->getPolicyVersion();
@@ -276,7 +281,9 @@ private:
         auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
         auto authentication_res = update_communication->authenticateAgent();
         if (authentication_res.ok() && !policy_version.empty()) {
-            auto path_policy_version = update_communication->sendPolicyVersion(policy_version);
+            auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
+            const string &policy_versions = service_controller->getPolicyVersions();
+            auto path_policy_version = update_communication->sendPolicyVersion(policy_version, policy_versions);
             if (!path_policy_version.ok()) {
                 dbgWarning(D_ORCHESTRATOR) << path_policy_version.getErr();
             }
@@ -287,59 +294,6 @@ private:
             return Maybe<void>();
         }
         return authentication_res;
-    }
-
-    void
-    loadExistingTenantsFromConfDir()
-    {
-        dbgTrace(D_ORCHESTRATOR) << "Load existing tenants and profiles from the configuration folder";
-
-        string global_conf_dir = getConfigurationWithDefault<string>(
-            getFilesystemPathConfig()+ "/conf/",
-            "orchestration",
-            "Conf dir"
-        );
-        string shell_cmd_string = ls_prefix + global_conf_dir + extract_tenant_profile_suffix;
-        auto shell = Singleton::Consume<I_ShellCmd>::by<OrchestrationComp>();
-        Maybe<string> output_res = shell->getExecOutput(shell_cmd_string);
-
-        if (!output_res.ok()) {
-            dbgWarning(D_ORCHESTRATOR)
-                << "Failed to load existing tenants from configuration folder: " + output_res.getErr();
-            return;
-        }
-
-        auto tenant_manager = Singleton::Consume<I_TenantManager>::by<OrchestrationComp>();
-        stringstream ss(output_res.unpack());
-        string tenant_id;
-        string profile_id;
-        while (!ss.eof() && getline(ss, tenant_id, ' ') && !ss.eof() && getline(ss, profile_id, ' ')) {
-            dbgTrace(D_ORCHESTRATOR) << "Add existing tenant_" + tenant_id + "_profile_" + profile_id;
-            tenant_manager->addActiveTenantAndProfile(tenant_id, profile_id);
-        }
-    }
-
-    void
-    deleteInactiveTenantProfileFiles(const string &tenant_id, const string &profile_id)
-    {
-        string global_conf_dir = getConfigurationWithDefault<string>(
-            getFilesystemPathConfig()+ "/conf/",
-            "orchestration",
-            "Conf dir"
-        );
-        string tenant_and_profile_suffix = "tenant_" + tenant_id + "_profile_" + profile_id;
-        string virtual_policy_dir = global_conf_dir + tenant_and_profile_suffix;
-
-        dbgTrace(D_ORCHESTRATOR) << "Delete virtual policy folder : " << virtual_policy_dir;
-        if (!NGEN::Filesystem::deleteDirectory(virtual_policy_dir, true)) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to delete virtual policy folder : " << virtual_policy_dir;
-        }
-
-        string settings_file_path = virtual_policy_dir + "_settings.json";
-        dbgTrace(D_ORCHESTRATOR) << "Delete settings file " << settings_file_path;
-        if (!NGEN::Filesystem::deleteFile(settings_file_path)) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to delete virtual policy settings file : " << settings_file_path;
-        }
     }
 
     Maybe<OrchestrationPolicy>
@@ -416,10 +370,11 @@ private:
 
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
         auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
-        if (service_controller->updateServiceConfiguration(policy_file_path, settings_file_path)) {
+        auto is_update_config = service_controller->updateServiceConfiguration(policy_file_path, settings_file_path);
+        if (is_update_config.ok()) {
             maybe_policy = orchestration_tools->jsonFileToObject<OrchestrationPolicy>(orchestration_policy_file);
         } else {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to enforce Orchestration policy. File: " << policy_file_path;
+            dbgWarning(D_ORCHESTRATOR) << is_update_config.getErr();
         }
 
         if (!maybe_policy.ok()) {
@@ -435,8 +390,11 @@ private:
                 return genError("Failed to copy orchestration policy from backup policy.json file.");
             }
             // Try to use the backup policy.json file and re-write the services's policies.
-            if (service_controller->updateServiceConfiguration(policy_file_path, settings_file_path)) {
-                maybe_policy= orchestration_tools->jsonFileToObject<OrchestrationPolicy>(orchestration_policy_file);
+            is_update_config = service_controller->updateServiceConfiguration(policy_file_path, settings_file_path);
+            if (is_update_config.ok()) {
+                maybe_policy = orchestration_tools->jsonFileToObject<OrchestrationPolicy>(orchestration_policy_file);
+            } else {
+                dbgWarning(D_ORCHESTRATOR) << is_update_config.getErr();
             }
         }
 
@@ -613,18 +571,22 @@ private:
 
         // Try to use the backup policy.json file and re-write the services's policies.
         dbgInfo(D_ORCHESTRATOR) << "Updating services with the new policy.";
-        if (service_controller->updateServiceConfiguration(policy_file_path + backup_ext, settings_file_path)) {
-            dbgInfo(D_ORCHESTRATOR) << "Recovering the policy file from backup.";
-            if (!orchestration_tools->copyFile(policy_file_path + backup_ext, policy_file_path)) {
-                dbgWarning (D_ORCHESTRATOR)
-                    << "Failed to recover policy file from backup. File: "
-                    << policy_file_path + backup_ext;
-                return false;
-            }
-            return true;
+        auto is_update_config = service_controller->updateServiceConfiguration(
+            policy_file_path + backup_ext,
+            settings_file_path
+        );
+        if (!is_update_config.ok()) {
+            dbgWarning (D_ORCHESTRATOR) << "Failed to load Orchestration policy. Error: " << is_update_config.getErr();
+            return false;
         }
-        dbgWarning (D_ORCHESTRATOR) << "Failed to load Orchestration policy.";
-        return false;
+        dbgInfo(D_ORCHESTRATOR) << "Recovering the policy file from backup.";
+        if (!orchestration_tools->copyFile(policy_file_path + backup_ext, policy_file_path)) {
+            dbgWarning (D_ORCHESTRATOR)
+                << "Failed to recover policy file from backup. File: "
+                << policy_file_path + backup_ext;
+            return false;
+        }
+        return true;
     }
 
     string
@@ -646,7 +608,8 @@ private:
             Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>()->setPolicyVersion(new_policy_version);
         }
         auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
-        auto path_policy_version = update_communication->sendPolicyVersion(new_policy_version);
+        const string &policy_versions = service_controller->getPolicyVersions();
+        auto path_policy_version = update_communication->sendPolicyVersion(new_policy_version, policy_versions);
         if (!path_policy_version.ok()) {
             dbgWarning(D_ORCHESTRATOR) << path_policy_version.getErr();
         }
@@ -685,19 +648,21 @@ private:
         // Calculate the changes between the existing policy to the new one.
         auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
         string old_policy_version = service_controller->getPolicyVersion();
-        bool res = service_controller->updateServiceConfiguration(
+        auto res = service_controller->updateServiceConfiguration(
             new_policy_file.unpack(),
             settings_path,
             data_updates
         );
 
-        if (!res) {
+        if (!res.ok()) {
             string updated_policy_version = service_controller->getUpdatePolicyVersion();
             string error_str =
                 "Failed to update services' policy configuration files. Previous version: " +
                 old_policy_version +
                 ". New version: " +
-                updated_policy_version;
+                updated_policy_version +
+                ". Error: " +
+                res.getErr();
 
             auto policy_file = getConfigurationWithDefault<string>(
                 filesystem_prefix + "/conf/policy.json",
@@ -987,6 +952,22 @@ private:
             policy_version
         );
 
+        auto agent_mode = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getOrchestrationMode();
+        auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
+        if (agent_mode == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
+            auto upgrade_mode = getSettingWithDefault<string>("manual", "upgradeMode");
+            if (upgrade_mode != "scheduled") {
+                request.setUpgradeFields(upgrade_mode);
+            } else {
+                request.setUpgradeFields(
+                    upgrade_mode,
+                    getSettingWithDefault<string>("0:00", "upgradeTime"),
+                    getSettingWithDefault<uint>(4, "upgradeDurationHours"),
+                    getSettingWithDefault<vector<string>>({}, "upgradeDay")
+                );
+            }
+        }
+
         auto greedy_update = getProfileAgentSettingWithDefault<bool>(false, "orchestration.multitenancy.greedymode");
         greedy_update = getConfigurationWithDefault<bool>(greedy_update, "orchestration", "Multitenancy Greedy mode");
 
@@ -1095,16 +1076,16 @@ private:
                 data_updates
             );
         }
-        if (!orch_policy.ok() && (data_updates.size() > 0 || settings_path != "")) {
+        if (!orch_policy.ok() && (!data_updates.empty() || !settings_path.empty())) {
             auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
-            bool res = service_controller->updateServiceConfiguration(
+            auto res = service_controller->updateServiceConfiguration(
                 "",
                 settings_path,
                 data_updates
             );
 
-            if (!res) {
-                dbgWarning(D_ORCHESTRATOR) << "Failed to update new service configuration";
+            if (!res.ok()) {
+                dbgWarning(D_ORCHESTRATOR) << res.getErr();
             }
         }
 
@@ -1271,7 +1252,12 @@ private:
                 }
             }
         }
-
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
+        auto conf_dir = getConfigurationWithDefault<string>(
+            getFilesystemPathConfig() + "/conf/",
+            "orchestration",
+            "Conf dir"
+        );
         for (const auto &tenant_profile_set : profiles_to_be_deleted) {
             auto tenant_id = tenant_profile_set.first;
             for (const auto &profile_id: tenant_profile_set.second) {
@@ -1282,7 +1268,11 @@ private:
                     << ", Profile ID: "
                     << profile_id;
                 tenant_manager->deactivateTenant(tenant_id, profile_id);
-                deleteInactiveTenantProfileFiles(tenant_id, profile_id);
+                orchestration_tools->deleteVirtualTenantProfileFiles(
+                    tenant_id,
+                    profile_id,
+                    conf_dir
+                );
             }
         }
 
@@ -1481,6 +1471,16 @@ private:
             agent_data_report << AgentReportFieldWithLabel("isVersionEqualOrAboveR8110", "true");
         }
 
+        auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>();
+        if (
+            i_agent_details->getOrchestrationMode() == OrchestrationMode::HYBRID ||
+            getSettingWithDefault<string>("management", "profileManagedMode") == "declarative"
+        ) {
+            agent_data_report << AgentReportFieldWithLabel("managedMode", "declarative");
+        } else {
+            agent_data_report << AgentReportFieldWithLabel("managedMode", "management");
+        }
+
 #if defined(gaia) || defined(smb)
         if (i_details_resolver->compareCheckpointVersion(8100, greater_equal<int>())) {
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER81", "true");
@@ -1584,7 +1584,9 @@ private:
         while (true) {
             static int failure_count = 0;
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->startNewTrace(false);
-            reportAgentDetailsMetaData();
+            if (shouldReportAgentDetailsMetadata()) {
+                reportAgentDetailsMetaData();
+            }
             auto check_update_result = checkUpdate();
             if (!check_update_result.ok()) {
                 failure_count++;
@@ -1900,6 +1902,32 @@ private:
         }
     }
 
+    bool
+    shouldReportAgentDetailsMetadata()
+    {
+        bool should_report_agent_details_metadata = true;
+#if defined(gaia) || defined(smb)
+        auto i_shell_cmd = Singleton::Consume<I_ShellCmd>::by<OrchestrationComp>();
+        auto result = i_shell_cmd->getExecOutput("stat -c %Y $FWDIR/state/local/FW1");
+        if (!result.ok()) return should_report_agent_details_metadata;
+        string current_update_time = result.unpack();
+        fw_last_update_time = fw_last_update_time.empty() ? current_update_time : fw_last_update_time;
+        try {
+                bool is_fw_dir_changed = stoi(current_update_time) > stoi(fw_last_update_time);
+                if (!is_fw_dir_changed) {
+                    should_report_agent_details_metadata = false;
+                } else {
+                    fw_last_update_time = current_update_time;
+                }
+        } catch (const exception& err) {
+            dbgWarning(D_ORCHESTRATOR)
+                << "Failed to check if access policy was recently updated , Error:"
+                <<  err.what();
+        }
+#endif // gaia || smb
+        return should_report_agent_details_metadata;
+    }
+
     class AddProxyRest : public ServerRest
     {
     public:
@@ -1976,6 +2004,9 @@ OrchestrationComp::preload()
     registerExpectedSetting<vector<string>>("orchestration", "Orchestration status ignored policies");
     registerExpectedSetting<string>("agentType");
     registerExpectedSetting<string>("upgradeMode");
+    registerExpectedSetting<string>("upgradeTime");
+    registerExpectedSetting<uint>("upgradeDurationHours");
+    registerExpectedSetting<vector<string>>("upgradeDay");
     registerExpectedSetting<string>("email-address");
     registerExpectedSetting<string>("registered-server");
     registerExpectedConfigFile("orchestration", Config::ConfigFileType::Policy);

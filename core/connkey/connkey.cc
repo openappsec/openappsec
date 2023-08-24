@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include <stdio.h>
+#include <bitset>
 #include <string.h>
 #include <arpa/inet.h>
 
@@ -140,6 +141,130 @@ bool
 IPAddr::isInRange(const IPAddr &left, const IPAddr &right) const
 {
     return (*this >= left) && (*this <= right);
+}
+
+Maybe<string>
+IPAddr::calculateSubnetStart(int subnet_value)
+{
+    if (type == IPType::V4) {
+        return calculateSubnetStartV4(subnet_value);
+    } else {
+        return calculateSubnetStartV6(subnet_value);
+    }
+}
+
+Maybe<string>
+IPAddr::calculateSubnetEnd(int subnet_value)
+{
+    if (type == IPType::V4) {
+        return calculateSubnetEndV4(subnet_value);
+    } else {
+        return calculateSubnetEndV6(subnet_value);
+    }
+}
+
+Maybe<string>
+IPAddr::calculateSubnetStartV4(int subnet_value)
+{
+    if (subnet_value < 0 || subnet_value > 32) {
+        return genError("Invalid subnet value: ");
+    }
+    uint32_t ip = ntohl(v4.s_addr);
+    uint32_t mask = (0xFFFFFFFF << (32 - subnet_value));
+    uint32_t subnet = ip & mask;
+    subnet = ntohl(subnet);
+    return string(inet_ntoa(*(struct in_addr *)&subnet));
+}
+
+Maybe<string>
+IPAddr::calculateSubnetStartV6(int subnet_value)
+{
+    if (subnet_value < 0 || subnet_value > 128) {
+        return genError("Invalid subnet value: ");
+    }
+
+    // represent IPV6 as a binary
+    bitset<128> mask;
+    for (int i = 0; i < 16; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            mask[i * 8 + j] = (v6.s6_addr[i] >> (7 - j)) & 1;
+        }
+    }
+
+    // set the subnet bits to 0
+    for (int i = subnet_value; i < 128; i++) {
+        mask.reset(i);
+    }
+
+    // convert the binary to IPV6
+    for (int i = 0; i < 16; ++i) {
+        uint8_t byteValue = 0;
+        for (int j = 0; j < 8; ++j) {
+            byteValue |= (mask[i * 8 + j] << (7 - j));
+        }
+        v6.s6_addr[i] = byteValue;
+    }
+
+    // convert to string
+    ostringstream oss;
+    for (int i = 0; i < 16; i+=2) {
+        if (i > 0)
+            oss << ":";
+        oss << hex << ((v6.s6_addr[i] << 8) + v6.s6_addr[i+1]);
+    }
+    return oss.str();
+}
+
+Maybe<string>
+IPAddr::calculateSubnetEndV4(int subnet_value)
+{
+    if (subnet_value < 0 || subnet_value > 32) {
+        return genError("Invalid subnet value: ");
+    }
+    uint32_t ip = ntohl(v4.s_addr);
+    uint32_t mask = (0xFFFFFFFF << (32 - subnet_value));
+    uint32_t subnet = ip & mask;
+    subnet |= ~mask;
+    subnet = ntohl(subnet);
+    return string(inet_ntoa(*(struct in_addr *)&subnet));
+}
+
+Maybe<string>
+IPAddr::calculateSubnetEndV6(int subnet_value)
+{
+    if (subnet_value < 0 || subnet_value > 128) {
+        return genError("Invalid subnet value: ");
+    }
+
+    // represent IPV6 as a binary
+    bitset<128> mask;
+    for (int i = 0; i < 16; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            mask[i * 8 + j] = (v6.s6_addr[i] >> (7 - j)) & 1;
+        }
+    }
+
+    // set the host bits to 1
+    for (int i = subnet_value; i < 128; i++) {
+        mask.set(i);
+    }
+
+    // convert the binary to IPV6
+    for (int i = 0; i < 16; ++i) {
+        uint8_t byteValue = 0;
+        for (int j = 0; j < 8; ++j) {
+            byteValue |= (mask[i * 8 + j] << (7 - j));
+        }
+        v6.s6_addr[i] = byteValue;
+    }
+
+    // convert to string
+    ostringstream oss;
+    for (int i = 0; i < 16; i += 2) {
+        if (i > 0) oss << ":";
+        oss << hex << ((v6.s6_addr[i] << 8) + v6.s6_addr[i + 1]);
+    }
+    return oss.str();
 }
 
 Maybe<IPAddr>

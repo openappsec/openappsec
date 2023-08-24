@@ -157,7 +157,7 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
 }
 
 Maybe<void>
-HybridCommunication::sendPolicyVersion(const string &policy_version) const
+HybridCommunication::sendPolicyVersion(const string &policy_version, const string &) const
 {
     dbgFlow(D_ORCHESTRATOR);
     policy_version.empty();

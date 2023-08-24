@@ -131,7 +131,7 @@ DetailsResolver::Impl::isReverseProxy()
         return is_reverse_proxy.unpack().front() == '1';
     }
 #endif
-    return false;
+    return getenv("DOCKER_RPM_ENABLED") && getenv("DOCKER_RPM_ENABLED") == string("true");
 }
 
 bool

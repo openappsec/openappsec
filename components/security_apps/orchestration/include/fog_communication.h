@@ -41,7 +41,10 @@ public:
     void init() override;
     Maybe<void> getUpdate(CheckUpdateRequest &request) override;
     Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) override;
-    Maybe<void> sendPolicyVersion(const std::string &policy_version) const override;
+    Maybe<void> sendPolicyVersion(
+        const std::string &policy_version,
+        const std::string &policy_versions
+    ) const override;
 
 private:
     DeclarativePolicyUtils declarative_policy_utils;

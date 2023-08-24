@@ -104,9 +104,16 @@ public:
     {
         dbgFlow(D_LOCAL_POLICY) << "Starting to parse policy - K8S environment";
 
-        map<string, AppsecLinuxPolicy> appsec_policies = k8s_policy_utils.createAppsecPoliciesFromIngresses();
-        return policy_maker_utils.proccesMultipleAppsecPolicies(
-            appsec_policies,
+        auto appsec_policies = k8s_policy_utils.createAppsecPoliciesFromIngresses();
+        if (!std::get<0>(appsec_policies).empty()) {
+            return policy_maker_utils.proccesMultipleAppsecPolicies<AppsecLinuxPolicy, ParsedRule>(
+                std::get<0>(appsec_policies),
+                policy_version,
+                default_local_appsec_policy_path
+            );
+        }
+        return policy_maker_utils.proccesMultipleAppsecPolicies<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+            std::get<1>(appsec_policies),
             policy_version,
             default_local_appsec_policy_path
         );

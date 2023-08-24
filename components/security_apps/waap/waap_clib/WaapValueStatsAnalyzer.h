@@ -34,6 +34,7 @@ struct ValueStatsAnalyzer
     bool canSplitPipe;
     bool hasSpace;
     bool isUrlEncoded;
+    std::string textual;
 };
 
 

@@ -6,6 +6,7 @@
 #include "mock/mock_time_get.h"
 #include "mock/mock_socket_is.h"
 #include "mock/mock_mainloop.h"
+#include "mock/mock_shell_cmd.h"
 #include "health_check_manager.h"
 
 #include "config.h"
@@ -17,6 +18,22 @@ using namespace std;
 using namespace testing;
 
 USE_DEBUG_FLAG(D_HEALTH_CHECK);
+
+static const string response =
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Length: 25\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "health check successful\r\n";
+static const vector<char> response_buffer(response.begin(), response.end());
+
+static const string failure_response =
+                    "HTTP/1.1 500 Internal Server Error\r\n"
+                    "Content-Length: 21\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "\r\n"
+                    "health check failed\r\n";
+static const vector<char> failure_response_buffer(failure_response.begin(), failure_response.end());
 
 class HealthCheckerTest : public testing::Test
 {
@@ -47,6 +64,7 @@ public:
     NiceMock<MockLogging>               mock_log;
     AgentDetails                        agent_details;
     StrictMock<MockSocketIS>            mock_socket;
+    NiceMock<MockShellCmd>              mock_shell_cmd;
     I_Socket::socketFd                  server_socket = -1;
     Context                             ctx;
     ConfigComponent                     config;
@@ -82,7 +100,7 @@ TEST_F(HealthCheckerTest, clientConnection)
 
     EXPECT_CALL(
         mock_mainloop,
-        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, _, false)
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Health check probe listener startup", false)
     ).WillOnce(DoAll(SaveArg<1>(&handle_probe_routine), Return(0)));
 
     EXPECT_CALL(
@@ -95,11 +113,19 @@ TEST_F(HealthCheckerTest, clientConnection)
         addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
+    EXPECT_CALL(
+        mock_mainloop,
+        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+    ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
+
     int socket = 1;
     EXPECT_CALL(mock_socket, acceptSocket(1, false, ip)).WillOnce(Return(socket));
     EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(0));
     EXPECT_CALL(mock_socket, receiveData(_, 1, false)).WillOnce(Return(vector<char>()));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string("cp_nginx_gaia")));
+    EXPECT_CALL(mock_socket, writeData(_, response_buffer)).WillOnce(Return(true));
     EXPECT_CALL(mock_socket, closeSocket(socket)).Times(2);
+
     health_checker.init();
     handle_probe_routine();
     connection_handler_routine();
@@ -194,10 +220,17 @@ TEST_F(HealthCheckerTest, disablingAfterEnabled)
         addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
+    EXPECT_CALL(
+        mock_mainloop,
+        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+    ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
+
     int socket = 1;
     EXPECT_CALL(mock_socket, acceptSocket(1, false, ip)).WillOnce(Return(socket));
     EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(0));
     EXPECT_CALL(mock_socket, receiveData(_, 1, false)).WillOnce(Return(vector<char>()));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillOnce(Return(string("cp_nginx_gaia")));
+    EXPECT_CALL(mock_socket, writeData(_, response_buffer)).WillOnce(Return(true));
     EXPECT_CALL(mock_socket, closeSocket(socket)).Times(2);
     health_checker.init();
     handle_probe_routine();
@@ -242,11 +275,20 @@ TEST_F(HealthCheckerTest, changePortIpConfig)
         addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
+    EXPECT_CALL(
+        mock_mainloop,
+        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+    ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
+
     int socket = 1;
+    int socket2 = 0;
     EXPECT_CALL(mock_socket, acceptSocket(1, false, ip)).WillOnce(Return(socket));
     EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(0));
     EXPECT_CALL(mock_socket, receiveData(_, 1, false)).Times(2).WillRepeatedly(Return(vector<char>()));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).Times(2).WillRepeatedly(Return(string("cp_nginx_gaia")));
+    EXPECT_CALL(mock_socket, writeData(_, response_buffer)).Times(2).WillRepeatedly(Return(true));
     EXPECT_CALL(mock_socket, closeSocket(socket)).Times(2);
+    EXPECT_CALL(mock_socket, closeSocket(socket2));
     health_checker.init();
     handle_probe_routine();
     connection_handler_routine();
@@ -257,4 +299,45 @@ TEST_F(HealthCheckerTest, changePortIpConfig)
     uint new_port = 11111;
     setConfiguration(new_port, "Health Check", "Probe port");
     connection_handler_routine();
+}
+
+TEST_F(HealthCheckerTest, FailedHealthCheck)
+{
+    string ip = "1.2.3.4";
+    setConfiguration(ip, "Health Check", "Probe IP");
+    uint port = 11600;
+    setConfiguration(port, "Health Check", "Probe port");
+
+    EXPECT_CALL(
+        mock_mainloop,
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, _, false)
+    ).WillOnce(DoAll(SaveArg<1>(&handle_probe_routine), Return(0)));
+
+    EXPECT_CALL(
+        mock_socket,
+        genSocket(I_Socket::SocketType::TCP, false, true, _)
+    ).WillRepeatedly(Return(1));
+
+    EXPECT_CALL(
+        mock_mainloop,
+        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+    ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
+
+    EXPECT_CALL(
+        mock_mainloop,
+        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+    ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
+
+    int socket = 1;
+    EXPECT_CALL(mock_socket, acceptSocket(1, false, ip)).WillOnce(Return(socket));
+    EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(0));
+    EXPECT_CALL(mock_socket, receiveData(_, 1, false)).WillOnce(Return(vector<char>()));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillOnce(Return(string("")));
+    EXPECT_CALL(mock_socket, writeData(_, failure_response_buffer)).WillOnce(Return(true));
+    EXPECT_CALL(mock_socket, closeSocket(socket)).Times(2);
+    health_checker.init();
+    handle_probe_routine();
+    connection_handler_routine();
+    connection_handler_routine();
+    setConfiguration(false, "Health Check", "Probe enabled");
 }

@@ -78,6 +78,15 @@ void WaapConfigBase::readJSONByCereal(cereal::JSONInputArchive& ar)
         cereal::make_nvp("ruleName", m_ruleName)
     );
 
+    try {
+        std::string application_urls;
+        ar(cereal::make_nvp("applicationUrls", application_urls));
+        m_applicationUrls = split(application_urls, ';');
+    } catch (std::runtime_error& e) {
+        dbgWarning(D_WAAP) << "Error to load applicationUrls field in policy" << e.what();
+        ar.setNextName(nullptr);
+    }
+
     m_blockingLevel = blockingLevelBySensitivityStr(m_autonomousSecurityLevel);
 }
 

@@ -83,13 +83,13 @@ public:
             :
         status(raw_status)
     {
-        for (const pair<string, HealthCheckStatusReply> &single_stat : descriptions) {
+        for (const auto &single_stat : descriptions) {
             if (single_stat.second.getStatus() == HealthCheckStatus::HEALTHY) {
                 dbgTrace(D_HEALTH_CHECK_MANAGER) << "Ignoring healthy status reply. Comp name: " << single_stat.first;
                 continue;
             }
 
-            for (const pair<string, string> &status : single_stat.second.getExtendedStatus()) {
+            for (const auto &status : single_stat.second.getExtendedStatus()) {
                 errors.push_back(HealthCheckError(single_stat.first + " " + status.first, status.second));
             }
         }
@@ -190,7 +190,7 @@ private:
     {
         general_health_aggregated_status = HealthCheckStatus::HEALTHY;
 
-        for (const pair<string, HealthCheckStatusReply> &reply : all_comps_health_status) {
+        for (const auto &reply : all_comps_health_status) {
             HealthCheckStatus status = reply.second.getStatus();
 
             dbgTrace(D_HEALTH_CHECK_MANAGER)

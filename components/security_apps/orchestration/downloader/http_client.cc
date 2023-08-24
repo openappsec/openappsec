@@ -179,14 +179,13 @@ private:
 Maybe<void>
 HTTPClient::getFile(const URLParser &url, ofstream &out_file, bool auth_required)
 {
-    auto message = Singleton::Consume<I_Messaging>::by<HTTPClient>();
-    auto load_env_proxy = message->loadProxy();
+    auto proxy_config = Singleton::Consume<I_ProxyConfiguration>::by<HTTPClient>();
+    auto load_env_proxy = proxy_config->loadProxy();
     if (!load_env_proxy.ok()) return load_env_proxy;
 
     string token = "";
     if (auth_required) {
-        auto message = Singleton::Consume<I_Messaging>::by<HTTPClient>();
-        token = message->getAccessToken();
+        token = Singleton::Consume<I_AgentDetails>::by<HTTPClient>()->getAccessToken();
     }
 
     if (url.isOverSSL()) {
@@ -214,15 +213,15 @@ Maybe<void>
 HTTPClient::curlGetFileOverHttp(const URLParser &url, ofstream &out_file, const string &token)
 {
     try {
-        auto message = Singleton::Consume<I_Messaging>::by<HTTPClient>();
+        auto proxy_config = Singleton::Consume<I_ProxyConfiguration>::by<HTTPClient>();
 
         HttpCurl http_curl_client(
             url,
             out_file,
             token,
-            message->getProxyDomain(ProxyProtocol::HTTPS),
-            message->getProxyPort(ProxyProtocol::HTTPS),
-            message->getProxyCredentials(ProxyProtocol::HTTPS));
+            proxy_config->getProxyDomain(ProxyProtocol::HTTPS),
+            proxy_config->getProxyPort(ProxyProtocol::HTTPS),
+            proxy_config->getProxyCredentials(ProxyProtocol::HTTPS));
 
         http_curl_client.setCurlOpts();
         bool connection_ok = http_curl_client.connect();
@@ -247,12 +246,12 @@ Maybe<void>
 HTTPClient::getFileHttp(const URLParser &url, ofstream &out_file, const string &token)
 {
     try {
-        auto message = Singleton::Consume<I_Messaging>::by<HTTPClient>();
+        auto proxy_config = Singleton::Consume<I_ProxyConfiguration>::by<HTTPClient>();
         ClientConnection client_connection(
             url,
-            message->getProxyDomain(ProxyProtocol::HTTP),
-            message->getProxyPort(ProxyProtocol::HTTP),
-            message->getProxyCredentials(ProxyProtocol::HTTP),
+            proxy_config->getProxyDomain(ProxyProtocol::HTTP),
+            proxy_config->getProxyPort(ProxyProtocol::HTTP),
+            proxy_config->getProxyCredentials(ProxyProtocol::HTTP),
             token
         );
         auto handle_connect_res = client_connection.handleConnect();

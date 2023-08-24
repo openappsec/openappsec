@@ -94,7 +94,7 @@ public:
 
             int res = send(socket_int, data.data() + bytes_sent, data.size() - bytes_sent, MSG_NOSIGNAL);
             if (res <= 0) {
-                dbgWarning(D_SOCKET) << "Failed to send data";
+                dbgWarning(D_SOCKET) << "Failed to send data, Error: " << strerror(errno);
                 return false;
             }
 

@@ -26,9 +26,12 @@ using OrchData      = Maybe<std::string>;
 class I_UpdateCommunication
 {
 public:
+    virtual Maybe<void> sendPolicyVersion(
+        const std::string &policy_version,
+        const std::string &policy_versions
+    ) const = 0;
     virtual Maybe<void> authenticateAgent() = 0;
     virtual Maybe<void> getUpdate(CheckUpdateRequest &request) = 0;
-    virtual Maybe<void> sendPolicyVersion(const std::string &policy_version) const = 0;
     virtual Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) = 0;
     virtual void setAddressExtenesion(const std::string &extension) = 0;
 };

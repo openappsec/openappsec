@@ -26,6 +26,8 @@ public:
     MOCK_METHOD1(setProxy, void(const std::string&));
     MOCK_METHOD1(setAgentId, void(const std::string&));
     MOCK_CONST_METHOD0(getAgentId, std::string());
+    MOCK_METHOD0(loadAccessToken, void());
+    MOCK_CONST_METHOD0(getAccessToken, std::string());
 
     // OpenSSL
     MOCK_METHOD1(setOpenSSLDir, void(const std::string&));

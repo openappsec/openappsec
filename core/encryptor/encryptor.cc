@@ -17,6 +17,7 @@
 #include <vector>
 #include <string.h>
 #include <openssl/aes.h>
+#include <openssl/evp.h>
 
 #include "cpnano_base64/base64.h"
 #include "config.h"

@@ -75,9 +75,9 @@ public:
     }
 
     Maybe<void>
-    sendPolicyVersion(const string &policy_version) const override
+    sendPolicyVersion(const string &policy_version, const string &policy_versions) const override
     {
-        return i_update_comm_impl->sendPolicyVersion(policy_version);
+        return i_update_comm_impl->sendPolicyVersion(policy_version, policy_versions);
     }
 
     Maybe<string>

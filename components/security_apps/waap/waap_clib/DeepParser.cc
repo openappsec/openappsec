@@ -23,6 +23,7 @@
 #include "ParserHTML.h"
 #include "ParserBinary.h"
 #include "ParserMultipartForm.h"
+#include "ParserPercentEncode.h"
 #include "ParserDelimiter.h"
 #include "WaapAssetState.h"
 #include "Waf2Regex.h"
@@ -232,16 +233,16 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
 
     bool base64ParamFound = false;
     dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
-    std::string decoded_val, key;
+    std::string decoded_val, decoded_key;
     base64_variants base64_status = Waap::Util::b64Test (cur_val,
-            key,
+            decoded_key,
             decoded_val);
 
     dbgTrace(D_WAAP_DEEP_PARSER)
         << " status = "
         << base64_status
         << " key = "
-        << key
+        << decoded_key
         << " value = "
         << decoded_val;
 
@@ -255,7 +256,7 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
         if (decoded_val.size() > 0) {
             cur_val = decoded_val;
             base64ParamFound = true;
-            rc = onKv(key.c_str(), key.size(), cur_val.data(), cur_val.size(), flags);
+            rc = onKv(decoded_key.c_str(), decoded_key.size(), cur_val.data(), cur_val.size(), flags);
             dbgTrace(D_WAAP_DEEP_PARSER) << " rc = " << rc;
             if (rc != CONTINUE_PARSING) {
                 return rc;
@@ -283,11 +284,6 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
 
     // Calculate various statistics over currently processed value
     ValueStatsAnalyzer valueStats(cur_val_html_escaped);
-
-    if (valueStats.isUrlEncoded && !Waap::Util::testUrlBareUtf8Evasion(cur_val) &&
-            !Waap::Util::testUrlBadUtf8Evasion(cur_val)) {
-        Waap::Util::decodePercentEncoding(cur_val);
-    }
 
     if (valueStats.canSplitPipe || valueStats.canSplitSemicolon)
     {
@@ -373,14 +369,14 @@ int DeepParser::onKv(const char* k, size_t k_len, const char* v, size_t v_len, i
         return rc;
     }
 
-    if (Waap::Util::detectJSONasParameter(cur_val, key, decoded_val)) {
+    if (Waap::Util::detectJSONasParameter(cur_val, decoded_key, decoded_val)) {
         dbgTrace(D_WAAP_DEEP_PARSER)
             << " detectJSONasParameter was  true: key = "
-            << key
+            << decoded_key
             << " value = "
             << decoded_val;
 
-        rc = onKv(key.c_str(), key.size(), decoded_val.data(), decoded_val.size(), flags);
+        rc = onKv(decoded_key.c_str(), decoded_key.size(), decoded_val.data(), decoded_val.size(), flags);
 
         dbgTrace(D_WAAP_DEEP_PARSER) << " After processing potential JSON rc = " << rc;
         if (rc != CONTINUE_PARSING) {
@@ -746,6 +742,13 @@ void DeepParser::createInternalParser(const char *k, size_t k_len, std::string& 
     bool isUrlParamPayload,
     int flags)
 {
+    dbgTrace(D_WAAP_DEEP_PARSER)
+        << "Starting create parsers for value: >>>"
+        << cur_val
+        << "<<<";
+    dbgTrace(D_WAAP_DEEP_PARSER)
+        << "Stats:\n "
+        << valueStats.textual;
     bool isPipesType = false, isSemicolonType = false, isAsteriskType = false,
         isCommaType = false, isAmperType = false;
     bool isKeyValDelimited = false;
@@ -887,27 +890,36 @@ void DeepParser::createInternalParser(const char *k, size_t k_len, std::string& 
     // Note that this function must not add more than one parser
     // because only the topmost parser will run on the value.
     // Normally, DeepParser will take care of recursively run other parsers.
-    if (isHtmlType &&
+    if (valueStats.isUrlEncoded &&
+        !Waap::Util::testUrlBareUtf8Evasion(cur_val)) {
+        if (!valueStats.hasSpace &&
+            valueStats.hasCharAmpersand &&
+            valueStats.hasTwoCharsEqual &&
+            !isBinaryData()) {
+            dbgTrace(D_WAAP_DEEP_PARSER) << " Starting to parse an Url-encoded data";
+            m_parsersDeque.push_front(std::make_shared<BufferedParser<ParserUrlEncode>>(*this));
+        } else if (!Waap::Util::testUrlBadUtf8Evasion(cur_val)) {
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse an percent decoding";
+            m_parsersDeque.push_front(std::make_shared<BufferedParser<ParserPercentEncode>>(*this));
+        }
+    } else if (isHtmlType &&
         !isRefererPayload &&
-        !isUrlPayload)
-    {
+        !isUrlPayload) {
         // HTML detected
         dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse an HTML file";
         m_parsersDeque.push_front(std::make_shared<BufferedParser<ParserHTML>>(*this));
-    }
-    else if (cur_val.size() > 0 && signatures->php_serialize_identifier.hasMatch(cur_val))
-    {
+    } else if (cur_val.size() > 0 &&
+        signatures->php_serialize_identifier.hasMatch(cur_val)) {
         // PHP value detected
         dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse phpSerializedData";
         m_parsersDeque.push_front(std::make_shared<BufferedParser<PHPSerializedDataParser>>(*this));
-    }
-    else if (isPotentialGqlQuery && cur_val.size() > 0 && !validateJson(cur_val.data(), cur_val.size())) {
+    } else if (isPotentialGqlQuery &&
+        cur_val.size() > 0 &&
+        !validateJson(cur_val.data(), cur_val.size())) {
         // Graphql value detected
         dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse graphql";
         m_parsersDeque.push_front(std::make_shared<BufferedParser<ParserGql>>(*this));
-    }
-    else if (cur_val.length() > 0 && (cur_val[0] == '[' || cur_val[0] == '{'))
-    {
+    } else if (cur_val.length() > 0 && (cur_val[0] == '[' || cur_val[0] == '{')) {
         boost::smatch confulence_match;
 
         if (NGEN::Regex::regexMatch(__FILE__, __LINE__, cur_val, confulence_match, signatures->confluence_macro_re))

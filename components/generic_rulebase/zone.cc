@@ -156,7 +156,7 @@ Zone::contains(const Asset &asset)
 {
     QueryRequest request;
 
-    for (const pair<Context::MetaDataType, string> &main_attr : asset.getAttrs()) {
+    for (const auto &main_attr : asset.getAttrs()) {
         request.addCondition(Condition::EQUALS, contextKeyToString(main_attr.first), main_attr.second);
     }
 

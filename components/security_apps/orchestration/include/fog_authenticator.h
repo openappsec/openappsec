@@ -266,17 +266,25 @@ private:
     S2C_PARAM(std::string, agentId);
 };
 
-class PolicyVersionPatchRequest : public ClientRest
+class PolicyVersionPatchRequest
 {
 public:
-    PolicyVersionPatchRequest(const std::string &_policy_version)
+    PolicyVersionPatchRequest(const std::string &_policy_version, const std::string &_policy_versions)
             :
-        policy_version(_policy_version)
+        policy_version(_policy_version),
+        policy_versions(_policy_versions)
     {
     }
 
+    Maybe<std::string>
+    genJson() const
+    {
+        return "{ \"policyVersion\" :\"" + policy_version + "\", \"versions\": " + policy_versions + "}";
+    }
+
 private:
-    C2S_LABEL_PARAM(std::string, policy_version, "policyVersion");
+    std::string policy_version;
+    std::string policy_versions;
 };
 
 class TokenRequest : public ClientRest

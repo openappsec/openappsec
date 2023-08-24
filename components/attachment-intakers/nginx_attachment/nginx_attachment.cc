@@ -1762,8 +1762,8 @@ private:
             &did_fail_on_purpose
         )) {
             return genError(
-                "Failed to read the attachment's User ID or Group ID" +
-                did_fail_on_purpose ? "[Intentional Failure]" : ""
+                string("Failed to read the attachment's User ID or Group ID") +
+                (did_fail_on_purpose ? "[Intentional Failure]" : "")
             );
         }
 

@@ -48,7 +48,7 @@ HttpManagerOpaque::getCurrVerdict() const
 
     uint accepted_apps = 0;
     ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
-    for (const pair<string, ngx_http_cp_verdict_e> &app_verdic_pair : applications_verdicts) {
+    for (const auto &app_verdic_pair : applications_verdicts) {
         switch (app_verdic_pair.second) {
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP:
                 return app_verdic_pair.second;

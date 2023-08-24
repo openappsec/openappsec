@@ -287,7 +287,10 @@ MainloopComponent::Impl::run()
                 dbgTrace(D_MAINLOOP) <<
                     "Ending execution of corutine. Routine named: " <<
                     curr_iter->second.getRoutineName();
-                if (getTimer()->getMonotonicTime() > stop_time + large_exceeding) {
+                if (
+                    getTimer()->getMonotonicTime() > stop_time + large_exceeding &&
+                    curr_iter->second.getRoutineName() != "Orchestration runner"
+                ) {
                     dbgWarning(D_MAINLOOP)
                         << "Routine execution exceeded run time. Routine name: "
                         << curr_iter->second.getRoutineName();
@@ -532,9 +535,15 @@ MainloopComponent::Impl::stop(const RoutineMap::iterator &iter)
     if (iter->second.isActive()) {
         dbgDebug(D_MAINLOOP) << "Stoping the routine " << iter->first;
         do_stop = true;
+        auto env = Singleton::Consume<I_Environment>::by<MainloopComponent>()->saveEnvironment();
+        RoutineMap::iterator save_routine  = curr_iter;
+        curr_iter = iter;
         // We are going to let the routine run one last time, so it can throw an exception which will cause the stack
         // to clean up nicely.
-        iter->second.run();
+        // We swap curr_iter to in case the routine will print debug messages and we can see the real Routine id
+        curr_iter->second.run();
+        curr_iter = save_routine;
+        Singleton::Consume<I_Environment>::by<MainloopComponent>()->loadEnvironment(move(env));
         do_stop = false;
     }
 }

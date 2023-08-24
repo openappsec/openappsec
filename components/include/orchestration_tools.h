@@ -17,9 +17,16 @@
 #include <fstream>
 
 #include "i_orchestration_tools.h"
+#include "i_shell_cmd.h"
+#include "i_tenant_manager.h"
 #include "component.h"
 
-class OrchestrationTools : public Component, Singleton::Provide<I_OrchestrationTools>
+class OrchestrationTools
+        :
+    public Component,
+    Singleton::Provide<I_OrchestrationTools>,
+    Singleton::Consume<I_ShellCmd>,
+    Singleton::Consume<I_TenantManager>
 {
 public:
     OrchestrationTools();

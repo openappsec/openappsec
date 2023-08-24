@@ -31,16 +31,50 @@
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
-SHELL_CMD_HANDLER("canUpdateSDWanData", "cpsdwan get_data | jq -r .can_update_sdwan_data", checkCanUpdateSDWanData)
+SHELL_CMD_HANDLER(
+    "canUpdateSDWanData",
+    "CPSDWAN_NOLOGS=1 cpsdwan get_data -f can_update_sdwan_data | jq -r .can_update_sdwan_data",
+    checkCanUpdateSDWanData
+)
 SHELL_CMD_HANDLER(
     "isSdwanRunning",
     "[ -v $(pidof cp-nano-sdwan) ] && echo 'false' || echo 'true'",
     checkIfSdwanRunning)
+SHELL_CMD_HANDLER(
+    "IP Address",
+    "cpsdwan get_data | jq -r .main_ip",
+    getGWIPAddress
+)
+SHELL_CMD_HANDLER(
+    "Version",
+    "cat /etc/cp-release | grep -oE 'R[0-9]+(\\.[0-9]+)?'",
+    getGWVersion
+)
 #endif //gaia || smb
 
 #if defined(gaia)
 SHELL_CMD_HANDLER("hasSupportedBlade", "enabled_blades", checkHasSupportedBlade)
 SHELL_CMD_HANDLER("hasSamlPortal", "mpclient status saml-vpn", checkSamlPortal)
+SHELL_CMD_HANDLER(
+    "Hardware",
+    "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:appliance_type/ {print $3}' | head -n 1",
+    getGWHardware
+)
+SHELL_CMD_HANDLER(
+    "Application Control",
+    "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:application_firewall_blade/ {print $3}' | head -n 1",
+    getGWApplicationControlBlade
+)
+SHELL_CMD_HANDLER(
+    "URL Filtering",
+    "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:advanced_uf_blade/ {print $3}' | head -n 1",
+    getGWURLFilteringBlade
+)
+SHELL_CMD_HANDLER(
+    "IPSec VPN",
+    "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:VPN_1/ {print $3}' | head -n 1",
+    getGWIPSecVPNBlade
+)
 #endif //gaia
 
 #if defined(smb)
@@ -59,6 +93,21 @@ SHELL_CMD_HANDLER(
     "cpprod_util FwIsLocalMgmt",
     getSmbObjectName
 )
+SHELL_CMD_HANDLER(
+    "Application Control",
+    "cat $FWDIR/conf/active_blades.txt | grep -o 'APCL [01]' | cut -d ' ' -f2",
+    getSmbGWApplicationControlBlade
+)
+SHELL_CMD_HANDLER(
+    "URL Filtering",
+    "cat $FWDIR/conf/active_blades.txt | grep -o 'URLF [01]' | cut -d ' ' -f2",
+    getSmbGWURLFilteringBlade
+)
+SHELL_CMD_HANDLER(
+    "IPSec VPN",
+    "cat $FWDIR/conf/active_blades.txt | grep -o 'IPS [01]' | cut -d ' ' -f2",
+    getSmbGWIPSecVPNBlade
+)
 #endif//smb
 
 SHELL_CMD_OUTPUT("kernel_version", "uname -r")
@@ -73,17 +122,6 @@ SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
 #if defined(gaia)
 
 FILE_CONTENT_HANDLER("hasIdpConfigured", "/opt/CPSamlPortal/phpincs/spPortal/idpPolicy.xml", checkIDP)
-
-FILE_CONTENT_HANDLER(
-    "cpProductIntegrationMgmtParentObjectUid",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getMgmtParentObjUid
-)
-FILE_CONTENT_HANDLER(
-    "cpProductIntegrationMgmtParentObjectName",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getMgmtParentObjName
-)
 FILE_CONTENT_HANDLER(
     "cpProductIntegrationMgmtObjectName",
     (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",
@@ -101,37 +139,6 @@ FILE_CONTENT_HANDLER(
     (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",
     getMgmtObjUid
 )
-FILE_CONTENT_HANDLER(
-    "IP Address",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getGWIPAddress
-)
-FILE_CONTENT_HANDLER(
-    "Hardware",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getGWHardware
-)
-FILE_CONTENT_HANDLER(
-    "Application Control",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getGWApplicationControlBlade
-)
-FILE_CONTENT_HANDLER(
-    "URL Filtering",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getGWURLFilteringBlade
-)
-FILE_CONTENT_HANDLER(
-    "IPSec VPN",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getGWIPSecVPNBlade
-)
-FILE_CONTENT_HANDLER(
-    "Version",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myself_objects.C",
-    getGWVersion
-)
-
 #else // !(gaia || smb)
 FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 #endif // gaia || smb

@@ -38,9 +38,13 @@
 #include "exceptions_section.h"
 #include "rules_config_section.h"
 #include "trusted_sources_section.h"
+#include "new_appsec_linux_policy.h"
+#include "access_control_practice.h"
 
 enum class AnnotationTypes {
     PRACTICE,
+    THREAT_PREVENTION_PRACTICE,
+    ACCESS_CONTROL_PRACTICE,
     TRIGGER,
     EXCEPTION,
     WEB_USER_RES,
@@ -56,12 +60,18 @@ public:
         const AppSecWrapper &_waap,
         const TriggersWrapper &_trrigers,
         const RulesConfigWrapper &_rules,
+        const IntrusionPreventionWrapper &_ips,
+        const AccessControlRulebaseWrapper &_rate_limit,
+        const FileSecurityWrapper &_file_security,
         const ExceptionsWrapper &_exceptions,
         const std::string &_policy_version)
             :
         waap(_waap),
         trrigers(_trrigers),
         rules(_rules),
+        ips(_ips),
+        rate_limit(_rate_limit),
+        file_security(_file_security),
         exceptions(_exceptions),
         policy_version(_policy_version) {}
 
@@ -71,6 +81,9 @@ private:
     AppSecWrapper waap;
     TriggersWrapper trrigers;
     RulesConfigWrapper rules;
+    IntrusionPreventionWrapper  ips;
+    AccessControlRulebaseWrapper rate_limit;
+    FileSecurityWrapper file_security;
     ExceptionsWrapper exceptions;
     std::string policy_version;
 };
@@ -106,8 +119,9 @@ public:
         const std::string &local_appsec_policy_path
     );
 
+    template<class T, class R>
     std::string proccesMultipleAppsecPolicies(
-        const std::map<std::string, AppsecLinuxPolicy> &appsec_policies,
+        const std::map<std::string, T> &appsec_policies,
         const std::string &policy_version,
         const std::string &local_appsec_policy_path
     );
@@ -129,29 +143,104 @@ private:
 
     PolicyWrapper combineElementsToPolicy(const std::string &policy_version);
 
+    void
+    createIpsSections(
+        const std::string &asset_id,
+        const std::string &asset_name,
+        const std::string &practice_id,
+        const std::string &practice_name,
+        const std::string &source_identifier,
+        const std::string & context,
+        const V1beta2AppsecLinuxPolicy &policy,
+        std::map<AnnotationTypes, std::string> &rule_annotations
+    );
+
+    void
+    createFileSecuritySections(
+        const std::string &asset_id,
+        const std::string &asset_name,
+        const std::string &practice_id,
+        const std::string &practice_name,
+        const std::string & context,
+        const V1beta2AppsecLinuxPolicy &policy,
+        std::map<AnnotationTypes, std::string> &rule_annotations
+    );
+
+    void
+    createRateLimitSection(
+        const std::string &asset_name,
+        const std::string &url,
+        const std::string &uri,
+        const std::string &trigger_id,
+        const V1beta2AppsecLinuxPolicy &policy,
+        std::map<AnnotationTypes, std::string> &rule_annotations
+    );
+
+    void createWebAppSection(
+        const V1beta2AppsecLinuxPolicy &policy,
+        const RulesConfigRulebase& rule_config,
+        const std::string &practice_id, const std::string &full_url,
+        const std::string &default_mode,
+        std::map<AnnotationTypes, std::string> &rule_annotations
+    );
+
+    void
+    createThreatPreventionPracticeSections(
+        const std::string &asset_name,
+        const std::string &url,
+        const std::string &uri,
+        const std::string &default_mode,
+        const V1beta2AppsecLinuxPolicy &policy,
+        std::map<AnnotationTypes, std::string> &rule_annotations
+    );
+
+    template<class T, class R>
     void createPolicyElementsByRule(
-        const ParsedRule &rule,
-        const ParsedRule &default_rule,
-        const AppsecLinuxPolicy &policy,
+        const R &rule,
+        const R &default_rule,
+        const T &policy,
         const std::string &policy_name
     );
 
+    template<class T, class R>
     void createPolicyElements(
-        const std::vector<ParsedRule> &rules,
-        const ParsedRule &default_rule,
-        const AppsecLinuxPolicy &policy,
+        const std::vector<R> &rules,
+        const R &default_rule,
+        const T &policy,
         const std::string &policy_name
     );
 
-    void createAgentPolicyFromAppsecPolicy(const std::string &policy_name, const AppsecLinuxPolicy &appsec_policy);
+    template<class T, class R>
+    void createAgentPolicyFromAppsecPolicy(const std::string &policy_name, const T &appsec_policy);
 
     std::map<std::string, LogTriggerSection> log_triggers;
     std::map<std::string, WebUserResponseTriggerSection> web_user_res_triggers;
     std::map<std::string, InnerException> inner_exceptions;
     std::map<std::string, WebAppSection> web_apps;
     std::map<std::string, RulesConfigRulebase> rules_config;
+    std::map<std::string, IpsProtectionsSection> ips;
+    std::map<std::string, FileSecurityProtectionsSection> file_security;
+    std::map<std::string, RateLimitSection> rate_limit;
     std::map<std::string, UsersIdentifiersRulebase> users_identifiers;
     std::map<std::string, AppSecTrustedSources> trusted_sources;
 };
+
+template<class T, class R>
+std::string
+PolicyMakerUtils::proccesMultipleAppsecPolicies(
+    const std::map<std::string, T> &appsec_policies,
+    const std::string &policy_version,
+    const std::string &local_appsec_policy_path)
+{
+    for (const auto &appsec_policy : appsec_policies) {
+        createAgentPolicyFromAppsecPolicy<T, R>(appsec_policy.first, appsec_policy.second);
+    }
+
+    PolicyWrapper policy_wrapper = combineElementsToPolicy(policy_version);
+    return dumpPolicyToFile(
+        policy_wrapper,
+        local_appsec_policy_path
+    );
+}
 
 #endif // __POLICY_MAKER_UTILS_H__

@@ -117,13 +117,20 @@ FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
 }
 
 Maybe<void>
-FogCommunication::sendPolicyVersion(const string &policy_version) const
+FogCommunication::sendPolicyVersion(const string &policy_version, const string &policy_versions) const
 {
-    PolicyVersionPatchRequest request(policy_version);
+    PolicyVersionPatchRequest request(policy_version, policy_versions);
     auto fog_messaging = Singleton::Consume<I_Messaging>::by<FogCommunication>();
+    dbgTrace(D_ORCHESTRATOR)
+        << "Sending patch request to the fog. Policy version: "
+        << policy_version
+        << " , Policy versions: "
+        << policy_versions;
     if (fog_messaging->sendNoReplyObject(request, HTTPMethod::PATCH, fog_address_ex + "/agents")) {
-        dbgInfo(D_ORCHESTRATOR)
+        dbgTrace(D_ORCHESTRATOR)
             << "Patch request was sent successfully to the fog."
+            << " Policy versions: "
+            << policy_versions
             << " Policy version: "
             << policy_version;
         return Maybe<void>();

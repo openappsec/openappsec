@@ -49,7 +49,8 @@ static const map<string, Intelligence::ObjectType> object_names = {
     { "zone", Intelligence::ObjectType::ZONE },
     { "policyPackage", Intelligence::ObjectType::POLICY_PACKAGE },
     { "configuration", Intelligence::ObjectType::CONFIGURATION },
-    { "session", Intelligence::ObjectType::SESSION }
+    { "session", Intelligence::ObjectType::SESSION },
+    { "shortLived", Intelligence::ObjectType::SHORTLIVED }
 };
 
 class InvalidationRegistration
@@ -128,7 +129,9 @@ public:
     void
     performCallBacks(const Invalidation &invalidation) const override
     {
+        dbgDebug(D_INTELLIGENCE) << "Looking for callbacks for invalidation " << invalidation.genObject();
         for (auto &registed_invalidation : callbacks) {
+            dbgTrace(D_INTELLIGENCE) << "Checking against: " << registed_invalidation.second.first.genObject();
             performCallBacksImpl(invalidation, registed_invalidation.second);
         }
     }

@@ -22,8 +22,8 @@
 #include <memory>
 #include <iostream>
 
-#include "debug.h"
 #include "time_print.h"
+#include "debug.h"
 #include "singleton.h"
 #include "context.h"
 #include "table/table_helpers.h"

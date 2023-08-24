@@ -31,7 +31,7 @@ public:
     MOCK_METHOD1(getUpdate, Maybe<void>(CheckUpdateRequest &));
     MOCK_METHOD1(downloadAttributeFile, Maybe<std::string>(const GetResourceFile &));
     MOCK_METHOD1(setAddressExtenesion, void(const std::string &));
-    MOCK_CONST_METHOD1(sendPolicyVersion, Maybe<void>(const std::string &));
+    MOCK_CONST_METHOD2(sendPolicyVersion, Maybe<void>(const std::string &, const std::string &));
 };
 
 #endif // __MOCK_UPDATE_COMMUNICATION_H__

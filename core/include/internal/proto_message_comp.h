@@ -26,6 +26,7 @@
 #include "i_rest_api.h"
 #include "i_messaging_buffer.h"
 #include "i_shell_cmd.h"
+#include "i_proxy_configuration.h"
 #include "component.h"
 
 class ProtoMessageComp
@@ -38,7 +39,8 @@ class ProtoMessageComp
     Singleton::Consume<I_Encryptor>,
     Singleton::Consume<I_Environment>,
     Singleton::Consume<I_MessagingBuffer>,
-    Singleton::Consume<I_ShellCmd>
+    Singleton::Consume<I_ShellCmd>,
+    Singleton::Consume<I_ProxyConfiguration>
 {
 public:
     ProtoMessageComp();

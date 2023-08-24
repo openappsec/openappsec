@@ -95,6 +95,7 @@ private:
     std::shared_ptr<Waap::TrustedSources::TrustedSourcesParameter> m_trustedSourcesPolicy;
     std::shared_ptr<Waap::Parameters::WaapParameters> m_waapParameters;
     std::shared_ptr<Waap::OpenRedirect::Policy> m_openRedirectPolicy;
+    std::vector<std::string> m_applicationUrls;
     std::shared_ptr<Waap::ErrorDisclosure::Policy> m_errorDisclosurePolicy;
     std::string m_schemaValidationPoicyStatusMessage;
     std::shared_ptr<Waap::Csrf::Policy> m_csrfPolicy;

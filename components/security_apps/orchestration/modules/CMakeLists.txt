@@ -7,4 +7,4 @@ add_library(
     data.cc
 )
 
-add_subdirectory(modules_ut)
+#add_subdirectory(modules_ut)

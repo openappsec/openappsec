@@ -621,7 +621,7 @@ public:
             if (streams.size() == 0) streams.push_back(DebugStreamConf(default_output_stream));
 
             for (DebugStreamConf &stream : streams) {
-                for (const pair<string, string> &flag : new_flags) {
+                for (const auto &flag : new_flags) {
                     stream.streams[flag.first] = flag.second;
                 }
             }
@@ -634,7 +634,7 @@ public:
             if (stream.streams["Output"] != output) continue;
 
             does_stream_exist = true;
-            for (const pair<string, string> &flag : new_flags) {
+            for (const auto &flag : new_flags) {
                 stream.streams[flag.first] = flag.second;
             }
         }
@@ -648,7 +648,7 @@ public:
     {
         if (output == "") {
             for (DebugStreamConf &stream : streams) {
-                for (const string flag : flags) {
+                for (const string &flag : flags) {
                     stream.streams.erase(flag);
                 }
             }
@@ -658,7 +658,7 @@ public:
         for (DebugStreamConf &stream : streams) {
             if (stream.streams["Output"] != output) continue;
 
-            for (const string flag : flags) {
+            for (const string &flag : flags) {
                 stream.streams.erase(flag);
             }
         }
@@ -692,7 +692,7 @@ public:
 
             output_stream = "Output: " + output_stream;
             debug_map.insert({ "context: " + context, output_stream });
-            for (const pair<string, string> &flag : stream.streams) {
+            for (const auto &flag : stream.streams) {
                 if (flag.first == "Output") continue;
                 debug_map.insert({ output_stream, flag.first + " = " + flag.second });
             }
@@ -745,7 +745,7 @@ public:
     addDebug(const map<string, string> &new_flags)
     {
         kernel_debug.front().erase("All");
-        for (const pair<string, string> &flag : new_flags) {
+        for (const auto &flag : new_flags) {
             kernel_debug.front()[flag.first] = flag.second;
         }
     }
@@ -758,7 +758,7 @@ public:
         multimap<string, string> debug_map;
         for (const map<string, string> &stream : kernel_debug) {
             if (stream.find("All") != stream.end() && stream.find("All")->second == "None") continue;
-            for (const pair<string, string> &flag : stream) {
+            for (const auto &flag : stream) {
                 debug_map.insert({ "kernel debug", flag.first + " = " + flag.second });
             }
         }
@@ -791,7 +791,7 @@ public:
         DebugLevel min_level = max_debug_level;
         for (const map<string, string> &stream : kernel_debug) {
             if (stream.find("ALL") != stream.end() && stream.find("ALL")->second == "None") continue;
-            for (const pair<string, string> &flag : stream) {
+            for (const auto &flag : stream) {
                 if (find(flags_to_ignore.begin(), flags_to_ignore.end(), flag.first) != flags_to_ignore.end()) {
                     continue;
                 }
@@ -1048,13 +1048,13 @@ DebugCli::show()
         const vector<DebugConf> &debug_conf = service.second;
         for (const DebugConf &debug : debug_conf) {
             multimap<string, string> debug_sub_map = debug.mapDebugConf(getServiceString(service.first));
-            for (const pair<string, string> &debug_map_section : debug_sub_map) {
+            for (const auto &debug_map_section : debug_sub_map) {
                 debug_map.insert(debug_map_section);
             }
         }
         if (service.first == Service::ACCESS_CONTROL) {
             multimap<string, string> debug_sub_map = kernel_debug_conf.mapDebugConf(getServiceString(service.first));
-            for (const pair<string, string> &debug_map_section : debug_sub_map) {
+            for (const auto &debug_map_section : debug_sub_map) {
                 debug_map.insert(debug_map_section);
             }
         }

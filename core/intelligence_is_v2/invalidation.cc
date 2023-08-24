@@ -106,7 +106,8 @@ static const map<Intelligence::ObjectType, string> convertObjectType = {
     { Intelligence::ObjectType::ZONE, "zone" },
     { Intelligence::ObjectType::POLICY_PACKAGE, "policyPackage" },
     { Intelligence::ObjectType::CONFIGURATION, "configuration" },
-    { Intelligence::ObjectType::SESSION, "session" }
+    { Intelligence::ObjectType::SESSION, "session" },
+    { Intelligence::ObjectType::SHORTLIVED, "shortLived" }
 };
 
 Maybe<string>

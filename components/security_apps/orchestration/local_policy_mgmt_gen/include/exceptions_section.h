@@ -24,6 +24,7 @@
 #include "debug.h"
 #include "rest.h"
 #include "local_policy_common.h"
+#include "new_exceptions.h"
 
 class AppsecExceptionSpec
 {
@@ -62,6 +63,7 @@ class ExceptionMatch
 public:
     ExceptionMatch() {}
     ExceptionMatch(const AppsecExceptionSpec &parsed_exception);
+    ExceptionMatch(const NewAppsecException &parsed_exception);
     ExceptionMatch(const std::string &_key, const std::vector<std::string> &_value)
             :
         match_type(MatchType::Condition),

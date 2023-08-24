@@ -119,6 +119,10 @@ public:
         return !(*this > other);
     }
 
+    Maybe<std::string> calculateSubnetStart(int subnet_value);
+
+    Maybe<std::string> calculateSubnetEnd(int subnet_value);
+
     // Checks if the IP address is in the range [left, right] inclusive.
     // All IPAddrs must be of the same kind, or the result is false.
     bool isInRange(const IPAddr &left, const IPAddr &right) const;
@@ -149,6 +153,14 @@ private:
     // Additional fields to be used by ConnKey class and placed here to save space, IPAddr class should ignore them.
     IPProto proto;
     PortNumber port;
+
+    Maybe<std::string> calculateSubnetStartV4(int subnet_value);
+
+    Maybe<std::string> calculateSubnetEndV4(int subnet_value);
+
+    Maybe<std::string> calculateSubnetStartV6(int subnet_value);
+
+    Maybe<std::string> calculateSubnetEndV6(int subnet_value);
 };
 
 namespace ConnKeyUtil {
@@ -171,12 +183,30 @@ public:
     static Maybe<CustomRange<RangeType>>
     createRange(const std::string &maybe_range)
     {
-        std::string start_range = maybe_range.substr(0, maybe_range.find("-"));
-        std::string end_range = maybe_range.substr(maybe_range.find("-") + 1);
-        if (end_range.empty()) {
-            end_range = start_range;
-        }
+        std::string start_range;
+        std::string end_range;
+        size_t delimiter_position;
 
+        if ((delimiter_position = maybe_range.find("-")) != std::string::npos) {
+            // If it's a range.
+            start_range = maybe_range.substr(0, delimiter_position);
+            end_range = maybe_range.substr(delimiter_position + 1);
+            if (end_range.empty()) {
+                end_range = start_range;
+            }
+        } else if ((delimiter_position = maybe_range.find("/")) != std::string::npos) {
+            // If it's a subnet.
+            IPAddr ip;
+            ConnKeyUtil::fromString((maybe_range.substr(0, delimiter_position)), ip);
+            std::string subnet = maybe_range.substr(delimiter_position + 1);
+            int subnet_value = std::stoi(subnet);
+            start_range = ip.calculateSubnetStart(subnet_value).unpack();
+            end_range = ip.calculateSubnetEnd(subnet_value).unpack();
+        } else {
+            // If it's a single IP.
+            start_range = maybe_range;
+            end_range = maybe_range;
+        }
         RangeType _start;
         if (!ConnKeyUtil::fromString(start_range, _start)) {
             return genError("Error in start value of custom range, value: " + start_range);
@@ -188,7 +218,7 @@ public:
         }
 
         if (_start > _end) {
-                return genError("Error in creating custom range, invalid range: " + maybe_range);
+            return genError("Error in creating custom range, invalid range: " + maybe_range);
         }
 
         return CustomRange(_start, _end);

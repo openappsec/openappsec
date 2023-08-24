@@ -247,6 +247,33 @@ private:
         );
     }
 
+    bool
+    nginxContainerIsRunning()
+    {
+        static const string nginx_container_name = "cp_nginx_gaia";
+        static const string cmd_running =
+            "docker ps --filter name=" + nginx_container_name + " --filter status=running";
+        dbgTrace(D_HEALTH_CHECK) << "Checking if the container is running with the commmand: " << cmd_running;
+
+        auto maybe_result = Singleton::Consume<I_ShellCmd>::by<HealthChecker>()->getExecOutput(cmd_running);
+        if (!maybe_result.ok()) {
+            dbgWarning(D_HEALTH_CHECK)
+                << "Unable to get status of nginx container. return false and failing health check.";
+            return false;
+        }
+
+        return (*maybe_result).find(nginx_container_name) != string::npos;
+
+    }
+
+    void
+    closeCurrentSocket(I_Socket::socketFd fd, I_MainLoop::RoutineID curr_routine) {
+        dbgDebug(D_HEALTH_CHECK) << "Connection with client closed, client fd: " << fd;
+        open_connections_counter--;
+        i_socket->closeSocket(fd);
+        client_sockets_routines.erase(curr_routine);
+    }
+
     void
     handleConnection()
     {
@@ -254,7 +281,7 @@ private:
             dbgDebug(D_HEALTH_CHECK)
                 << "Cannot serve new client, reached maximun open connections bound which is:"
                 << open_connections_counter
-                << "maximun allowed: "
+                << "maximum allowed: "
                 << max_connections;
             return;
         }
@@ -276,21 +303,48 @@ private:
 
         dbgDebug(D_HEALTH_CHECK) << "Successfully accepted client, client fd: " << new_client_socket;
         open_connections_counter++;
-        auto curr_routine = i_mainloop->addFileRoutine(
+        auto curr_routine = i_mainloop->addOneTimeRoutine(
             I_MainLoop::RoutineType::RealTime,
-            new_client_socket,
             [this] ()
             {
                 auto curr_routine_id = i_mainloop->getCurrentRoutineId().unpack();
                 auto curr_client_socket = client_sockets_routines[curr_routine_id];
                 auto data_recieved = i_socket->receiveData(curr_client_socket, sizeof(uint8_t), false);
                 if (!data_recieved.ok()) {
-                    dbgDebug(D_HEALTH_CHECK) << "Connection with client closed, client fd: " << curr_client_socket;
-                    open_connections_counter--;
-                    i_socket->closeSocket(curr_client_socket);
-                    client_sockets_routines.erase(curr_routine_id);
+                    closeCurrentSocket(curr_client_socket, curr_routine_id);
                     i_mainloop->stop();
                 }
+
+                static const string success_response =
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Length: 25\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "\r\n"
+                    "health check successful\r\n";
+                static const vector<char> success_response_buffer(success_response.begin(), success_response.end());
+
+                static const string failure_response =
+                    "HTTP/1.1 500 Internal Server Error\r\n"
+                    "Content-Length: 21\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "\r\n"
+                    "health check failed\r\n";
+                static const vector<char> failure_response_buffer(failure_response.begin(), failure_response.end());
+
+                if (nginxContainerIsRunning()) {
+                    dbgDebug(D_HEALTH_CHECK)
+                    << "nginx conatiner is running, returning the following response: "
+                    << success_response;
+                    i_socket->writeData(curr_client_socket, success_response_buffer);
+                    closeCurrentSocket(curr_client_socket, curr_routine_id);
+                    return;
+                }
+
+                dbgDebug(D_HEALTH_CHECK)
+                    << "nginx conatiner is not running, returning the following response: "
+                    << failure_response;
+                i_socket->writeData(curr_client_socket, failure_response_buffer);
+                closeCurrentSocket(curr_client_socket, curr_routine_id);
             },
             "Health check probe connection handler",
             true

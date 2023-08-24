@@ -74,17 +74,7 @@ public:
         ).WillOnce(Return(true));
 
         doEncrypt();
-        EXPECT_CALL(
-            mock_shell_cmd,
-            getExecOutput(
-                "ls /etc/cp/conf/"
-                "| grep tenant "
-                "| cut -d '_' -f 2,4 "
-                "| sort --unique "
-                "| awk -F '_' '{ printf \"%s %s \",$1,$2 }'",
-                _,
-                _
-        )).WillOnce(Return(Maybe<string>(string(""))));
+        EXPECT_CALL(mock_orchestration_tools, loadTenantsFromDir(_)).Times(1);
         orchestration_comp.init();
     }
 
@@ -446,7 +436,7 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "",
             false
         )
-    ).WillOnce(Return(true));
+    ).WillOnce(Return(Maybe<void>()));
 
     EXPECT_CALL(
         mock_service_controller,
@@ -458,7 +448,7 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "2611",
             false
         )
-    ).WillOnce(Return(true));
+    ).WillOnce(Return(Maybe<void>()));
 
     EXPECT_CALL(
         mock_service_controller,
@@ -470,7 +460,7 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             "2311",
             true
         )
-    ).WillOnce(Return(true));
+    ).WillOnce(Return(Maybe<void>()));
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
         .WillOnce(
@@ -494,12 +484,10 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
         mock_shell_cmd,
         getExecOutput(_, _, _)
     ).WillRepeatedly(Return(string("daniel\n1\n")));
+    EXPECT_CALL(mock_orchestration_tools, deleteVirtualTenantProfileFiles("321321", "123123", "/etc/cp/conf/"))
+    .Times(1);
     try {
         runRoutine();
     } catch (const invalid_argument& e) {}
-    string debug_str_folder = "Delete virtual policy folder : /etc/cp/conf/tenant_321321_profile_123123";
-    string debug_str_settings = "Delete settings file /etc/cp/conf/tenant_321321_profile_123123_settings.json";
-    EXPECT_THAT(debug_output.str(), HasSubstr(debug_str_folder));
-    EXPECT_THAT(debug_output.str(), HasSubstr(debug_str_settings));
     Debug::setNewDefaultStdout(&cout);
 }
