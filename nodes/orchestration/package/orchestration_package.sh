@@ -40,7 +40,6 @@ EGG_MODE=
 ORCHESTRATION_CONF_FILE="${CONF_PATH}/cp-nano-orchestration-conf.json"
 ORCHESTRATION_DEBUG_CONF_FILE="${CONF_PATH}/cp-nano-orchestration-debug-conf.json"
 DEFAULT_SETTINGS_PATH="${CONF_PATH}/settings.json"
-var_default_fog_address="https://i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="https://inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="https://inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="https://inext-agents-aus1.cloud.ngen.checkpoint.com"
@@ -346,7 +345,7 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             elif [ "${var_token#"$gem_prefix"}" != "${var_token}" ] || [ "${var_token#"$gem_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_gem_fog_address"
             else
-                var_fog_address="$var_default_fog_address"
+                echo "Failed to get fog address from token: ${var_token} - check if token is legal"
             fi
         fi
     fi

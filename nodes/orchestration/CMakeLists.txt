@@ -119,7 +119,7 @@ execute_process (
 install(FILES ${ssl2} DESTINATION orchestration/lib)
 
 execute_process (
-	COMMAND bash -c "find /usr/lib -name \"libcurl.so\" | awk '{printf $1\";\"}'"
+	COMMAND bash -c "find /usr/lib -name \"libcurl.so*\" | awk '{printf $1\";\"}'"
 	OUTPUT_VARIABLE curl
 )
 install(FILES ${curl} DESTINATION orchestration/lib)
