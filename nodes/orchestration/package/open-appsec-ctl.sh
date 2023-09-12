@@ -809,6 +809,13 @@ run_health_check() # Initials - rhc
     rm -rf "${rhc_health_check_tmp_file_path}"
 }
 
+print_link_information() # Initials - pli
+{
+    echo ""
+    echo "For release notes and known limitations check: https://docs.openappsec.io/release-notes"
+    echo "For troubleshooting and support: https://openappsec.io/support"
+}
+
 should_add_color_to_status() # Initials - sacts
 {
     sacts_ps_cmd="ps aux"
@@ -1238,7 +1245,7 @@ run_ai() # Initials - ra
     done
 
     if [ "$ra_upload_to_fog" = "false" ]; then
-        printf "Should upload to Checkpoints' cloud? [y/n] " && read -r ra_should_upload
+        printf "Would you like to upload the file to be inspected by the product support team? [y/n] " && read -r ra_should_upload
         case $ra_should_upload in
         [Yy] | [Yy][Ee][Ss]) ra_upload_to_fog=true ;;
         *) ;;
@@ -1316,6 +1323,7 @@ run_ai() # Initials - ra
             upload_ai "$ra_cp_info_path" "$ra_token" "$ra_fog_address" "$ra_tenant_id" "$ra_agent_id" "$ra_current_time" "$ra_file_dir"
         fi
         echo "File upload to cloud: Succeeded"
+        echo "Reference Id: " "$ra_tenant_id"/"$ra_agent_id"/"$ra_current_time"
     else
         echo "ignore uploading file to the Fog."
     fi
@@ -1653,6 +1661,7 @@ run() # Initials - r
             shift
             run_health_check "${@}"
         fi
+        print_link_information
     elif [ "--start-agent" = "$1" ] || [ "-r" = "$1" ]; then
         record_command $@
         run_start_agent
