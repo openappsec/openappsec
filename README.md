@@ -18,6 +18,8 @@ Every request to the application goes through two phases:
 
 2. If the request is identified as a valid and legitimate request the request is allowed, and forwarded to your application. If, however, the request is considered suspicious or high risk, it then gets evaluated by the unsupervised model, which was trained in your specific environment. This model uses information such as the URL and the users involved to create a final confidence score that determines whether the request should be allowed or blocked.
 
+![image](https://github.com/openappsec/openappsec/assets/114033741/f32f1c99-9c45-4d21-aa85-61408a16a18e)
+
 ##  Machine Learning models
 
 open-appsec uses two models:
@@ -35,6 +37,7 @@ open-appsec uses two models:
 * [Video Tutorials](https://www.openappsec.io/tutorials)
 * [Live Playgrounds](https://www.openappsec.io/playground)
 
+![image](https://github.com/openappsec/openappsec/assets/114033741/9f70f1c7-a672-40d5-a8f7-bacf5a8fd1eb)
 
 # open-appsec Installation
 
