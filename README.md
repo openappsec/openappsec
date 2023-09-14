@@ -20,26 +20,16 @@ Every request to the application goes through two phases:
 
 ![image](https://github.com/openappsec/openappsec/assets/114033741/f32f1c99-9c45-4d21-aa85-61408a16a18e)
 
-##  Machine Learning models
 
-open-appsec uses two models:
+open-appsec uses two machine learning models:
 
 1. A supervised model that was trained offline based on millions of requests, both malicious and benign.
     
-    * A basic model is provided as part of this repository. It is recommended for use in Monitor-Only and Test environments.
-    * An advanced model which is more accurate and recommended for Production use can be downloaded from the [open-appsec portal](https://my.openappsec.io)->User Menu->Download advanced ML model. This model updates from time to time and you will get an email when these updates happen.
+    * A **basic model** is provided as part of this repository. It is recommended for use in Monitor-Only and Test environments.
+    * An **advanced model** which is more accurate and **recommended for Production** use can be downloaded from the [open-appsec portal](https://my.openappsec.io)->User Menu->Download advanced ML model. This model updates from time to time and you will get an email when these updates happen.
 
 2. An unsupervised model that is being built in real time in the protected environment. This model uses traffic patterns specific to the environment.
 
-# Resources
-* [Project Website](https://openappsec.io)
-* [Offical Documentation](https://docs.openappsec.io/)
-* [Video Tutorials](https://www.openappsec.io/tutorials)
-
-## Deployment Playgrounds (Virtual labs)
-You can experiment with open-appsec using [Playgrounds](https://www.openappsec.io/playground)
-
-![image](https://github.com/openappsec/openappsec/assets/114033741/14d35d69-4577-48fc-ae87-ea344888e94d)
 
 # Management
 
@@ -52,7 +42,17 @@ open-appsec Web UI:
 ![image](https://github.com/openappsec/openappsec/assets/114033741/22d99379-df52-45c8-984f-1b820635f3b9)
 
 
-# open-appsec Installation
+## Deployment Playgrounds (Virtual labs)
+You can experiment with open-appsec using [Playgrounds](https://www.openappsec.io/playground)
+
+![image](https://github.com/openappsec/openappsec/assets/114033741/14d35d69-4577-48fc-ae87-ea344888e94d)
+
+# Resources
+* [Project Website](https://openappsec.io)
+* [Offical Documentation](https://docs.openappsec.io/)
+* [Video Tutorials](https://www.openappsec.io/tutorials)
+
+# open-appsec Installation (5 minutes)
 
 For Kubernetes (NGINX Ingress) using the installer:
 
