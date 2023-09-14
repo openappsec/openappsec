@@ -35,9 +35,22 @@ open-appsec uses two models:
 * [Project Website](https://openappsec.io)
 * [Offical Documentation](https://docs.openappsec.io/)
 * [Video Tutorials](https://www.openappsec.io/tutorials)
-* [Live Playgrounds](https://www.openappsec.io/playground)
 
-![image](https://github.com/openappsec/openappsec/assets/114033741/9f70f1c7-a672-40d5-a8f7-bacf5a8fd1eb)
+## Deployment Playgrounds (Virtual labs)
+You can experiment with open-appsec using [Playgrounds](https://www.openappsec.io/playground)
+
+![image](https://github.com/openappsec/openappsec/assets/114033741/14d35d69-4577-48fc-ae87-ea344888e94d)
+
+# Management
+
+open-appsec can be managed using multiple methods:
+* [Declarative configuration files](https://docs.openappsec.io/getting-started/getting-started)
+* [Kubernetes Helm Charts and annotations](https://docs.openappsec.io/getting-started/getting-started)
+* [Using SaaS Web Management](https://docs.openappsec.io/getting-started/using-the-web-ui-saas)
+
+open-appsec Web UI:
+![image](https://github.com/openappsec/openappsec/assets/114033741/22d99379-df52-45c8-984f-1b820635f3b9)
+
 
 # open-appsec Installation
 
