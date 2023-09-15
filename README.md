@@ -52,7 +52,7 @@ You can experiment with open-appsec using [Playgrounds](https://www.openappsec.i
 * [Offical Documentation](https://docs.openappsec.io/)
 * [Video Tutorials](https://www.openappsec.io/tutorials)
 
-# open-appsec Installation (5 minutes)
+# Installation
 
 For Kubernetes (NGINX Ingress) using the installer:
 
