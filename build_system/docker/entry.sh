@@ -58,6 +58,10 @@ fi
 
 /nano-service-installers/$ORCHESTRATION_INSTALLATION_SCRIPT --install $orchestration_service_installation_flags
 
+if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+    /etc/cp/orchestration/k8s-check-update-listener.sh &
+fi
+
 /nano-service-installers/$ATTACHMENT_REGISTRATION_SERVICE --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
 
