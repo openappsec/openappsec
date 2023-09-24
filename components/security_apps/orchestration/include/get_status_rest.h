@@ -54,6 +54,7 @@ public:
         last_update = i_orch_status->getUpdateTime();
         last_update_status = i_orch_status->getUpdateStatus();
         policy_version = i_orch_status->getPolicyVersion();
+        waap_model_version = i_orch_status->getWaapModelVersion();
         last_policy_update = i_orch_status->getLastPolicyUpdate();
         last_manifest_update = i_orch_status->getLastManifestUpdate();
         last_settings_update = i_orch_status->getLastSettingsUpdate();
@@ -72,6 +73,7 @@ private:
     S2C_LABEL_PARAM(std::string, last_update, "Last update");
     S2C_LABEL_PARAM(std::string, last_update_status, "Last update status");
     S2C_LABEL_PARAM(std::string, policy_version, "Policy version");
+    S2C_LABEL_PARAM(std::string, waap_model_version, "AI model version");
     S2C_LABEL_PARAM(std::string, last_policy_update, "Last policy update");
     S2C_LABEL_PARAM(std::string, last_manifest_update, "Last manifest update");
     S2C_LABEL_PARAM(std::string, last_settings_update, "Last settings update");

@@ -40,6 +40,7 @@ EGG_MODE=
 ORCHESTRATION_CONF_FILE="${CONF_PATH}/cp-nano-orchestration-conf.json"
 ORCHESTRATION_DEBUG_CONF_FILE="${CONF_PATH}/cp-nano-orchestration-debug-conf.json"
 DEFAULT_SETTINGS_PATH="${CONF_PATH}/settings.json"
+var_default_fog_address="https://i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="https://inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="https://inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="https://inext-agents-aus1.cloud.ngen.checkpoint.com"
@@ -345,7 +346,7 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             elif [ "${var_token#"$gem_prefix"}" != "${var_token}" ] || [ "${var_token#"$gem_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_gem_fog_address"
             else
-                echo "Failed to get fog address from token: ${var_token} - check if token is legal"
+                var_fog_address="$var_default_fog_address"
             fi
         fi
     fi
@@ -437,6 +438,28 @@ cp_copy() # Initials - cc
     status=$?
     if ! [ $status -eq 0 ]; then DEST_AFTER_COPY="destination '${DEST}' does not exist."; fi
     cp_print "Destination md5, after the copy:\n$DEST_AFTER_COPY"
+}
+
+update_cloudguard_appsec_manifest()
+{
+    if [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; then
+        return
+    fi
+
+    selected_cloudguard_appsec_manifest_path="/tmp/cloudguard_appsec_manifest.json"
+    if [ "${DOCKER_RPM_ENABLED}" = "false" ]; then
+        selected_cloudguard_appsec_manifest_path="/tmp/self_managed_cloudguard_appsec_manifest.json"
+    fi
+
+    if [ ! -f "$selected_cloudguard_appsec_manifest_path" ]; then
+        return
+    fi
+
+    cloudguard_appsec_manifest_path="${selected_cloudguard_appsec_manifest_path}.used"
+    mv "$selected_cloudguard_appsec_manifest_path" "$cloudguard_appsec_manifest_path"
+    fog_host=$(echo "$var_fog_address" | sed 's/https\?:\/\///')
+    fog_host=${fog_host%/}
+    sed "s/namespace/${fog_host}/g" ${cloudguard_appsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
 }
 
 install_watchdog_gaia()
@@ -906,6 +929,8 @@ install_orchestration()
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${CONF_PATH}"
     cp_exec "mkdir -p ${LOG_FILE_PATH}/${LOG_PATH}"
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${DATA_PATH}"
+
+    update_cloudguard_appsec_manifest
 
     if [ ! -f ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH} ]; then
         echo "{\"agentSettings\": []}" >  ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH}

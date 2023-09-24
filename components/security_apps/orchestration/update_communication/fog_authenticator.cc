@@ -187,6 +187,8 @@ FogAuthenticator::registerAgent(
         request << make_pair("managedMode", "management");
     }
 
+    request << make_pair("userEdition", getUserEdition());
+
     if (details_resolver->isReverseProxy()) {
         request << make_pair("reverse_proxy", "true");
     }
@@ -206,6 +208,9 @@ FogAuthenticator::registerAgent(
 #if defined(gaia) || defined(smb)
     if (details_resolver->compareCheckpointVersion(8100, std::greater_equal<int>())) {
         request << make_pair("isCheckpointVersionGER81", "true");
+    }
+    if (details_resolver->compareCheckpointVersion(8200, std::greater_equal<int>())) {
+        request << make_pair("isCheckpointVersionGER82", "true");
     }
 #endif // gaia || smb
 

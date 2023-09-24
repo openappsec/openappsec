@@ -1,8 +1,13 @@
 #include "orchestration_tools.h"
 
 #include "cptest.h"
+#include "config_component.h"
 #include "mock/mock_tenant_manager.h"
 #include "mock/mock_shell_cmd.h"
+#include "mock/mock_messaging.h"
+#include "mock/mock_env_details.h"
+#include "mock/mock_agent_details.h"
+#include "mock/mock_mainloop.h"
 
 using namespace std;
 using namespace testing;
@@ -12,6 +17,17 @@ class OrchestrationToolsTest : public Test
 public:
     OrchestrationToolsTest() : manifest_file("manifest.json")
     {
+    }
+
+    string
+    getResource(const string &path)
+    {
+        string resource_path = cptestFnameInSrcDir(path);
+        ifstream resource_file(resource_path);
+        EXPECT_TRUE(resource_file.is_open());
+        stringstream resource_file_content;
+        resource_file_content << resource_file.rdbuf();
+        return resource_file_content.str();
     }
 
     void
@@ -47,27 +63,74 @@ public:
 
     OrchestrationTools orchestration_tools;
     I_OrchestrationTools *i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::from(orchestration_tools);
-    StrictMock<MockTenantManager> mock_tenant_manager;
+    NiceMock<MockMessaging> mock_messaging;
+    NiceMock<MockAgentDetails> mock_agent_details;
+    NiceMock<MockMainLoop> mock_mainloop;
     StrictMock<MockShellCmd> mock_shell_cmd;
+    StrictMock<EnvDetailsMocker> mock_env_details;
+    StrictMock<MockTenantManager> mock_tenant_manager;
+    ::Environment env;
+
 };
 
 TEST_F(OrchestrationToolsTest, doNothing)
 {
 }
 
+TEST_F(OrchestrationToolsTest, getClusterId)
+{
+    EXPECT_CALL(mock_env_details, getToken()).WillOnce(Return("123"));
+    EXPECT_CALL(mock_env_details, getEnvType()).WillOnce(Return(EnvType::K8S));
+    I_MainLoop::Routine routine;
+    EXPECT_CALL(
+        mock_mainloop,
+        addOneTimeRoutine(I_MainLoop::RoutineType::Offline, _, "Get k8s cluster ID", _)
+    ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
+
+    string namespaces = getResource("k8s_namespaces.json");
+    EXPECT_CALL(
+        mock_messaging,
+        sendMessage(
+            true,
+            "",
+            I_Messaging::Method::GET,
+            "kubernetes.default.svc",
+            443,
+            _,
+            "/api/v1/namespaces/",
+            "Authorization: Bearer 123\nConnection: close",
+            _,
+            _
+        )
+    ).WillRepeatedly(Return(Maybe<string>(namespaces)));
+    i_orchestration_tools->getClusterId();
+    routine();
+}
+
 TEST_F(OrchestrationToolsTest, writeReadTextToFile)
 {
-    EXPECT_TRUE(i_orchestration_tools->writeFile(manifest_text, manifest_file));
+    EXPECT_TRUE(i_orchestration_tools->writeFile(manifest_text, manifest_file, false));
     EXPECT_TRUE(i_orchestration_tools->doesFileExist(manifest_file));
     EXPECT_TRUE(i_orchestration_tools->isNonEmptyFile(manifest_file));
+    EXPECT_TRUE(i_orchestration_tools->fileStreamWrapper(manifest_file)->is_open());
     EXPECT_EQ(manifest_text, i_orchestration_tools->readFile(manifest_file).unpack());
 
     EXPECT_FALSE(i_orchestration_tools->isNonEmptyFile("no_such_file"));
 }
 
+TEST_F(OrchestrationToolsTest, writeAndAppendToFile)
+{
+    EXPECT_TRUE(i_orchestration_tools->writeFile("blabla", "in_test.json", false));
+    EXPECT_TRUE(i_orchestration_tools->doesFileExist("in_test.json"));
+    EXPECT_TRUE(i_orchestration_tools->isNonEmptyFile("in_test.json"));
+    EXPECT_TRUE(i_orchestration_tools->writeFile(" Appending Text", "in_test.json", true));
+
+    EXPECT_EQ("blabla Appending Text", i_orchestration_tools->readFile("in_test.json").unpack());;
+}
+
 TEST_F(OrchestrationToolsTest, loadPackagesFromJsonTest)
 {
-    EXPECT_TRUE(i_orchestration_tools->writeFile("blabla", "in_test.json"));
+    EXPECT_TRUE(i_orchestration_tools->writeFile("blabla", "in_test.json", false));
     string file_name = "in_test.json";
     Maybe<map<string, Package>> packages = i_orchestration_tools->loadPackagesFromJson(file_name);
     EXPECT_FALSE(packages.ok());
@@ -83,7 +146,7 @@ TEST_F(OrchestrationToolsTest, loadPackagesFromJsonTest)
 
 TEST_F(OrchestrationToolsTest, copyFile)
 {
-    EXPECT_TRUE(i_orchestration_tools->writeFile("blabla", "in_test.json"));
+    EXPECT_TRUE(i_orchestration_tools->writeFile("blabla", "in_test.json", false));
     EXPECT_TRUE(i_orchestration_tools->copyFile("in_test.json", "cpy_test.json"));
     EXPECT_EQ("blabla", i_orchestration_tools->readFile("cpy_test.json").unpack());
     EXPECT_FALSE(i_orchestration_tools->copyFile("NOT_EXISTS_FILE", "cpy2_test.json"));
@@ -199,7 +262,7 @@ TEST_F(OrchestrationToolsTest, jsonFileToPackages)
                         "        }"
                         "    ]"
                         "}";
-    i_orchestration_tools->writeFile(string_stream.str(), "packages_tmp.json");
+    i_orchestration_tools->writeFile(string_stream.str(), "packages_tmp.json", false);
     Maybe<map<string, Package>> packages = i_orchestration_tools->loadPackagesFromJson("packages_tmp.json");
     EXPECT_TRUE(packages.ok());
     EXPECT_TRUE(packages.unpack().find("nano-agent") != packages.unpack().end());
@@ -222,7 +285,7 @@ TEST_F(OrchestrationToolsTest, packagesToJsonFile)
                         "       }"
                         "   ]"
                         "}";
-    i_orchestration_tools->writeFile(string_stream.str(), "packages.json");
+    i_orchestration_tools->writeFile(string_stream.str(), "packages.json", false);
     Maybe<map<string, Package>> packages = i_orchestration_tools->loadPackagesFromJson("packages.json");
     EXPECT_TRUE(packages.ok());
     EXPECT_TRUE(i_orchestration_tools->packagesToJsonFile(packages.unpack(), "packages.json"));
@@ -277,8 +340,8 @@ TEST_F(OrchestrationToolsTest, deleteVirtualTenantFiles)
     EXPECT_TRUE(i_orchestration_tools->createDirectory(policy_folder_path));
 
     string settings_file_path = conf_path + "/tenant_3fdbdd33_profile_c4c498d8_settings.json";
-    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path);
-    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path);
+    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path, false);
+    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path, false);
 
     EXPECT_TRUE(i_orchestration_tools->doesFileExist(settings_file_path));
     EXPECT_TRUE(i_orchestration_tools->doesFileExist(policy_file_path));
@@ -301,16 +364,16 @@ TEST_F(OrchestrationToolsTest, loadTenants)
     EXPECT_TRUE(i_orchestration_tools->createDirectory(policy_folder_path2));
 
     string settings_file_path1 = conf_path + "/tenant_3fdbdd33_profile_c4c498d8_settings.json";
-    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path1);
+    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path1, false);
 
     string settings_file_path2 = conf_path + "/tenant_123456_profile_654321_settings.json";
-    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path2);
+    i_orchestration_tools->writeFile(string_stream.str(), settings_file_path2, false);
 
     string policy_file_path1 = policy_folder_path1 + "/policy.json";
-    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path1);
+    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path1, false);
 
     string policy_file_path2 = policy_folder_path2 + "/policy.json";
-    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path2);
+    i_orchestration_tools->writeFile(string_stream.str(), policy_file_path2, false);
 
     EXPECT_TRUE(i_orchestration_tools->doesFileExist(settings_file_path1));
     EXPECT_TRUE(i_orchestration_tools->doesFileExist(settings_file_path2));

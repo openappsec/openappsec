@@ -98,8 +98,20 @@ TEST_F(AgentCoreUtilUT, printTest)
     EXPECT_EQ(NGEN::Filesystem::convertToHumanReadable(1024*gigabyte), "1024.00 GB");
 }
 
-
 TEST_F(AgentCoreUtilUT, fileBasenameTest)
 {
     EXPECT_EQ(NGEN::Filesystem::getFileName("/test/base/file/name"), "name");
+}
+
+TEST_F(AgentCoreUtilUT, isDirectoryTest)
+{
+    mkdir("./test", 0400);
+    EXPECT_EQ(NGEN::Filesystem::isDirectory("/test/base/file/name"), false);
+    EXPECT_EQ(NGEN::Filesystem::isDirectory("./test"), true);
+}
+
+TEST_F(AgentCoreUtilUT, removeTrailingWhitespacesTest)
+{
+    string str_with_trailing_whitespace = "str_with_trailing_whitespace\n\n\n\r    \n\n\r";
+    EXPECT_EQ(NGEN::Strings::removeTrailingWhitespaces(str_with_trailing_whitespace), "str_with_trailing_whitespace");
 }

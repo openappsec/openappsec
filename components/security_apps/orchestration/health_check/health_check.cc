@@ -21,6 +21,7 @@
 #include "config.h"
 #include "log_generator.h"
 #include "health_check_manager.h"
+#include "agent_core_utilities.h"
 
 using namespace std;
 using namespace ReportIS;
@@ -145,9 +146,11 @@ private:
     initCloudVendorConfig()
     {
         static const map<string, pair<string, int>> ip_port_defaults_map = {
-            {"Azure", make_pair("168.63.129.16", 8117)},
-            {"Aws", make_pair("", 8117)}
+            {"Azure", make_pair(getenv("DOCKER_RPM_ENABLED") ? "" : "168.63.129.16", 8117)},
+            {"Aws", make_pair("", 8117)},
+            {"Local", make_pair("", 8117)}
         };
+
         auto cloud_vendor_maybe = getSetting<string>("reverseProxy", "cloudVendorName");
         if (cloud_vendor_maybe.ok()) {
             const string cloud_vendor = cloud_vendor_maybe.unpack();
@@ -247,13 +250,36 @@ private:
         );
     }
 
+    HealthCheckStatus
+    getStandaloneHealthStatus()
+    {
+        if (!getenv("DOCKER_RPM_ENABLED")) return HealthCheckStatus::IGNORED;
+
+        static const string standalone_cmd = "/usr/sbin/cpnano -s --docker-rpm; echo $?";
+        dbgTrace(D_HEALTH_CHECK) << "Checking the standalone docker health status with command: " << standalone_cmd;
+
+        auto maybe_result = Singleton::Consume<I_ShellCmd>::by<HealthChecker>()->getExecOutput(standalone_cmd, 1000);
+        if (!maybe_result.ok()) {
+            dbgWarning(D_HEALTH_CHECK) << "Unable to get the standalone docker status. Returning unhealthy status.";
+            return HealthCheckStatus::UNHEALTHY;
+        }
+        dbgTrace(D_HEALTH_CHECK) << "Got response: " << maybe_result.unpack();
+
+        auto response = NGEN::Strings::removeTrailingWhitespaces(maybe_result.unpack());
+
+        if (response.back() == '0') return HealthCheckStatus::HEALTHY;
+        if (response.back() == '1') return HealthCheckStatus::UNHEALTHY;
+
+        return HealthCheckStatus::DEGRADED;
+    }
+
     bool
     nginxContainerIsRunning()
     {
         static const string nginx_container_name = "cp_nginx_gaia";
         static const string cmd_running =
             "docker ps --filter name=" + nginx_container_name + " --filter status=running";
-        dbgTrace(D_HEALTH_CHECK) << "Checking if the container is running with the commmand: " << cmd_running;
+        dbgTrace(D_HEALTH_CHECK) << "Checking if the container is running with the command: " << cmd_running;
 
         auto maybe_result = Singleton::Consume<I_ShellCmd>::by<HealthChecker>()->getExecOutput(cmd_running);
         if (!maybe_result.ok()) {
@@ -263,7 +289,6 @@ private:
         }
 
         return (*maybe_result).find(nginx_container_name) != string::npos;
-
     }
 
     void
@@ -279,7 +304,7 @@ private:
     {
         if (open_connections_counter >= max_connections) {
             dbgDebug(D_HEALTH_CHECK)
-                << "Cannot serve new client, reached maximun open connections bound which is:"
+                << "Cannot serve new client, reached maximum open connections bound which is:"
                 << open_connections_counter
                 << "maximum allowed: "
                 << max_connections;
@@ -330,6 +355,42 @@ private:
                     "\r\n"
                     "health check failed\r\n";
                 static const vector<char> failure_response_buffer(failure_response.begin(), failure_response.end());
+
+                static const string degraded_response =
+                    "HTTP/1.1 202 OK\r\n"
+                    "Content-Length: 22\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "\r\n"
+                    "health check partial\r\n";
+                static const vector<char> degraded_response_buffer(degraded_response.begin(), degraded_response.end());
+
+                HealthCheckStatus standalone_status = getStandaloneHealthStatus();
+                if (standalone_status != HealthCheckStatus::IGNORED) {
+                    if (standalone_status == HealthCheckStatus::HEALTHY) {
+                        dbgDebug(D_HEALTH_CHECK)
+                            << "Standalone status is healthy, returning the following response: "
+                            << success_response;
+                        i_socket->writeData(curr_client_socket, success_response_buffer);
+                        closeCurrentSocket(curr_client_socket, curr_routine_id);
+                        return;
+                    }
+
+                    if (standalone_status == HealthCheckStatus::UNHEALTHY) {
+                        dbgDebug(D_HEALTH_CHECK)
+                            << "Standalone status in unhealthy, returning the following response: "
+                            << failure_response;
+                        i_socket->writeData(curr_client_socket, failure_response_buffer);
+                        closeCurrentSocket(curr_client_socket, curr_routine_id);
+                        return;
+                    }
+
+                    dbgDebug(D_HEALTH_CHECK)
+                        << "Standalone status was partially loaded, returning the following response: "
+                        << degraded_response;
+                    i_socket->writeData(curr_client_socket, degraded_response_buffer);
+                    closeCurrentSocket(curr_client_socket, curr_routine_id);
+                    return;
+                }
 
                 if (nginxContainerIsRunning()) {
                     dbgDebug(D_HEALTH_CHECK)

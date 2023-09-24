@@ -253,6 +253,12 @@ void WaapConfigBase::loadOpenRedirectPolicy(cereal::JSONInputArchive& ar)
 }
 
 
+const std::vector<std::string> &
+WaapConfigBase::get_applicationUrls() const
+{
+    return m_applicationUrls;
+}
+
 void WaapConfigBase::loadErrorDisclosurePolicy(cereal::JSONInputArchive& ar)
 {
     std::string failMessage = "Failed to load the WAAP Information Disclosure policy";

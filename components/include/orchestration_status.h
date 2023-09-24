@@ -24,6 +24,7 @@
 #include "i_time_get.h"
 #include "i_mainloop.h"
 #include "i_agent_details.h"
+#include "i_details_resolver.h"
 #include "customized_cereal_map.h"
 
 class OrchestrationStatus
@@ -32,6 +33,7 @@ class OrchestrationStatus
     Singleton::Provide<I_OrchestrationStatus>,
     Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_DetailsResolver>,
     Singleton::Consume<I_OrchestrationTools>,
     Singleton::Consume<I_MainLoop>
 {

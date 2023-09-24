@@ -20,6 +20,9 @@
 #include "environment/evaluator_templates.h"
 #include "i_environment.h"
 #include "singleton.h"
+#include "debug.h"
+
+USE_DEBUG_FLAG(D_RULEBASE_CONFIG);
 
 using namespace std;
 using namespace EnvironmentHelper;
@@ -50,6 +53,51 @@ EqualHost::evalVariable() const
 
     if (lower_host_ctx == lower_host) return true;
     size_t pos = lower_host_ctx.find_last_of(':');
+    if (pos == string::npos) return false;
+    lower_host_ctx = string(lower_host_ctx.data(), pos);
+    return lower_host_ctx == lower_host;
+}
+
+WildcardHost::WildcardHost(const vector<string> &params)
+{
+    if (params.size() != 1) reportWrongNumberOfParams("WildcardHost", params.size(), 1, 1);
+    host = params[0];
+}
+
+Maybe<bool, Context::Error>
+WildcardHost::evalVariable() const
+{
+    I_Environment *env = Singleton::Consume<I_Environment>::by<WildcardHost>();
+    auto host_ctx = env->get<string>(HttpTransactionData::host_name_ctx);
+
+    if (!host_ctx.ok())
+    {
+        return false;
+    }
+
+    string lower_host_ctx = host_ctx.unpack();
+    transform(lower_host_ctx.begin(), lower_host_ctx.end(), lower_host_ctx.begin(), ::tolower);
+
+    dbgTrace(D_RULEBASE_CONFIG) << "found host in current context: " << lower_host_ctx;
+
+    size_t pos = lower_host_ctx.find_first_of(".");
+    if (pos == string::npos) {
+        return false;
+    }
+
+    lower_host_ctx = "*" + lower_host_ctx.substr(pos, lower_host_ctx.length());
+
+    string lower_host = host;
+    transform(lower_host.begin(), lower_host.end(), lower_host.begin(), ::tolower);
+
+    dbgTrace(D_RULEBASE_CONFIG)
+        << "trying to match host context with its corresponding wildcard address: "
+        << lower_host_ctx
+        << ". Matcher host: "
+        << lower_host;
+
+    if (lower_host_ctx == lower_host) return true;
+    pos = lower_host_ctx.find_last_of(':');
     if (pos == string::npos) return false;
     lower_host_ctx = string(lower_host_ctx.data(), pos);
     return lower_host_ctx == lower_host;

@@ -248,7 +248,7 @@ Layer7AccessControlTest::verifyReport(
     EXPECT_THAT(log, HasSubstr("\"destinationIP\": \"5.6.7.8\""));
     EXPECT_THAT(log, HasSubstr("\"externalVendorName\": \"CrowdSec\""));
     EXPECT_THAT(log, HasSubstr("\"waapIncidentType\": \"CrowdSec\""));
-    EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendationId\": 2253734"));
+    EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendationId\": \"2253734\""));
     EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendedAction\": \"ban\""));
     EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendationOrigin\": \"cscli\""));
     EXPECT_THAT(log, HasSubstr("\"externalVendorRecommendedAffectedScope\": \"1.2.3.4\""));

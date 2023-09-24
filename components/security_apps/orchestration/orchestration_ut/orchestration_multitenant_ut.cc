@@ -62,6 +62,8 @@ public:
             addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Orchestration runner", true)
         ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
 
+        EXPECT_CALL(mock_orchestration_tools, getClusterId());
+
         EXPECT_CALL(mock_shell_cmd, getExecOutput("openssl version -d | cut -d\" \" -f2 | cut -d\"\\\"\" -f2", _, _))
             .WillOnce(Return(string("OpenSSL certificates Directory")));
 
@@ -91,11 +93,11 @@ public:
         Maybe<string> err = genError("No file exist");
         EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/user-cred.json")).WillOnce(Return(err));
 
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a")).WillOnce(
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a", false)).WillOnce(
             Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a")).WillOnce(
+        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a", false)).WillOnce(
             Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a")).WillOnce(
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a", false)).WillOnce(
             Return(true));
     }
 

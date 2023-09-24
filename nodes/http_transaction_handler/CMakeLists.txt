@@ -14,6 +14,7 @@ target_link_libraries(cp-nano-http-transaction-handler
 	pcre2-8
 	pcre2-posix
 	yajl_s
+	hiredis
 
 	-lshmem_ipc
 	-lnginx_attachment_util
@@ -32,6 +33,8 @@ target_link_libraries(cp-nano-http-transaction-handler
 	waap
 	waap_clib
 	reputation
+	rate_limit_comp
+	rate_limit_config
         ips
         keywords
 	l7_access_control
@@ -52,6 +55,12 @@ execute_process (
 	OUTPUT_VARIABLE pcre2-posix
 )
 install(FILES ${pcre2-posix} DESTINATION http_transaction_handler_service/lib)
+
+execute_process (
+        COMMAND bash -c "find /usr/lib -name \"libhiredis.so*\" | awk '{printf $0\";\"}'"
+        OUTPUT_VARIABLE hiredis
+)
+install(FILES ${hiredis} DESTINATION http_transaction_handler_service/lib)
 
 execute_process (
 	COMMAND bash -c "find /usr/lib -name \"libxml2.so*\" | awk '{printf \$0\";\"}'"

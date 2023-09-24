@@ -14,13 +14,15 @@
 #ifndef __I_LOCAL_POLICY_MGMT_GEN_H__
 #define __I_LOCAL_POLICY_MGMT_GEN_H__
 
+#include "i_env_details.h"
+
 class I_LocalPolicyMgmtGen
 {
 public:
-    virtual std::string parsePolicy(const std::string &policy_version) = 0;
-    virtual const std::string & getAgentPolicyPath(void) const = 0;
-    virtual const std::string & getLocalPolicyPath(void) const = 0;
-    virtual void setPolicyPath(const std::string &new_local_policy_path) = 0;
+    virtual std::string generateAppSecLocalPolicy(
+        EnvType env_type,
+        const std::string &policy_version,
+        const std::string &local_policy_path) = 0;
 
 protected:
     ~I_LocalPolicyMgmtGen() {}

@@ -23,6 +23,7 @@ AI_VERBOSE=false
 PROFILE_SETTINGS_JSON_PATH=$cp_nano_conf_location/settings.json
 DEFAULT_HEALTH_CHECK_TMP_FILE_PATH="/tmp/cpnano_health_check_output.txt"
 
+var_default_fog_address="i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="inext-agents-aus1.cloud.ngen.checkpoint.com"
@@ -809,13 +810,6 @@ run_health_check() # Initials - rhc
     rm -rf "${rhc_health_check_tmp_file_path}"
 }
 
-print_link_information() # Initials - pli
-{
-    echo ""
-    echo "For release notes and known limitations check: https://docs.openappsec.io/release-notes"
-    echo "For troubleshooting and support: https://openappsec.io/support"
-}
-
 should_add_color_to_status() # Initials - sacts
 {
     sacts_ps_cmd="ps aux"
@@ -964,11 +958,13 @@ run_status() # Initials - rs
     if echo "$rs_orch_status" | grep -q "update status"; then
         rs_line_count=$(echo "$rs_orch_status" | grep -c '^')
         rs_policy_load_time="$(echo "${rs_orch_status}" | grep "Last policy update"| sed "s|\"||g" | sed "s|,||g")"
+        rs_ai_model_ver="$(echo "${rs_orch_status}" | grep "AI model version"| sed "s|\"||g" | sed "s|,||g")"
 
         rs_temp_old_status=$(echo "$rs_orch_status" | sed -r "${rs_line_count},${rs_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
     else
         rs_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
         rs_policy_load_time="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "Last policy update" | sed "s|\"||g" | sed "s|,||g")"
+        rs_ai_model_ver="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "AI model version" | sed "s|\"||g" | sed "s|,||g")"
     fi
 
     if [ -n "$(cat ${FILESYSTEM_PATH}/conf/agent_details.json | grep "hybrid_mode")" ]; then
@@ -1008,6 +1004,7 @@ run_status() # Initials - rs
     fi
     echo "Policy load status: ${rs_policy_load_status}"
     echo ${rs_policy_load_time}
+    echo ${rs_ai_model_ver}
     echo ""
 
     for service in $all_services; do
@@ -1245,7 +1242,7 @@ run_ai() # Initials - ra
     done
 
     if [ "$ra_upload_to_fog" = "false" ]; then
-        printf "Would you like to upload the file to be inspected by the product support team? [y/n] " && read -r ra_should_upload
+        printf "Should upload to Checkpoints' cloud? [y/n] " && read -r ra_should_upload
         case $ra_should_upload in
         [Yy] | [Yy][Ee][Ss]) ra_upload_to_fog=true ;;
         *) ;;
@@ -1261,7 +1258,7 @@ run_ai() # Initials - ra
     else
         ra_orch_status=$(curl_func "$(extract_api_port orchestration)"/show-orchestration-status)
         if ! echo "$ra_orch_status" | grep -q "update status"; then
-            ra_orch_status=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json)
+            [ -f ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json ] && ra_orch_status=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json)
         fi
         if [ -n "${ra_orch_status}" ]; then
             ra_fog_address=$(printf "%s" "$ra_orch_status" | grep "Fog address" | cut -d '"' -f4)
@@ -1488,7 +1485,7 @@ set_mode()
             elif [ "${var_token#"$gem_prefix"}" != "${var_token}" ] || [ "${var_token#"$gem_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_gem_fog_address"
             else
-                echo "Failed to get fog address from token: ${var_token} - check if token is legal"
+                var_fog_address="$var_default_fog_address"
             fi
             fog_address=$var_fog_address
         elif [ -z "$token" ]; then
@@ -1661,7 +1658,6 @@ run() # Initials - r
             shift
             run_health_check "${@}"
         fi
-        print_link_information
     elif [ "--start-agent" = "$1" ] || [ "-r" = "$1" ]; then
         record_command $@
         run_start_agent

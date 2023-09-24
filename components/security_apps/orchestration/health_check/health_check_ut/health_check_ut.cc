@@ -194,7 +194,7 @@ TEST_F(HealthCheckerTest, connectionsLimit)
     connection_handler_routine();
 
     EXPECT_THAT(
-        capture_debug.str(), HasSubstr("Cannot serve new client, reached maximun open connections")
+        capture_debug.str(), HasSubstr("Cannot serve new client, reached maximum open connections")
     );
 }
 

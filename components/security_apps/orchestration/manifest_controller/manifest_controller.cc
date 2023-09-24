@@ -76,6 +76,7 @@ public:
 
 private:
     bool changeManifestFile(const string &new_manifest_file);
+    bool updateIgnoreListForNSaaS();
 
     bool
     handlePackage(
@@ -156,11 +157,35 @@ ManifestController::Impl::init()
 }
 
 bool
+ManifestController::Impl::updateIgnoreListForNSaaS()
+{
+    if (!getProfileAgentSettingWithDefault<bool>(false, "accessControl.isAwsNSaaS")) return false;
+
+    auto ignore_packages_path = getConfigurationWithDefault<string>(
+        getFilesystemPathConfig() + "/conf/ignore-packages.txt",
+        "orchestration",
+        "Ignore packages list file path"
+    );
+    ofstream ignore_file(ignore_packages_path);
+    if (!ignore_file.is_open()) {
+        dbgWarning(D_ORCHESTRATOR) << "Unable to open file " << ignore_packages_path << " for writing";
+        return false;
+    }
+
+    ignore_file << "all";
+    ignore_file.close();
+    dbgInfo(D_ORCHESTRATOR) << "Updated " << ignore_packages_path << " to ignore all packages";
+
+    return true;
+}
+
+bool
 ManifestController::Impl::updateManifest(const string &new_manifest_file)
 {
     auto i_env = Singleton::Consume<I_Environment>::by<ManifestController>();
     auto span_scope = i_env->startNewSpanScope(Span::ContextType::CHILD_OF);
     auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ManifestController>();
+    static bool ignore_packages_update = false;
 
     if (isIgnoreFile(new_manifest_file)) {
         if (!orchestration_tools->copyFile(new_manifest_file, manifest_file_path)) {
@@ -173,9 +198,12 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
     dbgDebug(D_ORCHESTRATOR) << "Starting to update manifest file";
     auto ignored_settings_packages = getProfileAgentSetting<IgnoredPackages>("orchestration.IgnoredPackagesList");
     set<string> packages_to_ignore = ignore_packages;
-    if (ignored_settings_packages.ok()) packages_to_ignore = *(*ignored_settings_packages);
+    if (ignored_settings_packages.ok()) {
+        packages_to_ignore = *(*ignored_settings_packages);
+        ignore_packages_update = false;
+    }
 
-    if (packages_to_ignore.count("all") > 0) {
+    if (ignore_packages_update || packages_to_ignore.count("all") > 0) {
         dbgTrace(D_ORCHESTRATOR) << "Nothing to update (\"ignore all\" turned on)";
 
         if (!orchestration_tools->copyFile(new_manifest_file, manifest_file_path)) {
@@ -315,6 +343,8 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
 
     if (all_installed && (any_installed || no_change) && no_corrupted_package) {
         manifest_file_update = changeManifestFile(new_manifest_file);
+        // In NSaaS - set ignore packages to any
+        ignore_packages_update = updateIgnoreListForNSaaS();
     } else if (any_installed) {
         manifest_file_update = orchestration_tools->packagesToJsonFile(current_packages, manifest_file_path);
     }

@@ -19,7 +19,10 @@ extern const string unnamed_service;
 
 LogGen::~LogGen()
 {
-    if (send_log) Singleton::Consume<I_Logging>::by<LogGen>()->sendLog(log);
+    try {
+        if (send_log) Singleton::Consume<I_Logging>::by<LogGen>()->sendLog(log);
+    } catch (...) {
+    }
 }
 
 LogGen &

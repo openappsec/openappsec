@@ -105,6 +105,7 @@ public:
     static CURLcode ssl_ctx_verify_certificate(CURL *curl, void *ssl_ctx, void *opq);
     static int verify_certificate(int preverify_ok, X509_STORE_CTX *ctx);
     void setCurlOpts(long timeout = 60L, HTTP_VERSION http_version = HTTP_VERSION::HTTP_VERSION_1_1) override;
+    bool downloadOpenAppsecPackages();
 
 private:
     std::string ca_path;

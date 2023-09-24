@@ -37,8 +37,8 @@ private:
     std::string loadCAChainDir();
     Maybe<void> getFileSSL(const URLParser &url, std::ofstream &out_file, const std::string &_token);
     Maybe<void> getFileHttp(const URLParser &url, std::ofstream &out_file, const std::string &_token);
-    Maybe<void> curlGetFileOverSSL(const URLParser &url, std::ofstream &out_file, const std::string &_token);
     Maybe<void> curlGetFileOverHttp(const URLParser &url, std::ofstream &out_file, const std::string &_token);
+    Maybe<void> curlGetFileOverSSL(const URLParser &url, std::ofstream &out_file, const std::string &_token);
 };
 // LCOV_EXCL_STOP
 

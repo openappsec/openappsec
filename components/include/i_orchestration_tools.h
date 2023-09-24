@@ -106,8 +106,9 @@ public:
         const std::string &profile_id = "") const = 0;
 
     virtual bool isNonEmptyFile(const std::string &path) const = 0;
+    virtual std::shared_ptr<std::ifstream> fileStreamWrapper(const std::string &path) const = 0;
     virtual Maybe<std::string> readFile(const std::string &path) const = 0;
-    virtual bool writeFile(const std::string &text, const std::string &path) const = 0;
+    virtual bool writeFile(const std::string &text, const std::string &path, bool append_mode = false) const = 0;
     virtual bool removeFile(const std::string &path) const = 0;
     virtual bool removeDirectory(const std::string &path, bool delete_content) const = 0;
     virtual void deleteVirtualTenantProfileFiles(
@@ -116,6 +117,7 @@ public:
         const std::string &conf_path) const = 0;
     virtual bool copyFile(const std::string &src_path, const std::string &dst_path) const = 0;
     virtual bool doesFileExist(const std::string &file_path) const = 0;
+    virtual void getClusterId() const = 0;
     virtual void fillKeyInJson(
         const std::string &filename,
         const std::string &_key,

@@ -1,2 +1,2 @@
-add_library(update_communication update_communication.cc hybrid_communication.cc fog_communication.cc fog_authenticator.cc local_communication.cc declarative_policy_utils.cc)
+add_library(update_communication update_communication.cc hybrid_communication.cc fog_communication.cc fog_authenticator.cc local_communication.cc declarative_policy_utils.cc fog_helper_open_source.cc)
 #add_subdirectory(update_communication_ut)

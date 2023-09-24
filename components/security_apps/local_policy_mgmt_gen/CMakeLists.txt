@@ -1,0 +1,23 @@
+include_directories(include)
+add_library(local_policy_mgmt_gen
+    appsec_practice_section.cc
+    exceptions_section.cc
+    ingress_data.cc
+    rules_config_section.cc
+    settings_section.cc
+    snort_section.cc
+    triggers_section.cc
+    trusted_sources_section.cc
+    policy_maker_utils.cc
+    k8s_policy_utils.cc
+    local_policy_mgmt_gen.cc
+    new_appsec_policy_crd_parser.cc
+    new_appsec_linux_policy.cc
+    new_custom_response.cc
+    new_trusted_sources.cc
+    new_log_trigger.cc
+    new_practice.cc
+    new_exceptions.cc
+    access_control_practice.cc
+    configmaps.cc
+)
