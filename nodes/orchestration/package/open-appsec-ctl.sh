@@ -1664,6 +1664,7 @@ run() # Initials - r
             shift
             run_health_check "${@}"
         fi
+        print_link_information
     elif [ "--start-agent" = "$1" ] || [ "-r" = "$1" ]; then
         record_command $@
         run_start_agent
