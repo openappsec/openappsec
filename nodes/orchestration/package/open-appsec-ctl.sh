@@ -23,7 +23,6 @@ AI_VERBOSE=false
 PROFILE_SETTINGS_JSON_PATH=$cp_nano_conf_location/settings.json
 DEFAULT_HEALTH_CHECK_TMP_FILE_PATH="/tmp/cpnano_health_check_output.txt"
 
-var_default_fog_address="i2-agents.cloud.ngen.checkpoint.com/"
 var_default_gem_fog_address="inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="inext-agents-aus1.cloud.ngen.checkpoint.com"
@@ -810,6 +809,13 @@ run_health_check() # Initials - rhc
     rm -rf "${rhc_health_check_tmp_file_path}"
 }
 
+print_link_information() # Initials - pli
+{
+    echo ""
+    echo "For release notes and known limitations check: https://docs.openappsec.io/release-notes"
+    echo "For troubleshooting and support: https://openappsec.io/support"
+}
+
 should_add_color_to_status() # Initials - sacts
 {
     sacts_ps_cmd="ps aux"
@@ -1242,7 +1248,7 @@ run_ai() # Initials - ra
     done
 
     if [ "$ra_upload_to_fog" = "false" ]; then
-        printf "Should upload to Checkpoints' cloud? [y/n] " && read -r ra_should_upload
+        printf "Would you like to upload the file to be inspected by the product support team? [y/n] " && read -r ra_should_upload
         case $ra_should_upload in
         [Yy] | [Yy][Ee][Ss]) ra_upload_to_fog=true ;;
         *) ;;
@@ -1485,7 +1491,7 @@ set_mode()
             elif [ "${var_token#"$gem_prefix"}" != "${var_token}" ] || [ "${var_token#"$gem_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_gem_fog_address"
             else
-                var_fog_address="$var_default_fog_address"
+                echo "Failed to get fog address from token: ${var_token} - check if token is legal"
             fi
             fog_address=$var_fog_address
         elif [ -z "$token" ]; then
