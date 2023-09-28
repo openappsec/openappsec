@@ -47,7 +47,7 @@ V1beta2AppsecLinuxPolicy::getAppSecCustomResponseSpecs() const
 }
 
 const vector<NewAppsecException> &
-V1beta2AppsecLinuxPolicy::getAppsecExceptionSpecs() const
+V1beta2AppsecLinuxPolicy::getAppsecExceptions() const
 {
     return exceptions;
 }

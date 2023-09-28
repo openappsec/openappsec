@@ -18,11 +18,13 @@
 #include <map>
 
 #include "i_shell_cmd.h"
+#include "i_orchestration_tools.h"
 #include "i_agent_details_reporter.h"
 
 class DetailsResolvingHanlder
         :
     Singleton::Consume<I_ShellCmd>,
+    Singleton::Consume<I_OrchestrationTools>,
     Singleton::Consume<I_AgentDetailsReporter>
 {
 public:

@@ -55,6 +55,19 @@ SHELL_CMD_HANDLER(
 #if defined(gaia)
 SHELL_CMD_HANDLER("hasSupportedBlade", "enabled_blades", checkHasSupportedBlade)
 SHELL_CMD_HANDLER("hasSamlPortal", "mpclient status saml-vpn", checkSamlPortal)
+SHELL_CMD_HANDLER("requiredNanoServices", "mpclient status saml-vpn", getIDAGaia)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtParentObjectName",
+    "cat $FWDIR/database/myself_objects.C "
+    "| awk -F '[:()]' '/:cluster_object/ {found=1; next} found && /:Name/ {print $3; exit}'",
+    getMgmtParentObjName
+)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtParentObjectUid",
+    "cat $FWDIR/database/myself_objects.C "
+    "| awk -F'[{}]' '/:cluster_object/ { found=1; next } found && /:Uid/ { uid=tolower($2); print uid; exit }'",
+    getMgmtParentObjUid
+)
 SHELL_CMD_HANDLER(
     "Hardware",
     "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:appliance_type/ {print $3}' | head -n 1",
@@ -81,12 +94,12 @@ SHELL_CMD_HANDLER(
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "cpsdwan get_data | jq -r .cluster_name",
-    getMgmtParentObjName
+    getSmbMgmtParentObjName
 )
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectUid",
     "cpsdwan get_data | jq -r .cluster_uuid",
-    getMgmtParentObjUid
+    getSmbMgmtParentObjUid
 )
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtObjectName",
@@ -142,5 +155,7 @@ FILE_CONTENT_HANDLER(
 #else // !(gaia || smb)
 FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 #endif // gaia || smb
+
+FILE_CONTENT_HANDLER("AppSecModelVersion", "/etc/cp/conf/waap/waap.data", getWaapModelVersion)
 
 #endif // FILE_CONTENT_HANDLER

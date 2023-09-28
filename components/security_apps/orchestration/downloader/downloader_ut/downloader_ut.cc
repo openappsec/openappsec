@@ -51,7 +51,7 @@ TEST_F(DownloaderTest, downloadFileFromFog)
         calculateChecksum(Package::ChecksumTypes::SHA256, "/tmp/virtualSettings.download")
     ).WillOnce(Return(string("123")));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(fog_response, "/tmp/virtualSettings.download"))
+    EXPECT_CALL(mock_orchestration_tools, writeFile(fog_response, "/tmp/virtualSettings.download", false))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/tmp/virtualSettings.download")).WillOnce(Return(true));
 
@@ -183,7 +183,7 @@ TEST_F(DownloaderTest, downloadEmptyFileFromFog)
 
     EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(fog_response, "/tmp/manifest.download"))
+    EXPECT_CALL(mock_orchestration_tools, writeFile(fog_response, "/tmp/manifest.download", false))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/tmp/manifest.download")).WillOnce(Return(false));
 
@@ -342,13 +342,23 @@ TEST_F(DownloaderTest, download_virtual_policy)
 
     EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_0000_file, "/tmp/virtualPolicy_0000_profile_1234.download"))
-        .WillOnce(Return(true));
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        writeFile(
+            tenant_0000_file,
+            "/tmp/virtualPolicy_0000_profile_1234.download",
+            false)
+    ).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, fillKeyInJson(_, _, _)).WillRepeatedly(Return());
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(tenant_1111_file, "/tmp/virtualPolicy_1111_profile_1235.download"))
-        .WillOnce(Return(true));
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        writeFile(
+            tenant_1111_file,
+            "/tmp/virtualPolicy_1111_profile_1235.download",
+            false)
+    ).WillOnce(Return(true));
 
     map<pair<string, string>, string> expected_downloaded_files =
         {
@@ -427,7 +437,8 @@ TEST_F(DownloaderTest, download_virtual_settings)
         mock_orchestration_tools,
         writeFile(
             tenant_0000_file,
-            tenant_0000_path.str()
+            tenant_0000_path.str(),
+            false
         )
     ).WillOnce(Return(true));
 

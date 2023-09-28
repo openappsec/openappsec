@@ -439,6 +439,28 @@ cp_copy() # Initials - cc
     cp_print "Destination md5, after the copy:\n$DEST_AFTER_COPY"
 }
 
+update_cloudguard_appsec_manifest()
+{
+    if [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; then
+        return
+    fi
+
+    selected_cloudguard_appsec_manifest_path="/tmp/cloudguard_appsec_manifest.json"
+    if [ "${DOCKER_RPM_ENABLED}" = "false" ]; then
+        selected_cloudguard_appsec_manifest_path="/tmp/self_managed_cloudguard_appsec_manifest.json"
+    fi
+
+    if [ ! -f "$selected_cloudguard_appsec_manifest_path" ]; then
+        return
+    fi
+
+    cloudguard_appsec_manifest_path="${selected_cloudguard_appsec_manifest_path}.used"
+    mv "$selected_cloudguard_appsec_manifest_path" "$cloudguard_appsec_manifest_path"
+    fog_host=$(echo "$var_fog_address" | sed 's/https\?:\/\///')
+    fog_host=${fog_host%/}
+    sed "s/namespace/${fog_host}/g" ${cloudguard_appsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
+}
+
 install_watchdog_gaia()
 {
     # verify that DB is clean from cp-nano-watchdog
@@ -906,6 +928,8 @@ install_orchestration()
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${CONF_PATH}"
     cp_exec "mkdir -p ${LOG_FILE_PATH}/${LOG_PATH}"
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${DATA_PATH}"
+
+    update_cloudguard_appsec_manifest
 
     if [ ! -f ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH} ]; then
         echo "{\"agentSettings\": []}" >  ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH}

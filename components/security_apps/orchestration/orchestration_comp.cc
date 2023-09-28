@@ -189,6 +189,10 @@ public:
             "Orchestration runner",
             true
         );
+
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
+        orchestration_tools->getClusterId();
+
         hybrid_mode_metric.init(
             "Watchdog Metrics",
             ReportIS::AudienceTeam::AGENT_CORE,
@@ -198,7 +202,6 @@ public:
             ReportIS::Audience::INTERNAL
         );
         hybrid_mode_metric.registerListener();
-        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
         orchestration_tools->loadTenantsFromDir(
             getConfigurationWithDefault<string>(getFilesystemPathConfig() + "/conf/", "orchestration", "Conf dir")
         );
@@ -1484,6 +1487,9 @@ private:
 #if defined(gaia) || defined(smb)
         if (i_details_resolver->compareCheckpointVersion(8100, greater_equal<int>())) {
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER81", "true");
+        }
+        if (i_details_resolver->compareCheckpointVersion(8200, greater_equal<int>())) {
+            agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER82", "true");
         }
 #endif // gaia || smb
 

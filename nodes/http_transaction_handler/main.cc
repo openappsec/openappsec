@@ -17,6 +17,7 @@
 #include "gradual_deployment.h"
 #include "http_manager.h"
 #include "layer_7_access_control.h"
+#include "rate_limit.h"
 #include "waap.h"
 #include "ips_comp.h"
 #include "keyword_comp.h"
@@ -30,6 +31,7 @@ main(int argc, char **argv)
         GradualDeployment,
         HttpManager,
         Layer7AccessControl,
+        RateLimit,
         WaapComponent,
         IPSComp,
         KeywordComp

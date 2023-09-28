@@ -19,6 +19,7 @@
 #include "cereal/types/vector.hpp"
 #include "cereal/types/set.hpp"
 #include "agent_core_utilities.h"
+#include "namespace_data.h"
 
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -47,11 +48,13 @@ public:
         const string &tenant_id,
         const string &profile_id) const override;
 
+    shared_ptr<ifstream> fileStreamWrapper(const std::string &path) const override;
     Maybe<string> readFile(const string &path) const override;
-    bool writeFile(const string &text, const string &path) const override;
+    bool writeFile(const string &text, const string &path, bool append_mode = false) const override;
     bool removeFile(const string &path) const override;
     bool copyFile(const string &src_path, const string &dst_path) const override;
     bool doesFileExist(const string &file_path) const override;
+    void getClusterId() const override;
     void fillKeyInJson(const string &filename, const string &_key, const string &_val) const override;
     bool createDirectory(const string &directory_path) const override;
     bool doesDirectoryExist(const string &dir_path) const override;
@@ -128,6 +131,98 @@ OrchestrationTools::Impl::fillKeyInJson(const string &filename, const string &_k
 // LCOV_EXCL_STOP
 
 bool
+isPlaygroundEnv()
+{
+    const char *env_string = getenv("PLAYGROUND");
+
+    if (env_string == nullptr) return false;
+    string env_value = env_string;
+    transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+
+    return env_value == "true";
+}
+
+Maybe<NamespaceData, string>
+getNamespaceDataFromCluster(const string &path)
+{
+    NamespaceData name_space;
+    string token = Singleton::Consume<I_EnvDetails>::by<OrchestrationTools>()->getToken();
+    Flags<MessageConnConfig> conn_flags;
+    conn_flags.setFlag(MessageConnConfig::SECURE_CONN);
+    conn_flags.setFlag(MessageConnConfig::IGNORE_SSL_VALIDATION);
+    auto messaging = Singleton::Consume<I_Messaging>::by<OrchestrationTools>();
+    bool res = messaging->sendObject(
+        name_space,
+        I_Messaging::Method::GET,
+        "kubernetes.default.svc",
+        443,
+        conn_flags,
+        path,
+        "Authorization: Bearer " + token + "\nConnection: close"
+    );
+
+    if (res) return name_space;
+
+    return genError(string("Was not able to get object form k8s cluser in path: " + path));
+}
+
+bool
+doesClusterIdExists()
+{
+    string playground_uid = isPlaygroundEnv() ? "playground-" : "";
+
+    dbgTrace(D_ORCHESTRATOR) << "Getting cluster UID";
+
+    auto maybe_namespaces_data = getNamespaceDataFromCluster("/api/v1/namespaces/");
+
+    if (!maybe_namespaces_data.ok()) {
+        dbgWarning(D_ORCHESTRATOR)
+            << "Failed to retrieve K8S namespace data. Error: "
+            << maybe_namespaces_data.getErr();
+        return false;
+    }
+
+    NamespaceData namespaces_data = maybe_namespaces_data.unpack();
+
+    Maybe<string> maybe_ns_uid = namespaces_data.getNamespaceUidByName("kube-system");
+    if (!maybe_ns_uid.ok()) {
+        dbgWarning(D_ORCHESTRATOR) << maybe_ns_uid.getErr();
+        return false;
+    }
+    string uid = playground_uid + maybe_ns_uid.unpack();
+    dbgTrace(D_ORCHESTRATOR) << "Found k8s cluster UID: " << uid;
+    I_Environment *env = Singleton::Consume<I_Environment>::by<OrchestrationTools>();
+    env->getConfigurationContext().registerValue<string>(
+        "k8sClusterId",
+        uid,
+        EnvKeyAttr::LogSection::SOURCE
+    );
+    I_AgentDetails *i_agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationTools>();
+    i_agent_details->setClusterId(uid);
+    return true;
+}
+
+void
+OrchestrationTools::Impl::getClusterId() const
+{
+    auto env_type = Singleton::Consume<I_EnvDetails>::by<OrchestrationTools>()->getEnvType();
+
+    if (env_type == EnvType::K8S) {
+        Singleton::Consume<I_MainLoop>::by<OrchestrationTools>()->addOneTimeRoutine(
+            I_MainLoop::RoutineType::Offline,
+            [this] ()
+            {
+                while(!doesClusterIdExists()) {
+                    Singleton::Consume<I_MainLoop>::by<OrchestrationTools>()->yield(chrono::seconds(1));
+                }
+                return;
+            },
+            "Get k8s cluster ID"
+        );
+    }
+}
+
+bool
 OrchestrationTools::Impl::doesFileExist(const string &file_path) const
 {
     return checkExistence(file_path, false);
@@ -140,7 +235,7 @@ OrchestrationTools::Impl::doesDirectoryExist(const string &dir_path) const
 }
 
 bool
-OrchestrationTools::Impl::writeFile(const string &text, const string &path) const
+OrchestrationTools::Impl::writeFile(const string &text, const string &path, bool append_mode) const
 {
     dbgDebug(D_ORCHESTRATOR) << "Writing file: text = " << text << ", path = " << path;
     if (path.find('/') != string::npos) {
@@ -151,8 +246,15 @@ OrchestrationTools::Impl::writeFile(const string &text, const string &path) cons
             return false;
         }
     }
+
+    ofstream fout;
+
+    if (append_mode) {
+        fout.open(path, std::ios::app);
+    } else {
+        fout.open(path);
+    }
     try {
-        ofstream fout(path);
         fout << text;
         return true;
     } catch (const ofstream::failure &e) {
@@ -184,6 +286,12 @@ OrchestrationTools::Impl::isNonEmptyFile(const string &path) const
     }
 
     return false;
+}
+
+shared_ptr<ifstream>
+OrchestrationTools::Impl::fileStreamWrapper(const std::string &path) const
+{
+    return make_shared<ifstream>(path);
 }
 
 Maybe<string>

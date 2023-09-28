@@ -43,6 +43,16 @@ checkSamlPortal(const string &command_output)
 }
 
 Maybe<string>
+getIDAGaia(const string &command_output)
+{
+    if (command_output.find("Portal is running") != string::npos) {
+        return string("ida_gaia");
+    }
+
+    return genError("Current host does not have SAML Portal configured");
+}
+
+Maybe<string>
 checkIDP(shared_ptr<istream> file_stream)
 {
     string line;
@@ -226,58 +236,24 @@ getSmbGWIPSecVPNBlade(const string &command_output)
 {
     return getSmbBlade(command_output, "IPSec VPN Blade was not found");
 }
-
-Maybe<string>
-getMgmtParentObjAttr(shared_ptr<istream> file_stream, const string &parent_obj, const string &attr)
-{
-    string line;
-    bool found_parent_obj = false;
-    while (getline(*file_stream, line)) {
-        size_t parent_obj_pos = line.find(parent_obj);
-        if (parent_obj_pos != string::npos) found_parent_obj = true;
-        if (!found_parent_obj) continue;
-
-        size_t attr_pos = line.find(attr);
-        if (attr_pos == string::npos) continue;
-        line = line.substr(attr_pos + attr.size());
-        return line;
-    }
-    return genError("Parent object attribute was not found. Attr: " + attr);
-}
 #endif // gaia || smb
 
 #if defined(gaia)
 Maybe<string>
-getMgmtParentObjUid(shared_ptr<istream> file_stream)
+getMgmtParentObjUid(const string &command_output)
 {
-    auto maybe_unparsed_uid = getMgmtParentObjAttr(file_stream, "cluster_object", "Uid ");
-    if (!maybe_unparsed_uid.ok()) {
-        return maybe_unparsed_uid;
-    }
-    const string &unparsed_uid = maybe_unparsed_uid.unpack();
-    auto maybe_uid = chopHeadAndTail(unparsed_uid, "(\"{", "}\")");
-    if (!maybe_uid.ok()) {
-        return maybe_uid;
-    }
-    string uid = maybe_uid.unpack();
-    transform(uid.begin(), uid.end(), uid.begin(), ::tolower);
-    return uid;
+    return getAttr(command_output, "Parent object uuid was not found");
 }
 
 Maybe<string>
-getMgmtParentObjName(shared_ptr<istream> file_stream)
+getMgmtParentObjName(const string &command_output)
 {
-    auto maybe_unparsed_name = getMgmtParentObjAttr(file_stream, "cluster_object", "Name ");
-    if (!maybe_unparsed_name.ok()) {
-        return maybe_unparsed_name;
-    }
-    const string &unparsed_name = maybe_unparsed_name.unpack();
-    return chopHeadAndTail(unparsed_name, "(", ")");
+    return getAttr(command_output, "Parent object name was not found");
 }
 
 #elif defined(smb)
 Maybe<string>
-getMgmtParentObjUid(const string &command_output)
+getSmbMgmtParentObjUid(const string &command_output)
 {
     if (!command_output.empty()) {
         return command_output;
@@ -286,7 +262,7 @@ getMgmtParentObjUid(const string &command_output)
 }
 
 Maybe<string>
-getMgmtParentObjName(const string &command_output)
+getSmbMgmtParentObjName(const string &command_output)
 {
     if (!command_output.empty()) {
         return command_output;
@@ -312,6 +288,34 @@ getOsRelease(shared_ptr<istream> file_stream)
     }
 
     return genError("Os release was not found");
+}
+
+Maybe<string>
+getWaapModelVersion(shared_ptr<istream> file_stream)
+{
+    string line;
+    static const int max_lines = 5;
+    int i = 0;
+    bool found_key = false;
+    while (i < max_lines && getline(*file_stream, line)) {
+        if (!found_key) {
+            size_t index = line.find("\"model_version\":");
+            if (index != string::npos) {
+                found_key = true;
+            }
+        } else {
+            size_t start = line.find_first_of('"');
+            size_t end = line.find_last_of('"');
+            if (start != string::npos && end != string::npos && end > start) {
+                return line.substr(start + 1, end - start - 1);
+            } else {
+                return genError("Model version value unreadable");
+            }
+        }
+        i++;
+    }
+
+    return genError("Model version was not found");
 }
 
 #if defined(alpine)

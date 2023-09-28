@@ -45,6 +45,7 @@ public:
     virtual const std::string&   get_RuleName() const;
     virtual const bool&          get_WebAttackMitigation() const;
     virtual const std::string&   get_WebAttackMitigationAction() const;
+    virtual const std::vector<std::string> & get_applicationUrls() const;
 
     virtual const std::shared_ptr<Waap::Override::Policy>& get_OverridePolicy() const;
     virtual const std::shared_ptr<Waap::Trigger::Policy>& get_TriggerPolicy() const;

@@ -47,7 +47,7 @@ public:
 
     std::tuple<std::map<std::string, AppsecLinuxPolicy>, std::map<std::string, V1beta2AppsecLinuxPolicy>>
     createAppsecPoliciesFromIngresses();
-    bool getClusterId() const;
+    void getClusterId() const;
 
 private:
     std::map<AnnotationKeys, std::string> parseIngressAnnotations(
@@ -67,11 +67,18 @@ private:
         const NewParsedRule &default_rule
     ) const;
 
+    std::vector<AppsecException> extractExceptionsFromCluster(
+        const std::string &crd_plural,
+        const std::unordered_set<std::string> &elements_names
+    ) const;
+
     template<class T>
     std::vector<T> extractElementsFromCluster(
         const std::string &crd_plural,
         const std::unordered_set<std::string> &elements_names
     ) const;
+
+    void createSnortFile(std::vector<NewAppSecPracticeSpec> &practices) const;
 
     template<class T>
     std::vector<T> extractV1Beta2ElementsFromCluster(

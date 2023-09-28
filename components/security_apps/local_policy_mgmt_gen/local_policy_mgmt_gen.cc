@@ -43,7 +43,7 @@
 #include "include/rules_config_section.h"
 #include "include/trusted_sources_section.h"
 #include "include/policy_maker_utils.h"
-#include "include/k8s_policy_utils.h"
+#include "k8s_policy_utils.h"
 #include "i_env_details.h"
 
 using namespace std;
@@ -64,31 +64,10 @@ public:
     void
     init()
     {
-        env_details = Singleton::Consume<I_EnvDetails>::by<LocalPolicyMgmtGenerator::Impl>();
-        env_type = env_details->getEnvType();
-        if (env_type == EnvType::LINUX) {
-            dbgInfo(D_LOCAL_POLICY) << "Initializing Linux policy generator";
-            local_policy_path = getFilesystemPathConfig() + default_local_mgmt_policy_path;
-            return;
-        }
-        dbgInfo(D_LOCAL_POLICY) << "Initializing K8S policy generator";
-        k8s_policy_utils.init();
-
-        Singleton::Consume<I_MainLoop>::by<LocalPolicyMgmtGenerator::Impl>()->addOneTimeRoutine(
-            I_MainLoop::RoutineType::Offline,
-            [this] ()
-            {
-                while(!k8s_policy_utils.getClusterId()) {
-                    Singleton::Consume<I_MainLoop>::by<LocalPolicyMgmtGenerator::Impl>()->yield(chrono::seconds(1));
-                }
-                return;
-            },
-            "Get k8s cluster ID"
-        );
     }
 
     string
-    parseLinuxPolicy(const string &policy_version)
+    parseLinuxPolicy(const string &policy_version, const string &local_policy_path)
     {
         dbgFlow(D_LOCAL_POLICY) << "Starting to parse policy - embedded environment";
 
@@ -103,6 +82,10 @@ public:
     parseK8sPolicy(const string &policy_version)
     {
         dbgFlow(D_LOCAL_POLICY) << "Starting to parse policy - K8S environment";
+
+        dbgInfo(D_LOCAL_POLICY) << "Initializing K8S policy generator";
+        K8sPolicyUtils k8s_policy_utils;
+        k8s_policy_utils.init();
 
         auto appsec_policies = k8s_policy_utils.createAppsecPoliciesFromIngresses();
         if (!std::get<0>(appsec_policies).empty()) {
@@ -120,27 +103,14 @@ public:
     }
 
     string
-    parsePolicy(const string &policy_version)
+    generateAppSecLocalPolicy(EnvType env_type, const string &policy_version, const string &local_policy_paths)
     {
-        return isK8sEnv() ? parseK8sPolicy(policy_version) : parseLinuxPolicy(policy_version);
+        return env_type == EnvType::K8S ?
+            parseK8sPolicy(policy_version) : parseLinuxPolicy(policy_version, local_policy_paths);
     }
-
-    const string & getAgentPolicyPath(void) const override { return default_local_appsec_policy_path; }
-    const string & getLocalPolicyPath(void) const override { return local_policy_path; }
-    void setPolicyPath(const string &new_local_policy_path) override { local_policy_path = new_local_policy_path; }
 
 private:
-    bool
-    isK8sEnv()
-    {
-        return env_type == EnvType::K8S;
-    }
-
-    I_EnvDetails* env_details = nullptr;
-    EnvType env_type;
     PolicyMakerUtils policy_maker_utils;
-    K8sPolicyUtils k8s_policy_utils;
-    string local_policy_path;
 
 };
 

@@ -12,7 +12,6 @@ add_subdirectory(manifest_controller)
 add_subdirectory(update_communication)
 add_subdirectory(details_resolver)
 add_subdirectory(health_check)
-add_subdirectory(local_policy_mgmt_gen)
 add_subdirectory(env_details)
 
 #add_subdirectory(orchestration_ut)

@@ -21,6 +21,7 @@
 #include <sys/syscall.h>
 #include <dirent.h>
 #include <sstream>
+#include <algorithm>
 
 #include "debug.h"
 
@@ -46,6 +47,24 @@ exists(const string &path)
     }
 
     dbgTrace(D_INFRA_UTILS) << "Path does not exists. Path: " << path;
+    return false;
+}
+
+bool
+isDirectory(const string &path)
+{
+    dbgFlow(D_INFRA_UTILS) << "Checking if path is a directory. Path: " << path;
+    struct stat buffer;
+    if (stat(path.c_str(), &buffer) != 0) {
+        dbgTrace(D_INFRA_UTILS) << "Path does not exists. Path: " << path;
+        return false;
+    }
+
+    if (buffer.st_mode & S_IFDIR) {
+        dbgTrace(D_INFRA_UTILS) << "Path is a directory. Path: " << path;
+        return true;
+    }
+
     return false;
 }
 
@@ -355,5 +374,21 @@ regexReplace(const char *file, int line, const string &sample, const regex &rege
 }
 
 }// namespace Regex
+
+namespace Strings
+{
+
+string
+removeTrailingWhitespaces(string str)
+{
+    str.erase(
+        find_if(str.rbegin(), str.rend(), [] (char c) { return !isspace(c); }).base(),
+        str.end()
+    );
+
+    return str;
+}
+
+} // namespace Strings
 
 } // namespace NGEN

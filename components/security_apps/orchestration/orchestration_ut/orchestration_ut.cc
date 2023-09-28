@@ -54,6 +54,8 @@ public:
             addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Orchestration runner", true)
         ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
 
+        EXPECT_CALL(mock_orchestration_tools, getClusterId());
+
         EXPECT_CALL(
             mock_shell_cmd,
             getExecOutput("openssl version -d | cut -d\" \" -f2 | cut -d\"\\\"\" -f2", _, _)
@@ -118,11 +120,11 @@ public:
         Maybe<string> err = genError("No file exist");
         EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/conf/user-cred.json")).WillOnce(Return(err));
 
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a")).WillOnce(
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is fake", "/etc/cp/data/data1.a", false)).WillOnce(
             Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a")).WillOnce(
+        EXPECT_CALL(mock_orchestration_tools, writeFile("0000 is fake", "/etc/cp/data/data4.a", false)).WillOnce(
             Return(true));
-        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a")).WillOnce(
+        EXPECT_CALL(mock_orchestration_tools, writeFile("This is 3333", "/etc/cp/data/data6.a", false)).WillOnce(
             Return(true));
     }
 
@@ -1333,26 +1335,6 @@ TEST_F(OrchestrationTest, manifestUpdate)
     } catch (const invalid_argument& e) {}
 }
 
-TEST_F(OrchestrationTest, loadFromOrchestrationPolicy)
-{
-    EXPECT_CALL(
-        rest,
-        mockRestCall(RestAction::ADD, "proxy", _)
-    ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
-    waitForRestCall();
-    init();
-}
-
-TEST_F(OrchestrationTest, loadFromOrchestrationBackupPolicy)
-{
-    EXPECT_CALL(
-        rest,
-        mockRestCall(RestAction::ADD, "proxy", _)
-    ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
-    waitForRestCall();
-    init();
-}
-
 TEST_F(OrchestrationTest, getBadPolicyUpdate)
 {
     EXPECT_CALL(
@@ -1815,6 +1797,7 @@ TEST_F(OrchestrationTest, GetRestOrchStatus)
                     "    \"Last update\": \"" + test_str + "\",\n"
                     "    \"Last update status\": \"" + test_str + "\",\n"
                     "    \"Policy version\": \"" + test_str + "\",\n"
+                    "    \"AI model version\": \"" + test_str + "\",\n"
                     "    \"Last policy update\": \"" + test_str + "\",\n"
                     "    \"Last manifest update\": \"" + test_str + "\",\n"
                     "    \"Last settings update\": \"" + test_str + "\",\n"
@@ -1841,6 +1824,7 @@ TEST_F(OrchestrationTest, GetRestOrchStatus)
     EXPECT_CALL(mock_status, getUpdateTime()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getLastManifestUpdate()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getPolicyVersion()).WillOnce(ReturnRef(test_str));
+    EXPECT_CALL(mock_status, getWaapModelVersion()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getLastPolicyUpdate()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getLastSettingsUpdate()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getUpgradeMode()).WillOnce(ReturnRef(test_str));

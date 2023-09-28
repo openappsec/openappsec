@@ -22,6 +22,7 @@
 #include "maybe_res.h"
 #include "enum_array.h"
 #include "i_shell_cmd.h"
+#include "i_orchestration_tools.h"
 #include "config.h"
 
 using namespace std;
@@ -77,7 +78,8 @@ DetailsResolvingHanlder::Impl::getResolvedDetails() const
         const string &path = file_handler.second.first;
         FileContentHandler handler = file_handler.second.second;
 
-        shared_ptr<ifstream> in_file = make_shared<ifstream>(path);
+        shared_ptr<ifstream> in_file =
+            Singleton::Consume<I_OrchestrationTools>::by<DetailsResolvingHanlder>()->fileStreamWrapper(path);
         if (!in_file->is_open()) {
             dbgWarning(D_AGENT_DETAILS) << "Could not open file for processing. Path: " << path;
             continue;

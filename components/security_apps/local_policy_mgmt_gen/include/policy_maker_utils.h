@@ -57,19 +57,21 @@ class SecurityAppsWrapper
 {
 public:
     SecurityAppsWrapper(
-        const AppSecWrapper &_waap,
-        const TriggersWrapper &_trrigers,
-        const RulesConfigWrapper &_rules,
-        const IntrusionPreventionWrapper &_ips,
-        const AccessControlRulebaseWrapper &_rate_limit,
-        const FileSecurityWrapper &_file_security,
-        const ExceptionsWrapper &_exceptions,
-        const std::string &_policy_version)
+        const AppSecWrapper                 &_waap,
+        const TriggersWrapper               &_trrigers,
+        const RulesConfigWrapper            &_rules,
+        const IntrusionPreventionWrapper    &_ips,
+        const SnortSectionWrapper           &_snort,
+        const AccessControlRulebaseWrapper  &_rate_limit,
+        const FileSecurityWrapper           &_file_security,
+        const ExceptionsWrapper             &_exceptions,
+        const std::string                   &_policy_version)
             :
         waap(_waap),
         trrigers(_trrigers),
         rules(_rules),
         ips(_ips),
+        snort(_snort),
         rate_limit(_rate_limit),
         file_security(_file_security),
         exceptions(_exceptions),
@@ -78,14 +80,15 @@ public:
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
-    AppSecWrapper waap;
-    TriggersWrapper trrigers;
-    RulesConfigWrapper rules;
-    IntrusionPreventionWrapper  ips;
-    AccessControlRulebaseWrapper rate_limit;
-    FileSecurityWrapper file_security;
-    ExceptionsWrapper exceptions;
-    std::string policy_version;
+    AppSecWrapper                   waap;
+    TriggersWrapper                 trrigers;
+    RulesConfigWrapper              rules;
+    IntrusionPreventionWrapper      ips;
+    SnortSectionWrapper             snort;
+    AccessControlRulebaseWrapper    rate_limit;
+    FileSecurityWrapper             file_security;
+    ExceptionsWrapper               exceptions;
+    std::string                     policy_version;
 };
 
 class PolicyWrapper
@@ -129,7 +132,8 @@ public:
 private:
     std::string getPolicyName(const std::string &policy_path);
 
-    Maybe<AppsecLinuxPolicy> openPolicyAsJson(const std::string &policy_path);
+    template<class T>
+    Maybe<T> openFileAsJson(const std::string &path);
 
     void clearElementsMaps();
 
@@ -151,6 +155,20 @@ private:
         const std::string &practice_name,
         const std::string &source_identifier,
         const std::string & context,
+        const V1beta2AppsecLinuxPolicy &policy,
+        std::map<AnnotationTypes, std::string> &rule_annotations
+    );
+
+    void createSnortProtecionsSection(const std::string &file_name, const std::string &practic_name);
+
+    void
+    createSnortSections(
+        const std::string & context,
+        const std::string &asset_name,
+        const std::string &asset_id,
+        const std::string &practice_name,
+        const std::string &practice_id,
+        const std::string &source_identifier,
         const V1beta2AppsecLinuxPolicy &policy,
         std::map<AnnotationTypes, std::string> &rule_annotations
     );
@@ -215,10 +233,12 @@ private:
 
     std::map<std::string, LogTriggerSection> log_triggers;
     std::map<std::string, WebUserResponseTriggerSection> web_user_res_triggers;
-    std::map<std::string, InnerException> inner_exceptions;
+    std::map<std::string, std::vector<InnerException>> inner_exceptions;
     std::map<std::string, WebAppSection> web_apps;
     std::map<std::string, RulesConfigRulebase> rules_config;
     std::map<std::string, IpsProtectionsSection> ips;
+    std::map<std::string, SnortProtectionsSection> snort;
+    std::map<std::string, ProtectionsSection> snort_protections;
     std::map<std::string, FileSecurityProtectionsSection> file_security;
     std::map<std::string, RateLimitSection> rate_limit;
     std::map<std::string, UsersIdentifiersRulebase> users_identifiers;

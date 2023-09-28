@@ -12,7 +12,7 @@
 // limitations under the License.
 
 #include "k8s_policy_utils.h"
-#include "namespace_data.h"
+#include "configmaps.h"
 
 using namespace std;
 
@@ -184,6 +184,36 @@ getAppSecClassNameFromCluster()
 }
 // LCOV_EXCL_STOP
 
+vector<AppsecException>
+K8sPolicyUtils::extractExceptionsFromCluster(
+    const string &crd_plural,
+    const unordered_set<string> &elements_names) const
+{
+    dbgTrace(D_LOCAL_POLICY) << "Retrieve AppSec elements. type: " << crd_plural;
+    vector<AppsecException> elements;
+    for (const string &element_name : elements_names) {
+        dbgTrace(D_LOCAL_POLICY) << "AppSec element name: " << element_name;
+        auto maybe_appsec_element = getObjectFromCluster<AppsecSpecParser<vector<AppsecExceptionSpec>>>(
+            "/apis/openappsec.io/v1beta1/" + crd_plural + "/" + element_name
+        );
+
+        if (!maybe_appsec_element.ok()) {
+            dbgWarning(D_LOCAL_POLICY)
+                << "Failed to retrieve AppSec element. type: "
+                << crd_plural
+                << ", name: "
+                << element_name
+                << ". Error: "
+                << maybe_appsec_element.getErr();
+            continue;
+        }
+
+        AppsecSpecParser<vector<AppsecExceptionSpec>> appsec_element = maybe_appsec_element.unpack();
+        elements.push_back(AppsecException(element_name, appsec_element.getSpec()));
+    }
+    return elements;
+}
+
 template<class T>
 vector<T>
 K8sPolicyUtils::extractElementsFromCluster(
@@ -292,7 +322,8 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta1Crds(
         policy_elements_names[AnnotationTypes::WEB_USER_RES]
     );
 
-    vector<AppsecExceptionSpec> exceptions = extractElementsFromCluster<AppsecExceptionSpec>(
+
+    vector<AppsecException> exceptions = extractExceptionsFromCluster(
         "exceptions",
         policy_elements_names[AnnotationTypes::EXCEPTION]
     );
@@ -320,6 +351,34 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta1Crds(
 }
 
 // LCOV_EXCL_START Reason: no test exist
+void
+K8sPolicyUtils::createSnortFile(vector<NewAppSecPracticeSpec> &practices) const
+{
+    for (NewAppSecPracticeSpec &practice : practices) {
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<K8sPolicyUtils>();
+        auto path = "/etc/cp/conf/snort/snort_k8s_" + practice.getName() + ".rule";
+        bool append_mode = false;
+        for (const string &config_map : practice.getSnortSignatures().getConfigMap())
+        {
+            auto maybe_configmap = getObjectFromCluster<ConfigMaps>(
+                "/api/v1/namespaces/default/configmaps/" + config_map
+            );
+            if (!maybe_configmap.ok())  {
+                dbgWarning(D_LOCAL_POLICY) << "Failed to get configMaps from the cluster.";
+                continue;
+            }
+            string file_content = maybe_configmap.unpack().getFileContent();
+            string file_name = maybe_configmap.unpack().getFileName();
+            if (!orchestration_tools->writeFile(file_content, path, append_mode)) {
+                dbgWarning(D_LOCAL_POLICY) << "Failed to update the snort_k8s_rules file.";
+                continue;
+            }
+            append_mode = true;
+            practice.getSnortSignatures().addFile(file_name);
+        }
+    }
+}
+
 Maybe<V1beta2AppsecLinuxPolicy>
 K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
     const AppsecSpecParser<NewAppsecPolicySpec> &appsec_policy_spec,
@@ -348,6 +407,8 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
             "threatpreventionpractices",
             policy_elements_names[AnnotationTypes::THREAT_PREVENTION_PRACTICE]
         );
+
+    createSnortFile(threat_prevention_practices);
 
     vector<AccessControlPracticeSpec> access_control_practices =
         extractV1Beta2ElementsFromCluster<AccessControlPracticeSpec>(
@@ -404,7 +465,7 @@ doesVersionExist(const map<string, string> &annotations, const string &version)
     }
     return false;
 }
-//need to refactor don't forget that
+
 std::tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>>
 K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &ingress_mode) const
 {
@@ -523,51 +584,4 @@ K8sPolicyUtils::createAppsecPoliciesFromIngresses()
         }
     }
     return make_tuple(v1bet1_policies, v1bet2_policies);
-}
-
-bool
-isPlaygroundEnv()
-{
-    const char *env_string = getenv("PLAYGROUND");
-
-    if (env_string == nullptr) return false;
-    string env_value = env_string;
-    transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
-
-    return env_value == "true";
-}
-
-bool
-K8sPolicyUtils::getClusterId() const
-{
-    string playground_uid = isPlaygroundEnv() ? "playground-" : "";
-
-    dbgTrace(D_LOCAL_POLICY) << "Getting cluster UID";
-    auto maybe_namespaces_data = getObjectFromCluster<NamespaceData>("/api/v1/namespaces/");
-
-    if (!maybe_namespaces_data.ok()) {
-        dbgWarning(D_LOCAL_POLICY)
-            << "Failed to retrieve K8S namespace data. Error: "
-            << maybe_namespaces_data.getErr();
-        return false;
-    }
-
-    NamespaceData namespaces_data = maybe_namespaces_data.unpack();
-
-    Maybe<string> maybe_ns_uid = namespaces_data.getNamespaceUidByName("kube-system");
-    if (!maybe_ns_uid.ok()) {
-        dbgWarning(D_LOCAL_POLICY) << maybe_ns_uid.getErr();
-        return false;
-    }
-    string uid = playground_uid + maybe_ns_uid.unpack();
-    dbgTrace(D_LOCAL_POLICY) << "Found k8s cluster UID: " << uid;
-    I_Environment *env = Singleton::Consume<I_Environment>::by<K8sPolicyUtils>();
-    env->getConfigurationContext().registerValue<string>(
-        "k8sClusterId",
-        uid,
-        EnvKeyAttr::LogSection::SOURCE
-    );
-    I_AgentDetails *i_agent_details = Singleton::Consume<I_AgentDetails>::by<K8sPolicyUtils>();
-    i_agent_details->setClusterId(uid);
-    return true;
 }

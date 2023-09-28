@@ -31,6 +31,14 @@ class ApplyPolicyEvent : public Event<ApplyPolicyEvent>
 {
 public:
     ApplyPolicyEvent() {}
+    ApplyPolicyEvent(const std::string &path) : local_policy_path(path) {}
+
+    // LCOV_EXCL_START Reason: no test exist
+    std::string getPolicyPath() const { return local_policy_path; }
+    // LCOV_EXCL_STOP
+
+private:
+    std::string local_policy_path;
 };
 
 class DeclarativePolicyUtils
@@ -40,6 +48,7 @@ class DeclarativePolicyUtils
     Singleton::Consume<I_EnvDetails>,
     Singleton::Consume<I_AgentDetails>,
     Singleton::Consume<I_OrchestrationTools>,
+    public Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_RestApi>,
     public Listener<ApplyPolicyEvent>
 {
@@ -50,8 +59,7 @@ public:
         void
         doCall() override
         {
-            Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->setPolicyPath(policy_path.get());
-            ApplyPolicyEvent().notify();
+            ApplyPolicyEvent(policy_path.get()).notify();
         }
 
     private:
@@ -80,6 +88,7 @@ public:
 private:
     std::string getCleanChecksum(const std::string &unclean_checksum);
 
+    std::string local_policy_path;
     std::string curr_version;
     std::string curr_policy;
     bool should_apply_policy;

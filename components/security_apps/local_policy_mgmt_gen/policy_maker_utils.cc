@@ -27,6 +27,7 @@ SecurityAppsWrapper::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("rules",               rules),
         cereal::make_nvp("ips",                 ips),
         cereal::make_nvp("exceptions",          exceptions),
+        cereal::make_nvp("snort",               snort),
         cereal::make_nvp("fileSecurity",        file_security),
         cereal::make_nvp("version",             policy_version)
     );
@@ -53,29 +54,30 @@ PolicyMakerUtils::getPolicyName(const string &policy_path)
     return policy_name;
 }
 
-Maybe<AppsecLinuxPolicy>
-PolicyMakerUtils::openPolicyAsJson(const string &policy_path)
+template<class T>
+Maybe<T>
+PolicyMakerUtils::openFileAsJson(const string &path)
 {
-    auto maybe_policy_as_json = Singleton::Consume<I_ShellCmd>::by<PolicyMakerUtils>()->getExecOutput(
-        getFilesystemPathConfig() + "/bin/yq " + policy_path + " -o json"
+    auto maybe_file_as_json = Singleton::Consume<I_ShellCmd>::by<PolicyMakerUtils>()->getExecOutput(
+        getFilesystemPathConfig() + "/bin/yq " + path + " -o json"
     );
 
-    if (!maybe_policy_as_json.ok()) {
+    if (!maybe_file_as_json.ok()) {
         dbgDebug(D_NGINX_POLICY) << "Could not convert policy from yaml to json";
-        return genError("Could not convert policy from yaml to json. Error: " + maybe_policy_as_json.getErr());
+        return genError("Could not convert policy from yaml to json. Error: " + maybe_file_as_json.getErr());
     }
 
     auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<PolicyMakerUtils>();
-    auto maybe_policy = i_orchestration_tools->jsonStringToObject<AppsecLinuxPolicy>(
-        maybe_policy_as_json.unpack()
+    auto maybe_file = i_orchestration_tools->jsonStringToObject<T>(
+        maybe_file_as_json.unpack()
     );
 
-    if (!maybe_policy.ok()) {
-        string error = "Policy in path: " + policy_path + " was not loaded. Error: " + maybe_policy.getErr();
+    if (!maybe_file.ok()) {
+        string error = "Policy in path: " + path + " was not loaded. Error: " + maybe_file.getErr();
         dbgDebug(D_NGINX_POLICY) << error;
         return  genError(error);
     }
-    return maybe_policy.unpack();
+    return maybe_file.unpack();
 }
 
 void
@@ -86,6 +88,11 @@ PolicyMakerUtils::clearElementsMaps()
     inner_exceptions.clear();
     web_apps.clear();
     rules_config.clear();
+    ips.clear();
+    snort.clear();
+    snort_protections.clear();
+    file_security.clear();
+    rate_limit.clear();
 }
 
 // LCOV_EXCL_START Reason: no test exist - needed for NGINX config
@@ -351,6 +358,19 @@ convertMapToVector(map<K, V> map)
     return vec;
 }
 
+vector<InnerException>
+convertExceptionsMapToVector(map<string, vector<InnerException>> map)
+{
+    vector<InnerException> vec;
+    if (map.empty()) {
+        return vec;
+    }
+    for (const auto &m : map) {
+        if (!m.first.empty()) vec.insert(vec.end(), m.second.begin(), m.second.end());
+    }
+    return vec;
+}
+
 template<class T, class R>
 R
 getAppsecPracticeSpec(const string &practice_annotation_name, const T &policy)
@@ -404,7 +424,7 @@ template<class T, class R>
 R
 getAppsecExceptionSpec(const string &exception_annotation_name, const T &policy)
 {
-    auto exceptions_vec = policy.getAppsecExceptionSpecs();
+    auto exceptions_vec = policy.getAppsecExceptions();
     auto exception_it = extractElement(exceptions_vec.begin(), exceptions_vec.end(), exception_annotation_name);
 
     if (exception_it == exceptions_vec.end()) {
@@ -710,26 +730,24 @@ createTrustedSourcesSection<V1beta2AppsecLinuxPolicy>(
 }
 
 template<class T>
-InnerException
+vector<InnerException>
 createExceptionSection(
     const string &exception_annotation_name,
     const T &policy)
 {
-    AppsecExceptionSpec exception_spec =
-        getAppsecExceptionSpec<T, AppsecExceptionSpec>(exception_annotation_name, policy);
-    ExceptionMatch exception_match(exception_spec);
-    string behavior =
-        exception_spec.getAction() == "skip" ?
-        "ignore" :
-        exception_spec.getAction();
-
-    ExceptionBehavior exception_behavior("action", behavior);
-    InnerException inner_exception(exception_behavior, exception_match);
-    return inner_exception;
+    AppsecException exception_spec =
+        getAppsecExceptionSpec<T, AppsecException>(exception_annotation_name, policy);
+    vector<InnerException> res;
+    for (auto exception : exception_spec.getExceptions()) {
+        ExceptionMatch exception_match(exception);
+        ExceptionBehavior exception_behavior(exception.getAction());
+        res.push_back(InnerException(exception_behavior, exception_match));
+    }
+    return res;
 }
 
 template<>
-InnerException
+vector<InnerException>
 createExceptionSection<V1beta2AppsecLinuxPolicy>(
     const string &exception_annotation_name,
     const V1beta2AppsecLinuxPolicy &policy)
@@ -737,14 +755,9 @@ createExceptionSection<V1beta2AppsecLinuxPolicy>(
     NewAppsecException exception_spec =
         getAppsecExceptionSpec<V1beta2AppsecLinuxPolicy, NewAppsecException>(exception_annotation_name, policy);
     ExceptionMatch exception_match(exception_spec);
-    string behavior =
-        exception_spec.getAction() == "skip" ?
-        "ignore" :
-        exception_spec.getAction();
-
-    ExceptionBehavior exception_behavior("action", behavior);
+    ExceptionBehavior exception_behavior(exception_spec.getAction());
     InnerException inner_exception(exception_behavior, exception_match);
-    return inner_exception;
+    return {inner_exception};
 }
 
 template<class T>
@@ -842,10 +855,13 @@ createMultiRulesSections(
     const string &web_user_res_vec_type,
     const string &asset_name,
     const string &exception_name,
-    const string &exception_id)
+    const vector<InnerException> &exceptions)
 {
     PracticeSection practice = PracticeSection(practice_id, practice_type, practice_name);
-    ParametersSection exception_param = ParametersSection(exception_id, exception_name);
+    vector<ParametersSection> exceptions_result;
+    for (auto exception : exceptions) {
+        exceptions_result.push_back(ParametersSection(exception.getBehaviorId(), exception_name));
+    }
 
     vector<RulesTriggerSection> triggers;
     if (!log_trigger_id.empty()) {
@@ -864,7 +880,7 @@ createMultiRulesSections(
         url,
         uri,
         {practice},
-        {exception_param},
+        exceptions_result,
         triggers
     );
 
@@ -889,9 +905,9 @@ createMultiRulesSections(
     const string &web_user_res_vec_type,
     const string &asset_name,
     const string &exception_name,
-    const string &exception_id)
+    const vector<InnerException> &exceptions)
 {
-    ParametersSection exception_param = ParametersSection(exception_id, exception_name);
+    ParametersSection exception_param = ParametersSection(exceptions[0].getBehaviorId(), exception_name);
 
     vector<PracticeSection> practices;
     if (!practice_id.empty()) {
@@ -941,6 +957,9 @@ PolicyMakerUtils::createIpsSections(
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
         policy);
+
+    if (apssec_practice.getIntrusionPrevention().getMode().empty()) return;
+
     IpsProtectionsSection ips_section = IpsProtectionsSection(
         context,
         asset_name,
@@ -956,6 +975,74 @@ PolicyMakerUtils::createIpsSections(
 }
 
 void
+PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, const string &practice_name)
+{
+    auto path = getFilesystemPathConfig() + "/conf/snort/snort_k8s_" + practice_name;
+    if (snort_protections.find(path) != snort_protections.end()) return;
+
+    auto snort_scriipt_path = getFilesystemPathConfig() + "/scripts/snort_to_ips_local.py";
+    auto cmd = "python " + snort_scriipt_path + " " + path + ".rule " + path + ".out " + path + ".err";
+
+    auto res = Singleton::Consume<I_ShellCmd>::by<PolicyMakerUtils>()->getExecOutput(cmd);
+
+    if (!res.ok()) {
+        dbgWarning(D_LOCAL_POLICY) << res.getErr();
+        return;
+    }
+
+    Maybe<ProtectionsSectionWrapper> maybe_protections = openFileAsJson<ProtectionsSectionWrapper>(path + ".out");
+    if (!maybe_protections.ok()){
+        dbgWarning(D_LOCAL_POLICY) << maybe_protections.getErr();
+        return;
+    }
+
+    auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<PolicyMakerUtils>();
+    i_orchestration_tools->removeFile(path + ".rule");
+    i_orchestration_tools->removeFile(path + ".out");
+    i_orchestration_tools->removeFile(path + ".err");
+
+    snort_protections[path] = ProtectionsSection(
+        maybe_protections.unpack().getProtections(),
+        file_name
+    );
+}
+
+void
+PolicyMakerUtils::createSnortSections(
+    const string & context,
+    const string &asset_name,
+    const string &asset_id,
+    const string &practice_name,
+    const string &practice_id,
+    const string &source_identifier,
+    const V1beta2AppsecLinuxPolicy &policy,
+    map<AnnotationTypes, string> &rule_annotations)
+{
+    auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
+        rule_annotations[AnnotationTypes::PRACTICE],
+        policy);
+
+    if (apssec_practice.getSnortSignatures().getOverrideMode() == "inactive" ||
+        apssec_practice.getSnortSignatures().getFiles().size() == 0) {
+        return;
+    }
+    createSnortProtecionsSection(apssec_practice.getSnortSignatures().getFiles()[0], apssec_practice.getName());
+
+    SnortProtectionsSection snort_section = SnortProtectionsSection(
+        context,
+        asset_name,
+        asset_id,
+        practice_name,
+        practice_id,
+        source_identifier,
+        apssec_practice.getSnortSignatures().getOverrideMode(),
+        apssec_practice.getSnortSignatures().getFiles()
+    );
+
+    snort[asset_name] = snort_section;
+}
+
+void
 PolicyMakerUtils::createFileSecuritySections(
     const string &asset_id,
     const string &asset_name,
@@ -968,6 +1055,9 @@ PolicyMakerUtils::createFileSecuritySections(
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
         policy);
+
+    if (apssec_practice.getFileSecurity().getOverrideMode().empty()) return;
+
     auto file_security_section = apssec_practice.getFileSecurity().createFileSecurityProtectionsSection(
         context,
         asset_name,
@@ -1095,7 +1185,7 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         "WebUserResponse",
         asset_name,
         rule_annotations[AnnotationTypes::EXCEPTION],
-        inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]].getBehaviorId()
+        inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]]
     );
     rules_config[rule_config.getAssetName()] = rule_config;
 
@@ -1117,6 +1207,17 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         rule_annotations[AnnotationTypes::PRACTICE],
         current_identifier,
         rule_config.getContext(),
+        policy,
+        rule_annotations
+    );
+
+    createSnortSections(
+        "practiceId(" + practice_id + ")",
+        rule_config.getAssetName(),
+        rule_config.getAssetId(),
+        rule_annotations[AnnotationTypes::PRACTICE],
+        practice_id,
+        current_identifier,
         policy,
         rule_annotations
     );
@@ -1158,12 +1259,13 @@ PolicyMakerUtils::combineElementsToPolicy(const string &policy_version)
         )
     );
     ExceptionsWrapper exceptions_section({
-        ExceptionsRulebase(convertMapToVector(inner_exceptions))
+        ExceptionsRulebase(convertExceptionsMapToVector(inner_exceptions))
     });
 
     AppSecWrapper appses_section(AppSecRulebase(convertMapToVector(web_apps), {}));
     RulesConfigWrapper rules_config_section(convertMapToVector(rules_config), convertMapToVector(users_identifiers));
     IntrusionPreventionWrapper ips_section(convertMapToVector(ips));
+    SnortSectionWrapper snort_section(convertMapToVector(snort), convertMapToVector(snort_protections));
     FileSecurityWrapper file_security_section(convertMapToVector(file_security));
     AccessControlRulebaseWrapper rate_limit_section(convertMapToVector(rate_limit));
     SecurityAppsWrapper security_app_section = SecurityAppsWrapper(
@@ -1171,6 +1273,7 @@ PolicyMakerUtils::combineElementsToPolicy(const string &policy_version)
         triggers_section,
         rules_config_section,
         ips_section,
+        snort_section,
         rate_limit_section,
         file_security_section,
         exceptions_section,
@@ -1277,7 +1380,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
             "WebUserResponse",
             full_url,
             rule_annotations[AnnotationTypes::EXCEPTION],
-            inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]].getBehaviorId()
+            inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]]
         );
         rules_config[rule_config.getAssetName()] = rule_config;
 
@@ -1303,7 +1406,8 @@ PolicyMakerUtils::createPolicyElementsByRule(
                 getAppsecPracticeSpec<T, AppSecPracticeSpec>(rule_annotations[AnnotationTypes::PRACTICE], policy),
                 log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],
                 rule.getMode(),
-                trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]]
+                trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]],
+                inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]]
             );
             web_apps[rule_config.getAssetName()] = web_app;
         }
@@ -1468,7 +1572,7 @@ PolicyMakerUtils::proccesSingleAppsecPolicy(
     const string &policy_version,
     const string &local_appsec_policy_path)
 {
-    Maybe<AppsecLinuxPolicy> maybe_policy = openPolicyAsJson(policy_path);
+    Maybe<AppsecLinuxPolicy> maybe_policy = openFileAsJson<AppsecLinuxPolicy>(policy_path);
     if (!maybe_policy.ok()){
         dbgWarning(D_LOCAL_POLICY) << maybe_policy.getErr();
         return "";

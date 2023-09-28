@@ -141,7 +141,6 @@ Environment::Impl::init()
 void
 Environment::Impl::fini()
 {
-    global.deactivate();
 }
 
 void

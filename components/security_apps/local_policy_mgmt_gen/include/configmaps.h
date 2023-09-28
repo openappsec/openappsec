@@ -11,21 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __I_LOCAL_POLICY_MGMT_GEN_H__
-#define __I_LOCAL_POLICY_MGMT_GEN_H__
+#ifndef __CONFIGMAPS_H__
+#define __CONFIGMAPS_H__
 
-#include "i_env_details.h"
+#include <vector>
+#include <map>
 
-class I_LocalPolicyMgmtGen
+#include "config.h"
+#include "debug.h"
+#include "rest.h"
+#include "cereal/archives/json.hpp"
+#include <cereal/types/map.hpp>
+#include "customized_cereal_map.h"
+
+#include "local_policy_common.h"
+
+class ConfigMaps : public ClientRest
 {
 public:
-    virtual std::string generateAppSecLocalPolicy(
-        EnvType env_type,
-        const std::string &policy_version,
-        const std::string &local_policy_path) = 0;
+    bool loadJson(const std::string &json);
 
-protected:
-    ~I_LocalPolicyMgmtGen() {}
+    std::string getFileContent() const;
+    std::string getFileName() const;
+
+private:
+    std::map<std::string, std::string> data;
 };
 
-#endif //__I_LOCAL_POLICY_MGMT_GEN_H__
+#endif // __CONFIGMAPS_H__

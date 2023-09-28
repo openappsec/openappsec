@@ -25,6 +25,7 @@ namespace Filesystem
 {
 
 bool exists(const std::string &path);
+bool isDirectory(const std::string &path);
 
 bool makeDir(const std::string &path, mode_t permission = S_IRWXU);
 bool makeDirRecursive(const std::string &path, mode_t permission = S_IRWXU);
@@ -74,6 +75,13 @@ regexReplace(
 );
 
 } // namespace Regex
+
+namespace Strings
+{
+
+std::string removeTrailingWhitespaces(std::string str);
+
+} // namespace Strings
 
 } // namespace NGEN
 

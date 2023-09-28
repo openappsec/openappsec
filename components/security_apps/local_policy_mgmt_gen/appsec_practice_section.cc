@@ -34,7 +34,7 @@ AppSecWebBotsURI::getURI() const
     return uri;
 }
 
-std::vector<std::string>
+vector<string>
 AppSecPracticeAntiBot::getIjectedUris() const
 {
     vector<string> injected;
@@ -44,7 +44,7 @@ AppSecPracticeAntiBot::getIjectedUris() const
     return injected;
 }
 
-std::vector<std::string>
+vector<string>
 AppSecPracticeAntiBot::getValidatedUris() const
 {
     vector<string> validated;
@@ -315,18 +315,74 @@ TriggersInWaapSection::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
+ParsedMatch::ParsedMatch(const string &_operator, const string &_tag, const string &_value)
+        :
+    operator_type(_operator),
+    tag(_tag),
+    value(_value)
+{
+}
+
+// LCOV_EXCL_START Reason: no test exist
+ParsedMatch::ParsedMatch(const ExceptionMatch &exceptions)
+{
+    if (exceptions.getOperator() == "equals") {
+        operator_type = "basic";
+        tag = exceptions.getKey();
+        value = exceptions.getValue();
+    } else {
+        operator_type = exceptions.getOperator();
+    }
+    for (const ExceptionMatch &exception_match : exceptions.getMatch()) {
+        parsed_match.push_back(ParsedMatch(exception_match));
+    }
+}
+// LCOV_EXCL_STOP
+
+void
+ParsedMatch::save(cereal::JSONOutputArchive &out_ar) const
+{
+    if (parsed_match.size() > 0) {
+        out_ar(cereal::make_nvp("operator", operator_type));
+        int i = 0;
+        for (const ParsedMatch &operand : parsed_match) {
+            i++;
+            out_ar(cereal::make_nvp("operand" + to_string(i), operand));
+        }
+    } else {
+        out_ar(
+            cereal::make_nvp("operator",    operator_type),
+            cereal::make_nvp("tag",         tag),
+            cereal::make_nvp("value",       value)
+        );
+    }
+}
+
 AppSecOverride::AppSecOverride(const SourcesIdentifiers &parsed_trusted_sources)
 {
     string source_ident = parsed_trusted_sources.getSourceIdent();
     map<string, string> behavior = {{"httpSourceId", source_ident}};
     parsed_behavior.push_back(behavior);
-    parsed_match = {{"operator", "BASIC"}, {"tag", "sourceip"}, {"value", "0.0.0.0/0"}};
+    parsed_match = ParsedMatch("BASIC", "sourceip", "0.0.0.0/0");
 }
+
+// LCOV_EXCL_START Reason: no test exist
+AppSecOverride::AppSecOverride(const InnerException &parsed_exceptions)
+        :
+    id(parsed_exceptions.getBehaviorId()),
+    parsed_match(parsed_exceptions.getMatch())
+{
+    map<string, string> behavior = {{parsed_exceptions.getBehaviorKey(), parsed_exceptions.getBehaviorValue()}};
+    parsed_behavior.push_back(behavior);
+}
+// LCOV_EXCL_STOP
 
 void
 AppSecOverride::save(cereal::JSONOutputArchive &out_ar) const
 {
-    string parameter_type = "TrustedSource";
+    if (!id.empty()) {
+        out_ar(cereal::make_nvp("id", id));
+    }
     out_ar(
         cereal::make_nvp("parsedBehavior", parsed_behavior),
         cereal::make_nvp("parsedMatch",    parsed_match)
@@ -355,7 +411,8 @@ WebAppSection::WebAppSection(
     const AppSecPracticeSpec &parsed_appsec_spec,
     const LogTriggerSection &parsed_log_trigger,
     const string &default_mode,
-    const AppSecTrustedSources &parsed_trusted_sources)
+    const AppSecTrustedSources &parsed_trusted_sources,
+    const vector<InnerException> &parsed_exceptions)
         :
     application_urls(_application_urls),
     asset_id(_asset_id),
@@ -382,19 +439,23 @@ WebAppSection::WebAppSection(
     for (const SourcesIdentifiers &source_ident : parsed_trusted_sources.getSourcesIdentifiers()) {
         overrides.push_back(AppSecOverride(source_ident));
     }
+
+    for (const InnerException &exception : parsed_exceptions) {
+        overrides.push_back(AppSecOverride(exception));
+    }
 }
 
 WebAppSection::WebAppSection(
-    const std::string &_application_urls,
-    const std::string &_asset_id,
-    const std::string &_asset_name,
-    const std::string &_rule_id,
-    const std::string &_rule_name,
-    const std::string &_practice_id,
-    const std::string &_practice_name,
+    const string &_application_urls,
+    const string &_asset_id,
+    const string &_asset_name,
+    const string &_rule_id,
+    const string &_rule_name,
+    const string &_practice_id,
+    const string &_practice_name,
     const string &_context,
-    const std::string &_web_attack_mitigation_severity,
-    const std::string &_web_attack_mitigation_mode,
+    const string &_web_attack_mitigation_severity,
+    const string &_web_attack_mitigation_mode,
     const PracticeAdvancedConfig &_practice_advanced_config,
     const AppsecPracticeAntiBotSection &_anti_bots,
     const LogTriggerSection &parsed_log_trigger,
@@ -611,7 +672,7 @@ AppsecPolicySpec::getSpecificRules() const
 }
 
 bool
-AppsecPolicySpec::isAssetHostExist(const std::string &full_url) const
+AppsecPolicySpec::isAssetHostExist(const string &full_url) const
 {
     for (const ParsedRule &rule : specific_rules) {
         if (rule.getHost() == full_url) return true;
@@ -633,7 +694,7 @@ AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<AppSecPracticeSpec>>("practices", practices, archive_in);
     parseAppsecJSONKey<vector<AppsecTriggerSpec>>("log-triggers", log_triggers, archive_in);
     parseAppsecJSONKey<vector<AppSecCustomResponseSpec>>("custom-responses", custom_responses, archive_in);
-    parseAppsecJSONKey<vector<AppsecExceptionSpec>>("exceptions", exceptions, archive_in);
+    parseAppsecJSONKey<vector<AppsecException>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<TrustedSourcesSpec>>("trusted-sources", trusted_sources, archive_in);
     parseAppsecJSONKey<vector<SourceIdentifierSpecWrapper>>(
         "source-identifiers",
@@ -666,8 +727,8 @@ AppsecLinuxPolicy::getAppSecCustomResponseSpecs() const
     return custom_responses;
 }
 
-const vector<AppsecExceptionSpec> &
-AppsecLinuxPolicy::getAppsecExceptionSpecs() const
+const vector<AppsecException> &
+AppsecLinuxPolicy::getAppsecExceptions() const
 {
     return exceptions;
 }

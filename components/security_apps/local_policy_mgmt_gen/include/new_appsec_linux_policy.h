@@ -65,7 +65,7 @@ public:
     const std::vector<AccessControlPracticeSpec> & getAccessControlPracticeSpecs() const;
     const std::vector<NewAppsecLogTrigger> & getAppsecTriggerSpecs() const;
     const std::vector<NewAppSecCustomResponse> & getAppSecCustomResponseSpecs() const;
-    const std::vector<NewAppsecException> & getAppsecExceptionSpecs() const;
+    const std::vector<NewAppsecException> & getAppsecExceptions() const;
     const std::vector<NewTrustedSourcesSpec> & getAppsecTrustedSourceSpecs() const;
     const std::vector<NewSourcesIdentifiers> & getAppsecSourceIdentifierSpecs() const;
     void addSpecificRule(const NewParsedRule &_rule);

@@ -32,6 +32,19 @@ private:
     std::string host;
 };
 
+class WildcardHost : public EnvironmentEvaluator<bool>, Singleton::Consume<I_Environment>
+{
+public:
+    WildcardHost(const std::vector<std::string> &params);
+
+    static std::string getName() { return "WildcardHost"; }
+
+    Maybe<bool, Context::Error> evalVariable() const override;
+
+private:
+    std::string host;
+};
+
 class EqualListeningIP : public EnvironmentEvaluator<bool>, Singleton::Consume<I_Environment>
 {
 public:

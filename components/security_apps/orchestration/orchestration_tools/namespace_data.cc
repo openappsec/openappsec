@@ -12,11 +12,31 @@
 // limitations under the License.
 
 #include "namespace_data.h"
-#include "local_policy_common.h"
 
 using namespace std;
 
-USE_DEBUG_FLAG(D_LOCAL_POLICY);
+USE_DEBUG_FLAG(D_ORCHESTRATOR);
+
+template <typename T>
+void
+parseNameSpaceJSONKey(
+    const string &key_name,
+    T &value,
+    cereal::JSONInputArchive &archive_in,
+    const T &default_value = T())
+{
+    try {
+        archive_in(cereal::make_nvp(key_name, value));
+    } catch (const cereal::Exception &e) {
+        archive_in.setNextName(nullptr);
+        value = default_value;
+        dbgDebug(D_ORCHESTRATOR)
+            << "Could not parse the required key. Key: "
+            << key_name
+            << ", Error: "
+            << e.what();
+    }
+}
 
 class NamespaceMetadata
 {
@@ -24,9 +44,9 @@ public:
     void
     load(cereal::JSONInputArchive &archive_in)
     {
-        dbgFlow(D_LOCAL_POLICY);
-        parseAppsecJSONKey<string>("name", name, archive_in);
-        parseAppsecJSONKey<string>("uid", uid, archive_in);
+        dbgFlow(D_ORCHESTRATOR);
+        parseNameSpaceJSONKey<string>("name", name, archive_in);
+        parseNameSpaceJSONKey<string>("uid", uid, archive_in);
     }
 
     const string &
@@ -52,7 +72,7 @@ public:
     void
     load(cereal::JSONInputArchive &archive_in)
     {
-        parseAppsecJSONKey<NamespaceMetadata>("metadata", metadata, archive_in);
+        parseNameSpaceJSONKey<NamespaceMetadata>("metadata", metadata, archive_in);
     }
 
     const NamespaceMetadata &
@@ -68,7 +88,7 @@ private:
 bool
 NamespaceData::loadJson(const string &json)
 {
-    dbgFlow(D_LOCAL_POLICY);
+    dbgFlow(D_ORCHESTRATOR);
     string modified_json = json;
     modified_json.pop_back();
     stringstream in;
@@ -81,7 +101,7 @@ NamespaceData::loadJson(const string &json)
             ns_name_to_uid[single_ns_data.getMetadata().getName()] = single_ns_data.getMetadata().getUID();
         }
     } catch (cereal::Exception &e) {
-        dbgWarning(D_LOCAL_POLICY) << "Failed to load namespace data JSON. Error: " << e.what();
+        dbgWarning(D_ORCHESTRATOR) << "Failed to load namespace data JSON. Error: " << e.what();
         return false;
     }
     return true;

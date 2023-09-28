@@ -16,6 +16,7 @@ USE_DEBUG_FLAG(D_ORCHESTRATOR);
 void
 DeclarativePolicyUtils::init()
 {
+    local_policy_path = getFilesystemPathConfig() + "/conf/local_policy.yaml";
     should_apply_policy = true;
     Singleton::Consume<I_RestApi>::by<DeclarativePolicyUtils>()->addRestCall<ApplyPolicyRest>(
         RestAction::SET, "apply-policy"
@@ -25,9 +26,10 @@ DeclarativePolicyUtils::init()
 
 // LCOV_EXCL_START Reason: no test exist
 void
-DeclarativePolicyUtils::upon(const ApplyPolicyEvent &)
+DeclarativePolicyUtils::upon(const ApplyPolicyEvent &event)
 {
     dbgTrace(D_ORCHESTRATOR) << "Apply policy event";
+    local_policy_path = event.getPolicyPath();
     should_apply_policy = true;
 }
 // LCOV_EXCL_STOP
@@ -54,11 +56,9 @@ DeclarativePolicyUtils::getLocalPolicyChecksum()
         return orchestration_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
     }
 
-    string policy_path = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getLocalPolicyPath();
-
     Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
         I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-        policy_path
+        local_policy_path
     );
 
     if (!file_checksum.ok()) {
@@ -83,8 +83,11 @@ void
 DeclarativePolicyUtils::updateCurrentPolicy(const string &policy_checksum)
 {
     string clean_policy_checksum = getCleanChecksum(policy_checksum);
-    curr_policy = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->parsePolicy(
-        clean_policy_checksum
+    auto env = Singleton::Consume<I_EnvDetails>::by<DeclarativePolicyUtils>()->getEnvType();
+    curr_policy = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->generateAppSecLocalPolicy(
+        env,
+        clean_policy_checksum,
+        local_policy_path
     );
 }
 
@@ -94,7 +97,7 @@ DeclarativePolicyUtils::getPolicyChecksum()
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<DeclarativePolicyUtils>();
     Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
         I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-        Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->getAgentPolicyPath()
+        "/tmp/local_appsec.policy"
     );
 
     if (!file_checksum.ok()) {

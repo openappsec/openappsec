@@ -34,6 +34,7 @@ public:
     virtual const std::string & getUpdateTime() const = 0;
     virtual const std::string & getLastManifestUpdate() const = 0;
     virtual const std::string & getPolicyVersion() const = 0;
+    virtual const std::string & getWaapModelVersion() const = 0;
     virtual const std::string & getLastPolicyUpdate() const = 0;
     virtual const std::string & getLastSettingsUpdate() const = 0;
     virtual const std::string & getUpgradeMode() const = 0;

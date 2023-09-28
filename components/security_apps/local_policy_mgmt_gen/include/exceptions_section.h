@@ -31,7 +31,6 @@ class AppsecExceptionSpec
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string & getName() const;
     const std::string & getAction() const;
     const std::vector<std::string> & getCountryCode() const;
     const std::vector<std::string> & getCountryName() const;
@@ -42,10 +41,10 @@ public:
     const std::vector<std::string> & getSourceIdentifier() const;
     const std::vector<std::string> & getSourceIp() const;
     const std::vector<std::string> & getUrl() const;
-    void setName(const std::string &_name);
+    bool isOneCondition() const;
 
 private:
-    std::string name;
+    int conditions_number;
     std::string action;
     std::vector<std::string> country_code;
     std::vector<std::string> country_name;
@@ -58,21 +57,42 @@ private:
     std::vector<std::string> url;
 };
 
+class AppsecException
+{
+public:
+    AppsecException() {};
+
+    // LCOV_EXCL_START Reason: no test exist
+    AppsecException(const std::string &_name, const std::vector<AppsecExceptionSpec> &_exception_spec)
+        :
+    name(_name),
+    exception_spec(_exception_spec) {};
+    // LCOV_EXCL_STOP
+
+    void load(cereal::JSONInputArchive &archive_in);
+
+    const std::string & getName() const;
+    const std::vector<AppsecExceptionSpec> & getExceptions() const;
+    void setName(const std::string &_name);
+
+private:
+    std::string name;
+    std::vector<AppsecExceptionSpec> exception_spec;
+};
+
 class ExceptionMatch
 {
 public:
     ExceptionMatch() {}
     ExceptionMatch(const AppsecExceptionSpec &parsed_exception);
+    ExceptionMatch(const std::string &_key, const std::vector<std::string> &_value);
     ExceptionMatch(const NewAppsecException &parsed_exception);
-    ExceptionMatch(const std::string &_key, const std::vector<std::string> &_value)
-            :
-        match_type(MatchType::Condition),
-        key(_key),
-        op("in"),
-        value(_value)
-    {}
 
     void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::string & getOperator() const;
+    const std::string & getKey() const;
+    const std::string & getValue() const;
+    const std::vector<ExceptionMatch> & getMatch() const;
 
 private:
     MatchType match_type;
@@ -86,13 +106,12 @@ class ExceptionBehavior
 {
 public:
     ExceptionBehavior() {}
-    ExceptionBehavior(
-        const std::string &_key,
-        const std::string &_value
-    );
+    ExceptionBehavior(const std::string &_value);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
-    const std::string getBehaviorId() const;
+    const std::string & getBehaviorId() const;
+    const std::string & getBehaviorKey() const;
+    const std::string & getBehaviorValue() const;
 
 private:
     std::string key;
@@ -104,15 +123,13 @@ class InnerException
 {
 public:
     InnerException() {}
-    InnerException(
-        ExceptionBehavior _behavior,
-        ExceptionMatch _match)
-            :
-        behavior(_behavior),
-        match(_match) {}
+    InnerException(ExceptionBehavior _behavior, ExceptionMatch _match);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
-    const std::string getBehaviorId() const;
+    const std::string & getBehaviorId() const;
+    const std::string & getBehaviorKey() const;
+    const std::string & getBehaviorValue() const;
+    const ExceptionMatch & getMatch() const;
 
 private:
     ExceptionBehavior behavior;

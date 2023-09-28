@@ -74,7 +74,7 @@ public:
     getCrowdsecEventId() const
     {
         if (!crowdsec_event_id) return genError("Empty ID");
-        return LogField("externalVendorRecommendationId", crowdsec_event_id);
+        return LogField("externalVendorRecommendationId", to_string(crowdsec_event_id));
     }
 
     bool isMalicious() const { return type == "ban"; }
@@ -280,6 +280,8 @@ Layer7AccessControl::Impl::generateLog(const string &source_ip, const Intelligen
         << LogField("sourceIP", source_ip)
         << LogField("externalVendorName", "CrowdSec")
         << LogField("waapIncidentType", "CrowdSec")
+        << LogField("practiceSubType", "Web Access Control")
+        << LogField("practiceType", "Access Control")
         << ip_reputation.getCrowdsecEventId()
         << ip_reputation.getType()
         << ip_reputation.getOrigin()

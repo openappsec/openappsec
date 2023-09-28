@@ -75,6 +75,7 @@ GenericRulebase::Impl::preload()
     addMatcher<IpProtocolMatcher>();
     addMatcher<UrlMatcher>();
     addMatcher<EqualHost>();
+    addMatcher<WildcardHost>();
     addMatcher<EqualListeningIP>();
     addMatcher<EqualListeningPort>();
     addMatcher<BeginWithUri>();

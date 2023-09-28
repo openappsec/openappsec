@@ -202,16 +202,35 @@ private:
     LogTriggerSection log;
 };
 
-class AppSecOverride
+class ParsedMatch
 {
 public:
-    AppSecOverride(const SourcesIdentifiers &parsed_trusted_sources);
+    ParsedMatch() {}
+    ParsedMatch(const std::string &_operator, const std::string &_tag, const std::string &_value);
+
+    ParsedMatch(const ExceptionMatch &exceptions);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
+    std::string operator_type;
+    std::string tag;
+    std::string value;
+    std::vector<ParsedMatch> parsed_match;
+};
+
+class AppSecOverride
+{
+public:
+    AppSecOverride(const SourcesIdentifiers &parsed_trusted_sources);
+    AppSecOverride(const InnerException &parsed_exceptions);
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    std::string id;
     std::vector<std::map<std::string, std::string>> parsed_behavior;
-    std::map<std::string, std::string> parsed_match;
+    ParsedMatch parsed_match;
 };
 
 class AppsecPracticeAntiBotSection
@@ -254,7 +273,8 @@ public:
         const AppSecPracticeSpec &parsed_appsec_spec,
         const LogTriggerSection &parsed_log_trigger,
         const std::string &default_mode,
-        const AppSecTrustedSources &parsed_trusted_sources
+        const AppSecTrustedSources &parsed_trusted_sources,
+        const std::vector<InnerException> &parsed_exceptions
     );
 
     WebAppSection(
@@ -430,7 +450,7 @@ public:
         const std::vector<AppSecPracticeSpec> &_practices,
         const std::vector<AppsecTriggerSpec> &_log_triggers,
         const std::vector<AppSecCustomResponseSpec> &_custom_responses,
-        const std::vector<AppsecExceptionSpec> &_exceptions,
+        const std::vector<AppsecException> &_exceptions,
         const std::vector<TrustedSourcesSpec> &_trusted_sources,
         const std::vector<SourceIdentifierSpecWrapper> &_sources_identifiers)
             :
@@ -448,7 +468,7 @@ public:
     const std::vector<AppSecPracticeSpec> & getAppSecPracticeSpecs() const;
     const std::vector<AppsecTriggerSpec> & getAppsecTriggerSpecs() const;
     const std::vector<AppSecCustomResponseSpec> & getAppSecCustomResponseSpecs() const;
-    const std::vector<AppsecExceptionSpec> & getAppsecExceptionSpecs() const;
+    const std::vector<AppsecException> & getAppsecExceptions() const;
     const std::vector<TrustedSourcesSpec> & getAppsecTrustedSourceSpecs() const;
     const std::vector<SourceIdentifierSpecWrapper> & getAppsecSourceIdentifierSpecs() const;
     void addSpecificRule(const ParsedRule &_rule);
@@ -458,7 +478,7 @@ private:
     std::vector<AppSecPracticeSpec> practices;
     std::vector<AppsecTriggerSpec> log_triggers;
     std::vector<AppSecCustomResponseSpec> custom_responses;
-    std::vector<AppsecExceptionSpec> exceptions;
+    std::vector<AppsecException> exceptions;
     std::vector<TrustedSourcesSpec> trusted_sources;
     std::vector<SourceIdentifierSpecWrapper> sources_identifiers;
 };

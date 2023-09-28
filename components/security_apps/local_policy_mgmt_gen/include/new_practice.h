@@ -147,25 +147,25 @@ public:
     // LCOV_EXCL_STOP
 
     FileSecurityProtectionsSection(
-        int                     file_size_limit,
-        int                     archive_file_size_limit,
-        bool                    allow_files_without_name,
-        bool                    required_file_size_limit,
-        bool                    required_archive_extraction,
-        const std::string       &context,
-        const std::string       &name,
-        const std::string       &asset_id,
-        const std::string       &practice_name,
-        const std::string       &practice_id,
-        const std::string       &action,
-        const std::string       &files_without_name_action,
-        const std::string       &high_confidence_action,
-        const std::string       &medium_confidence_action,
-        const std::string       &low_confidence_action,
-        const std::string       &severity_level,
-        const std::string       &fileSize_limit_action,
-        const std::string       &multi_level_archive_action,
-        const std::string       &unopened_archive_actio
+        int                     _file_size_limit,
+        int                     _archive_file_size_limit,
+        bool                    _allow_files_without_name,
+        bool                    _required_file_size_limit,
+        bool                    _required_archive_extraction,
+        const std::string       &_context,
+        const std::string       &_name,
+        const std::string       &_asset_id,
+        const std::string       &_practice_name,
+        const std::string       &_practice_id,
+        const std::string       &_action,
+        const std::string       &_files_without_name_action,
+        const std::string       &_high_confidence_action,
+        const std::string       &_medium_confidence_action,
+        const std::string       &_low_confidence_action,
+        const std::string       &_severity_level,
+        const std::string       &_file_size_limit_action,
+        const std::string       &_multi_level_archive_action,
+        const std::string       &_unopened_archive_action
     );
 
     void save(cereal::JSONOutputArchive &out_ar) const;
@@ -265,6 +265,7 @@ class NewFileSecurity
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
+    const std::string & getOverrideMode() const;
     const NewFileSecurityArchiveInspection & getArchiveInspection() const;
     const NewFileSecurityLargeFileInspection & getLargeFileInspection() const;
     FileSecurityProtectionsSection createFileSecurityProtectionsSection(
@@ -287,17 +288,210 @@ private:
     NewFileSecurityLargeFileInspection  large_file_inspection;
 };
 
+class SnortProtectionsSection
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    SnortProtectionsSection() {};
+    // LCOV_EXCL_STOP
+
+    SnortProtectionsSection(
+        const std::string               &_context,
+        const std::string               &_asset_name,
+        const std::string               &_asset_id,
+        const std::string               &_practice_name,
+        const std::string               &_practice_id,
+        const std::string               &_source_identifier,
+        const std::string               &_mode,
+        const std::vector<std::string>  &_files
+    );
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    std::string                                 context;
+    std::string                                 asset_name;
+    std::string                                 asset_id;
+    std::string                                 practice_name;
+    std::string                                 practice_id;
+    std::string                                 source_identifier;
+    std::string                                 mode;
+    std::vector<std::string>                    files;
+};
+
+class DetectionRules
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    DetectionRules() {};
+    // LCOV_EXCL_STOP
+
+    DetectionRules(
+        const std::string                   &_type,
+        const std::string                   &_SSM,
+        const std::string                   &_keywords,
+        const std::vector<std::string>      &_context
+    );
+
+    void load(cereal::JSONInputArchive &archive_in);
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    std::string                 type;
+    std::string                 SSM;
+    std::string                 keywords;
+    std::vector<std::string>    context;
+};
+
+class ProtectionMetadata
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    ProtectionMetadata() {};
+    // LCOV_EXCL_STOP
+
+    ProtectionMetadata(
+        bool                                _silent,
+        const std::string                   &_protection_name,
+        const std::string                   &_severity,
+        const std::string                   &_confidence_level,
+        const std::string                   &_performance_impact,
+        const std::string                   &_last_update,
+        const std::string                   &_maintrain_id,
+        const std::vector<std::string>      &_tags,
+        const std::vector<std::string>      &_cve_list
+    );
+
+    void load(cereal::JSONInputArchive &archive_in);
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    bool                        silent;
+    std::string                 protection_name;
+    std::string                 severity;
+    std::string                 confidence_level;
+    std::string                 performance_impact;
+    std::string                 last_update;
+    std::string                 maintrain_id;
+    std::vector<std::string>    tags;
+    std::vector<std::string>    cve_list;
+};
+
+class ProtectionsProtectionsSection
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    ProtectionsProtectionsSection() {};
+    // LCOV_EXCL_STOP
+
+    ProtectionsProtectionsSection(
+        const ProtectionMetadata    &_protection_metadata,
+        const DetectionRules        &_detection_rules
+    );
+
+    void load(cereal::JSONInputArchive &archive_in);
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    ProtectionMetadata  protection_metadata;
+    DetectionRules      detection_rules;
+};
+
+class ProtectionsSection
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    ProtectionsSection() {};
+    // LCOV_EXCL_STOP
+
+    ProtectionsSection(
+        const std::vector<ProtectionsProtectionsSection>    &_protections,
+        const std::string                                   &_name = "",
+        const std::string                                   &_modification_time = ""
+    );
+
+    void load(cereal::JSONInputArchive &archive_in);
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::vector<ProtectionsProtectionsSection> & getProtections() const;
+
+private:
+    std::vector<ProtectionsProtectionsSection>  protections;
+    std::string                                 name;
+    std::string                                 modification_time;
+};
+
+class ProtectionsSectionWrapper
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    ProtectionsSectionWrapper() {};
+    // LCOV_EXCL_STOP
+
+    void serialize(cereal::JSONInputArchive &archive_in);
+    const std::vector<ProtectionsProtectionsSection> & getProtections() const;
+
+private:
+    ProtectionsSection  protections;
+};
+
+class SnortSection
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    SnortSection() {};
+
+    SnortSection(
+        const std::vector<SnortProtectionsSection> &_snort,
+        const std::vector<ProtectionsSection> &_protections)
+            :
+        snort_protections(_snort),
+        protections(_protections)
+    {};
+    // LCOV_EXCL_STOP
+
+    void load(cereal::JSONInputArchive &archive_in);
+    void save(cereal::JSONOutputArchive &out_ar) const;
+    const std::vector<ProtectionsSection> & getProtections() const;
+
+private:
+    std::vector<SnortProtectionsSection> snort_protections;
+    std::vector<ProtectionsSection> protections;
+};
+
+class SnortSectionWrapper
+{
+public:
+    // LCOV_EXCL_START Reason: no test exist
+    SnortSectionWrapper() {};
+
+    SnortSectionWrapper(
+        const std::vector<SnortProtectionsSection> &_snort,
+        const std::vector<ProtectionsSection> &_protections)
+            :
+        snort(SnortSection(_snort, _protections))
+    {};
+    // LCOV_EXCL_STOP
+
+    void save(cereal::JSONOutputArchive &out_ar) const;
+
+private:
+    SnortSection snort;
+};
+
 class NewSnortSignaturesAndOpenSchemaAPI
 {
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
+    void addFile(const std::string &file_name);
     const std::string & getOverrideMode() const;
     const std::vector<std::string> & getConfigMap() const;
+    const std::vector<std::string> & getFiles() const;
 
 private:
     std::string override_mode;
     std::vector<std::string> config_map;
+    std::vector<std::string> files;
 };
 
 class NewAppSecWebBotsURI
@@ -371,8 +565,8 @@ class NewAppSecPracticeSpec
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
+    NewSnortSignaturesAndOpenSchemaAPI & getSnortSignatures();
     const NewSnortSignaturesAndOpenSchemaAPI & getOpenSchemaValidation() const;
-    const NewSnortSignaturesAndOpenSchemaAPI & getSnortSignatures() const;
     const NewAppSecPracticeWebAttacks & getWebAttacks() const;
     const NewAppSecPracticeAntiBot & getAntiBot() const;
     const NewIntrusionPrevention & getIntrusionPrevention() const;

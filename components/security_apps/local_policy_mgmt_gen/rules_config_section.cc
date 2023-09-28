@@ -98,6 +98,7 @@ PracticeSection::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
+// LCOV_EXCL_START Reason: no test exist
 ParametersSection::ParametersSection(
     const string &_id,
     const string &_name)
@@ -120,6 +121,7 @@ ParametersSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("parameterType", type)
     );
 }
+// LCOV_EXCL_STOP
 
 RulesTriggerSection::RulesTriggerSection(
     const string &_name,

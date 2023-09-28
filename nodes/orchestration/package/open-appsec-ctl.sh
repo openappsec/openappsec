@@ -964,11 +964,13 @@ run_status() # Initials - rs
     if echo "$rs_orch_status" | grep -q "update status"; then
         rs_line_count=$(echo "$rs_orch_status" | grep -c '^')
         rs_policy_load_time="$(echo "${rs_orch_status}" | grep "Last policy update"| sed "s|\"||g" | sed "s|,||g")"
+        rs_ai_model_ver="$(echo "${rs_orch_status}" | grep "AI model version"| sed "s|\"||g" | sed "s|,||g")"
 
         rs_temp_old_status=$(echo "$rs_orch_status" | sed -r "${rs_line_count},${rs_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
     else
         rs_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
         rs_policy_load_time="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "Last policy update" | sed "s|\"||g" | sed "s|,||g")"
+        rs_ai_model_ver="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "AI model version" | sed "s|\"||g" | sed "s|,||g")"
     fi
 
     if [ -n "$(cat ${FILESYSTEM_PATH}/conf/agent_details.json | grep "hybrid_mode")" ]; then
@@ -1008,6 +1010,7 @@ run_status() # Initials - rs
     fi
     echo "Policy load status: ${rs_policy_load_status}"
     echo ${rs_policy_load_time}
+    echo ${rs_ai_model_ver}
     echo ""
 
     for service in $all_services; do
@@ -1261,7 +1264,7 @@ run_ai() # Initials - ra
     else
         ra_orch_status=$(curl_func "$(extract_api_port orchestration)"/show-orchestration-status)
         if ! echo "$ra_orch_status" | grep -q "update status"; then
-            ra_orch_status=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json)
+            [ -f ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json ] && ra_orch_status=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json)
         fi
         if [ -n "${ra_orch_status}" ]; then
             ra_fog_address=$(printf "%s" "$ra_orch_status" | grep "Fog address" | cut -d '"' -f4)

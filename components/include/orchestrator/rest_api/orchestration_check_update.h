@@ -111,6 +111,26 @@ public:
     public:
         UpgradeSchedule() = default;
 
+        UpgradeSchedule(const UpgradeSchedule &other)
+        {
+            mode = other.mode;
+            time = other.time;
+            duration_hours = other.duration_hours;
+            days = other.days;
+        }
+
+        UpgradeSchedule &
+        operator=(const UpgradeSchedule &other)
+        {
+            if (this != &other) {
+                mode = other.mode;
+                time = other.time;
+                duration_hours = other.duration_hours;
+                days = other.days;
+            }
+            return *this;
+        }
+
         void init(const std::string &_upgrade_mode) { mode = _upgrade_mode; }
 
         void
@@ -140,6 +160,22 @@ public:
         C2S_LABEL_OPTIONAL_PARAM(std::string, time, "upgradeTime");
         C2S_LABEL_OPTIONAL_PARAM(uint, duration_hours, "upgradeDurationHours");
         C2S_LABEL_OPTIONAL_PARAM(std::vector<std::string>, days, "upgradeDay");
+    };
+
+    class LocalConfigurationSettings : public ClientRest
+    {
+    public:
+        LocalConfigurationSettings() = default;
+
+        void
+        setUpgradeSchedule(const UpgradeSchedule &schedule)
+        {
+            upgrade_schedule.setActive(true);
+            upgrade_schedule.get() = schedule;
+        }
+
+    private:
+        C2S_LABEL_OPTIONAL_PARAM(UpgradeSchedule, upgrade_schedule, "upgradeSchedule");
     };
 
     CheckUpdateRequest(
@@ -224,8 +260,10 @@ public:
     void
     setUpgradeFields(const std::string &_upgrade_mode)
     {
-        upgrade_schedule.setActive(true);
-        upgrade_schedule.get().init(_upgrade_mode);
+        UpgradeSchedule upgrade_schedule;
+        upgrade_schedule.init(_upgrade_mode);
+        local_configuration_settings.setActive(true);
+        local_configuration_settings.get().setUpgradeSchedule(upgrade_schedule);
     }
 
     void
@@ -235,12 +273,14 @@ public:
         const uint &_upgrade_duration_hours,
         const std::vector<std::string> &_upgrade_days)
     {
-        upgrade_schedule.setActive(true);
+        UpgradeSchedule upgrade_schedule;
         if (!_upgrade_days.empty()) {
-            upgrade_schedule.get().init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours, _upgrade_days);
-            return;
+            upgrade_schedule.init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours, _upgrade_days);
+        } else {
+            upgrade_schedule.init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours);
         }
-        upgrade_schedule.get().init(_upgrade_mode, _upgrade_time, _upgrade_duration_hours);
+        local_configuration_settings.setActive(true);
+        local_configuration_settings.get().setUpgradeSchedule(upgrade_schedule);
     }
 
 private:
@@ -297,7 +337,7 @@ private:
     C2S_LABEL_PARAM(std::string, checksum_type,  "checksum-type");
     C2S_LABEL_PARAM(std::string, policy_version, "policyVersion");
 
-    C2S_LABEL_OPTIONAL_PARAM(UpgradeSchedule, upgrade_schedule, "upgradeSchedule");
+    C2S_LABEL_OPTIONAL_PARAM(LocalConfigurationSettings, local_configuration_settings, "localConfigurationSettings");
 
     S2C_LABEL_OPTIONAL_PARAM(VirtualConfig, in_virtual_policy,    "virtualPolicy");
     S2C_LABEL_OPTIONAL_PARAM(VirtualConfig, in_virtual_settings,  "virtualSettings");

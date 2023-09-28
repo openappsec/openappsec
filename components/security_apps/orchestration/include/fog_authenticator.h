@@ -142,6 +142,7 @@ protected:
     std::string base64Encode(const std::string &in) const;
     std::string buildBasicAuthHeader(const std::string &username, const std::string &pass) const;
     std::string buildOAuth2Header(const std::string &token) const;
+    std::string getUserEdition() const;
 
     // This apps which the orchestrations requires them from Fog.
     std::vector<std::string> required_security_apps;

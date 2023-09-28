@@ -217,21 +217,251 @@ NewAppSecPracticeWebAttacks::getMode(const string &default_mode) const
     return key_to_practices_val.at(mode);
 }
 
+SnortProtectionsSection::SnortProtectionsSection(
+    const std::string               &_context,
+    const std::string               &_asset_name,
+    const std::string               &_asset_id,
+    const std::string               &_practice_name,
+    const std::string               &_practice_id,
+    const std::string               &_source_identifier,
+    const std::string               &_mode,
+    const std::vector<std::string>  &_files)
+        :
+    context(_context),
+    asset_name(_asset_name),
+    asset_id(_asset_id),
+    practice_name(_practice_name),
+    practice_id(_practice_id),
+    source_identifier(_source_identifier),
+    mode(_mode),
+    files(_files)
+{
+}
+
+void
+SnortProtectionsSection::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("context",                         context),
+        cereal::make_nvp("mode",                            key_to_mode_val.at(mode)),
+        cereal::make_nvp("files",                           files),
+        cereal::make_nvp("assetName",                       asset_name),
+        cereal::make_nvp("assetId",                         asset_id),
+        cereal::make_nvp("practiceName",                    practice_name),
+        cereal::make_nvp("practiceId",                      practice_id),
+        cereal::make_nvp("sourceIdentifier",                source_identifier)
+    );
+}
+
+DetectionRules::DetectionRules(
+    const std::string                   &_type,
+    const std::string                   &_SSM,
+    const std::string                   &_keywords,
+    const std::vector<std::string>      &_context)
+        :
+    type(_type),
+    SSM(_SSM),
+    keywords(_keywords),
+    context(_context)
+{
+}
+
+void
+DetectionRules::load(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading Snort protections protections detection rules section";
+    parseAppsecJSONKey<string>("type", type, archive_in);
+    parseAppsecJSONKey<string>("SSM", SSM, archive_in);
+    parseAppsecJSONKey<string>("keywords", keywords, archive_in);
+    parseAppsecJSONKey<vector<string>>("context", context, archive_in);
+
+}
+
+void
+DetectionRules::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("type",        type),
+        cereal::make_nvp("SSM",         SSM),
+        cereal::make_nvp("keywords",    keywords),
+        cereal::make_nvp("context",     context)
+    );
+}
+
+ProtectionMetadata::ProtectionMetadata(
+    bool                                _silent,
+    const std::string                   &_protection_name,
+    const std::string                   &_severity,
+    const std::string                   &_confidence_level,
+    const std::string                   &_performance_impact,
+    const std::string                   &_last_update,
+    const std::string                   &_maintrain_id,
+    const std::vector<std::string>      &_tags,
+    const std::vector<std::string>      &_cve_list)
+        :
+    silent(_silent),
+    protection_name(_protection_name),
+    severity(_severity),
+    confidence_level(_confidence_level),
+    performance_impact(_performance_impact),
+    last_update(_last_update),
+    maintrain_id(_maintrain_id),
+    tags(_tags),
+    cve_list(_cve_list)
+{
+}
+
+void
+ProtectionMetadata::load(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading Snort protections protections metadata section";
+    parseAppsecJSONKey<bool>("silent", silent, archive_in);
+    parseAppsecJSONKey<string>("protectionName", protection_name, archive_in);
+    parseAppsecJSONKey<string>("severity", severity, archive_in);
+    parseAppsecJSONKey<string>("confidenceLevel", confidence_level, archive_in);
+    parseAppsecJSONKey<string>("performanceImpact", performance_impact, archive_in);
+    parseAppsecJSONKey<string>("lastUpdate", last_update, archive_in);
+    parseAppsecJSONKey<string>("maintrainId", maintrain_id, archive_in);
+    parseAppsecJSONKey<vector<string>>("tags", tags, archive_in);
+    parseAppsecJSONKey<vector<string>>("cveList", cve_list, archive_in);
+
+}
+
+void
+ProtectionMetadata::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("protectionName",      protection_name),
+        cereal::make_nvp("severity",            severity),
+        cereal::make_nvp("confidenceLevel",     confidence_level),
+        cereal::make_nvp("performanceImpact",   performance_impact),
+        cereal::make_nvp("lastUpdate",          last_update),
+        cereal::make_nvp("maintrainId",         maintrain_id),
+        cereal::make_nvp("tags",                tags),
+        cereal::make_nvp("cveList",             cve_list),
+        cereal::make_nvp("silent",              silent)
+    );
+}
+
+ProtectionsProtectionsSection::ProtectionsProtectionsSection(
+    const ProtectionMetadata    &_protection_metadata,
+    const DetectionRules        &_detection_rules)
+        :
+    protection_metadata(_protection_metadata),
+    detection_rules(_detection_rules)
+{
+}
+
+void
+ProtectionsProtectionsSection::load(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading Snort protections protections section";
+    parseAppsecJSONKey<ProtectionMetadata>("protectionMetadata", protection_metadata, archive_in);
+    parseAppsecJSONKey<DetectionRules>("detectionRules", detection_rules, archive_in);
+}
+
+void
+ProtectionsProtectionsSection::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("protectionMetadata",      protection_metadata),
+        cereal::make_nvp("detectionRules",          detection_rules)
+    );
+}
+
+ProtectionsSection::ProtectionsSection(
+    const std::vector<ProtectionsProtectionsSection>    &_protections,
+    const std::string                                   &_name,
+    const std::string                                   &_modification_time)
+        :
+    protections(_protections),
+    name(_name),
+    modification_time(_modification_time)
+{
+}
+
+void
+ProtectionsSection::load(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading Snort protections section";
+    parseAppsecJSONKey<vector<ProtectionsProtectionsSection>>("protections", protections, archive_in);
+}
+
+void
+ProtectionsSection::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("name",                name),
+        cereal::make_nvp("modificationTime",    modification_time),
+        cereal::make_nvp("protections",         protections)
+    );
+}
+
+const vector<ProtectionsProtectionsSection> &
+ProtectionsSection::getProtections() const
+{
+    return protections;
+}
+
+void
+ProtectionsSectionWrapper::serialize(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading Snort Section";
+    parseAppsecJSONKey<ProtectionsSection>("IPSSnortSigs", protections, archive_in);
+}
+
+const vector<ProtectionsProtectionsSection> &
+ProtectionsSectionWrapper::getProtections() const
+{
+    return protections.getProtections();
+}
+
+void
+SnortSection::save(cereal::JSONOutputArchive &out_ar) const
+{
+    string version = "LocalVersion";
+    out_ar(
+        cereal::make_nvp("VersionId", version),
+        cereal::make_nvp("SnortProtections", snort_protections),
+        cereal::make_nvp("protections", protections)
+    );
+}
+
+void
+SnortSectionWrapper::save(cereal::JSONOutputArchive &out_ar) const
+{
+    out_ar(
+        cereal::make_nvp("IPSSnortSigs", snort)
+    );
+}
+
 void
 NewSnortSignaturesAndOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Snort Signatures practice";
-    parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "Inactive");
+    parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Snort Signatures override mode invalid: " << override_mode;
     }
 }
 
+void
+NewSnortSignaturesAndOpenSchemaAPI::addFile(const string &file_name)
+{
+    files.push_back(file_name);
+}
+
 const string &
 NewSnortSignaturesAndOpenSchemaAPI::getOverrideMode() const
 {
     return override_mode;
+}
+
+const vector<string> &
+NewSnortSignaturesAndOpenSchemaAPI::getFiles() const
+{
+    return files;
 }
 
 const vector<string> &
@@ -320,7 +550,7 @@ void
 NewIntrusionPrevention::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Intrusion Prevention practice";
-    parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "Inactive");
+    parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Intrusion Prevention override mode invalid: " << override_mode;
     }
@@ -596,7 +826,7 @@ void
 NewFileSecurity::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec File Security practice";
-    parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "Inactive");
+    parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec File Security override mode invalid: " << override_mode;
     }
@@ -633,6 +863,11 @@ NewFileSecurity::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<NewFileSecurityLargeFileInspection>("largeFileInspection", large_file_inspection, archive_in);
 }
 
+const string &
+NewFileSecurity::getOverrideMode() const
+{
+    return override_mode;
+}
 
 const NewFileSecurityArchiveInspection &
 NewFileSecurity::getArchiveInspection() const
@@ -707,8 +942,8 @@ NewAppSecPracticeSpec::getOpenSchemaValidation() const
     return openapi_schema_validation;
 }
 
-const NewSnortSignaturesAndOpenSchemaAPI &
-NewAppSecPracticeSpec::getSnortSignatures() const
+NewSnortSignaturesAndOpenSchemaAPI &
+NewAppSecPracticeSpec::getSnortSignatures()
 {
     return snort_signatures;
 }

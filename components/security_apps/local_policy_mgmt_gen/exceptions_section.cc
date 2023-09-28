@@ -18,39 +18,61 @@ using namespace std;
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 // LCOV_EXCL_START Reason: no test exist
+using AttributeGetter = function<vector<string>(const AppsecExceptionSpec&)>;
+static const vector<pair<string, AttributeGetter>> attributes = {
+    {"countryCode",      [](const AppsecExceptionSpec& e){ return e.getCountryCode(); }},
+    {"countryName",      [](const AppsecExceptionSpec& e){ return e.getCountryName(); }},
+    {"hostName",         [](const AppsecExceptionSpec& e){ return e.getHostName(); }},
+    {"paramName",        [](const AppsecExceptionSpec& e){ return e.getParamName(); }},
+    {"paramValue",       [](const AppsecExceptionSpec& e){ return e.getParamValue(); }},
+    {"protectionName",   [](const AppsecExceptionSpec& e){ return e.getProtectionName(); }},
+    {"sourceIdentifier", [](const AppsecExceptionSpec& e){ return e.getSourceIdentifier(); }},
+    {"sourceIp",         [](const AppsecExceptionSpec& e){ return e.getSourceIp(); }},
+    {"url",              [](const AppsecExceptionSpec& e){ return e.getUrl(); }}
+};
 static const set<string> valid_actions = {"skip", "accept", "drop", "suppressLog"};
+static const unordered_map<string, string> key_to_action = {
+    { "accept", "accept"},
+    { "drop", "reject"},
+    { "skip", "ignore"},
+    { "suppressLog", "ignore"}
+};
 
 void
 AppsecExceptionSpec::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec exception spec";
-    parseAppsecJSONKey<string>("name", name, archive_in);
-    parseAppsecJSONKey<string>("action", action, archive_in);
+    parseAppsecJSONKey<string>("action", action, archive_in, "skip");
     if (valid_actions.count(action) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec exception action invalid: " << action;
     }
 
     parseAppsecJSONKey<vector<string>>("countryCode", country_code, archive_in);
+    if (!country_code.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("countryName", country_name, archive_in);
+    if (!country_name.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("hostName", host_name, archive_in);
+    if (!host_name.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("paramName", param_name, archive_in);
+    if (!param_name.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("paramValue", param_value, archive_in);
+    if (!param_value.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("protectionName", protection_name, archive_in);
+    if (!protection_name.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("sourceIdentifier", source_identifier, archive_in);
+    if (!source_identifier.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("sourceIp", source_ip, archive_in);
+    if (!source_ip.empty()) conditions_number++;
+
     parseAppsecJSONKey<vector<string>>("url", url, archive_in);
-}
-
-void
-AppsecExceptionSpec::setName(const string &_name)
-{
-    name = _name;
-}
-
-const string &
-AppsecExceptionSpec::getName() const
-{
-    return name;
+    if (!url.empty()) conditions_number++;
 }
 
 const string &
@@ -113,37 +135,82 @@ AppsecExceptionSpec::getUrl() const
     return url;
 }
 
+bool
+AppsecExceptionSpec::isOneCondition() const
+{
+    return conditions_number == 1;
+}
+
+void
+AppsecException::load(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec exception";
+    parseAppsecJSONKey<string>("name", name, archive_in);
+    archive_in(CEREAL_NVP(exception_spec));
+}
+
+void
+AppsecException::setName(const string &_name)
+{
+    name = _name;
+}
+
+const string &
+AppsecException::getName() const
+{
+    return name;
+}
+
+const vector<AppsecExceptionSpec> &
+AppsecException::getExceptions() const
+{
+    return exception_spec;
+}
+
 ExceptionMatch::ExceptionMatch(const AppsecExceptionSpec &parsed_exception)
         :
     match_type(MatchType::Operator),
     op("and")
 {
-    if (!parsed_exception.getCountryCode().empty()) {
-        items.push_back(ExceptionMatch("countryCode", parsed_exception.getCountryCode()));
+    bool single_condition = parsed_exception.isOneCondition();
+    for (auto &attrib : attributes) {
+        auto &attrib_name = attrib.first;
+        auto &attrib_getter = attrib.second;
+        auto exceptions_value = attrib_getter(parsed_exception);
+        if (exceptions_value.empty()) continue;
+        if (single_condition) {
+            if (exceptions_value.size() == 1) {
+                match_type = MatchType::Condition;
+                op = "equals";
+                key = attrib_name;
+                value = exceptions_value;
+                return;
+            } else {
+                match_type = MatchType::Operator;
+                op = "or";
+                for (auto new_value : exceptions_value) {
+                    items.push_back(ExceptionMatch(attrib_name, {new_value}));
+                }
+                return;
+            }
+        }
+        items.push_back(ExceptionMatch(attrib_name, exceptions_value));
     }
-    if (!parsed_exception.getCountryName().empty()) {
-        items.push_back(ExceptionMatch("countryName", parsed_exception.getCountryName()));
-    }
-    if (!parsed_exception.getHostName().empty()) {
-        items.push_back(ExceptionMatch("hostName", parsed_exception.getHostName()));
-    }
-    if (!parsed_exception.getParamName().empty()) {
-        items.push_back(ExceptionMatch("paramName", parsed_exception.getParamName()));
-    }
-    if (!parsed_exception.getParamValue().empty()) {
-        items.push_back(ExceptionMatch("paramValue", parsed_exception.getParamValue()));
-    }
-    if (!parsed_exception.getProtectionName().empty()) {
-        items.push_back(ExceptionMatch("protectionName", parsed_exception.getProtectionName()));
-    }
-    if (!parsed_exception.getSourceIdentifier().empty()) {
-        items.push_back(ExceptionMatch("sourceIdentifier", parsed_exception.getSourceIdentifier()));
-    }
-    if (!parsed_exception.getSourceIp().empty()) {
-        items.push_back(ExceptionMatch("sourceIp", parsed_exception.getSourceIp()));
-    }
-    if (!parsed_exception.getUrl().empty()) {
-        items.push_back(ExceptionMatch("url", parsed_exception.getUrl()));
+}
+
+ExceptionMatch::ExceptionMatch(const std::string &_key, const std::vector<std::string> &values)
+{
+    if (values.size() == 1) {
+        match_type = MatchType::Condition;
+        op = "equals";
+        key = _key;
+        value = values;
+    } else {
+        match_type = MatchType::Operator;
+        op = "or";
+        for (auto new_value : values) {
+            items.push_back(ExceptionMatch(_key, {new_value}));
+        }
     }
 }
 
@@ -210,13 +277,34 @@ ExceptionMatch::save(cereal::JSONOutputArchive &out_ar) const
     }
 }
 
-ExceptionBehavior::ExceptionBehavior(
-    const string &_key,
-    const string &_value)
-        :
-    key(_key),
-    value(_value)
+const string &
+ExceptionMatch::getOperator() const
 {
+    return op;
+}
+
+const string &
+ExceptionMatch::getKey() const
+{
+    return key;
+}
+
+const string &
+ExceptionMatch::getValue() const
+{
+    return value[0];
+}
+
+const vector<ExceptionMatch> &
+ExceptionMatch::getMatch() const
+{
+    return items;
+}
+
+ExceptionBehavior::ExceptionBehavior(const string &_value)
+{
+    key = _value == "suppressLog" ? "log" : "action";
+    value = key_to_action.at(_value);
     try {
         id = to_string(boost::uuids::random_generator()());
     } catch (const boost::uuids::entropy_error &e) {
@@ -234,10 +322,29 @@ ExceptionBehavior::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
-const string
+const string &
 ExceptionBehavior::getBehaviorId() const
 {
     return id;
+}
+
+const string &
+ExceptionBehavior::getBehaviorKey() const
+{
+    return key;
+}
+
+const string &
+ExceptionBehavior::getBehaviorValue() const
+{
+    return value;
+}
+
+InnerException::InnerException(ExceptionBehavior _behavior, ExceptionMatch _match)
+        :
+    behavior(_behavior),
+    match(_match)
+{
 }
 
 void
@@ -249,10 +356,28 @@ InnerException::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
-const string
+const string &
 InnerException::getBehaviorId() const
 {
     return behavior.getBehaviorId();
+}
+
+const string &
+InnerException::getBehaviorKey() const
+{
+    return behavior.getBehaviorKey();
+}
+
+const string &
+InnerException::getBehaviorValue() const
+{
+    return behavior.getBehaviorValue();
+}
+
+const ExceptionMatch &
+InnerException::getMatch() const
+{
+    return match;
 }
 
 ExceptionsRulebase::ExceptionsRulebase(

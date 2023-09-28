@@ -246,7 +246,8 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
@@ -357,8 +358,9 @@ TEST_F(ServiceControllerTest, supportVersions)
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
     EXPECT_CALL(mock_orchestration_status,
@@ -455,7 +457,8 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
@@ -575,7 +578,8 @@ TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
@@ -807,7 +811,8 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
@@ -965,7 +970,7 @@ TEST_F(ServiceControllerTest, backup)
     ).WillOnce(Return(true));
     EXPECT_CALL(
         mock_orchestration_tools,
-        writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true)
+        writeFile(l4_firewall, l4_firewall_policy_path, false)).WillOnce(Return(true)
     );
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
@@ -1078,7 +1083,7 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
     ).WillOnce(Return(true));
     EXPECT_CALL(
         mock_orchestration_tools,
-        writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true)
+        writeFile(l4_firewall, l4_firewall_policy_path, false)).WillOnce(Return(true)
     );
 
     // backup file doesn't exist so the copyFile function should be called 0 times
@@ -1194,7 +1199,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
 
     EXPECT_CALL(
         mock_orchestration_tools,
-        writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true)
+        writeFile(l4_firewall, l4_firewall_policy_path, false)).WillOnce(Return(true)
     );
 
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
@@ -1311,8 +1316,10 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("orchestration", orchestration_policy_path, OrchestrationStatusConfigType::POLICY));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(orchestration, orchestration_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(orchestration, orchestration_policy_path, false))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -1560,7 +1567,12 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(true));
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        writeFile(
+            l4_firewall,
+            l4_firewall_policy_path,
+            false)).WillOnce(Return(true));
     EXPECT_CALL(
         mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY)
@@ -1667,7 +1679,7 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
 
     EXPECT_CALL(
         mock_orchestration_tools,
-        writeFile(l4_firewall, l4_firewall_policy_path)).WillOnce(Return(false)
+        writeFile(l4_firewall, l4_firewall_policy_path, false)).WillOnce(Return(false)
     );
 
     EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
@@ -1782,7 +1794,7 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
 
         EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path_new)).WillOnce(Return(false));
 
-        EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path_new))
+        EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path_new, false))
             .WillOnce(Return(true));
 
         EXPECT_CALL(mock_orchestration_status, setServiceConfiguration(
@@ -1889,7 +1901,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path)).
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false)).
         WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
