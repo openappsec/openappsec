@@ -368,21 +368,14 @@ public:
     {
         disconnectRedis();
 
-        redisOptions options;
-        memset(&options, 0, sizeof(redisOptions));
-        REDIS_OPTIONS_SET_TCP(
-            &options,
-            "127.0.0.1",
-            getConfigurationWithDefault<int>(6379, "connection", "Redis Port")
-        );
+        const string &redis_ip = getConfigurationWithDefault<string>("127.0.0.1", "connection", "Redis IP");
+        int redis_port = getConfigurationWithDefault<int>(6379, "connection", "Redis Port");
 
         timeval timeout;
         timeout.tv_sec = 0;
         timeout.tv_usec = getConfigurationWithDefault<int>(30000, "connection", "Redis Timeout");
-        options.connect_timeout = &timeout;
-        options.command_timeout = &timeout;
 
-        redisContext* context = redisConnectWithOptions(&options);
+        redisContext* context = redisConnectWithTimeout(redis_ip.c_str(), redis_port, timeout);
         if (context != nullptr && context->err) {
             dbgDebug(D_RATE_LIMIT)
                 << "Error connecting to Redis: "
