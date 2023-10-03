@@ -1,4 +1,6 @@
-{"waap_signatures":
+{ "model_version":
+"Simple model, V1.0",
+"waap_signatures":
 {
     "allowed_text_re": "^([\\w\\s+-]|%20|%09)*$",
     "attack_types_map": {
