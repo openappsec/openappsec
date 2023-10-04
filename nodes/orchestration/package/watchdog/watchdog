@@ -56,7 +56,7 @@ load_paths()
     if [ -n "${CP_INIT_D_PATH}" ]; then
         INIT_D_PATH=$CP_INIT_D_PATH
     fi
-	
+
     if [ -z "${MAX_FILE_SIZE}" ]; then
         MAX_FILE_SIZE=$DEFAULT_MAX_FILE_SIZE
 	fi
@@ -123,7 +123,7 @@ if [ -f /pfrm2.0/bin/cposd ]; then
 
     SUB_HW_VER=`fw_printenv -n sub_hw_ver`
 
-    # Clear TMPDIR(set by nano-egg in SMB), 
+    # Clear TMPDIR(set by nano-egg in SMB),
     # so the nano-agent will use the default tmp dir(/tmp).
     export TMPDIR=
 fi
@@ -667,7 +667,7 @@ load_services()
             fi
 
             log "load_services" "Respawn ${service}"
-            if [ "${service}" == "/etc/cp/agentIntelligence/redis/redis-server" ] || [ "${service}" = "/etc/cp/crowdsecAux/cp-nano-crowdsec-aux" ]; then
+            if [ "${service}" = "${FILESYSTEM_PATH}/agentCache/cp-nano-agent-cache" ] || [ "${service}" == "/etc/cp/agentIntelligence/redis/redis-server" ] || [ "${service}" = "/etc/cp/crowdsecAux/cp-nano-crowdsec-aux" ]; then
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} &"
             else
                 eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} &"
