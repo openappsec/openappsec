@@ -1,10 +1,4 @@
 execute_process (
-	COMMAND sh -c "find / -name \"redis.conf\""
-	OUTPUT_VARIABLE redis_conf_path
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-execute_process (
 	COMMAND sh -c "which redis-server"
 	OUTPUT_VARIABLE redis_server_path
     OUTPUT_STRIP_TRAILING_WHITESPACE
