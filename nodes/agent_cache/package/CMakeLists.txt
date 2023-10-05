@@ -1,41 +1,41 @@
 execute_process (
-	COMMAND bash -c "find / -name \"redis.conf\""
+	COMMAND sh -c "find / -name \"redis.conf\""
 	OUTPUT_VARIABLE redis_conf_path
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
 execute_process (
-	COMMAND bash -c "which redis-server"
+	COMMAND sh -c "which redis-server"
 	OUTPUT_VARIABLE redis_server_path
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
 if (IS_SYMLINK ${redis_server_path})
     execute_process (
-        COMMAND bash -c "readlink -f ${redis_server_path}"
+        COMMAND sh -c "readlink -f ${redis_server_path}"
         OUTPUT_VARIABLE redis_server_path
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 endif()
 
 execute_process (
-	COMMAND bash -c "which redis-cli"
+	COMMAND sh -c "which redis-cli"
 	OUTPUT_VARIABLE redis_cli_path
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
 execute_process (
-	COMMAND bash -c "find /usr/lib -name \"libatomic.so*\" | awk '{printf \$0\";\"}'"
+	COMMAND sh -c "find /usr/lib -name \"libatomic.so*\" | awk '{printf \$0\";\"}'"
 	OUTPUT_VARIABLE atomic
 )
 
 execute_process (
-	COMMAND bash -c "find /usr/lib -name \"libjemalloc*\" | awk '{printf \$0\";\"}'"
+	COMMAND sh -c "find /usr/lib -name \"libjemalloc*\" | awk '{printf \$0\";\"}'"
 	OUTPUT_VARIABLE jemalloc
 )
 
 execute_process (
-	COMMAND bash -c "find /usr/lib -name \"liblua*\" | awk '{printf \$0\";\"}'"
+	COMMAND sh -c "find /usr/lib -name \"liblua*\" | awk '{printf \$0\";\"}'"
 	OUTPUT_VARIABLE lua
 )
 
