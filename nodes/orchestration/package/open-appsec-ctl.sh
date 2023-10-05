@@ -269,7 +269,7 @@ usage()
     uninstall_option="-u,  --uninstall"
     load_config_option="-lc, --load-config <$(get_installed_services '|')>"
     display_config_option="-dc, --display-config [$(get_installed_services '|')]"
-    cp_agent_info_option="-ai, --cp-agent-info [-wd|--with_dump|-u|--upload|-fms|--file_max_size|-an|--additional_name]"
+    cp_agent_info_option="--info [-wd|--with_dump|-u|--upload|-fms|--file_max_size|-an|--additional_name]"
     display_policy_option="-dp, --display-policy"
     set_gradual_policy_option="-gp, --set-gradual-policy [access-control|http-manager] <ip-ranges>"
     delete_gradual_policy_option="-dg, --delete-gradual-policy [access-control|http-manager]"
@@ -299,7 +299,7 @@ usage()
    # printf "%s %s : Load configuration\n" "$load_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#load_config_option})))")"
    # printf "%s %s : Set proxy\n" "$proxy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#proxy_option})))")"
    # printf "%s %s : Display configuration\n" "$display_config_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_config_option})))")"
-   # printf "%s %s : Create open-appsec agent info\n" "$cp_agent_info_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#cp_agent_info_option})))")"
+    printf "%s %s : Create open-appsec agent info\n" "$cp_agent_info_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#cp_agent_info_option})))")"
    # printf "%s %s : Display current policy\n" "$display_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#display_policy_option})))")"
    # printf "%s %s : Load gradual policy\n" "$set_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#set_gradual_policy_option})))")"
    # printf "%s %s : Remove gradual policy\n" "$delete_gradual_policy_option" "$(printf "%s" "$line_padding" | cut -c 1-"$(max_num 1 $((${#line_padding} - ${#delete_gradual_policy_option})))")"
@@ -1707,6 +1707,8 @@ run() # Initials - r
         shift
         run_set_traffic_recording_policy "${@}"
     elif [ "--cp-agent-info" = "$1" ] || [ "-ai" = "$1" ]; then
+        echo "This option has been replaced by '--info' - please run again using the new flag"
+    elif [ "--info" = "$1" ]; then
         record_command $@
         shift
         run_ai "${@}"

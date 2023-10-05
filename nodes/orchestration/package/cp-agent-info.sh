@@ -106,7 +106,7 @@ writeCommandTofile() { # Initials - wctf
 }
 
 helpMenu() {
-    cp_print "Usage: cpnano <--cp-agent-info|-ai> [options]"
+    cp_print "Usage: cpnano <--info> [options]"
     cp_print "Options:"
     cp_print "-h,  --help                                                   : This help text."
     cp_print "-o,  --output                                                 : Output file path."
