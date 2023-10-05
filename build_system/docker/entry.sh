@@ -5,6 +5,7 @@ CROWDSEC_INSTALLATION_SCRIPT="install-cp-crowdsec-aux.sh"
 HTTP_TRANSACTION_HANDLER_SERVICE="install-cp-nano-service-http-transaction-handler.sh"
 ATTACHMENT_REGISTRATION_SERVICE="install-cp-nano-attachment-registration-manager.sh"
 ORCHESTRATION_INSTALLATION_SCRIPT="install-cp-nano-agent.sh"
+CACHE_INSTALLATION_SCRIPT="install-cp-nano-agent-cache.sh"
 
 var_fog_address=
 var_proxy=
@@ -63,6 +64,7 @@ if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
 fi
 
 /nano-service-installers/$ATTACHMENT_REGISTRATION_SERVICE --install
+/nano-service-installers/$CACHE_INSTALLATION_SCRIPT --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
 
 if [ ! -z $CROWDSEC_ENABLED ]; then

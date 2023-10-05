@@ -63,7 +63,7 @@ $ ./open-appsec-k8s-install
 
 For Kubernetes (NGINX or Kong) using Helm: follow [documentation](https://docs.openappsec.io/getting-started/start-with-kubernetes/install-using-helm-ingress-nginx-and-kong) – use this method if you’ve built your own containers. 
 
-For Linux (NGINX or Kong) using the installer (list of supported/pre-compiled NGINX attachments is available [here](https://downloads.openappsec.io/supported-nginx.txt)):
+For Linux (NGINX or Kong) using the installer (list of supported/pre-compiled NGINX attachments is available [here](https://downloads.openappsec.io/packages/supported-nginx.txt)):
 
 ```bash
 $ wget https://downloads.openappsec.io/open-appsec-install && chmod +x open-appsec-install
@@ -104,13 +104,14 @@ Before compiling the services, you'll need to ensure the latest development vers
 * GTest
 * GMock
 * cURL
+* Redis
 * Hiredis
 
 An example of installing the packages on Alpine:
 
 ```bash
  $ apk update
- $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev
+ $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis
 ```
 
 ## Compiling and packaging the agent code
