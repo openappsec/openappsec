@@ -52,13 +52,14 @@ run_installation()
     cp_exec "cp -rf lib/* ${USR_LIB_PATH}/cpnano"
     cp_exec "cp -rf bin/redis-server ${CACHE_SERVICE_PATH}/"
     cp_exec "cp -rf bin/redis-cli ${CACHE_SERVICE_PATH}/"
-    cp_exec "cp -f redis.conf ${CONF_PATH}/redis.conf"
     cp_exec "cp -f cp-nano-agent-cache.cfg ${CACHE_SERVICE_PATH}/cp-nano-agent-cache.cfg"
+    cp_exec "cp -f cache.conf ${CONF_PATH}/redis.conf"
     cp_exec "mv ${CACHE_SERVICE_PATH}/redis-server ${CACHE_SERVICE_PATH}/cp-nano-agent-cache"
     cp_exec "mv ${CACHE_SERVICE_PATH}/redis-cli ${CACHE_SERVICE_PATH}/cp-nano-cache-cli"
     cp_exec "chmod +x ${CACHE_SERVICE_PATH}/cp-nano-agent-cache"
     cp_exec "chmod +x ${CACHE_SERVICE_PATH}/cp-nano-cache-cli"
     cp_exec "chmod 600 ${CACHE_SERVICE_PATH}/cp-nano-agent-cache.cfg"
+    cp_exec "chmod 600 ${CONF_PATH}/redis.conf"
 
     cp_exec "${WATCHDOG_PATH} --register ${CACHE_SERVICE_PATH}/cp-nano-agent-cache"
     cp_print "Installation completed successfully." $FORCE_STDOUT
