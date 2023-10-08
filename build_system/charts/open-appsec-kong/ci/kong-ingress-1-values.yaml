@@ -1,6 +1,5 @@
 # CI test for empty hostname including tls secret using string
 proxy:
-  type: NodePort
   ingress:
     enabled: true
     tls: "kong.proxy.example.secret"

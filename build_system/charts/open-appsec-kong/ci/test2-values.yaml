@@ -3,8 +3,12 @@
 # - stream listens work
 # - a mixture of controller, Kong, and shared volumes successfully mount
 # - watchNamespaces is set
+# - the admission webhook is enabled; has the timeout explicitly set
 ingressController:
   enabled: true
+  admissionWebhook:
+    enabled: true
+    timeoutSeconds: 5
   env:
     anonymous_reports: "false"
   customEnv:
@@ -21,13 +25,11 @@ env:
   database: "postgres"
 # - ingress resources are created without hosts
 admin:
-  type: NodePort
   ingress:
     enabled: true
     hosts: []
     path: /
 proxy:
-  type: NodePort
   ingress:
     enabled: true
     hostname: proxy.kong.example

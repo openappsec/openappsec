@@ -1,5 +1,4 @@
 {{- if .Values.deployment.kong.enabled }}
-{{- if .Values.enterprise.enabled }}
 {{- if and .Values.manager.enabled (or .Values.manager.http.enabled .Values.manager.tls.enabled) -}}
 {{- $serviceConfig := dict -}}
 {{- $serviceConfig := merge $serviceConfig .Values.manager -}}
@@ -13,7 +12,6 @@
 {{ if .Values.manager.ingress.enabled }}
 ---
 {{ include "kong.ingress" $serviceConfig }}
-{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

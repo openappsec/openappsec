@@ -1,5 +1,98 @@
 # Changelog
 
+## Unreleased
+
+Nothing yet.
+
+## 2.29.0
+
+### Improvements
+* Make it possible to set the admission webhook's `timeoutSeconds`.
+
+## 2.28.1
+
+### Fixed
+
+* The admission webhook now includes Gateway API resources and Ingress
+  resources for controller versions 2.12+. This version introduces new
+  validations for Kong's regex path implementation.
+
+## 2.28.0
+
+### Improvements
+
+* Bump default `kong` image tag to 3.4.
+  [#883](https://github.com/Kong/charts/pull/883)
+* Bump default ingress controller image tag to 2.12.
+* Added validation rule for `latency` upstream load balancing algorithm to
+  CRDs. [Upgrade your CRDs](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#updates-to-crds)
+  when installing this release.
+
+## 2.27.0
+
+### Improvements
+
+* Listens now all support `.address` configuration. This was an existing
+  setting that was not applied properly for some listens.
+  [#881](https://github.com/Kong/charts/pull/881)
+
+## 2.26.5
+
+### Fixed 
+
+* Kuma ServiceAccount Token hints and volumes are also available in migrations
+  Pods.
+  [#877](https://github.com/Kong/charts/pull/877)
+
+## 2.26.4
+
+### Fixed 
+
+* updated `admin_api_uri` to `admin_gui_api_url` as per [kong documentation](https://docs.konghq.com/gateway/3.4.x/reference/configuration/#admin_api_uri). 
+
+## 2.26.3
+
+### Fixed 
+
+* Enabled Service and Ingress in Kong Manager for non enterprise users.
+
+## 2.26.2
+
+### Fixed 
+
+* Add missing CRD KongConsumerGroup and extend status subresource for CRDs
+
+## 2.26.1
+
+### Fixed
+
+* Fix parsing enterprise tags (like e.g. `3.4.0.0`)
+  [#857](https://github.com/Kong/charts/pull/857)
+
+## 2.26.0
+
+### Breaking changes
+
+2.26 changes the default proxy readiness endpoint for newer Kong versions. This
+causes an issue in a narrow edge case. If all of the following are true:
+
+* You use Kong 3.3 or newer.
+* You use controller 2.10 or older.
+* You run the controller and proxy in separate Deployments.
+
+you are affected and should review [the 2.26 upgrade instructions](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md#2260).
+
+### Improvements
+
+* Use the Kong 3.3 `/status/ready` endpoint for readiness probes by default if
+  available. If not available, use the old `/status` default.
+  [#844](https://github.com/Kong/charts/pull/844)
+* Add ArgoCD `Sync` and `BeforeHookCreation` [hook policies](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/)
+  to the the init and pre-upgrade migrations Jobs.
+* Add controller's RBAC rules for `KongConsumerGroups` CRD.
+  [#850](https://github.com/Kong/charts/pull/850)
+* Updated controller version to 2.11.
+
 ## 2.25.0
 
 - Generate the `adminApiService.name` value from `.Release.Name` rather than

@@ -9,7 +9,7 @@
 
 image:
   repository: kong/kong-gateway
-  tag: "3.3"
+  tag: "3.4"
 
 admin:
   enabled: true

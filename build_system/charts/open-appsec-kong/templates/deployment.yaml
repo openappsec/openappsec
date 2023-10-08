@@ -270,7 +270,7 @@ spec:
         {{- include "kong.volumeMounts" . | nindent 10 }}
         {{- include "kong.userDefinedVolumeMounts" .Values.deployment | nindent 10 }}
         readinessProbe:
-{{ toYaml .Values.readinessProbe | indent 10 }}
+{{ include "kong.proxy.compatibleReadiness" . | indent 10 }}
         livenessProbe:
 {{ toYaml .Values.livenessProbe | indent 10 }}
         {{- if .Values.startupProbe }}
@@ -302,39 +302,4 @@ spec:
       volumes:
       {{- include "kong.volumes" . | nindent 8 -}}
       {{- include "kong.userDefinedVolumes" . | nindent 8 -}}
-      {{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
-        - name: {{ template "kong.serviceAccountTokenName" . }}
-          {{- /* Due to GKE versions (e.g. v1.23.15-gke.1900) we need to handle pre-release part of the version as well.
-          See the related documentation of semver module that Helm depends on for semverCompare:
-          https://github.com/Masterminds/semver#working-with-prerelease-versions
-          Related Helm issue: https://github.com/helm/helm/issues/3810 */}}
-          {{- if semverCompare ">=1.20.0-0" .Capabilities.KubeVersion.Version }}
-          projected:
-            sources:
-            - serviceAccountToken:
-                expirationSeconds: 3607
-                path: token
-            - configMap:
-                items:
-                - key: ca.crt
-                  path: ca.crt
-                name: kube-root-ca.crt
-            - downwardAPI:
-                items:
-                - fieldRef:
-                    apiVersion: v1
-                    fieldPath: metadata.namespace
-                  path: namespace
-          {{- else }}
-          secret:
-            secretName: {{ template "kong.serviceAccountTokenName" . }}
-            items:
-            - key: token
-              path: token
-            - key: ca.crt
-              path: ca.crt
-            - key: namespace
-              path: namespace
-          {{- end }}
-      {{- end }}
 {{- end }}

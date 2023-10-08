@@ -1,6 +1,5 @@
 # CI test for using ingress hosts configuration
 proxy:
-  type: NodePort
   ingress:
     enabled: true
     hosts:

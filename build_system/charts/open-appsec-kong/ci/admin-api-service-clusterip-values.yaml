@@ -1,0 +1,18 @@
+admin:
+  enabled: true
+  type: ClusterIP
+
+# Stub config to make the instance become ready
+dblessConfig:
+  config: |
+    _format_version: "1.1"
+    services:
+    - name: example.com
+      url: http://example.com
+      routes:
+      - name: example
+        paths:
+        - "/example"
+
+ingressController:
+  enabled: false

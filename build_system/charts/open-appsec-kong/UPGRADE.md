@@ -17,7 +17,8 @@ upgrading from a previous version.
 ## Table of contents
 
 - [Upgrade considerations for all versions](#upgrade-considerations-for-all-versions)
-- [2.17.0](#2170)
+- [2.26.0](#2260)
+- [2.19.0](#2190)
 - [2.13.0](#2130)
 - [2.8.0](#280)
 - [2.7.0](#270)
@@ -82,6 +83,35 @@ https://raw.githubusercontent.com/Kong/charts/kong-<version>/charts/kong/crds/cu
 
 For example, if your release is 2.6.4, you would apply
 `https://raw.githubusercontent.com/Kong/charts/kong-2.6.4/charts/kong/crds/custom-resource-definitions.yaml`.
+
+## 2.26.0
+
+If you are using controller version 2.10 or lower and proxy version 3.3 or
+higher in separate Deployments (such as when using the `ingress` chart), proxy
+Pods will not become ready unless you override the default readiness endpoint:
+
+```
+readinessProbe:
+  httpGet:
+    path: /status
+```
+
+This section goes under the `gateway` section when using the `ingress` chart.
+
+2.26 changes the default proxy readiness endpoint to the `/status/ready`
+endpoint introduced in Kong 3.3. This endpoint reports true when Kong has
+configuration available, whereas the previous `/status` endpoint returned true
+immediately after start, and could result in proxy instances attempting to
+serve requests before they had configuration.
+
+The chart has logic to fall back to the older endpoint if the proxy and
+controller versions do not work well with the new endpoint. However, the chart
+detection cannot determine the controller version when the controller is in a
+separate Deployment, and will always use the new endpoint if the Kong image
+version is 3.3 or higher.
+
+Kong recommends Kong 3.3 and higher users update to controller 2.11 at their
+earliest convenience to take advantage of the improved readiness behavior.
 
 ## 2.19.0
 

@@ -30,14 +30,12 @@ podLabels:
   environment: test
 # - ingress resources are created with hosts
 admin:
-  type: NodePort
   ingress:
     enabled: true
     hostname: admin.kong.example
     annotations: {}
     path: /
 proxy:
-  type: NodePort
   ingress:
     enabled: true
     hostname: proxy.kong.example

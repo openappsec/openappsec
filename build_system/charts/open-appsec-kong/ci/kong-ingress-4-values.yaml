@@ -1,6 +1,5 @@
 # CI test for testing combined ingress hostname and hosts configuration including tls configuraion using slice
 proxy:
-  type: NodePort
   ingress:
     enabled: true
     hostname: "proxy.kong.example"

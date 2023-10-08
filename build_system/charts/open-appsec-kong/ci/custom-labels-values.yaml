@@ -1,6 +1,3 @@
-
 # install chart with some extra labels
-
 extraLabels:
   acme.com/some-key: some-value
-

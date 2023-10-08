@@ -1,7 +1,4 @@
 # install chart with default values
-proxy:
-  type: NodePort
-
 env:
   anonymous_reports: "off"
 ingressController:

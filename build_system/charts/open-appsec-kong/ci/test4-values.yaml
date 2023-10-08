@@ -12,7 +12,6 @@ env:
 postgresql:
   enabled: false
 proxy:
-  type: NodePort
 # - add stream listens
   stream:
   - containerPort: 9000

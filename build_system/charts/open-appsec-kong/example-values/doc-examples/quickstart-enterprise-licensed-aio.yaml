@@ -88,7 +88,7 @@ enterprise:
     enabled: true
 env:
   admin_access_log: /dev/stdout
-  admin_api_uri: https://kong.127-0-0-1.nip.io/api
+  admin_gui_api_url: https://kong.127-0-0-1.nip.io/api
   admin_error_log: /dev/stdout
   admin_gui_access_log: /dev/stdout
   admin_gui_error_log: /dev/stdout
@@ -146,7 +146,7 @@ extraLabels:
   konghq.com/component: quickstart
 image:
   repository: kong/kong-gateway
-  tag: "3.3"
+  tag: "3.4"
 ingressController:
   enabled: true
   env:

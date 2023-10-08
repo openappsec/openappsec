@@ -13,6 +13,8 @@ metadata:
   annotations:
     helm.sh/hook: "pre-upgrade"
     helm.sh/hook-delete-policy: "before-hook-creation"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   {{- range $key, $value := .Values.migrations.jobAnnotations }}
     {{ $key }}: {{ $value | quote }}
   {{- end }}
@@ -28,6 +30,9 @@ spec:
       annotations:
       {{- range $key, $value := .Values.migrations.annotations }}
         {{ $key }}: {{ $value | quote }}
+      {{- end }}
+      {{- if (and (not .Values.deployment.serviceAccount.automountServiceAccountToken) (or .Values.deployment.serviceAccount.create .Values.deployment.serviceAccount.name)) }}
+        kuma.io/service-account-token-volume: {{ template "kong.serviceAccountTokenName" . }}
       {{- end }}
       {{- end }}
     spec:

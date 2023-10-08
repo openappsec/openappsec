@@ -8,8 +8,6 @@ env:
   database: "off"
 postgresql:
   enabled: false
-proxy:
-  type: NodePort
 deployment:
   initContainers:
     - name: "bash"

@@ -86,7 +86,7 @@ env:
   database: "off"
   # the chart uses the traditional router (for Kong 3.x+) because the ingress
   # controller generates traditional routes. if you do not use the controller,
-  # you may set this to "traditional_compatible" or "expression" to use the new
+  # you may set this to "traditional_compatible" or "expressions" to use the new
   # DSL-based router
   router_flavor: "traditional"
   nginx_worker_processes: "2"
@@ -121,11 +121,13 @@ extraLabels: {}
 # Specify Kong's Docker image and repository details here
 image:
   repository: kong
-  tag: "3.3"
+  tag: "3.4"
   # Kong Enterprise
   # repository: kong/kong-gateway
-  # tag: "3.3"
+  # tag: "3.4"
 
+  # Specify a semver version if your image tag is not one (e.g. "nightly")
+  effectiveSemver:
   pullPolicy: IfNotPresent
   ## Optionally specify an array of imagePullSecrets.
   ## Secrets must be manually created in the namespace.
@@ -514,7 +516,7 @@ ingressController:
   enabled: true
   image:
     repository: kong/kubernetes-ingress-controller
-    tag: "2.10"
+    tag: "2.12"
     # Optionally set a semantic version for version-gated features. This can normally
     # be left unset. You only need to set this if your tag is not a semver string,
     # such as when you are using a "next" tag. Set this to the effective semantic
@@ -574,6 +576,8 @@ ingressController:
     service:
       # Specify custom labels for the validation webhook service.
       labels: {}
+    # Tune the default Kubernetes timeoutSeconds of 10 seconds
+    # timeoutSeconds: 10
 
   ingressClass: kong
   # annotations for IngressClass resource (Kubernetes 1.18+)
@@ -800,7 +804,7 @@ resources: {}
 # readinessProbe for Kong pods
 readinessProbe:
   httpGet:
-    path: "/status"
+    path: "/status/ready"
     port: status
     scheme: HTTP
   initialDelaySeconds: 5
@@ -1229,8 +1233,8 @@ appsec:
   image:
     #registry:
     repository: ghcr.io/openappsec
-    image: agent
-    tag: latest
+    image: "agent"
+    tag: "1.1.0"
     pullPolicy: Always
 
     securityContext:
@@ -1243,8 +1247,8 @@ appsec:
       # runAsUser: 1000
   kong:
     image:
-      repository: "ghcr.io/openappsec/kong-gateway-attachment"
-      tag: "latest"
+      repository: "ghcr.io/openappsec/kong-attachment"
+      tag: "1.1.0"
   configMapName: appsec-settings-configmap
   configMapContent:
     crowdsec:

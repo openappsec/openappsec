@@ -71,6 +71,7 @@ $ helm install kong/kong --generate-name
   - [Sessions](#sessions)
   - [Email/SMTP](#emailsmtp)
 - [Prometheus Operator integration](#prometheus-operator-integration)
+- [Argo CD considerations](#argo-cd-considerations)
 - [Changelog](https://github.com/Kong/charts/blob/main/charts/kong/CHANGELOG.md)
 - [Upgrading](https://github.com/Kong/charts/blob/main/charts/kong/UPGRADE.md)
 - [Seeking help](#seeking-help)
@@ -599,7 +600,8 @@ directory.
 | Parameter                          | Description                                                                           | Default             |
 | ---------------------------------- | ------------------------------------------------------------------------------------- | ------------------- |
 | image.repository                   | Kong image                                                                            | `kong`              |
-| image.tag                          | Kong image version                                                                    | `2.5`               |
+| image.tag                          | Kong image version                                                                    | `3.4`               |
+| image.effectiveSemver              | Semantic version to use for version-dependent features (if `tag` is not a semver)     |                     |
 | image.pullPolicy                   | Image pull policy                                                                     | `IfNotPresent`      |
 | image.pullSecrets                  | Image pull secrets                                                                    | `null`              |
 | replicaCount                       | Kong instance count. It has no effect when `autoscaling.enabled` is set to true         | `1`                 |
@@ -723,7 +725,7 @@ section of `values.yaml` file:
 |--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
 | enabled                                    | Deploy the ingress controller, rbac and crd                                                                                                              | true                               |
 | image.repository                           | Docker image with the ingress controller                                                                                                                 | kong/kubernetes-ingress-controller |
-| image.tag                                  | Version of the ingress controller                                                                                                                        | 2.0                                |
+| image.tag                                  | Version of the ingress controller                                                                                                                        | `2.12`                             |
 | image.effectiveSemver                      | Version of the ingress controller used for version-specific features when image.tag is not a valid semantic version                                      |                                    |
 | readinessProbe                             | Kong ingress controllers readiness probe                                                                                                                 |                                    |
 | livenessProbe                              | Kong ingress controllers liveness probe                                                                                                                  |                                    |
@@ -737,11 +739,13 @@ section of `values.yaml` file:
 | admissionWebhook.enabled                   | Whether to enable the validating admission webhook                                                                                                       | true                               |
 | admissionWebhook.failurePolicy             | How unrecognized errors from the admission endpoint are handled (Ignore or Fail)                                                                         | Ignore                             |
 | admissionWebhook.port                      | The port the ingress controller will listen on for admission webhooks                                                                                    | 8080                               |
+| admissionWebhook.address                   | The address the ingress controller will listen on for admission webhooks, if not 0.0.0.0                                                                 |                                    |
 | admissionWebhook.annotations               | Annotations for the Validation Webhook Configuration                                                                                                     |                                    |
 | admissionWebhook.certificate.provided      | Use a provided certificate. When set to false, the chart will automatically generate a certificate.                                                      | false                              |
 | admissionWebhook.certificate.secretName    | Name of the TLS secret for the provided webhook certificate                                                                                              |                                    |
 | admissionWebhook.certificate.caBundle      | PEM encoded CA bundle which will be used to validate the provided webhook certificate                                                                    |                                    |
 | admissionWebhook.namespaceSelector         | Add namespaceSelector to the webhook. Please go to [Kubernetes doc for the specs](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#matching-requests-namespaceselector)                                                                          |                                    |
+| admissionWebhook.timeoutSeconds            | Kubernetes `apiserver`'s timeout when running this webhook. Default: 10 seconds.                                                                         |                                    |
 | userDefinedVolumes                         | Create volumes. Please go to Kubernetes doc for the spec of the volumes                                                                                  |                                    |
 | userDefinedVolumeMounts                    | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts                                                                        |                                    |
 | terminationGracePeriodSeconds              | Sets the [termination grace period](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#hook-handler-execution) for Deployment pod | 30                                 |
@@ -1045,7 +1049,7 @@ must know where other Kong services (namely the admin and files APIs) can be
 accessed in order to function properly. Kong's default behavior for attempting
 to locate these absent configuration is unlikely to work in common Kubernetes
 environments. Because of this, you should set each of `admin_gui_url`,
-`admin_api_uri`, `proxy_url`, `portal_api_url`, `portal_gui_host`, and
+`admin_gui_api_url`, `proxy_url`, `portal_api_url`, `portal_gui_host`, and
 `portal_gui_protocol` under the `.env` key in values.yaml to locations where
 each of their respective services can be accessed to ensure that Kong services
 can locate one another and properly set CORS headers. See the
@@ -1160,6 +1164,28 @@ admin:
   labels:
     enable-metrics: "true"
 ```
+
+## Argo CD Considerations
+
+The built-in database subchart (`postgresql.enabled` in values) is not
+supported when installing the chart via Argo CD.
+
+Argo CD does not support the full Helm lifecycle. There is no distinction
+between the initial install and upgrades. Both operations are a "sync" in Argo
+terms. This affects when migration Jobs execute in database-backed Kong
+installs.
+
+The chart sets the `Sync` and `BeforeHookCreation` deletion 
+[hook policies](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/)
+on the `init-migrations` and `pre-upgrade-migrations` Jobs.
+
+The `pre-upgrade-migrations` Job normally uses Helm's `pre-upgrade` policy. Argo
+translates this to its `PreSync` policy, which would create the Job before all
+sync phase resources. Doing this before various sync phase resources (such as
+the ServiceAccount) are in place would prevent the Job from running
+successfully. Overriding this with Argo's `Sync` policy starts the Job at the
+same time as the upgraded Deployment Pods. The new Pods may fail to start
+temporarily, but will eventually start normally once migrations complete.
 
 ## Seeking help
 
