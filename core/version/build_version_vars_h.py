@@ -8,12 +8,12 @@ import sys
 # collect build data
 
 now = datetime.datetime.now()
-build_id = "0.0"
+build_id = ""
 is_public = "true"
 username = "%s" % getpass.getuser()
 timestamp = "%s%s" % (now.replace(microsecond=0).isoformat(), time.strftime("%z"))
-version_prefix = "1."
-full_version = "%s%s" % (version_prefix, build_id)
+version_prefix = ""
+full_version = "private"
 
 branch = os.getenv("CI_BUILD_REF_NAME")
 if branch is None:
