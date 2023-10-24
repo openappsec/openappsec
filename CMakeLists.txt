@@ -3,6 +3,11 @@ project (ngen)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wno-terminate -Dalpine")
 
+execute_process(COMMAND grep -c "Alpine Linux" /etc/os-release OUTPUT_VARIABLE IS_ALPINE)
+if(IS_ALPINE EQUAL "1")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dalpine")
+endif()
+
 find_package(Boost REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(GTest REQUIRED)
