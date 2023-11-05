@@ -67,7 +67,7 @@ For Linux (NGINX or Kong) using the installer (list of supported/pre-compiled NG
 
 ```bash
 $ wget https://downloads.openappsec.io/open-appsec-install && chmod +x open-appsec-install
-$ ./open-appsec-install –auto
+$ ./open-appsec-install --auto
 ```
 
 For Linux, if you’ve built your own package use the following commands:
