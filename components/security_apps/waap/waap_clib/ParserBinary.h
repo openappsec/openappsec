@@ -19,7 +19,7 @@
 class ParserBinary : public ParserBase
 {
 public:
-    ParserBinary(IParserStreamReceiver& receiver);
+    ParserBinary(IParserStreamReceiver& receiver, size_t parser_depth);
     virtual ~ParserBinary();
     virtual size_t push(const char* data, size_t data_len);
     virtual void finish();
@@ -39,7 +39,7 @@ private:
     state m_state;
     std::string m_textFromLastBuffer;
     size_t m_textCharCount;
-
+    size_t m_parser_depth;
     void flush();
 };
 

@@ -55,6 +55,8 @@
 USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
 USE_DEBUG_FLAG(D_WAAP_BOT_PROTECTION);
+USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
+
 using namespace ReportIS;
 
 #define MAX_REQUEST_BODY_SIZE (2*1024)
@@ -529,6 +531,7 @@ void Waf2Transaction::set_method(const char* method) {
     m_methodStr = method;
 }
 
+
 bool Waf2Transaction::checkIsScanningRequired()
 {
     bool result = false;
@@ -606,7 +609,7 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
         bool firstPush = true;
 
         // Parse URL
-        ParserRaw urlParser(m_deepParserReceiver, scanStage);
+        ParserRaw urlParser(m_deepParserReceiver, 0, scanStage);
 
         // Scan the uri until '?' or ';' character found, whichever comes first (or until end of the uri string),
         // Do not account for last character as valid separator
@@ -654,7 +657,6 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
                 pushed = true;
                 std::string url(uri);
 
-                Waap::Util::decodePercentEncoding(url);
                 urlParser.push(url.data(), url.size());
 
                 // We found no '?' character so set p to NULL to prevent parameters scan below.
@@ -677,7 +679,6 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
 
                 pushed = true;
                 std::string url(p, q-p);
-                Waap::Util::decodePercentEncoding(url);
                 urlParser.push(url.data(), url.size());
             }
 
@@ -704,7 +705,7 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
         bool ignoreScore = m_ignoreScore;
         m_ignoreScore = true;
         m_deepParser.m_key.push(scanStage.c_str(), scanStage.size());
-        ParserDelimiter uriSegmentsParser(m_deepParserReceiver, '/', scanStage);
+        ParserDelimiter uriSegmentsParser(m_deepParserReceiver, 0, '/', scanStage);
         std::string baseUriUnescaped(baseUri);
         Waap::Util::decodePercentEncoding(baseUriUnescaped);
         uriSegmentsParser.push(baseUriUnescaped.c_str(), baseUriUnescaped.length());
@@ -749,7 +750,8 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
         std::string tag = scanStage + "_param";
         m_deepParser.m_key.push(tag.data(), tag.size());
         size_t buff_len = uriEnd - p;
-        ParserUrlEncode up(m_deepParserReceiver, paramSep, checkUrlEncoded(p, buff_len));
+        dbgTrace(D_WAAP) << "% will be encoded?'" << checkUrlEncoded(p, buff_len) << "'";
+        ParserUrlEncode up(m_deepParserReceiver, 0, paramSep, checkUrlEncoded(p, buff_len));
         up.push(p, buff_len);
         up.finish();
         m_deepParser.m_key.pop(tag.c_str());
@@ -796,7 +798,7 @@ void Waf2Transaction::parseCookie(const char* value, int value_len)
     if (value_len > 0) {
         dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the cookie value";
         m_deepParser.m_key.push("cookie", 6);
-        ParserUrlEncode cookieValueParser(m_deepParserReceiver, ';');
+        ParserUrlEncode cookieValueParser(m_deepParserReceiver, 0, ';');
         cookieValueParser.push(value, value_len);
         cookieValueParser.finish();
         m_deepParser.m_key.pop("cookie");
@@ -838,7 +840,7 @@ void Waf2Transaction::parseUnknownHeaderName(const char* name, int name_len)
         !m_pWaapAssetState->getSignatures()->good_header_name_re.hasMatch(std::string(name, name_len))) {
         dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the header name";
         m_deepParser.m_key.push("header", 6);
-        ParserRaw headerNameParser(m_deepParserReceiver, std::string(name, name_len));
+        ParserRaw headerNameParser(m_deepParserReceiver, 0, std::string(name,  name_len));
         headerNameParser.push(name, name_len);
         headerNameParser.finish();
         m_deepParser.m_key.pop("header name");
@@ -857,7 +859,7 @@ void Waf2Transaction::parseGenericHeaderValue(const std::string &headerName, con
 
     dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the header value";
     m_deepParser.m_key.push("header", 6);
-    ParserRaw headerValueParser(m_deepParserReceiver, headerName);
+    ParserRaw headerValueParser(m_deepParserReceiver, 0, headerName);
     headerValueParser.push(value, value_len);
     headerValueParser.finish();
     m_deepParser.m_key.pop("header value");
@@ -1077,7 +1079,7 @@ void Waf2Transaction::start_request_body() {
     clearRequestParserState();
 
 
-    m_requestBodyParser = new ParserRaw(m_deepParserReceiver, "body");
+    m_requestBodyParser = new ParserRaw(m_deepParserReceiver, 0, "body");
 
     m_request_body_bytes_received = 0;
     m_request_body.clear();
@@ -1187,6 +1189,7 @@ void Waf2Transaction::end_request() {
         }
         dbgTrace(D_WAAP) << "(Waf2Engine::end_request): Security Headers State was created";
     }
+
 
     // Enable response headers processing if response scanning is enabled in policy
     auto errorDisclosurePolicy = m_siteConfig ? m_siteConfig->get_ErrorDisclosurePolicy() : NULL;
@@ -1642,6 +1645,11 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
         std::vector<std::string> vOverrideIds(m_matchedOverrideIds.size());
         std::copy(m_matchedOverrideIds.begin(), m_matchedOverrideIds.end(), vOverrideIds.begin());
         waapLog.addToOrigin(LogField("exceptionIdList", vOverrideIds));
+        if (!m_effectiveOverrideIds.empty()) {
+            std::vector<std::string> vEffectiveOverrideIds(m_effectiveOverrideIds.size());
+            std::copy(m_effectiveOverrideIds.begin(), m_effectiveOverrideIds.end(), vEffectiveOverrideIds.begin());
+            waapLog.addToOrigin(LogField("effectiveExceptionIdList", vEffectiveOverrideIds));
+        }
     }
 }
 
@@ -1697,13 +1705,18 @@ Waf2Transaction::sendLog()
         return;
     }
 
+    dbgTrace(D_WAAP) << "force exception: " << m_overrideState.bForceException <<
+        " force block: " << m_overrideState.bForceBlock <<
+        " matched overrides count: " << m_matchedOverrideIds.size() <<
+        " effective overrides count: " << m_effectiveOverrideIds.size();
+
+
     bool shouldBlock = false;
     if (m_overrideState.bForceBlock) {
         // If override forces "reject" decision, mention it in the "override" log field.
         logOverride = OVERRIDE_DROP;
         shouldBlock = true;
-    }
-    else if (m_overrideState.bForceException) {
+    } else if (m_overrideState.bForceException) {
         // If override forces "allow" decision, mention it in the "override" log field.
         logOverride = OVERRIDE_ACCEPT;
     } else if (m_scanner.getIgnoreOverride()) {
@@ -2024,6 +2037,9 @@ Waf2Transaction::decideAutonomousSecurity(
     if (m_overrideState.bForceBlock) {
         dbgTrace(D_WAAP) << "decideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
             " and override forces REJECT ...";
+        if (!decision->shouldBlock()) {
+            m_effectiveOverrideIds.insert(m_overrideState.forceBlockIds.begin(), m_overrideState.forceBlockIds.end());
+        }
         decision->setBlock(true);
         if (!m_overrideState.bIgnoreLog)
         {
@@ -2033,6 +2049,17 @@ Waf2Transaction::decideAutonomousSecurity(
     else if (m_overrideState.bForceException) {
         dbgTrace(D_WAAP) << "decideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
             " and override forces ALLOW ...";
+        if (m_scanResult) {
+            // on accept exception the decision is not set and needs to be calculated to determine effectivness
+            ThreatLevel threat = Waap::Conversions::convertFinalScoreToThreatLevel(m_scanResult->score);
+            bool shouldBlock = Waap::Conversions::shouldDoWafBlocking(&sitePolicy, threat);
+            if (shouldBlock) {
+                m_effectiveOverrideIds.insert(
+                    m_overrideState.forceExceptionIds.begin(), m_overrideState.forceExceptionIds.end()
+                );
+            }
+        }
+
         decision->setBlock(false);
         if (!m_overrideState.bIgnoreLog)
         {
@@ -2041,8 +2068,13 @@ Waf2Transaction::decideAutonomousSecurity(
     }
 
 
-
-    if(decision->getThreatLevel() <= ThreatLevel::THREAT_INFO) {
+    bool log_all = false;
+    const std::shared_ptr<Waap::Trigger::Policy> triggerPolicy = sitePolicy.get_TriggerPolicy();
+    if (triggerPolicy) {
+        const std::shared_ptr<Waap::Trigger::Log> triggerLog = getTriggerLog(triggerPolicy);
+        if (triggerLog && triggerLog->webRequests) log_all = true;
+    }
+    if(decision->getThreatLevel() <= ThreatLevel::THREAT_INFO && !log_all) {
         decision->setLog(false);
     } else {
         decision->setLog(true);
@@ -2171,8 +2203,10 @@ Waf2Transaction::reportScanResult(const Waf2ScanResult &res) {
 bool
 Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
-    if (!exceptions.ok()) return false;
-
+    if (!exceptions.ok()) {
+        dbgInfo(D_WAAP_OVERRIDE) << "matching exceptions error:" << exceptions.getErr();
+        return false;
+    }
     dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions";
 
     std::unordered_map<std::string, std::set<std::string>> exceptions_dict;
@@ -2212,12 +2246,19 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
         // calling behavior and check if there is a behavior that match to this specific param name.
         auto behaviors = exceptions.unpack().getBehavior(exceptions_dict,
                 getAssetState()->m_filtersMngr->getMatchedOverrideKeywords());
-        for (auto const &behavior : behaviors) {
-            if (behavior == action_ignore) {
+        for (const auto &behavior : behaviors) {
+            if (behavior == action_ignore)
+            {
                 dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for " << res.param_name << " should ignore.";
                 std::string overrideId = behavior.getId();
                 if (!overrideId.empty()) {
                     m_matchedOverrideIds.insert(overrideId);
+                }
+                if (!res.keyword_matches.empty() || res.unescaped_line == Waap::Scanner::xmlEntityAttributeId)
+                {
+                    if (!overrideId.empty()) {
+                        m_effectiveOverrideIds.insert(overrideId);
+                    }
                 }
                 return true;
             }

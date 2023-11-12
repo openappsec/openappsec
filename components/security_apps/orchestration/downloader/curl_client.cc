@@ -278,36 +278,6 @@ HttpsCurl::HttpsCurl(const HttpsCurl &other) :
     HttpCurl(other),
     ca_path(other.ca_path) {}
 
-bool
-HttpsCurl::downloadOpenAppsecPackages()
-{
-    char errorstr[CURL_ERROR_SIZE];
-    CURL* curl_handle = curl_easy_init();
-    if (!curl_handle) return false;
-
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1);
-    curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 2);
-
-    curl_easy_setopt(curl_handle, CURLOPT_URL, ("https://" + curl_url).c_str());
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, writeResponseCallback);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &out_file);
-
-    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
-    curl_easy_setopt(curl_handle, CURLOPT_ERRORBUFFER, errorstr);
-
-    CURLcode res = curl_easy_perform(curl_handle);
-    if (res == CURLE_OK) {
-        dbgTrace(D_HTTP_REQUEST) << "CURL HTTP request successfully completed.";
-    } else {
-        dbgWarning(D_HTTP_REQUEST) << "CURL result " + string(curl_easy_strerror(res));
-        curl_easy_cleanup(curl_handle);
-        return false;
-    }
-
-    curl_easy_cleanup(curl_handle);
-    return true;
-}
-
 void
 HttpsCurl::setCurlOpts(long timeout, HTTP_VERSION http_version)
 {
@@ -347,7 +317,7 @@ HttpsCurl::setCurlOpts(long timeout, HTTP_VERSION http_version)
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, writeResponseCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &out_file);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, timeout);
-    curl_easy_setopt(curl_handle, CURLOPT_CAINFO, ca_path.c_str());
+    if (ca_path != "") curl_easy_setopt(curl_handle, CURLOPT_CAINFO, ca_path.c_str());
     headers = curl_slist_append(headers, "Accept: */*");
     string auth = string("Authorization: Bearer ") + bearer;
     headers = curl_slist_append(headers, auth.c_str());

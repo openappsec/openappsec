@@ -964,13 +964,21 @@ run_status() # Initials - rs
     if echo "$rs_orch_status" | grep -q "update status"; then
         rs_line_count=$(echo "$rs_orch_status" | grep -c '^')
         rs_policy_load_time="$(echo "${rs_orch_status}" | grep "Last policy update"| sed "s|\"||g" | sed "s|,||g")"
-        rs_ai_model_ver="$(echo "${rs_orch_status}" | grep "AI model version"| sed "s|\"||g" | sed "s|,||g")"
 
         rs_temp_old_status=$(echo "$rs_orch_status" | sed -r "${rs_line_count},${rs_line_count}d; "' 1,1d; s/^\s*//g; s/^\n//g; s/\"//g; s/\\n/\n/g; s/\,//g')
     else
         rs_temp_old_status=$(sed 's/{//g' <${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json | sed 's/}//g' | sed 's/"//g' | sed 's/,//g' | sed -r '/^\s*$/d' | sed -r 's/^    //g')
         rs_policy_load_time="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "Last policy update" | sed "s|\"||g" | sed "s|,||g")"
-        rs_ai_model_ver="$(cat ${FILESYSTEM_PATH}/conf/orchestration_status.json | grep "AI model version" | sed "s|\"||g" | sed "s|,||g")"
+    fi
+
+    if [ -f ${FILESYSTEM_PATH}/conf/waap/waap.data ]; then
+        rs_ai_model_ver="$(cat ${FILESYSTEM_PATH}/conf/waap/waap.data | ${FILESYSTEM_PATH}/${CP_PICOJSON_PATH} | grep 'model_version')"
+
+        if [ -z "$rs_ai_model_ver" ]; then
+            echo "AI model version: None"
+        else
+            echo "$rs_ai_model_ver" | sed "s/\"//g; s/,//g; s/model_version/AI model version/g; s/^[ \t]*//"
+        fi
     fi
 
     if [ -n "$(cat ${FILESYSTEM_PATH}/conf/agent_details.json | grep "hybrid_mode")" ]; then
@@ -1010,7 +1018,6 @@ run_status() # Initials - rs
     fi
     echo "Policy load status: ${rs_policy_load_status}"
     echo ${rs_policy_load_time}
-    echo ${rs_ai_model_ver}
     echo ""
 
     for service in $all_services; do
@@ -1258,7 +1265,7 @@ run_ai() # Initials - ra
     ra_https_prefix="https://"
     ra_agent_details=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/agent_details.json)
     if echo "$ra_agent_details" | grep -q "Fog domain"; then
-        ra_fog_address=$(printf "%s" "$ra_agent_details" | grep "Fog domain" | cut -d '"' -f4)
+        [ -f ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json ] && ra_orch_status=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json)
         ra_tenant_id=$(printf "%s" "$ra_agent_details" | grep "Tenant ID" | cut -d '"' -f4)
         ra_agent_id=$(printf "%s" "$ra_agent_details" | grep "Agent ID" | cut -d '"' -f4)
     else

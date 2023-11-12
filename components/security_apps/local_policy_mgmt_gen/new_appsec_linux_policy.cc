@@ -70,3 +70,31 @@ V1beta2AppsecLinuxPolicy::addSpecificRule(const NewParsedRule &_rule)
     policies.addSpecificRule(_rule);
 }
 // LCOV_EXCL_STOP
+
+void
+V1beta2AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
+{
+    dbgInfo(D_LOCAL_POLICY) << "Loading Appsec V1Beta2 Linux Policy";
+
+    // Check for the presence of "apiVersion" key, present only from V1Beta2
+    string api_version;
+    archive_in(cereal::make_nvp("apiVersion", api_version));
+    if (api_version != "v1beta2") throw cereal::Exception("Failed to parse JSON as v1Beta2 version");
+
+    parseAppsecJSONKey<NewAppsecPolicySpec>("policies", policies, archive_in);
+    parseAppsecJSONKey<vector<NewAppSecPracticeSpec>>(
+        "threatPreventionPractices",
+        threat_prevection_practices,
+        archive_in
+    );
+    parseAppsecJSONKey<vector<AccessControlPracticeSpec>>(
+        "accessControlPractices",
+        access_control_practices,
+        archive_in
+    );
+    parseAppsecJSONKey<vector<NewAppsecLogTrigger>>("logTriggers", log_triggers, archive_in);
+    parseAppsecJSONKey<vector<NewAppSecCustomResponse>>("customResponse", custom_responses, archive_in);
+    parseAppsecJSONKey<vector<NewAppsecException>>("exceptions", exceptions, archive_in);
+    parseAppsecJSONKey<vector<NewTrustedSourcesSpec>>("trustedSources", trusted_sources, archive_in);
+    parseAppsecJSONKey<vector<NewSourcesIdentifiers>>("sourcesIdentifiers", sources_identifiers, archive_in);
+}

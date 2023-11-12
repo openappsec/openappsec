@@ -38,16 +38,24 @@ void ParserHTML::onStartElement(
             if (attr_value == NULL) {
                 attr_value = (const xmlChar*)"";
             }
-            
-            dbgTrace(D_WAAP_PARSER_HTML) << "\tHTML ATTR: elem='" << (char*)localname << "', " << attr_localname <<
-                "='" << std::string((char*)attr_value) << "'";
-            p->m_key.push((const char*)attr_localname, xmlStrlen(attr_localname));
+
+            dbgTrace(D_WAAP_PARSER_HTML)
+                << "\tHTML ATTR: elem='"
+                << (char *)localname
+                << "', "
+                << attr_localname
+                << "='"
+                << std::string((char *)attr_value)
+                << "'";
+            p->m_key.push((const char *)attr_localname, xmlStrlen(attr_localname));
             if (p->m_receiver.onKv(
-                p->m_key.first().c_str(),
-                p->m_key.first().size(),
-                (const char*)attr_value, strlen((const char*)attr_value),
-                BUFFERED_RECEIVER_F_BOTH
-            ) != 0) {
+                    p->m_key.first().c_str(),
+                    p->m_key.first().size(),
+                    (const char *)attr_value,
+                    strlen((const char *)attr_value),
+                    BUFFERED_RECEIVER_F_BOTH,
+                    p->m_parser_depth
+                ) != 0) {
                 p->m_state = s_error;
             }
             p->m_key.pop("HTML end attribute");
@@ -73,8 +81,8 @@ ParserHTML::onEndElement(
     dbgTrace(D_WAAP_PARSER_HTML) << "HTML CLOSE: '" << localname << "'";
 
     if (p->m_elemTrackStack.empty()) {
-        dbgWarning(D_WAAP_PARSER_HTML) <<
-            "HTML closing tag and elem track stack is empty. This is probably sign of a bug!";
+        dbgWarning(D_WAAP_PARSER_HTML)
+            << "HTML closing tag and elem track stack is empty. This is probably sign of a bug!";
         return;
     }
 
@@ -111,8 +119,10 @@ ParserHTML::onEndElement(
     p->m_key.pop("HTML end element");
 }
 
-void ParserHTML::onCharacters(void* ctx, const xmlChar* ch, int len) {
-    ParserHTML* p = (ParserHTML*)ctx;
+void
+ParserHTML::onCharacters(void *ctx, const xmlChar *ch, int len)
+{
+    ParserHTML *p = (ParserHTML *)ctx;
 
     if (p->m_elemTrackStack.empty()) {
         dbgWarning(D_WAAP_PARSER_HTML) << "HTML text and elem track stack is empty. This is probably sign of a bug!";
@@ -141,7 +151,9 @@ void ParserHTML::onCharacters(void* ctx, const xmlChar* ch, int len) {
     elemTrackInfo.value += val;
 }
 
-static void onError(void* ctx, const char* msg, ...) {
+static void
+onError(void *ctx, const char *msg, ...)
+{
     static const size_t TMP_BUF_SIZE = 4096;
     char string[TMP_BUF_SIZE];
     va_list arg_ptr;
@@ -152,9 +164,19 @@ static void onError(void* ctx, const char* msg, ...) {
     dbgTrace(D_WAAP_PARSER_HTML) << "LIBXML (html) onError: " << std::string(string);
 }
 
-ParserHTML::ParserHTML(IParserStreamReceiver& receiver)
-    :m_receiver(receiver), m_state(s_start), m_bufLen(0), m_key("html_parser"), m_pushParserCtxPtr(NULL) {
-    dbgTrace(D_WAAP_PARSER_HTML) << "ParserHTML::ParserHTML()";
+ParserHTML::ParserHTML(IParserStreamReceiver &receiver, size_t parser_depth) :
+    m_receiver(receiver),
+    m_state(s_start),
+    m_bufLen(0),
+    m_key("html_parser"),
+    m_pushParserCtxPtr(NULL),
+    m_parser_depth(parser_depth)
+{
+    dbgTrace(D_WAAP_PARSER_HTML)
+        << "ParserHTML::ParserHTML()"
+        << "parser_depth="
+        << parser_depth;
+
     // TODO:: is zeroing this really needed?
     memset(m_buf, 0, sizeof(m_buf));
 
@@ -173,7 +195,8 @@ ParserHTML::ParserHTML(IParserStreamReceiver& receiver)
     m_key.push("html", 4);
 }
 
-ParserHTML::~ParserHTML() {
+ParserHTML::~ParserHTML()
+{
     // Cleanup HTML
     dbgTrace(D_WAAP_PARSER_HTML) << "ParserHTML::~ParserHTML()";
 
@@ -182,9 +205,15 @@ ParserHTML::~ParserHTML() {
     }
 }
 
-bool ParserHTML::filterErrors(xmlErrorPtr xmlError) {
-    dbgDebug(D_WAAP_PARSER_HTML) << "ParserHTML::filterErrors(): xmlError " << xmlError->code << ": '" <<
-        xmlError->message << "'";
+bool
+ParserHTML::filterErrors(xmlErrorPtr xmlError)
+{
+    dbgDebug(D_WAAP_PARSER_HTML)
+        << "ParserHTML::filterErrors(): xmlError "
+        << xmlError->code
+        << ": '"
+        << xmlError->message
+        << "'";
 
     // Ignore specific error: "HTML declaration allowed only at the start of the document".
     // This includes the case of "multiple HTML declarations" we've seen sent by some SOAP clients.
@@ -193,15 +222,21 @@ bool ParserHTML::filterErrors(xmlErrorPtr xmlError) {
     // Ignoring this error prevents the WAAP code from thinking the HTML is "broken" and from scanning the HTML
     // source as-is, in effect preventing false alarm on that HTML source.
     if (xmlError->code == XML_ERR_RESERVED_XML_NAME || xmlError->code == XML_ERR_UNDECLARED_ENTITY) {
-        dbgDebug(D_WAAP_PARSER_HTML) << "ParserHTML::filterErrors(): ignoring the '" << xmlError->code << ": " <<
-            xmlError->message << "' html parser error.";
+        dbgDebug(D_WAAP_PARSER_HTML)
+            << "ParserHTML::filterErrors(): ignoring the '"
+            << xmlError->code
+            << ": "
+            << xmlError->message
+            << "' html parser error.";
         return false;
     }
 
     return true;
 }
 
-size_t ParserHTML::push(const char* data, size_t data_len) {
+size_t
+ParserHTML::push(const char *data, size_t data_len)
+{
     size_t i = 0;
     char c;
 
@@ -212,8 +247,12 @@ size_t ParserHTML::push(const char* data, size_t data_len) {
         if (htmlParseChunk(m_pushParserCtxPtr, m_buf, 0, 1)) {
             xmlErrorPtr xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
             if (xmlError && filterErrors(xmlError)) {
-                dbgDebug(D_WAAP_PARSER_HTML) << "ParserHTML::push(): xmlError: code=" << xmlError->code << ": '" <<
-                    xmlError->message << "'";
+                dbgDebug(D_WAAP_PARSER_HTML)
+                    << "ParserHTML::push(): xmlError: code="
+                    << xmlError->code
+                    << ": '"
+                    << xmlError->message
+                    << "'";
                 m_state = s_error; // error
                 return -1;
             }
@@ -232,8 +271,13 @@ size_t ParserHTML::push(const char* data, size_t data_len) {
             // fall through //
             CP_FALL_THROUGH;
         case s_accumulate_first_bytes:
-            dbgTrace(D_WAAP_PARSER_HTML) << "ParserHTML::push(): s_accumulate_first_bytes. c='" << data[i] <<
-                "'; m_bufLen=" << m_bufLen << "; i=" << i;
+                dbgTrace(D_WAAP_PARSER_HTML)
+                    << "ParserHTML::push(): s_accumulate_first_bytes. c='"
+                    << data[i]
+                    << "'; m_bufLen="
+                    << m_bufLen
+                    << "; i="
+                    << i;
             m_buf[m_bufLen] = c;
             m_bufLen++;
             if (c == '?') {
@@ -244,13 +288,19 @@ size_t ParserHTML::push(const char* data, size_t data_len) {
             }
             break;
 
-        case s_start_parsing:
-            dbgTrace(D_WAAP_PARSER_HTML) << "ParserHTML::push(): s_start_parsing. sending len=" << m_bufLen << ": '" <<
-                std::string(m_buf, m_bufLen) << "'; i=" << i;
-            // Create HTML SAX (push parser) context
-            // It is important to buffer at least first 4 bytes of input stream so libxml can determine text encoding!
-            m_pushParserCtxPtr = htmlCreatePushParserCtxt(&m_saxHandler, this, m_buf, m_bufLen, NULL,
-                XML_CHAR_ENCODING_UTF8);
+            case s_start_parsing:
+                dbgTrace(D_WAAP_PARSER_HTML)
+                    << "ParserHTML::push(): s_start_parsing. sending len="
+                    << m_bufLen
+                    << ": '"
+                    << std::string(m_buf, m_bufLen)
+                    << "'; i="
+                    << i;
+                // Create HTML SAX (push parser) context
+                // It is important to buffer at least first 4 bytes of input stream so libxml can determine text
+                // encoding!
+                m_pushParserCtxPtr =
+                    htmlCreatePushParserCtxt(&m_saxHandler, this, m_buf, m_bufLen, NULL, XML_CHAR_ENCODING_UTF8);
 
             // Enable "permissive mode" for HTML SAX parser.
             // In this mode, the libxml parser doesn't stop on errors, but still reports them!
@@ -261,14 +311,23 @@ size_t ParserHTML::push(const char* data, size_t data_len) {
             // fall through //
             CP_FALL_THROUGH;
         case s_parsing:
-            dbgTrace(D_WAAP_PARSER_HTML) << "ParserHTML::push(): s_parsing. sending len=" << (int)(data_len - i) <<
-                ": '" << std::string(data + i, data_len - i) << "'; i=" << i;
+                dbgTrace(D_WAAP_PARSER_HTML)
+                    << "ParserHTML::push(): s_parsing. sending len="
+                    << (int)(data_len - i)
+                    << ": '"
+                    << std::string(data + i, data_len - i)
+                    << "'; i="
+                    << i;
             if (m_pushParserCtxPtr) {
                 if (htmlParseChunk(m_pushParserCtxPtr, data + i, data_len - i, 0)) {
                     xmlErrorPtr xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
                     if (xmlError && filterErrors(xmlError)) {
-                        dbgDebug(D_WAAP_PARSER_HTML) << "ParserHTML::push(): xmlError: code=" << xmlError->code <<
-                            ": '" << xmlError->message << "'";
+                            dbgDebug(D_WAAP_PARSER_HTML)
+                                << "ParserHTML::push(): xmlError: code="
+                                << xmlError->code
+                                << ": '"
+                                << xmlError->message
+                                << "'";
                         m_state = s_error; // error
                         return 0;
                     }
@@ -290,15 +349,20 @@ size_t ParserHTML::push(const char* data, size_t data_len) {
     return i;
 }
 
-void ParserHTML::finish() {
+void
+ParserHTML::finish()
+{
     push(NULL, 0);
 }
 
 const std::string &
-ParserHTML::name() const {
+ParserHTML::name() const
+{
     return m_parserName;
 }
 
-bool ParserHTML::error() const {
+bool
+ParserHTML::error() const
+{
     return m_state == s_error;
 }

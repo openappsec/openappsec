@@ -28,6 +28,7 @@
 #include "triggers_section.h"
 #include "exceptions_section.h"
 #include "trusted_sources_section.h"
+#include "reverse_proxy_section.h"
 #include "new_practice.h"
 
 class AppSecWebBotsURI
@@ -148,7 +149,7 @@ public:
     PracticeAdvancedConfig() {}
 
     PracticeAdvancedConfig(const AppSecPracticeSpec &parsed_appsec_spec)
-            :
+        :
         http_header_max_size(parsed_appsec_spec.getWebAttacks().getMaxHeaderSizeBytes()),
         http_illegal_methods_allowed(0),
         http_request_body_max_size(parsed_appsec_spec.getWebAttacks().getMaxBodySizeKb()),
@@ -162,7 +163,7 @@ public:
         int _http_request_body_max_size,
         int _json_max_object_depth,
         int _url_max_size)
-            :
+        :
         http_header_max_size(_http_header_max_size),
         http_illegal_methods_allowed(0),
         http_request_body_max_size(_http_request_body_max_size),
@@ -186,7 +187,7 @@ class TriggersInWaapSection
 {
 public:
     TriggersInWaapSection(const LogTriggerSection &log_section)
-            :
+        :
         trigger_type("log"),
         id(log_section.getTriggerId()),
         name(log_section.getTriggerName()),
@@ -241,13 +242,13 @@ public:
     AppsecPracticeAntiBotSection(const NewAppSecPracticeAntiBot &anti_bot) :
         injected_uris(anti_bot.getIjectedUris()),
         validated_uris(anti_bot.getValidatedUris())
-    {};
+            {};
     // LCOV_EXCL_STOP
 
     AppsecPracticeAntiBotSection(const AppSecPracticeAntiBot &anti_bot) :
         injected_uris(anti_bot.getIjectedUris()),
         validated_uris(anti_bot.getValidatedUris())
-    {};
+            {};
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -278,20 +279,20 @@ public:
     );
 
     WebAppSection(
-    const std::string &_application_urls,
-    const std::string &_asset_id,
-    const std::string &_asset_name,
-    const std::string &_rule_id,
-    const std::string &_rule_name,
-    const std::string &_practice_id,
-    const std::string &_practice_name,
-    const std::string &_context,
-    const std::string &_web_attack_mitigation_severity,
-    const std::string &_web_attack_mitigation_mode,
-    const PracticeAdvancedConfig &_practice_advanced_config,
-    const AppsecPracticeAntiBotSection &_anti_bots,
-    const LogTriggerSection &parsed_log_trigger,
-    const AppSecTrustedSources &parsed_trusted_sources);
+        const std::string &_application_urls,
+        const std::string &_asset_id,
+        const std::string &_asset_name,
+        const std::string &_rule_id,
+        const std::string &_rule_name,
+        const std::string &_practice_id,
+        const std::string &_practice_name,
+        const std::string &_context,
+        const std::string &_web_attack_mitigation_severity,
+        const std::string &_web_attack_mitigation_mode,
+        const PracticeAdvancedConfig &_practice_advanced_config,
+        const AppsecPracticeAntiBotSection &_anti_bots,
+        const LogTriggerSection &parsed_log_trigger,
+        const AppSecTrustedSources &parsed_trusted_sources);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -331,7 +332,7 @@ public:
         const std::string &_web_attack_mitigation_mode,
         bool _web_attack_mitigation,
         const PracticeAdvancedConfig &_practice_advanced_config)
-            :
+        :
         application_urls(_application_urls),
         asset_id(_asset_id),
         asset_name(_asset_name),
@@ -345,7 +346,7 @@ public:
         web_attack_mitigation_mode(_web_attack_mitigation_mode),
         web_attack_mitigation(_web_attack_mitigation),
         practice_advanced_config(_practice_advanced_config)
-        {}
+    {}
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -371,7 +372,7 @@ public:
     AppSecRulebase(
         std::vector<WebAppSection> _webApplicationPractices,
         std::vector<WebAPISection> _webAPIPractices)
-            :
+        :
         webApplicationPractices(_webApplicationPractices),
         webAPIPractices(_webAPIPractices) {}
 
@@ -387,7 +388,7 @@ class AppSecWrapper
 {
 public:
     AppSecWrapper(const AppSecRulebase &_app_sec)
-            :
+        :
         app_sec_rulebase(_app_sec)
     {}
 
@@ -409,6 +410,9 @@ public:
     const std::vector<std::string> & getPractices() const;
     const std::string & getHost() const;
     const std::string & getMode() const;
+    const std::string &rpmGetUpstream() const;
+    const std::string &rpmGetRPSettings() const;
+    bool rpmIsHttps() const;
     void setHost(const std::string &_host);
     void setMode(const std::string &_mode);
     const std::string & getCustomResponse() const;
@@ -424,6 +428,9 @@ private:
     std::string custom_response;
     std::string source_identifiers;
     std::string trusted_sources;
+    std::string rpm_upstream;
+    std::string rpm_settings;
+    bool rpm_is_ssl = false;
 };
 
 class AppsecPolicySpec : Singleton::Consume<I_Environment>
@@ -453,7 +460,7 @@ public:
         const std::vector<AppsecException> &_exceptions,
         const std::vector<TrustedSourcesSpec> &_trusted_sources,
         const std::vector<SourceIdentifierSpecWrapper> &_sources_identifiers)
-            :
+        :
         policies(_policies),
         practices(_practices),
         log_triggers(_log_triggers),
@@ -471,6 +478,7 @@ public:
     const std::vector<AppsecException> & getAppsecExceptions() const;
     const std::vector<TrustedSourcesSpec> & getAppsecTrustedSourceSpecs() const;
     const std::vector<SourceIdentifierSpecWrapper> & getAppsecSourceIdentifierSpecs() const;
+    const std::vector<RPMSettings> &rpmGetRPSettings() const;
     void addSpecificRule(const ParsedRule &_rule);
 
 private:
@@ -481,6 +489,7 @@ private:
     std::vector<AppsecException> exceptions;
     std::vector<TrustedSourcesSpec> trusted_sources;
     std::vector<SourceIdentifierSpecWrapper> sources_identifiers;
+    std::vector<RPMSettings> rpm_settings;
 };
 
 #endif // __APPSEC_PRACTICE_SECTION_H__

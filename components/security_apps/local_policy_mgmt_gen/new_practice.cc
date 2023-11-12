@@ -42,7 +42,7 @@ static const std::unordered_map<std::string, std::string> key_to_mode_val = {
     { "detect", "Detect"},
     { "inactive", "Inactive"}
 };
-static const std::unordered_map<std::string, int> unit_to_int = {
+static const std::unordered_map<std::string, uint64_t> unit_to_int = {
     { "bytes", 1},
     { "KB", 1024},
     { "MB", 1048576},
@@ -631,8 +631,8 @@ NewIntrusionPrevention::getMode() const
 }
 
 FileSecurityProtectionsSection::FileSecurityProtectionsSection(
-    int                     _file_size_limit,
-    int                     _archive_file_size_limit,
+    uint64_t                _file_size_limit,
+    uint64_t                _archive_file_size_limit,
     bool                    _allow_files_without_name,
     bool                    _required_file_size_limit,
     bool                    _required_archive_extraction,
@@ -720,7 +720,7 @@ NewFileSecurityArchiveInspection::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec File Security Archive Inspection practice";
     parseAppsecJSONKey<bool>("extractArchiveFiles", extract_archive_files, archive_in);
-    parseAppsecJSONKey<int>("scanMaxFileSize", scan_max_file_size, archive_in, 0);
+    parseAppsecJSONKey<uint64_t>("scanMaxFileSize", scan_max_file_size, archive_in, 0);
     parseAppsecJSONKey<string>("scanMaxFileSizeUnit", scan_max_file_size_unit, archive_in, "bytes");
     if (size_unit.count(scan_max_file_size_unit) == 0) {
         dbgWarning(D_LOCAL_POLICY)
@@ -749,7 +749,7 @@ NewFileSecurityArchiveInspection::load(cereal::JSONInputArchive &archive_in)
     }
 }
 
-int
+uint64_t
 NewFileSecurityArchiveInspection::getArchiveFileSizeLimit() const
 {
     if (unit_to_int.find(scan_max_file_size_unit) == unit_to_int.end()) {
@@ -784,7 +784,7 @@ void
 NewFileSecurityLargeFileInspection::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec File Security large File Inspection practice";
-    parseAppsecJSONKey<int>("fileSizeLimit", file_size_limit, archive_in);
+    parseAppsecJSONKey<uint64_t>("fileSizeLimit", file_size_limit, archive_in);
     parseAppsecJSONKey<string>("fileSizeLimitUnit", file_size_limit_unit, archive_in, "bytes");
     if (size_unit.count(file_size_limit_unit) == 0) {
         dbgWarning(D_LOCAL_POLICY)
@@ -803,7 +803,7 @@ NewFileSecurityLargeFileInspection::load(cereal::JSONInputArchive &archive_in)
     }
 }
 
-int
+uint64_t
 NewFileSecurityLargeFileInspection::getFileSizeLimit() const
 {
     if (unit_to_int.find(file_size_limit_unit) == unit_to_int.end()) {

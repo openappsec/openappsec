@@ -52,6 +52,7 @@ public:
     const EventVerdict drop_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
     const EventVerdict accept_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
     const EventVerdict inspect_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    const EventVerdict wait_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
     Layer7AccessControl         l7_access_control;
     ::Environment               env;
     ConfigComponent             config;
@@ -62,6 +63,7 @@ public:
     NiceMock<MockRestApi>       mock_rest;
     AgentDetails                agent_details;
     IntelligenceComponentV2     intelligence_comp;
+    I_MainLoop::Routine         query_intelligence_routine;
     Context ctx;
 };
 
@@ -273,6 +275,13 @@ TEST_F(Layer7AccessControlTest, ReturnAcceptVerdict)
     const HttpHeader header2{ Buffer("date"), Buffer("Sun, 26 Mar 2023 18:45:22 GMT"), 1 };
     const HttpHeader header3{ Buffer("x-forwarded-for"), Buffer("1.2.3.4"), 2, true};
 
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(_, _, "Check IP reputation", _))
+            .WillOnce(DoAll(SaveArg<1>(&query_intelligence_routine), Return(0))
+    );
+    EXPECT_CALL(mock_ml, yield(A<bool>())).Times(1);
+
     EXPECT_THAT(
         HttpRequestHeaderEvent(header1).performNamedQuery(),
         ElementsAre(Pair("Layer-7 Access Control app", inspect_verdict))
@@ -283,6 +292,13 @@ TEST_F(Layer7AccessControlTest, ReturnAcceptVerdict)
     );
     EXPECT_THAT(
         HttpRequestHeaderEvent(header3).performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", wait_verdict))
+    );
+
+    query_intelligence_routine();
+
+    EXPECT_THAT(
+        WaitTransactionEvent().performNamedQuery(),
         ElementsAre(Pair("Layer-7 Access Control app", accept_verdict))
     );
 }
@@ -299,6 +315,13 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictOnMaliciousReputation)
         sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
     ).WillOnce(Return(malicious_intelligence_response));
 
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(_, _, "Check IP reputation", _))
+        .WillOnce(DoAll(SaveArg<1>(&query_intelligence_routine), Return(0))
+    );
+    EXPECT_CALL(mock_ml, yield(A<bool>())).Times(1);
+
     registerTransactionData();
     ctx.registerValue<string>(HttpTransactionData::source_identifier, "1.2.3.4");
     const HttpHeader header1{ Buffer("Content-Type"), Buffer("application/json"), 0 };
@@ -310,7 +333,18 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictOnMaliciousReputation)
 
     EXPECT_THAT(HttpRequestHeaderEvent(header1).query(), ElementsAre(inspect_verdict));
     EXPECT_THAT(HttpRequestHeaderEvent(header2).query(), ElementsAre(inspect_verdict));
-    EXPECT_THAT(HttpRequestHeaderEvent(header3).query(), ElementsAre(drop_verdict));
+
+    EXPECT_THAT(
+        HttpRequestHeaderEvent(header3).performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", wait_verdict))
+    );
+
+    query_intelligence_routine();
+
+    EXPECT_THAT(
+        WaitTransactionEvent().performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", drop_verdict))
+    );
 
     verifyReport(report, "1.2.3.4", "Prevent");
 }
@@ -327,6 +361,13 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictCacheBased)
         sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
     ).WillOnce(Return(malicious_intelligence_response));
 
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(_, _, "Check IP reputation", _))
+        .WillOnce(DoAll(SaveArg<1>(&query_intelligence_routine), Return(0))
+    );
+    EXPECT_CALL(mock_ml, yield(A<bool>())).Times(1);
+
     registerTransactionData();
     ctx.registerValue<string>(HttpTransactionData::source_identifier, "1.2.3.4");
     const HttpHeader header1{ Buffer("Content-Type"), Buffer("application/json"), 0 };
@@ -338,7 +379,18 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictCacheBased)
 
     EXPECT_THAT(HttpRequestHeaderEvent(header1).query(), ElementsAre(inspect_verdict));
     EXPECT_THAT(HttpRequestHeaderEvent(header2).query(), ElementsAre(inspect_verdict));
-    EXPECT_THAT(HttpRequestHeaderEvent(header3).query(), ElementsAre(drop_verdict));
+
+    EXPECT_THAT(
+        HttpRequestHeaderEvent(header3).performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", wait_verdict))
+    );
+
+    query_intelligence_routine();
+
+    EXPECT_THAT(
+        WaitTransactionEvent().performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", drop_verdict))
+    );
 
     verifyReport(report, "1.2.3.4", "Prevent");
     
@@ -361,6 +413,13 @@ TEST_F(Layer7AccessControlTest, AcceptOnDetect)
         sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
     ).WillOnce(Return(malicious_intelligence_response));
 
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(_, _, "Check IP reputation", _))
+        .WillOnce(DoAll(SaveArg<1>(&query_intelligence_routine), Return(0))
+    );
+    EXPECT_CALL(mock_ml, yield(A<bool>())).Times(1);
+
     registerTransactionData();
     ctx.registerValue<string>(HttpTransactionData::source_identifier, "1.2.3.4");
     const HttpHeader header1{ Buffer("Content-Type"), Buffer("application/json"), 0 };
@@ -372,7 +431,18 @@ TEST_F(Layer7AccessControlTest, AcceptOnDetect)
 
     EXPECT_THAT(HttpRequestHeaderEvent(header1).query(), ElementsAre(inspect_verdict));
     EXPECT_THAT(HttpRequestHeaderEvent(header2).query(), ElementsAre(inspect_verdict));
-    EXPECT_THAT(HttpRequestHeaderEvent(header3).query(), ElementsAre(accept_verdict));
+
+    EXPECT_THAT(
+        HttpRequestHeaderEvent(header3).performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", wait_verdict))
+    );
+
+    query_intelligence_routine();
+
+    EXPECT_THAT(
+        WaitTransactionEvent().performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", accept_verdict))
+    );
 
     verifyReport(report, "1.2.3.4", "Detect");
 }
@@ -389,6 +459,13 @@ TEST_F(Layer7AccessControlTest, FallbackToSourceIPAndDrop)
         sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
     ).WillOnce(Return(malicious_intelligence_response));
 
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(_, _, "Check IP reputation", _))
+        .WillOnce(DoAll(SaveArg<1>(&query_intelligence_routine), Return(0))
+    );
+    EXPECT_CALL(mock_ml, yield(A<bool>())).Times(1);
+
     registerTransactionData();
     const HttpHeader header1{ Buffer("Content-Type"), Buffer("application/json"), 0 };
     const HttpHeader header2{ Buffer("date"), Buffer("Sun, 26 Mar 2023 18:45:22 GMT"), 1, true };
@@ -397,7 +474,18 @@ TEST_F(Layer7AccessControlTest, FallbackToSourceIPAndDrop)
     EXPECT_CALL(mock_logging, sendLog(_)).WillOnce(SaveArg<0>(&report));
 
     EXPECT_THAT(HttpRequestHeaderEvent(header1).query(), ElementsAre(inspect_verdict));
-    EXPECT_THAT(HttpRequestHeaderEvent(header2).query(), ElementsAre(drop_verdict));
+
+    EXPECT_THAT(
+        HttpRequestHeaderEvent(header2).performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", wait_verdict))
+    );
+
+    query_intelligence_routine();
+
+    EXPECT_THAT(
+        WaitTransactionEvent().performNamedQuery(),
+        ElementsAre(Pair("Layer-7 Access Control app", drop_verdict))
+    );
 
     verifyReport(report, "", "Prevent");
 }

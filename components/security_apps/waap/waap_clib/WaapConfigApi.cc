@@ -59,7 +59,6 @@ WaapConfigAPI::clearAssetsCount()
 void WaapConfigAPI::load(cereal::JSONInputArchive& ar)
 {
     // order has affect - we need to call base last because of triggers and overrides
-
     WaapConfigBase::load(ar);
     assets_ids_aggregation.insert(m_assetId);
 }

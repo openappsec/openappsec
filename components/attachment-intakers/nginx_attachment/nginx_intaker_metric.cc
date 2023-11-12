@@ -49,6 +49,8 @@ nginxIntakerEvent::resetAllCounters()
     req_proccessing_timeout = 0;
     res_proccessing_timeout = 0;
     req_failed_to_reach_upstream = 0;
+    req_overall_size = 0;
+    res_overall_size = 0;
     cpu_event.setCPU(0);
 }
 
@@ -249,10 +251,22 @@ nginxIntakerEvent::addPluginMetricCounter(const ngx_http_cp_metric_data_t *recie
                 cpu_event.setCPU(amount);
                 break;
             }
+            case ngx_http_plugin_metric_type_e::REQUEST_OVERALL_SIZE_COUNT: {
+                req_overall_size += amount;
+                static const uint64_t max_expected_res_size = 100ULL * 1024 * 1024 * 1024;
+                if (amount > max_expected_res_size) {
+                    dbgWarning(D_METRICS_NGINX_ATTACHMENT) << "Requests sizes higher than expected: " << amount;
+                }
+                break;
+            }
+            case ngx_http_plugin_metric_type_e::RESPONSE_OVERALL_SIZE_COUNT: {
+                res_overall_size += amount;
+                break;
+            }
             default:
                 dbgWarning(D_METRICS_NGINX_ATTACHMENT)
                     << "Unsupported metric type. Type: " << static_cast<int>(metric_type);
-                return;
+                break;
         }
     }
 }
@@ -353,6 +367,10 @@ nginxIntakerEvent::getPluginMetricCounter(ngx_http_plugin_metric_type_e metric_t
             return req_failed_to_reach_upstream;
         case ngx_http_plugin_metric_type_e::CPU_USAGE:
             return static_cast<uint64_t>(cpu_event.getCPU());
+        case ngx_http_plugin_metric_type_e::REQUEST_OVERALL_SIZE_COUNT:
+            return req_overall_size;
+        case ngx_http_plugin_metric_type_e::RESPONSE_OVERALL_SIZE_COUNT:
+            return res_overall_size;
         default:
             dbgWarning(D_METRICS_NGINX_ATTACHMENT)
                     << "Unsupported metric type. Type: " << static_cast<int>(metric_type);
@@ -497,6 +515,12 @@ nginxIntakerMetric::upon(const nginxIntakerEvent &event)
     );
     req_failed_to_reach_upstream.report(
         event.getPluginMetricCounter(ngx_http_plugin_metric_type_e::REQ_FAILED_TO_REACH_UPSTREAM)
+    );
+    req_overall_size.report(
+        event.getPluginMetricCounter(ngx_http_plugin_metric_type_e::REQUEST_OVERALL_SIZE_COUNT)
+    );
+    res_overall_size.report(
+        event.getPluginMetricCounter(ngx_http_plugin_metric_type_e::RESPONSE_OVERALL_SIZE_COUNT)
     );
     event.notifyCPU();
 }

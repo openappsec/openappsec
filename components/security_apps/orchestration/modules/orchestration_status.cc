@@ -108,7 +108,6 @@ public:
         last_update_attempt = from.last_update_attempt;
         last_manifest_update = from.last_manifest_update;
         policy_version = from.policy_version;
-        waap_model_version = from.waap_model_version;
         last_policy_update = from.last_policy_update;
         last_settings_update = from.last_settings_update;
         upgrade_mode = from.upgrade_mode;
@@ -129,7 +128,6 @@ public:
     const string & getUpdateTime() const                             { return last_update_time; }
     const string & getLastManifestUpdate() const                     { return last_manifest_update; }
     const string & getPolicyVersion() const                          { return policy_version; }
-    const string & getWaapModelVersion() const                       { return waap_model_version; }
     const string & getLastPolicyUpdate() const                       { return last_policy_update; }
     const string & getLastSettingsUpdate() const                     { return last_settings_update; }
     const string & getUpgradeMode() const                            { return upgrade_mode; }
@@ -143,16 +141,6 @@ public:
     const RegistrationDetails & getRegistrationDetails() const       { return registration_details; }
     const map<string, string> & getServicePolicies() const { return service_policies; }
     const map<string, string> & getServiceSettings() const { return service_settings; }
-
-    void updateWaapModelVersion() {
-        map<string, string> details_resolver =
-            Singleton::Consume<I_DetailsResolver>::by<OrchestrationStatus>()->getResolvedDetails();
-        if (details_resolver.find("AppSecModelVersion") != details_resolver.end()) {
-            waap_model_version =  details_resolver["AppSecModelVersion"];
-        } else {
-            waap_model_version = "None";
-        }
-    }
 
     void
     insertServicePolicy(const string &key, const string &value)
@@ -279,7 +267,6 @@ public:
         last_manifest_update = "None";
         last_policy_update = "None";
         last_settings_update = "None";
-        waap_model_version = "None";
         fog_address = "None";
         agent_id = "None";
         profile_id = "None";
@@ -305,7 +292,6 @@ public:
             } else {
                 fog_address = "None";
             }
-            updateWaapModelVersion();
         }
     }
 
@@ -318,7 +304,6 @@ public:
         archive(cereal::make_nvp("Last update", last_update_time));
         archive(cereal::make_nvp("Last manifest update", last_manifest_update));
         archive(cereal::make_nvp("Policy version", policy_version));
-        archive(cereal::make_nvp("AI model version", waap_model_version));
         archive(cereal::make_nvp("Last policy update", last_policy_update));
         archive(cereal::make_nvp("Last settings update", last_settings_update));
         archive(cereal::make_nvp("Upgrade mode", upgrade_mode));
@@ -346,7 +331,6 @@ public:
             archive.setNextName(nullptr);
         }
 
-        archive(cereal::make_nvp("AI model version",        waap_model_version));
         archive(cereal::make_nvp("Last policy update",      last_policy_update));
         archive(cereal::make_nvp("Last settings update",    last_settings_update));
 
@@ -384,7 +368,6 @@ private:
     string last_update_attempt;
     string last_manifest_update;
     string policy_version;
-    string waap_model_version;
     string last_policy_update;
     string last_settings_update;
     string upgrade_mode;
@@ -411,7 +394,6 @@ public:
             "orchestration",
             "Orchestration status path"
         );
-        status.updateWaapModelVersion();
         auto write_result =
             orchestration_tools->objectToJsonFile<Status>(status, orchestration_status_path);
         if (!write_result) {
@@ -515,7 +497,6 @@ private:
     const string & getUpdateTime() const override                     { return status.getUpdateTime(); }
     const string & getLastManifestUpdate() const override             { return status.getLastManifestUpdate(); }
     const string & getPolicyVersion() const override                  { return status.getPolicyVersion(); }
-    const string & getWaapModelVersion() const override               { return status.getWaapModelVersion(); }
     const string & getLastPolicyUpdate() const override               { return status.getLastPolicyUpdate(); }
     const string & getLastSettingsUpdate() const override             { return status.getLastSettingsUpdate(); }
     const string & getUpgradeMode() const override                    { return status.getUpgradeMode(); }

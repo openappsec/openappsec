@@ -19,9 +19,15 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_PHPSERIALIZE);
 
 const std::string PHPSerializedDataParser::m_parserName = "PHPSerializedDataParser";
 
-PHPSerializedDataParser::PHPSerializedDataParser(IParserStreamReceiver &outReceiver)
-: m_state(), m_outReceiver(outReceiver), m_keyStack("php_serialized")
+PHPSerializedDataParser::PHPSerializedDataParser(IParserStreamReceiver &outReceiver, size_t parser_depth) :
+    m_state(),
+    m_outReceiver(outReceiver),
+    m_keyStack("php_serialized"),
+    m_parser_depth(parser_depth)
 {
+    dbgTrace(D_WAAP_PARSER_PHPSERIALIZE)
+        << "parser_depth="
+        << parser_depth;
 }
 
 size_t
@@ -344,7 +350,7 @@ size_t PHPSerializedDataParser::handleValue (const char &c)
             // else will parse it normaly.
             dbgTrace(D_WAAP_PARSER_PHPSERIALIZE) << "PHPSerializedDataParser::push(): End of Class object" <<
                 " sending class object data to PHPSerializedDataParser";
-            PHPSerializedDataParser psdp(m_outReceiver);
+            PHPSerializedDataParser psdp(m_outReceiver, m_parser_depth);
             psdp.push(m_value.c_str(), m_value.length());
             if(psdp.error())
             {

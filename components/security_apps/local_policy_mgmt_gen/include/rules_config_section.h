@@ -90,6 +90,7 @@ public:
     RulesConfigRulebase(
         const std::string &_name,
         const std::string &_url,
+        const std::string &_port,
         const std::string &_uri,
         std::vector<PracticeSection> _practices,
         std::vector<ParametersSection> _parameters,

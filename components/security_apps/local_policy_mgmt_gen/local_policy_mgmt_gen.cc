@@ -55,9 +55,7 @@ const static string default_local_mgmt_policy_path = "/conf/local_policy.yaml";
 
 class LocalPolicyMgmtGenerator::Impl
         :
-    public Singleton::Provide<I_LocalPolicyMgmtGen>::From<LocalPolicyMgmtGenerator>,
-    public Singleton::Consume<I_MainLoop>,
-    public Singleton::Consume<I_EnvDetails>
+    public Singleton::Provide<I_LocalPolicyMgmtGen>::From<LocalPolicyMgmtGenerator>
 {
 
 public:
@@ -111,7 +109,6 @@ public:
 
 private:
     PolicyMakerUtils policy_maker_utils;
-
 };
 
 LocalPolicyMgmtGenerator::LocalPolicyMgmtGenerator()

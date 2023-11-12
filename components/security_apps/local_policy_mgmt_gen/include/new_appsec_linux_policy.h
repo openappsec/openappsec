@@ -59,6 +59,7 @@ public:
         trusted_sources(_trusted_sources),
         sources_identifiers(_sources_identifiers) {}
     // LCOV_EXCL_STOP
+    void serialize(cereal::JSONInputArchive &archive_in);
 
     const NewAppsecPolicySpec & getAppsecPolicySpec() const;
     const std::vector<NewAppSecPracticeSpec> & getAppSecPracticeSpecs() const;

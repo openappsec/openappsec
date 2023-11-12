@@ -87,10 +87,12 @@ public:
 
 private:
     std::string getCleanChecksum(const std::string &unclean_checksum);
+    void periodicPolicyLoad();
 
     std::string local_policy_path;
     std::string curr_version;
     std::string curr_policy;
+    std::string curr_checksum;
     bool should_apply_policy;
 };
 

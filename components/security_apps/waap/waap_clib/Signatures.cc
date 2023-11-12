@@ -85,13 +85,6 @@ static filtered_parameters_t to_filtermap(const picojson::value::object& JsObj)
     return result;
 }
 
-std::string genDelimitedKeyValPattern(const std::string& delim)
-{
-    std::string pattern = "^([^" + delim + "]+?=[^" + delim + "]+?" + delim + ")+"
-        "([^" + delim + "]+?=[^" + delim + "]+?)" + delim + "?$";
-    return pattern;
-}
-
 Signatures::Signatures(const std::string& filepath) :
     sigsSource(loadSource(filepath)),
     error(false),
@@ -207,11 +200,6 @@ Signatures::Signatures(const std::string& filepath) :
     html_regex("(<(?>body|head)\\b.*>(?>.|[\\r\\n]){0,400}){2}|<html", error, "htmlRegex"),
     uri_parser_regex("(http|https)://([^/ :]+):?([^/ ]*)(/?[^ #?]*)", error, "uriParserRegex"),
     confluence_macro_re("{[^\"]+:(?>.+\\|)+.+}"),
-    pipes_delimited_key_val_re(genDelimitedKeyValPattern("\\|")),
-    semicolon_delimited_key_val_re(genDelimitedKeyValPattern(";")),
-    asterisk_delimited_key_val_re(genDelimitedKeyValPattern("\\*")),
-    comma_delimited_key_val_re(genDelimitedKeyValPattern(",")),
-    ampersand_delimited_key_val_re(genDelimitedKeyValPattern("&")),
     headers_re(to_regexmap(sigsSource["headers_re"].get<JsObj>(), error)),
     format_magic_binary_re(sigsSource["format_magic_binary_re"].get<std::string>(), error, "format_magic_binary_re"),
     params_type_re(to_regexmap(sigsSource["format_types_regex_list"].get<JsObj>(), error)),

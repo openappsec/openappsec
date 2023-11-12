@@ -64,7 +64,7 @@ void
 Identifier::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading source identifiers spec";
-    parseAppsecJSONKey<string>("sourceIdentifier", identifier, archive_in);
+    parseAppsecJSONKey<string>("identifier", identifier, archive_in);
     if (valid_identifiers.count(identifier) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec identifier invalid: " << identifier;
     }

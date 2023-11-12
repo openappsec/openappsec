@@ -304,11 +304,13 @@ ExceptionMatch::getMatch() const
 ExceptionBehavior::ExceptionBehavior(const string &_value)
 {
     key = _value == "suppressLog" ? "log" : "action";
-    value = key_to_action.at(_value);
     try {
+        value = key_to_action.at(_value);
         id = to_string(boost::uuids::random_generator()());
     } catch (const boost::uuids::entropy_error &e) {
         dbgWarning(D_LOCAL_POLICY) << "Failed to generate exception behavior UUID. Error: " << e.what();
+    } catch (std::exception &e) {
+        dbgWarning(D_LOCAL_POLICY) << "Failed to find exception name: " << _value << ". Error: " << e.what();
     }
 }
 

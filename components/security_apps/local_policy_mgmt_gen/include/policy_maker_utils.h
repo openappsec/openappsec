@@ -40,6 +40,7 @@
 #include "trusted_sources_section.h"
 #include "new_appsec_linux_policy.h"
 #include "access_control_practice.h"
+#include "reverse_proxy_section.h"
 
 enum class AnnotationTypes {
     PRACTICE,
@@ -109,11 +110,6 @@ private:
 };
 
 class PolicyMakerUtils
-        :
-    Singleton::Consume<I_Environment>,
-    Singleton::Consume<I_OrchestrationTools>,
-    Singleton::Consume<I_Messaging>,
-    Singleton::Consume<I_ShellCmd>
 {
 public:
     std::string proccesSingleAppsecPolicy(
@@ -206,6 +202,7 @@ private:
     createThreatPreventionPracticeSections(
         const std::string &asset_name,
         const std::string &url,
+        const std::string &port,
         const std::string &uri,
         const std::string &default_mode,
         const V1beta2AppsecLinuxPolicy &policy,
@@ -231,6 +228,11 @@ private:
     template<class T, class R>
     void createAgentPolicyFromAppsecPolicy(const std::string &policy_name, const T &appsec_policy);
 
+    void rpmBuildNginxServers(const AppsecLinuxPolicy &policy);
+    void rpmReportInfo(const std::string &msg);
+    void rpmReportError(const std::string &msg);
+
+    std::string policy_version_name;
     std::map<std::string, LogTriggerSection> log_triggers;
     std::map<std::string, WebUserResponseTriggerSection> web_user_res_triggers;
     std::map<std::string, std::vector<InnerException>> inner_exceptions;

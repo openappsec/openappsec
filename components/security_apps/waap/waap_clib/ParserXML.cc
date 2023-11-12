@@ -60,9 +60,11 @@ void ParserXML::onStartElementNs(
         if (p->m_receiver.onKv(
             p->m_key.c_str(),
             p->m_key.size(),
-            (const char*)attr_value_begin, attr_value_end - attr_value_begin,
-            BUFFERED_RECEIVER_F_BOTH
-        ) != 0) {
+            (const char *)attr_value_begin,
+            attr_value_end - attr_value_begin,
+            BUFFERED_RECEIVER_F_BOTH,
+            p->m_parser_depth
+            ) != 0) {
             p->m_state = s_error;
         }
         p->m_key.pop("XML end attribute");
@@ -195,9 +197,17 @@ static void onError(void* ctx, const char* msg, ...) {
     dbgTrace(D_WAAP_PARSER_XML) << "LIBXML (xml) onError: " << std::string(string);
 }
 
-ParserXML::ParserXML(IParserStreamReceiver& receiver)
-    :m_receiver(receiver), m_state(s_start), m_bufLen(0), m_key("xml_parser"), m_pushParserCtxPtr(NULL) {
-    dbgTrace(D_WAAP_PARSER_XML) << "ParserXML::ParserXML()";
+ParserXML::ParserXML(IParserStreamReceiver &receiver, size_t parser_depth) :
+    m_receiver(receiver),
+    m_state(s_start),
+    m_bufLen(0),
+    m_key("xml_parser"),
+    m_pushParserCtxPtr(NULL),
+    m_parser_depth(parser_depth)
+{
+    dbgTrace(D_WAAP_PARSER_XML)
+        << "ParserXML::ParserXML() parser_depth="
+        << parser_depth;
     // TODO:: is zeroing this really needed?
     memset(m_buf, 0, sizeof(m_buf));
 

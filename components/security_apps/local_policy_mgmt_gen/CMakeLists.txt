@@ -20,4 +20,5 @@ add_library(local_policy_mgmt_gen
     new_exceptions.cc
     access_control_practice.cc
     configmaps.cc
+    reverse_proxy_section.cc
 )

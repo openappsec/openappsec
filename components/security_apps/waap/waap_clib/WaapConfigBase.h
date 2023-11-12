@@ -99,6 +99,7 @@ private:
     std::vector<std::string> m_applicationUrls;
     std::shared_ptr<Waap::ErrorDisclosure::Policy> m_errorDisclosurePolicy;
     std::string m_schemaValidationPoicyStatusMessage;
+    std::string m_schemaUpdaterPoicyStatusMessage;
     std::shared_ptr<Waap::Csrf::Policy> m_csrfPolicy;
     std::shared_ptr<Waap::RateLimiting::Policy> m_rateLimitingPolicy;
     std::shared_ptr<Waap::RateLimiting::Policy> m_errorLimitingPolicy;

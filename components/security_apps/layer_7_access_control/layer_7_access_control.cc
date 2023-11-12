@@ -1,16 +1,14 @@
 #include "layer_7_access_control.h"
 
 #include <string>
-#include <unordered_set>
 #include <boost/algorithm/string/case_conv.hpp>
+#include <unordered_set>
 
 #include "config.h"
 #include "cache.h"
 #include "http_inspection_events.h"
-#include "http_transaction_common.h"
 #include "nginx_attachment_common.h"
 #include "intelligence_comp_v2.h"
-#include "intelligence_is_v2/intelligence_query_v2.h"
 #include "intelligence_is_v2/query_request_v2.h"
 #include "log_generator.h"
 
@@ -103,7 +101,7 @@ private:
     unsigned int crowdsec_event_id;
 };
 
-class Layer7AccessControl::Impl : public Listener<HttpRequestHeaderEvent>
+class Layer7AccessControl::Impl : public Listener<HttpRequestHeaderEvent>, Listener<WaitTransactionEvent>
 {
 public:
     void init();
@@ -126,27 +124,25 @@ public:
             return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
         }
 
-        auto source_identifier = i_env->get<string>(HttpTransactionData::source_identifier);
-        if (source_identifier.ok() && IPAddr::createIPAddr(source_identifier.unpack()).ok()) {
-            dbgTrace(D_L7_ACCESS_CONTROL) << "Found a valid source identifier value: " << source_identifier.unpack();
-            return checkReputation(source_identifier.unpack());
-        }
+        return handleEvent();
+    }
 
-        auto orig_source_ip = i_env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
-        if (!orig_source_ip.ok()) {
-            dbgWarning(D_L7_ACCESS_CONTROL) << "Could not extract the Client IP address from context";
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-        }
+    EventVerdict
+    respond(const WaitTransactionEvent &) override
+    {
+        dbgFlow(D_L7_ACCESS_CONTROL) << "Handling wait verdict";
 
-        stringstream ss_client_ip;
-        ss_client_ip << orig_source_ip.unpack();
-        return checkReputation(ss_client_ip.str());
+        return handleEvent();
     }
 
 private:
+    void queryIntelligence();
+    void scheduleIntelligenceQuery(const string &ip);
+    void processIntelligenceResponse(const string &ip, const vector<AssetReply<IntelligenceIpReputation>> &response);
     Maybe<IntelligenceIpReputation> getIpReputation(const string &ip);
-    ngx_http_cp_verdict_e checkReputation(const string &source_ip);
-    void generateLog(const string &source_ip, const IntelligenceIpReputation &ip_reputation) const;
+    EventVerdict generateLog(const string &source_ip, const IntelligenceIpReputation &ip_reputation) const;
+    EventVerdict queryIpReputation(const string &source_ip);
+    EventVerdict handleEvent();
 
     bool isAppEnabled() const;
     bool isPrevent() const;
@@ -154,9 +150,12 @@ private:
     Maybe<LogField, Context::Error> genLogField(const string &log_key, const string &env_key) const;
     Maybe<LogField, Context::Error> genLogIPField(const string &log_key, const string &env_key) const;
 
+    bool is_intelligence_routine_running = false;
     I_Environment *i_env = nullptr;
     I_Intelligence_IS_V2 *i_intelligence = nullptr;
+    I_MainLoop *i_mainloop = nullptr;
     TemporaryCache<string, IntelligenceIpReputation> ip_reputation_cache;
+    unordered_set<string> pending_ips;
 };
 
 bool
@@ -177,79 +176,139 @@ Layer7AccessControl::Impl::isPrevent() const
     return mode == "prevent";
 }
 
+void
+Layer7AccessControl::Impl::scheduleIntelligenceQuery(const string &ip)
+{
+    dbgFlow(D_L7_ACCESS_CONTROL) << "Scheduling intelligence query about reputation of IP: " << ip;
+
+    pending_ips.emplace(ip);
+
+    if (!is_intelligence_routine_running) {
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Starting intelligence routine";
+        is_intelligence_routine_running = true;
+        i_mainloop->addOneTimeRoutine(
+            I_MainLoop::RoutineType::System,
+            [&] () { queryIntelligence(); },
+            "Check IP reputation"
+        );
+    }
+}
+
 Maybe<IntelligenceIpReputation>
 Layer7AccessControl::Impl::getIpReputation(const string &ip)
 {
     dbgFlow(D_L7_ACCESS_CONTROL) << "Getting reputation of IP " << ip;
-
     if (ip_reputation_cache.doesKeyExists(ip)) return ip_reputation_cache.getEntry(ip);
 
-    dbgTrace(D_L7_ACCESS_CONTROL) << "Not found in cache - about to query intelligence";
+    dbgTrace(D_L7_ACCESS_CONTROL) << ip << " reputation was not found in cache";
 
-    QueryRequest request = QueryRequest(
-        Condition::EQUALS,
-        "ipv4Addresses",
-        ip,
-        true,
-        AttributeKeyType::REGULAR
-    );
-
-    auto response = i_intelligence->queryIntelligence<IntelligenceIpReputation>(request);
-
-    if (!response.ok()) {
-        dbgWarning(D_L7_ACCESS_CONTROL) << "Failed to query intelligence about reputation of IP: " << ip;
-        return genError("Failed to query intelligence");
-    }
-
-    auto &unpacked_response = response.unpack();
-    if (unpacked_response.empty()) {
-        dbgTrace(D_L7_ACCESS_CONTROL) << "Intelligence reputation response collection is empty. IP is clean.";
-        return IntelligenceIpReputation();
-    }
-
-    for (const auto &intelligence_reply : unpacked_response) {
-        if (intelligence_reply.getAssetType() == crowdsec_asset_type && !intelligence_reply.getData().empty()){
-            dbgTrace(D_L7_ACCESS_CONTROL) << intelligence_reply.getData().front();
-            return intelligence_reply.getData().front();
-        }
-    }
-
-
-    return IntelligenceIpReputation();
+    return genError("Intelligence needed");
 }
 
-ngx_http_cp_verdict_e
-Layer7AccessControl::Impl::checkReputation(const string &source_ip)
+EventVerdict
+Layer7AccessControl::Impl::queryIpReputation(const string &source_ip)
 {
     auto ip_reputation = getIpReputation(source_ip);
     if (!ip_reputation.ok()) {
-        dbgWarning(D_L7_ACCESS_CONTROL) << "Could not query intelligence. Retruning default verdict";
-        bool is_drop_by_default = getProfileAgentSettingWithDefault<bool>(false, "layer7AccessControl.dropByDefault");
-        if (!(is_drop_by_default && isPrevent())) return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-        generateLog(source_ip, IntelligenceIpReputation());
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Scheduling Intelligence query  - returning Wait verdict";
+        scheduleIntelligenceQuery(source_ip);
+        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
     }
 
     if (!ip_reputation.unpack().isMalicious()) {
         dbgTrace(D_L7_ACCESS_CONTROL) << "Accepting IP: " << source_ip;
+        ip_reputation_cache.deleteEntry(source_ip);
         return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
     }
 
-    ip_reputation_cache.emplaceEntry(source_ip, ip_reputation.unpack());
+    return generateLog(source_ip, ip_reputation.unpack());
+}
 
-    if (isPrevent()) {
-        dbgTrace(D_L7_ACCESS_CONTROL) << "Dropping IP: " << source_ip;
-        generateLog(source_ip, ip_reputation.unpack());
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+EventVerdict
+Layer7AccessControl::Impl::handleEvent()
+{
+    auto source_identifier = i_env->get<string>(HttpTransactionData::source_identifier);
+    if (source_identifier.ok() && IPAddr::createIPAddr(source_identifier.unpack()).ok()) {
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Found a valid source identifier value: " << source_identifier.unpack();
+        return queryIpReputation(source_identifier.unpack());
     }
 
-    dbgTrace(D_L7_ACCESS_CONTROL) << "Detecting IP: " << source_ip;
-    generateLog(source_ip, ip_reputation.unpack());
+    auto orig_source_ip = i_env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
+    if (orig_source_ip.ok()) {
+        stringstream ss_client_ip;
+        ss_client_ip << orig_source_ip.unpack();
+        return queryIpReputation(ss_client_ip.str());
+    }
+
+    dbgWarning(D_L7_ACCESS_CONTROL) << "Could not extract the Client IP address from context";
     return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
 }
 
+void
+Layer7AccessControl::Impl::processIntelligenceResponse(
+    const string &ip,
+    const vector<AssetReply<IntelligenceIpReputation>> &response)
+{
+    if (response.empty()) {
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Intelligence reputation response collection is empty. IP is clean.";
+        ip_reputation_cache.emplaceEntry(ip, IntelligenceIpReputation());
+        return;
+    }
+
+    for (const auto &intelligence_reply : response) {
+        if (intelligence_reply.getAssetType() == crowdsec_asset_type && !intelligence_reply.getData().empty()) {
+            dbgTrace(D_L7_ACCESS_CONTROL) << intelligence_reply.getData().front();
+            ip_reputation_cache.emplaceEntry(ip, intelligence_reply.getData().front());
+            return;
+        }
+    }
+
+    dbgTrace(D_L7_ACCESS_CONTROL) << "Could not find a matching intelligence asset type for IP: " << ip;
+    ip_reputation_cache.emplaceEntry(ip, IntelligenceIpReputation());
+}
 
 void
+Layer7AccessControl::Impl::queryIntelligence()
+{
+    dbgFlow(D_L7_ACCESS_CONTROL) << "Started IP reputation intelligence routine";
+
+    while (!pending_ips.empty()) {
+        i_mainloop->yield();
+
+        auto ip = *(pending_ips.begin());
+        pending_ips.erase(pending_ips.begin());
+
+        if (ip_reputation_cache.doesKeyExists(ip)) continue;
+
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Querying intelligence about reputation of IP: " << ip;
+
+        QueryRequest request = QueryRequest(
+            Condition::EQUALS,
+            "ipv4Addresses",
+            ip,
+            true,
+            AttributeKeyType::REGULAR
+        );
+
+        auto response = i_intelligence->queryIntelligence<IntelligenceIpReputation>(request);
+
+        if (!response.ok()) {
+            dbgWarning(D_L7_ACCESS_CONTROL)
+                << "Failed to query intelligence about reputation of IP: "
+                << ip
+                << ", error: "
+                << response.getErr();
+            ip_reputation_cache.emplaceEntry(ip, IntelligenceIpReputation());
+            continue;
+        }
+
+        processIntelligenceResponse(ip, response.unpack());
+    }
+
+    is_intelligence_routine_running = false;
+}
+
+EventVerdict
 Layer7AccessControl::Impl::generateLog(const string &source_ip, const IntelligenceIpReputation &ip_reputation) const
 {
     dbgFlow(D_L7_ACCESS_CONTROL) << "About to generate Layer-7 Access Control log";
@@ -287,6 +346,14 @@ Layer7AccessControl::Impl::generateLog(const string &source_ip, const Intelligen
         << ip_reputation.getOrigin()
         << ip_reputation.getIpv4Address()
         << ip_reputation.getScenario();
+
+    if (isPrevent()) {
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Dropping IP: " << source_ip;
+        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+    }
+
+    dbgTrace(D_L7_ACCESS_CONTROL) << "Detecting IP: " << source_ip;
+    return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
 }
 
 Maybe<LogField, Context::Error>
@@ -315,6 +382,7 @@ Layer7AccessControl::Impl::init()
     registerListener();
     i_env = Singleton::Consume<I_Environment>::by<Layer7AccessControl>();
     i_intelligence = Singleton::Consume<I_Intelligence_IS_V2>::by<Layer7AccessControl>();
+    i_mainloop = Singleton::Consume<I_MainLoop>::by<Layer7AccessControl>();
 
     chrono::minutes expiration(
         getProfileAgentSettingWithDefault<uint>(60u, "layer7AccessControl.crowdsec.cacheExpiration")
@@ -322,7 +390,7 @@ Layer7AccessControl::Impl::init()
 
     ip_reputation_cache.startExpiration(
         expiration,
-        Singleton::Consume<I_MainLoop>::by<Layer7AccessControl>(),
+        i_mainloop,
         Singleton::Consume<I_TimeGet>::by<Layer7AccessControl>()
     );
 }

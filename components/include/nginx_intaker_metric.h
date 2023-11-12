@@ -81,6 +81,8 @@ private:
     uint64_t req_proccessing_timeout = 0;
     uint64_t res_proccessing_timeout = 0;
     uint64_t req_failed_to_reach_upstream = 0;
+    uint64_t req_overall_size = 0;
+    uint64_t res_overall_size = 0;
     CPUEvent cpu_event;
 };
 
@@ -140,6 +142,8 @@ private:
     Counter thread_failure{this, "attachmentThreadFailureSum"};
     Counter req_proccessing_timeout{this, "httpRequestProcessingReachedTimeoutSum"};
     Counter res_proccessing_timeout{this, "httpResponseProcessingReachedTimeoutSum"};
+    Counter req_overall_size{this, "httpRequestsSizeSum"};
+    Counter res_overall_size{this, "httpResponsesSizeSum"};
     Counter req_failed_to_reach_upstream{this, "httpRequestFailedToReachWebServerUpstreamSum"};
 };
 

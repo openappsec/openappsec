@@ -25,7 +25,7 @@
 
 class ParserGql : public ParserBase, public facebook::graphql::ast::visitor::AstVisitor {
 public:
-    ParserGql(IParserReceiver &receiver);
+    ParserGql(IParserReceiver &receiver, size_t parser_depth);
     virtual ~ParserGql();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -51,6 +51,7 @@ private:
     bool visitEnumValue(const facebook::graphql::ast::EnumValue &node) override;
 public:
     static const std::string m_parserName;
+    size_t m_parser_depth;
 };
 
 #endif // __PARSER_JQL_H

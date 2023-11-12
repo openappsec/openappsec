@@ -107,7 +107,7 @@ AnalysisResult DeepAnalyzer::Impl::analyzeData(const D2InputData& data, const IW
         (shouldExcept ? "true" : "false");
 
     analysis.threatLevel = threat;
-    analysis.shouldBlock = shouldBlock && !shouldExcept;
+    analysis.shouldBlock = shouldBlock;
 
     return analysis;
 }

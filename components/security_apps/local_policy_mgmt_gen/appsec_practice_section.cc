@@ -316,7 +316,7 @@ TriggersInWaapSection::save(cereal::JSONOutputArchive &out_ar) const
 }
 
 ParsedMatch::ParsedMatch(const string &_operator, const string &_tag, const string &_value)
-        :
+    :
     operator_type(_operator),
     tag(_tag),
     value(_value)
@@ -368,7 +368,7 @@ AppSecOverride::AppSecOverride(const SourcesIdentifiers &parsed_trusted_sources)
 
 // LCOV_EXCL_START Reason: no test exist
 AppSecOverride::AppSecOverride(const InnerException &parsed_exceptions)
-        :
+    :
     id(parsed_exceptions.getBehaviorId()),
     parsed_match(parsed_exceptions.getMatch())
 {
@@ -413,7 +413,7 @@ WebAppSection::WebAppSection(
     const string &default_mode,
     const AppSecTrustedSources &parsed_trusted_sources,
     const vector<InnerException> &parsed_exceptions)
-        :
+    :
     application_urls(_application_urls),
     asset_id(_asset_id),
     asset_name(_asset_name),
@@ -460,7 +460,7 @@ WebAppSection::WebAppSection(
     const AppsecPracticeAntiBotSection &_anti_bots,
     const LogTriggerSection &parsed_log_trigger,
     const AppSecTrustedSources &parsed_trusted_sources)
-        :
+    :
     application_urls(_application_urls),
     asset_id(_asset_id),
     asset_name(_asset_name),
@@ -477,6 +477,7 @@ WebAppSection::WebAppSection(
 {
     web_attack_mitigation = true;
     web_attack_mitigation_action =
+        web_attack_mitigation_mode != "Prevent" ? "Transparent" :
         web_attack_mitigation_severity == "critical" ? "low" :
         web_attack_mitigation_severity == "high" ? "balanced" :
         web_attack_mitigation_severity == "medium" ? "high" :
@@ -584,6 +585,9 @@ ParsedRule::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("custom-response", custom_response, archive_in);
     parseAppsecJSONKey<string>("source-identifiers", source_identifiers, archive_in);
     parseAppsecJSONKey<string>("trusted-sources", trusted_sources, archive_in);
+    parseAppsecJSONKey<string>("upstream", rpm_upstream, archive_in);
+    parseAppsecJSONKey<string>("rp-settings", rpm_settings, archive_in);
+    parseAppsecJSONKey<bool>("ssl", rpm_is_ssl, archive_in);
     try {
         archive_in(cereal::make_nvp("host", host));
     } catch (const cereal::Exception &e)
@@ -618,6 +622,24 @@ const string &
 ParsedRule::getMode() const
 {
     return mode;
+}
+
+const string &
+ParsedRule::rpmGetUpstream() const
+{
+    return rpm_upstream;
+}
+
+const std::string &
+ParsedRule::rpmGetRPSettings() const
+{
+    return rpm_settings;
+}
+
+bool
+ParsedRule::rpmIsHttps() const
+{
+    return rpm_is_ssl;
 }
 
 void
@@ -691,6 +713,7 @@ AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading Appsec Linux Policy";
     parseAppsecJSONKey<AppsecPolicySpec>("policies", policies, archive_in);
+    parseAppsecJSONKey<vector<RPMSettings>>("rp-settings", rpm_settings, archive_in);
     parseAppsecJSONKey<vector<AppSecPracticeSpec>>("practices", practices, archive_in);
     parseAppsecJSONKey<vector<AppsecTriggerSpec>>("log-triggers", log_triggers, archive_in);
     parseAppsecJSONKey<vector<AppSecCustomResponseSpec>>("custom-responses", custom_responses, archive_in);
@@ -743,6 +766,13 @@ const vector<SourceIdentifierSpecWrapper> &
 AppsecLinuxPolicy::getAppsecSourceIdentifierSpecs() const
 {
     return sources_identifiers;
+}
+
+
+const vector<RPMSettings> &
+AppsecLinuxPolicy::rpmGetRPSettings() const
+{
+    return rpm_settings;
 }
 
 void

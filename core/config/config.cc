@@ -52,12 +52,15 @@ public:
 class LoadNewConfigurationStatus : public ClientRest
 {
 public:
-    LoadNewConfigurationStatus(uint _id, bool _error, bool end) : id(_id), error(_error), finished(end) {}
+    LoadNewConfigurationStatus(uint _id, string _service_name, bool _error, bool end)
+            :
+        id(_id), service_name(_service_name), error(_error), finished(end) {}
 
     void setError(const string &error) { error_message = error; }
 
 private:
     C2S_PARAM(int, id);
+    C2S_PARAM(string, service_name);
     C2S_PARAM(bool, error);
     C2S_PARAM(bool, finished);
     C2S_OPTIONAL_PARAM(string, error_message);
@@ -133,7 +136,7 @@ public:
     void registerExpectedSetting(unique_ptr<GenericConfig<false>> &&config) override;
 
 
-    bool loadConfiguration(istream &json_contents) override;
+    bool loadConfiguration(istream &json_contents, const string &path) override;
     bool loadConfiguration(const vector<string> &configuration_flags) override;
     AsyncLoadConfigStatus reloadConfiguration(const string &version, bool is_async, uint id) override;
     bool saveConfiguration(ostream &) const override { return false; }
@@ -565,13 +568,13 @@ ConfigComponent::Impl::registerExpectedSetting(unique_ptr<GenericConfig<false>> 
 }
 
 bool
-ConfigComponent::Impl::loadConfiguration(istream &stream)
+ConfigComponent::Impl::loadConfiguration(istream &stream, const string &path)
 {
     vector<shared_ptr<JSONInputArchive>> archive;
     try {
         archive.emplace_back(make_shared<JSONInputArchive>(stream));
     } catch (const cereal::Exception &e) {
-        dbgError(D_CONFIG) << "Failed to load stream: " << e.what();
+        dbgError(D_CONFIG) << "Failed to serialize stream. Path: " << path << ", Error: " << e.what();
         return false;
     }
     return loadConfiguration(archive, false);
@@ -872,7 +875,12 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
     for (const auto &file : files) {
         if (file.second->is_open()) {
             dbgTrace(D_CONFIG) << "Succesfully opened configuration file. File: " << file.first;
-            archives.push_back(make_shared<JSONInputArchive>(*file.second));
+            try {
+                archives.push_back(make_shared<JSONInputArchive>(*file.second));
+            } catch (const cereal::Exception &e) {
+                dbgError(D_CONFIG) << "Failed in file serialization. Path: " << file.first << ", Error: " << e.what();
+                return false;
+            }
         } else {
             dbgTrace(D_CONFIG) << "Could not open configuration file. Path: " << file.first;
         }
@@ -904,8 +912,9 @@ ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version
 {
     dbgFlow(D_CONFIG) << "Running reloadConfigurationContinuesWrapper. Version: " << version << ", Id: " << id;
     auto mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
-
-    LoadNewConfigurationStatus in_progress(id, false, false);
+    auto maybe_service_name = Singleton::Consume<I_Environment>::by<ConfigComponent>()->get<string>("Service Name");
+    string service_name = maybe_service_name.ok() ? maybe_service_name.unpack() : "serviceNameNotRegistered";
+    LoadNewConfigurationStatus in_progress(id, service_name, false, false);
     auto routine_id = mainloop->addRecurringRoutine(
         I_MainLoop::RoutineType::Timer,
         std::chrono::seconds(30),
@@ -916,7 +925,7 @@ ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version
     bool res = reloadConfigurationImpl(version, true);
 
     mainloop->stop(routine_id);
-    LoadNewConfigurationStatus finished(id, !res, true);
+    LoadNewConfigurationStatus finished(id, service_name, !res, true);
     if (!res) finished.setError("Failed to reload configuration");
     sendOrchestatorReloadStatusMsg(finished);
 

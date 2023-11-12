@@ -66,7 +66,7 @@ public:
 
     typedef std::map<std::string, PortNumber> ServicePortMap;
     MOCK_METHOD0(getServiceToPortMap, ServicePortMap());
-    MOCK_METHOD2(updateReconfStatus, void(int id, ReconfStatus status));
+    MOCK_METHOD3(updateReconfStatus, void(int id, const std::string &service_name, ReconfStatus status));
     MOCK_METHOD4(
         startReconfStatus,
         void(int id, ReconfStatus status, const std::string &serivce_name, const std::string &service_id)

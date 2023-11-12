@@ -31,13 +31,18 @@ bool Match::operator==(const Match &other) const
 }
 
 Behavior::Behavior()
-: m_action(""), m_log(""), m_sourceIdentifier("")
+: m_id(""), m_action(""), m_log(""), m_sourceIdentifier("")
 {
 }
 
 bool Behavior::operator==(const Behavior &other) const
 {
     return  (m_action == other.m_action) && (m_log == other.m_log) && (m_sourceIdentifier == other.m_sourceIdentifier);
+}
+
+const std::string & Behavior::getParentId() const
+{
+    return m_id;
 }
 
 const std::string & Behavior::getAction() const
@@ -55,6 +60,11 @@ const std::string& Behavior::getSourceIdentifier() const
     return m_sourceIdentifier;
 }
 
+void Behavior::setParentId(const std::string& id)
+{
+    m_id = id;
+}
+
 bool Rule::operator==(const Rule &other) const
 {
     return  (m_match == other.m_match) &&
@@ -70,7 +80,9 @@ bool Policy::operator==(const Policy &other) const
 
 State::State() :
     bForceBlock(false),
+    forceBlockIds(),
     bForceException(false),
+    forceExceptionIds(),
     bIgnoreLog(false),
     bSourceIdentifierOverride(false),
     sSourceIdentifierMatch("")

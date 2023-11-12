@@ -61,11 +61,6 @@ public:
     const Regex html_regex;
     const Regex uri_parser_regex;
     const boost::regex confluence_macro_re;
-    const boost::regex pipes_delimited_key_val_re;
-    const boost::regex semicolon_delimited_key_val_re;
-    const boost::regex asterisk_delimited_key_val_re;
-    const boost::regex comma_delimited_key_val_re;
-    const boost::regex ampersand_delimited_key_val_re;
 #if 0 // Removed by Pavel's request. Leaving here in case he'll want to add this back...
     const std::set<std::string> cookie_ignored_keywords;
     const std::set<std::string> cookie_ignored_patterns;

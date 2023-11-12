@@ -709,6 +709,7 @@ copy_orchestration_executable()
     cp_copy open-appsec-cloud-mgmt ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-cloud-mgmt
     cp_copy open-appsec-cloud-mgmt-k8s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-cloud-mgmt-k8s
     cp_copy open-appsec-ctl.sh ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-ctl.sh
+
     if [ $var_hybrid_mode = true ]; then
         if [ -f /ext/appsec/local_policy.yaml ]; then
             cp_exec "ln -s /ext/appsec/local_policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml"

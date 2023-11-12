@@ -18,7 +18,7 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_CONTENT_TYPE);
 
 const std::string ContentTypeParser::m_parserName = "contentTypeParser";
 
-int ContentTypeParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags)
+int ContentTypeParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth)
 {
     dbgTrace(D_WAAP_PARSER_CONTENT_TYPE) << "ContentTypeParser::onKv(): " << std::string(v, v_len);
     assert((flags & BUFFERED_RECEIVER_F_BOTH) == BUFFERED_RECEIVER_F_BOTH);
@@ -42,10 +42,12 @@ int ContentTypeParser::onKv(const char *k, size_t k_len, const char *v, size_t v
     return 0; // ok
 }
 
-ContentTypeParser::ContentTypeParser()
-:ctParserState(CTP_STATE_CONTENT_TYPE), m_rcvr(*this), m_hvp(m_rcvr), m_error(false)
-{
-}
+ContentTypeParser::ContentTypeParser() :
+    ctParserState(CTP_STATE_CONTENT_TYPE),
+    m_rcvr(*this),
+    m_hvp(m_rcvr),
+    m_error(false)
+{}
 
 size_t ContentTypeParser::push(const char *data, size_t data_len)
 {

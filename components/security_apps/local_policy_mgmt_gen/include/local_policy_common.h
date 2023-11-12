@@ -50,7 +50,7 @@ static const std::unordered_map<std::string, TriggerType> string_to_trigger_type
 
 static const std::unordered_map<std::string, std::string> key_to_practices_val = {
     { "prevent-learn", "Prevent"},
-    { "detect-learn", "Detect"},
+    { "detect-learn", "Learn"},
     { "prevent", "Prevent"},
     { "detect", "Detect"},
     { "inactive", "Inactive"}
@@ -70,9 +70,9 @@ parseAppsecJSONKey(
         archive_in.setNextName(nullptr);
         value = default_value;
         dbgDebug(D_LOCAL_POLICY)
-            << "Could not parse the required key. Key: "
+            << "Could not parse the required key. Key: \""
             << key_name
-            << ", Error: "
+            << "\", Error: "
             << e.what();
     }
 }

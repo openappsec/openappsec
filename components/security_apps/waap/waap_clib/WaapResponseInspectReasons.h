@@ -25,6 +25,7 @@ public:
     void setErrorLimiter(bool flag);
     void setCollectResponseForLog(bool flag);
     void setApplyOverride(bool flag);
+
     bool getApplyOverride(void);
 private:
     bool openRedirect;

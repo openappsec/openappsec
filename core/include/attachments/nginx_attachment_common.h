@@ -128,6 +128,8 @@ typedef enum ngx_http_plugin_metric_type
     AVERAGE_RSS_MEMORY_USAGE,
     MAX_VM_MEMORY_USAGE,
     MAX_RSS_MEMORY_USAGE,
+    REQUEST_OVERALL_SIZE_COUNT,
+    RESPONSE_OVERALL_SIZE_COUNT,
 
     METRIC_TYPES_COUNT
 } ngx_http_plugin_metric_type_e;

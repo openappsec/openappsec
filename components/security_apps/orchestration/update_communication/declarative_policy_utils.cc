@@ -22,6 +22,16 @@ DeclarativePolicyUtils::init()
         RestAction::SET, "apply-policy"
     );
     registerListener();
+    char *automatic_load = getenv("autoPolicyLoad");
+    if (automatic_load != nullptr && automatic_load == string("true")) {
+        auto mainloop = Singleton::Consume<I_MainLoop>::by<DeclarativePolicyUtils>();
+        mainloop->addRecurringRoutine(
+            I_MainLoop::RoutineType::Offline,
+            chrono::minutes(1),
+            [&] () { periodicPolicyLoad(); },
+            "Automatic Policy Loading"
+        );
+    }
 }
 
 // LCOV_EXCL_START Reason: no test exist
@@ -169,4 +179,20 @@ DeclarativePolicyUtils::getUpdate(CheckUpdateRequest &request)
         << (policy_response.empty() ? "has no change," : "has new update," );
     curr_version = maybe_new_version.unpack();
     return policy_response;
+}
+
+void
+DeclarativePolicyUtils::periodicPolicyLoad()
+{
+    auto new_checksum = getLocalPolicyChecksum();
+
+    if (!new_checksum.ok()) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to calculate checksum";
+        return;
+    }
+
+    if (*new_checksum == curr_checksum) return;
+
+    should_apply_policy = true;
+    curr_checksum = *new_checksum;
 }

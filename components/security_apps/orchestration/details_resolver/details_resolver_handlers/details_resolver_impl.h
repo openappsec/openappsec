@@ -30,6 +30,14 @@
 #ifdef SHELL_CMD_HANDLER
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
+SHELL_CMD_HANDLER("isCpviewRunning",
+    "pidof cpview_api_service > /dev/null 2>&1 && [ -f $CPDIR/conf/cpview_api_service.version ] "
+    "&& echo 'true' || echo 'false'",
+    checkIsCpviewRunning)
+SHELL_CMD_HANDLER("isCPotelcolGRET64",
+    "grep -A 10 '(BUNDLE_CPOTELCOL_AUTOUPDATE' ${CPDIR}/registry/HKLM_registry.data | "
+    "awk '/SU_Build_Take/{val = substr($2, 2, length($2)-2); if (val >=64) print \"true\"; else print \"false\" }'",
+    checkIsCPotelcolGRET64)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
@@ -50,12 +58,20 @@ SHELL_CMD_HANDLER(
     "cat /etc/cp-release | grep -oE 'R[0-9]+(\\.[0-9]+)?'",
     getGWVersion
 )
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtParentObjectIP",
+    "obj=\"$(cpsdwan get_data | jq -r .cluster_name)\";"
+    " awk -v obj=\"$obj\" '$1 == \":\" && $2 == \"(\" obj, $1 == \":ip_address\" { if ($1 == \":ip_address\")"
+    " { gsub(/[()]/, \"\", $2); print $2; exit; } }'"
+    " $FWDIR/state/local/FW1/local.gateway_cluster",
+    getClusterObjectIP
+)
 #endif //gaia || smb
 
 #if defined(gaia)
 SHELL_CMD_HANDLER("hasSupportedBlade", "enabled_blades", checkHasSupportedBlade)
 SHELL_CMD_HANDLER("hasSamlPortal", "mpclient status saml-vpn", checkSamlPortal)
-SHELL_CMD_HANDLER("requiredNanoServices", "mpclient status saml-vpn", getIDAGaia)
+SHELL_CMD_HANDLER("requiredNanoServices", "ida_gaia", getIDAGaia)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "cat $FWDIR/database/myself_objects.C "

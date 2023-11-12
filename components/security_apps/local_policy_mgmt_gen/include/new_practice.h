@@ -147,8 +147,8 @@ public:
     // LCOV_EXCL_STOP
 
     FileSecurityProtectionsSection(
-        int                     _file_size_limit,
-        int                     _archive_file_size_limit,
+        uint64_t                _file_size_limit,
+        uint64_t                _archive_file_size_limit,
         bool                    _allow_files_without_name,
         bool                    _required_file_size_limit,
         bool                    _required_archive_extraction,
@@ -171,8 +171,8 @@ public:
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
-    int                                         file_size_limit;
-    int                                         archive_file_size_limit;
+    uint64_t                                    file_size_limit;
+    uint64_t                                    archive_file_size_limit;
     bool                                        allow_files_without_name;
     bool                                        required_file_size_limit;
     bool                                        required_archive_extraction;
@@ -233,13 +233,13 @@ class NewFileSecurityArchiveInspection
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    int getArchiveFileSizeLimit() const;
+    uint64_t getArchiveFileSizeLimit() const;
     bool getrequiredArchiveExtraction() const;
     const std::string & getMultiLevelArchiveAction() const;
     const std::string & getUnopenedArchiveAction() const;
 
 private:
-    int         scan_max_file_size;
+    uint64_t    scan_max_file_size;
     bool        extract_archive_files;
     std::string scan_max_file_size_unit;
     std::string archived_files_within_archived_files;
@@ -251,11 +251,11 @@ class NewFileSecurityLargeFileInspection
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    int getFileSizeLimit() const;
+    uint64_t getFileSizeLimit() const;
     const std::string & getFileSizeLimitAction() const;
 
 private:
-    int         file_size_limit;
+    uint64_t    file_size_limit;
     std::string file_size_limit_unit;
     std::string files_exceeding_size_limit_action;
 };

@@ -45,11 +45,7 @@ checkSamlPortal(const string &command_output)
 Maybe<string>
 getIDAGaia(const string &command_output)
 {
-    if (command_output.find("Portal is running") != string::npos) {
-        return string("ida_gaia");
-    }
-
-    return genError("Current host does not have SAML Portal configured");
+    return string("ida_gaia");
 }
 
 Maybe<string>
@@ -71,6 +67,22 @@ checkIDP(shared_ptr<istream> file_stream)
 #endif // gaia
 
 #if defined(gaia) || defined(smb)
+
+Maybe<string>
+checkIsCpviewRunning(const string &command_output)
+{
+    if (command_output == "true" || command_output == "false") return command_output;
+
+    return genError("cpview is not running");
+}
+
+Maybe<string>
+checkIsCPotelcolGRET64(const string &command_output)
+{
+    if (command_output == "true" || command_output == "false") return command_output;
+
+    return genError("CPotelcol is not installed or its take is below T64");
+}
 
 Maybe<string>
 checkHasSDWan(const string &command_output)
@@ -191,6 +203,12 @@ checkIfSdwanRunning(const string &command_output)
     if (command_output == "true" || command_output == "false") return command_output;
 
     return genError("Could not determine if sd-wan is running or not");
+}
+
+Maybe<string>
+getClusterObjectIP(const string &command_output)
+{
+    return getAttr(command_output, "Cluster object IP was not found");
 }
 
 Maybe<string>

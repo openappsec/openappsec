@@ -55,8 +55,8 @@ public:
     EventVerdict respond(const EndTransactionEvent &) override;
 
 private:
-    void init(const std::string &waapDataFileName);
 
+    void init(const std::string &waapDataFileName);
     EventVerdict waapDecisionAfterHeaders(IWaf2Transaction& waf2Transaction);
     EventVerdict waapDecision(IWaf2Transaction& waf2Transaction);
     void finishTransaction(IWaf2Transaction& waf2Transaction);

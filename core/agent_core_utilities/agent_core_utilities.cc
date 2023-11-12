@@ -68,6 +68,29 @@ isDirectory(const string &path)
     return false;
 }
 
+Maybe<vector<string>>
+getDirectoryFiles(const string &path)
+{
+    if (!isDirectory(path)) return genError("Path: " + path + " is not a directory");
+
+    struct dirent *entry = nullptr;
+    DIR *directory = opendir(path.c_str());
+
+    if (!directory) {
+        dbgWarning(D_INFRA_UTILS) << "Fail to open directory. Path: " << path << ", Errno: " << errno;
+        return genError("Failed to open directory: " + path);
+    }
+
+    vector<string> files;
+    while ((entry = readdir(directory))) {
+        if (entry->d_type == DT_REG) files.push_back(entry->d_name);
+    }
+
+    closedir(directory);
+
+    return files;
+}
+
 bool
 makeDir(const string &path, mode_t permission)
 {
@@ -257,13 +280,17 @@ regexMatch(const char *file, int line, const char *sample, cmatch &match, const 
     try {
         return regex_match(sample, match, regex);
     } catch (const runtime_error &err) {
+        uint sample_len = strlen(sample);
         dbgError(D_INFRA_UTILS)
             << "FAILURE during regex_match @ "
             << file
             << ":"
             << line
-            << "; sample='"
-            << sample << "', pattern='"
+            << "; sample size: "
+            << sample_len
+            << " sample='"
+            << string(sample, min(100u, sample_len))
+            << "', pattern='"
             << regex.str()
             << "': "
             << err.what();
@@ -282,8 +309,11 @@ regexMatch(const char *file, int line, const string &sample, smatch &match, cons
             << file
             << ":"
             << line
-            << "; sample='"
-            << sample << "', pattern='"
+            << "; sample size: "
+            << sample.size()
+            << " sample='"
+            << sample.substr(0, 100)
+            << "', pattern='"
             << regex.str()
             << "': "
             << err.what();
@@ -302,8 +332,11 @@ regexMatch(const char *file, int line, const string &sample, const regex &regex)
             << file
             << ":"
             << line
-            << "; sample='"
-            << sample << "', pattern='"
+            << "; sample size: "
+            << sample.size()
+            << " sample='"
+            << sample.substr(0, 100)
+            << "', pattern='"
             << regex.str()
             << "': "
             << err.what();
@@ -322,8 +355,11 @@ regexMatch(const char *file, int line, string &sample, const regex &regex)
             << file
             << ":"
             << line
-            << "; sample='"
-            << sample << "', pattern='"
+            << "; sample size: "
+            << sample.size()
+            << " sample='"
+            << sample.substr(0, 100)
+            << "', pattern='"
             << regex.str()
             << "': "
             << err.what();
@@ -342,8 +378,11 @@ regexSearch(const char *file, int line, const string &sample, smatch &match, con
             << file
             << ":"
             << line
-            << "; sample='"
-            << sample << "', pattern='"
+            << "; sample size: "
+            << sample.size()
+            << " sample='"
+            << sample.substr(0, 100)
+            << "', pattern='"
             << regex.str()
             << "': "
             << err.what();
@@ -362,8 +401,11 @@ regexReplace(const char *file, int line, const string &sample, const regex &rege
             << file
             << ":"
             << line
-            << "; sample='"
-            << sample << "', pattern='"
+            << ";  sample size: "
+            << sample.size()
+            << " sample='"
+            << sample.substr(0, 100)
+            << "', pattern='"
             << regex.str()
             << "', replace='"
             << replace

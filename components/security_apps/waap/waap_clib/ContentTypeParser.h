@@ -25,7 +25,7 @@ class ContentTypeParser : public ParserBase, private IParserReceiver {
         CTP_STATE_CONTENT_TYPE_PARAMS
     } ctParserState;
 private:
-    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags);
+    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth);
 
 public:
     ContentTypeParser();

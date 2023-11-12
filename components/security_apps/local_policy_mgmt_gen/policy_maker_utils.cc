@@ -13,6 +13,11 @@
 
 #include "policy_maker_utils.h"
 
+#include <regex>
+
+#include "local_policy_mgmt_gen.h"
+#include "log_generator.h"
+
 using namespace std;
 
 USE_DEBUG_FLAG(D_NGINX_POLICY);
@@ -58,7 +63,7 @@ template<class T>
 Maybe<T>
 PolicyMakerUtils::openFileAsJson(const string &path)
 {
-    auto maybe_file_as_json = Singleton::Consume<I_ShellCmd>::by<PolicyMakerUtils>()->getExecOutput(
+    auto maybe_file_as_json = Singleton::Consume<I_ShellCmd>::by<LocalPolicyMgmtGenerator>()->getExecOutput(
         getFilesystemPathConfig() + "/bin/yq " + path + " -o json"
     );
 
@@ -67,7 +72,7 @@ PolicyMakerUtils::openFileAsJson(const string &path)
         return genError("Could not convert policy from yaml to json. Error: " + maybe_file_as_json.getErr());
     }
 
-    auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<PolicyMakerUtils>();
+    auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalPolicyMgmtGenerator>();
     auto maybe_file = i_orchestration_tools->jsonStringToObject<T>(
         maybe_file_as_json.unpack()
     );
@@ -136,10 +141,11 @@ PolicyMakerUtils::splitHostName(const string &host_name)
         url = url.substr(0, url.find(":"));
     }
 
-    if (host_name == "*") {
+    if (host_name == "*" || host_name == "*:*") {
         url = "Any";
         uri = "Any";
     }
+
     return make_tuple(url, port, uri);
 }
 
@@ -323,6 +329,7 @@ extractAnnotationsNames<NewParsedRule>(
     if (!trusted_sources_annotation_name.empty()) {
         rule_annotation[AnnotationTypes::TRUSTED_SOURCES] = policy_name + "/" + trusted_sources_annotation_name;
     }
+
     return rule_annotation;
 }
 // LCOV_EXCL_STOP
@@ -449,6 +456,23 @@ getAppsecCustomResponseSpec(const string &custom_response_annotation_name, const
         return R();
     }
     return *custom_response_it;
+}
+
+template<class T, class R>
+R
+rpmGetAppsecRPSettingSpec(const string &rp_settings_name, const T &policy)
+{
+    auto rp_settings_vec = policy.rpmGetRPSettings();
+    auto rp_settings_it = extractElement(
+        rp_settings_vec.begin(),
+        rp_settings_vec.end(),
+        rp_settings_name);
+
+    if (rp_settings_it == rp_settings_vec.end()) {
+        dbgTrace(D_NGINX_POLICY) << "Failed to retrieve AppSec RP Settings";
+        return R();
+    }
+    return *rp_settings_it;
 }
 
 template<class T, class R>
@@ -843,6 +867,7 @@ createUserIdentifiers<V1beta2AppsecLinuxPolicy>(
 RulesConfigRulebase
 createMultiRulesSections(
     const string &url,
+    const string &port,
     const string &uri,
     const string &practice_id,
     const string &practice_name,
@@ -878,6 +903,7 @@ createMultiRulesSections(
     RulesConfigRulebase rules_config = RulesConfigRulebase(
         asset_name,
         url,
+        port,
         uri,
         {practice},
         exceptions_result,
@@ -890,6 +916,7 @@ createMultiRulesSections(
 RulesConfigRulebase
 createMultiRulesSections(
     const string &url,
+    const string &port,
     const string &uri,
     const string &practice_id,
     const string &practice_name,
@@ -907,7 +934,8 @@ createMultiRulesSections(
     const string &exception_name,
     const vector<InnerException> &exceptions)
 {
-    ParametersSection exception_param = ParametersSection(exceptions[0].getBehaviorId(), exception_name);
+    string behaviorId = exceptions.empty() ? "" : exceptions[0].getBehaviorId();
+    ParametersSection exception_param = ParametersSection(behaviorId, exception_name);
 
     vector<PracticeSection> practices;
     if (!practice_id.empty()) {
@@ -934,6 +962,7 @@ createMultiRulesSections(
     RulesConfigRulebase rules_config = RulesConfigRulebase(
         asset_name,
         url,
+        port,
         uri,
         practices,
         {exception_param},
@@ -983,7 +1012,7 @@ PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, const st
     auto snort_scriipt_path = getFilesystemPathConfig() + "/scripts/snort_to_ips_local.py";
     auto cmd = "python " + snort_scriipt_path + " " + path + ".rule " + path + ".out " + path + ".err";
 
-    auto res = Singleton::Consume<I_ShellCmd>::by<PolicyMakerUtils>()->getExecOutput(cmd);
+    auto res = Singleton::Consume<I_ShellCmd>::by<LocalPolicyMgmtGenerator>()->getExecOutput(cmd);
 
     if (!res.ok()) {
         dbgWarning(D_LOCAL_POLICY) << res.getErr();
@@ -996,7 +1025,7 @@ PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, const st
         return;
     }
 
-    auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<PolicyMakerUtils>();
+    auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalPolicyMgmtGenerator>();
     i_orchestration_tools->removeFile(path + ".rule");
     i_orchestration_tools->removeFile(path + ".out");
     i_orchestration_tools->removeFile(path + ".err");
@@ -1153,12 +1182,15 @@ void
 PolicyMakerUtils::createThreatPreventionPracticeSections(
     const string &asset_name,
     const string &url,
+    const string &port,
     const string &uri,
     const string &default_mode,
     const V1beta2AppsecLinuxPolicy &policy,
     map<AnnotationTypes, string> &rule_annotations)
 {
-    if (rule_annotations[AnnotationTypes::PRACTICE].empty()) {
+    if (rule_annotations[AnnotationTypes::PRACTICE].empty() ||
+        web_apps.count(asset_name)
+    ) {
         return;
     }
     string practice_id = "";
@@ -1170,6 +1202,7 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
 
     RulesConfigRulebase rule_config = createMultiRulesSections(
         url,
+        port,
         uri,
         practice_id,
         rule_annotations[AnnotationTypes::PRACTICE],
@@ -1353,7 +1386,14 @@ PolicyMakerUtils::createPolicyElementsByRule(
             );
     }
 
-    if (!rule_annotations[AnnotationTypes::PRACTICE].empty()) {
+    string full_url = rule.getHost() == "*" || rule.getHost() == "*:*"
+            ? "Any"
+            : rule.getHost();
+
+
+    if (!rule_annotations[AnnotationTypes::PRACTICE].empty() &&
+        !web_apps.count(full_url)
+    ) {
         string practice_id = "";
         try {
             practice_id = to_string(boost::uuids::random_generator()());
@@ -1362,12 +1402,10 @@ PolicyMakerUtils::createPolicyElementsByRule(
         }
 
         tuple<string, string, string> splited_host_name = splitHostName(rule.getHost());
-        string full_url = rule.getHost() == "*"
-            ? "Any"
-            : rule.getHost();
 
         RulesConfigRulebase rule_config = createMultiRulesSections(
             std::get<0>(splited_host_name),
+            std::get<1>(splited_host_name),
             std::get<2>(splited_host_name),
             practice_id,
             rule_annotations[AnnotationTypes::PRACTICE],
@@ -1426,7 +1464,9 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
     dbgTrace(D_LOCAL_POLICY) << "Creating policy elements from version V1beta2";
     map<AnnotationTypes, string> rule_annotations =
         extractAnnotationsNames<NewParsedRule>(rule, default_rule, policy_name);
+
     if (
+        rule_annotations.count(AnnotationTypes::TRIGGER) > 0 &&
         !rule_annotations[AnnotationTypes::TRIGGER].empty() &&
         !log_triggers.count(rule_annotations[AnnotationTypes::TRIGGER])
     ) {
@@ -1438,6 +1478,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
     }
 
     if (
+        rule_annotations.count(AnnotationTypes::WEB_USER_RES) > 0 &&
         !rule_annotations[AnnotationTypes::WEB_USER_RES].empty() &&
         !web_user_res_triggers.count(rule_annotations[AnnotationTypes::WEB_USER_RES])
     ) {
@@ -1449,6 +1490,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
     }
 
     if (
+        rule_annotations.count(AnnotationTypes::EXCEPTION) > 0 &&
         !rule_annotations[AnnotationTypes::EXCEPTION].empty() &&
         !inner_exceptions.count(rule_annotations[AnnotationTypes::EXCEPTION])
     ) {
@@ -1460,6 +1502,8 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
     }
 
     if (
+        rule_annotations.count(AnnotationTypes::TRUSTED_SOURCES) > 0 &&
+        rule_annotations.count(AnnotationTypes::SOURCE_IDENTIFIERS) > 0 &&
         !rule_annotations[AnnotationTypes::TRUSTED_SOURCES].empty() &&
         !rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS].empty() &&
         !trusted_sources.count(rule_annotations[AnnotationTypes::TRUSTED_SOURCES])
@@ -1473,6 +1517,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
     }
 
     if (
+        rule_annotations.count(AnnotationTypes::PRACTICE) > 0 &&
         !rule_annotations[AnnotationTypes::PRACTICE].empty() &&
         !web_apps.count(rule_annotations[AnnotationTypes::PRACTICE])
     ) {
@@ -1484,7 +1529,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
             );
     }
 
-    string full_url = rule.getHost() == "*"
+    string full_url = rule.getHost() == "*" || rule.getHost() == "*:*"
         ? "Any"
         : rule.getHost();
     tuple<string, string, string> splited_host_name = splitHostName(rule.getHost());
@@ -1501,6 +1546,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
     createThreatPreventionPracticeSections(
         full_url,
         std::get<0>(splited_host_name),
+        std::get<1>(splited_host_name),
         std::get<2>(splited_host_name),
         rule.getMode(),
         policy,
@@ -1531,11 +1577,11 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy(const string &policy_name, c
 
     R default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
 
-    // add default rule to policy
-    createPolicyElementsByRule<T, R>(default_rule, default_rule, appsec_policy, policy_name);
-
     vector<R> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
     createPolicyElements<T, R>(specific_rules, default_rule, appsec_policy, policy_name);
+
+    // add default rule to policy
+    createPolicyElementsByRule<T, R>(default_rule, default_rule, appsec_policy, policy_name);
 }
 
 // LCOV_EXCL_START Reason: no test exist
@@ -1545,16 +1591,9 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, Ne
     const string &policy_name,
     const V1beta2AppsecLinuxPolicy &appsec_policy)
 {
-    dbgTrace(D_LOCAL_POLICY) << "Proccesing policy, name: " << policy_name;
+    dbgTrace(D_LOCAL_POLICY) << "Proccesing v1beta2 policy, name: " << policy_name;
 
     NewParsedRule default_rule = appsec_policy.getAppsecPolicySpec().getDefaultRule();
-
-    // add default rule to policy
-    createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsedRule>(
-        default_rule,
-        default_rule,
-        appsec_policy,
-        policy_name);
 
     vector<NewParsedRule> specific_rules = appsec_policy.getAppsecPolicySpec().getSpecificRules();
     createPolicyElements<V1beta2AppsecLinuxPolicy, NewParsedRule>(
@@ -1563,6 +1602,13 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, Ne
         appsec_policy,
         policy_name
     );
+
+    // add default rule to policy
+    createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+        default_rule,
+        default_rule,
+        appsec_policy,
+        policy_name);
 }
 // LCOV_EXCL_STOP
 
@@ -1572,19 +1618,146 @@ PolicyMakerUtils::proccesSingleAppsecPolicy(
     const string &policy_version,
     const string &local_appsec_policy_path)
 {
-    Maybe<AppsecLinuxPolicy> maybe_policy = openFileAsJson<AppsecLinuxPolicy>(policy_path);
-    if (!maybe_policy.ok()){
-        dbgWarning(D_LOCAL_POLICY) << maybe_policy.getErr();
-        return "";
+
+    Maybe<V1beta2AppsecLinuxPolicy> maybe_policy_v1beta2 = openFileAsJson<V1beta2AppsecLinuxPolicy>(policy_path);
+    if (maybe_policy_v1beta2.ok()) {
+        policy_version_name = "v1beta2";
+        createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+            getPolicyName(policy_path),
+            maybe_policy_v1beta2.unpack()
+        );
+    } else {
+        policy_version_name = "v1beta1";
+        dbgInfo(D_LOCAL_POLICY)
+            << "Failed to retrieve AppSec local policy with version: v1beta2, Trying version: v1beta1";
+
+        Maybe<AppsecLinuxPolicy> maybe_policy_v1beta1 = openFileAsJson<AppsecLinuxPolicy>(policy_path);
+        if (!maybe_policy_v1beta1.ok()){
+            dbgWarning(D_LOCAL_POLICY) << maybe_policy_v1beta1.getErr();
+            return "";
+        }
+        createAgentPolicyFromAppsecPolicy<AppsecLinuxPolicy, ParsedRule>(
+            getPolicyName(policy_path),
+            maybe_policy_v1beta1.unpack()
+        );
+
+        if (getenv("OPENAPPSEC_STANDALONE")) rpmBuildNginxServers(maybe_policy_v1beta1.unpack());
     }
-    createAgentPolicyFromAppsecPolicy<AppsecLinuxPolicy, ParsedRule>(
-        getPolicyName(policy_path),
-        maybe_policy.unpack()
-    );
 
     PolicyWrapper policy_wrapper = combineElementsToPolicy(policy_version);
     return dumpPolicyToFile(
         policy_wrapper,
         local_appsec_policy_path
     );
+}
+
+void
+PolicyMakerUtils::rpmReportInfo(const std::string &msg)
+{
+    dbgTrace(D_LOCAL_POLICY) << msg;
+
+    LogGen(
+        msg,
+        ReportIS::Audience::SECURITY,
+        ReportIS::Severity::INFO,
+        ReportIS::Priority::LOW,
+        ReportIS::Tags::ORCHESTRATOR
+    );
+}
+
+void
+PolicyMakerUtils::rpmReportError(const std::string &msg)
+{
+    dbgWarning(D_LOCAL_POLICY) << msg;
+
+    LogGen(
+        msg,
+        ReportIS::Audience::SECURITY,
+        ReportIS::Severity::CRITICAL,
+        ReportIS::Priority::URGENT,
+        ReportIS::Tags::ORCHESTRATOR
+    );
+}
+
+void
+PolicyMakerUtils::rpmBuildNginxServers(const AppsecLinuxPolicy &policy)
+{
+    rpmReportInfo("Started building NGINX servers");
+
+    ReverseProxyBuilder::init();
+    bool full_success = true;
+    bool partial_success = false;
+    set<pair<string, bool>> processed_rules;
+    for (ParsedRule const &rule : policy.getAppsecPolicySpec().getSpecificRules()) {
+        tuple<string, string, string> splited_host_name = splitHostName(rule.getHost());
+        string host = std::get<0>(splited_host_name);
+        if (host.empty() || rule.rpmGetUpstream().empty()) continue;
+
+        string location = std::get<2>(splited_host_name);
+        if (location.empty()) location = "/";
+
+        dbgTrace(D_LOCAL_POLICY)
+            << "Building NGINX server: "
+            << host
+            << ", location: "
+            << location
+            << " RP-Settings: "
+            << rule.rpmGetRPSettings();
+
+        RPMSettings rp_settings =
+            rpmGetAppsecRPSettingSpec<AppsecLinuxPolicy, RPMSettings>(rule.rpmGetRPSettings(), policy);
+        pair<string, bool> server = {host, rule.rpmIsHttps()};
+        auto it = processed_rules.find(server);
+        if (it != processed_rules.end()) {
+            auto maybe_res = ReverseProxyBuilder::addNginxServerLocation(location, host, rule, rp_settings);
+            if (!maybe_res.ok()) {
+                rpmReportError(
+                    "Could not add an NGINX server location: " + location + " to server: " + host +
+                    ", error: " + maybe_res.getErr()
+                );
+                full_success = false;
+                continue;
+            }
+            rpmReportInfo("NGINX server location: " + location + " was successfully added to server: " + host);
+            partial_success = true;
+        } else {
+            auto maybe_res = ReverseProxyBuilder::createNewNginxServer(host, rule, rp_settings);
+            if (!maybe_res.ok()) {
+                rpmReportError("Could not create a new NGINX server: " + host + ", error: " + maybe_res.getErr());
+                full_success = false;
+                continue;
+            }
+            rpmReportInfo(
+                (rule.rpmIsHttps() ? string("SSL") : string("HTTP")) + " NGINX server: " + host +
+                " was successfully built"
+            );
+            processed_rules.insert(server);
+
+            maybe_res = ReverseProxyBuilder::addNginxServerLocation(location, host, rule, rp_settings);
+            if (!maybe_res.ok()) {
+                rpmReportError(
+                    "Could not add an NGINX server location: " + location + " to server: " + host +
+                    ", error: " + maybe_res.getErr()
+                );
+                full_success = false;
+                continue;
+            }
+            rpmReportInfo("NGINX server location: " + location + " was successfully added to server: " + host);
+            partial_success = true;
+        }
+    }
+
+    auto maybe_reload_nginx = ReverseProxyBuilder::reloadNginx();
+    if (!maybe_reload_nginx.ok()) {
+        rpmReportError("Could not reload NGINX, error: " + maybe_reload_nginx.getErr());
+        return;
+    }
+
+    if (full_success) {
+        rpmReportInfo("NGINX configuration was loaded successfully!");
+    } else if (partial_success) {
+        rpmReportInfo("NGINX configuration was partially loaded");
+    } else {
+        rpmReportError("Could not load any NGINX configuration");
+    }
 }

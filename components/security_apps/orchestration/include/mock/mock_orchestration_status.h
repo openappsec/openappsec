@@ -45,7 +45,6 @@ public:
     MOCK_CONST_METHOD0(getUpdateTime, const std::string&());
     MOCK_CONST_METHOD0(getLastManifestUpdate, const std::string&());
     MOCK_CONST_METHOD0(getPolicyVersion, const std::string&());
-    MOCK_CONST_METHOD0(getWaapModelVersion, const std::string&());
     MOCK_CONST_METHOD0(getLastPolicyUpdate, const std::string&());
     MOCK_CONST_METHOD0(getLastSettingsUpdate, const std::string&());
     MOCK_CONST_METHOD0(getUpgradeMode, const std::string&());

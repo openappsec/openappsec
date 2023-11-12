@@ -74,7 +74,6 @@ void WaapConfigApplication::load(cereal::JSONInputArchive& ar)
 {
     // order has affect - we need to call base last because of triggers and overrides
 
-
     loadOpenRedirectPolicy(ar);
     loadErrorDisclosurePolicy(ar);
     loadCsrfPolicy(ar);
