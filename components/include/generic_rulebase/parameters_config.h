@@ -224,5 +224,6 @@ private:
 };
 
 static const ParameterBehavior action_ignore(BehaviorKey::ACTION, BehaviorValue::IGNORE);
+static const ParameterBehavior action_accept(BehaviorKey::ACTION, BehaviorValue::ACCEPT);
 
 #endif //__PARAMETERS_CONFIG_H__

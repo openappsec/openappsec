@@ -21,12 +21,14 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_GQL);
 
 const std::string ParserGql::m_parserName = "gqlParser";
 
-ParserGql::ParserGql(IParserReceiver& receiver) :
+ParserGql::ParserGql(IParserReceiver &receiver, size_t parser_depth) :
     m_receiver(receiver),
     m_error(false),
-    m_curNameValues(0)
+    m_curNameValues(0),
+    m_parser_depth(parser_depth)
 {
     dbgFlow(D_WAAP_PARSER_GQL);
+    dbgTrace(D_WAAP_PARSER_GQL) << "parser_depth=" << parser_depth;
 }
 
 ParserGql::~ParserGql() {
@@ -56,7 +58,9 @@ size_t ParserGql::push(const char* buf, size_t len) {
     // Handle corner case of last name visited without value: don't forget to output that name too
     if (m_curNameValues == 0 && !m_curNodeName.empty()) {
         dbgTrace(D_WAAP_PARSER_GQL) << "handle last name: '" << m_curNodeName << "'";
-        if (m_receiver.onKv(m_curNodeName.data(), m_curNodeName.size(), "", 0, BUFFERED_RECEIVER_F_BOTH) != 0) {
+        if (m_receiver.onKv(
+                m_curNodeName.data(), m_curNodeName.size(), "", 0, BUFFERED_RECEIVER_F_BOTH, m_parser_depth
+            ) != 0) {
             m_error = true;
         }
     }
@@ -81,7 +85,9 @@ bool ParserGql::visitValue(const char *value)
 {
     dbgTrace(D_WAAP_PARSER_GQL) << "'" << value << "'";
     m_curNameValues++;
-    return m_receiver.onKv(m_curNodeName.data(), m_curNodeName.size(), value, strlen(value), BUFFERED_RECEIVER_F_BOTH);
+    return m_receiver.onKv(
+        m_curNodeName.data(), m_curNodeName.size(), value, strlen(value), BUFFERED_RECEIVER_F_BOTH, m_parser_depth
+    );
 }
 
 bool ParserGql::visitName(const facebook::graphql::ast::Name &node)
@@ -89,7 +95,9 @@ bool ParserGql::visitName(const facebook::graphql::ast::Name &node)
     dbgTrace(D_WAAP_PARSER_GQL) << node.getValue() << "'";
     bool ret = true;
     if (m_curNameValues == 0 && !m_curNodeName.empty()) {
-        ret = m_receiver.onKv(m_curNodeName.data(), m_curNodeName.size(), "", 0, BUFFERED_RECEIVER_F_BOTH);
+        ret = m_receiver.onKv(
+            m_curNodeName.data(), m_curNodeName.size(), "", 0, BUFFERED_RECEIVER_F_BOTH, m_parser_depth
+        );
     }
     // wait for next name
     m_curNodeName = std::string(node.getValue());

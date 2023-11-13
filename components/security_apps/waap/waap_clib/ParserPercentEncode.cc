@@ -19,12 +19,17 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_PERCENT);
 
 const std::string ParserPercentEncode::m_parserName = "ParserPercentEncode";
 
-ParserPercentEncode::ParserPercentEncode(IParserStreamReceiver &receiver) :
+ParserPercentEncode::ParserPercentEncode(IParserStreamReceiver &receiver, size_t parser_depth) :
     m_receiver(receiver),
     m_state(s_start),
     m_escapedLen(0),
-    m_escapedCharCandidate(0)
+    m_escapedCharCandidate(0),
+    m_parser_depth(parser_depth)
 {
+    dbgTrace(D_WAAP_PARSER_PERCENT)
+        << "parser_depth="
+        << parser_depth;
+
     memset(m_escaped, 0, sizeof(m_escaped));
 }
 
@@ -51,7 +56,8 @@ ParserPercentEncode::push(const char *buf, size_t len)
                 dbgTrace(D_WAAP_PARSER_PERCENT)
                     << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
                     << m_escaped
-                    << "<<<";
+                    << "<<< and m_escapedLen = "
+                    << m_escapedLen;
                 if (m_receiver.onValue(m_escaped, m_escapedLen) != 0) {
                     m_state = s_error;
                     return i;
@@ -97,7 +103,6 @@ ParserPercentEncode::push(const char *buf, size_t len)
             {
                 dbgTrace(D_WAAP_PARSER_PERCENT)
                     << "ParserPercentEncode::push(): s_start";
-
                 // fallthrough //
                 CP_FALL_THROUGH;
             }
@@ -107,7 +112,6 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     << "ParserPercentEncode::push(): s_value_start";
                 pointer_in_buffer = i;
                 m_state = s_value;
-
                 // fallthrough //
                 CP_FALL_THROUGH;
             }
@@ -120,9 +124,10 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     if (i - pointer_in_buffer > 0)
                     {
                         dbgTrace(D_WAAP_PARSER_PERCENT)
-                            << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
+                            << "ParserPercentEncode::push(): call onValue with buffer = >>>"
                             << (buf + pointer_in_buffer)
-                            << "<<<";
+                            << "<<< of size "
+                            << i - pointer_in_buffer;
                         if (m_receiver.onValue(buf + pointer_in_buffer, i - pointer_in_buffer) != 0)
                         {
                             m_state = s_error;
@@ -140,7 +145,8 @@ ParserPercentEncode::push(const char *buf, size_t len)
                         dbgTrace(D_WAAP_PARSER_PERCENT)
                             << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
                             << m_escaped
-                            << "<<<";
+                            << "<<< and m_escapedLen = "
+                            << m_escapedLen;
                         if (m_receiver.onValue(m_escaped, m_escapedLen) != 0)
                         {
                             m_state = s_error;
@@ -155,7 +161,8 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     dbgTrace(D_WAAP_PARSER_PERCENT)
                         << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
                         << (buf + pointer_in_buffer)
-                        << "<<<";
+                        << "<<< of size "
+                        << (i - pointer_in_buffer) + 1;
                     if (m_receiver.onValue(buf + pointer_in_buffer, (i - pointer_in_buffer) + 1) != 0)
                     {
                         m_state = s_error;
@@ -177,7 +184,8 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     dbgTrace(D_WAAP_PARSER_PERCENT)
                         << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
                         << m_escaped
-                        << "<<<";
+                        << "<<< and m_escapedLen = "
+                        << m_escapedLen;
                     if (m_escapedLen > 0
                         && m_receiver.onValue(m_escaped, m_escapedLen) != 0)
                     {
@@ -186,7 +194,7 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     }
                     m_escapedLen = 0;
                     // return the '%' character back to the output.
-                    dbgTrace(D_WAAP_PARSER_PERCENT) << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
+                    dbgTrace(D_WAAP_PARSER_PERCENT) << "ParserPercentEncode::push(): call onValue with \"%\" = >>>"
                                                     << "%"
                                                     << "<<<";
                     if (m_receiver.onValue("%", 1) != 0)
@@ -199,7 +207,7 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     {
                         // pass the non-hex character back to the output too.
                         dbgTrace(D_WAAP_PARSER_PERCENT)
-                            << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
+                            << "ParserPercentEncode::push(): call onValue with current char = >>>"
                             << c
                             << "<<<";
                         if (m_receiver.onValue(&c, 1) != 0)
@@ -232,7 +240,8 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     dbgTrace(D_WAAP_PARSER_PERCENT)
                         << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
                         << m_escaped
-                        << "<<<";
+                        << "<<< and m_escapedLen = "
+                        << m_escapedLen;
                     if (m_escapedLen > 0
                         && m_receiver.onValue(m_escaped, m_escapedLen) != 0)
                     {
@@ -243,7 +252,7 @@ ParserPercentEncode::push(const char *buf, size_t len)
 
                     // return the '%' character back to the output.
                     dbgTrace(D_WAAP_PARSER_PERCENT)
-                        << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
+                        << "ParserPercentEncode::push(): call onValue with \"%\" >>>"
                         << "%"
                         << "<<<";
                     if (m_receiver.onValue("%", 1) != 0)
@@ -252,7 +261,7 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     }
                     // add the character that was thought to be escaped value
                     dbgTrace(D_WAAP_PARSER_PERCENT)
-                        << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
+                        << "ParserPercentEncode::push(): call onValue with m_escapedCharCandicate = >>>"
                         << m_escapedCharCandidate
                         << "<<<";
                     if (m_receiver.onValue(&m_escapedCharCandidate, 1))
@@ -273,7 +282,8 @@ ParserPercentEncode::push(const char *buf, size_t len)
                     dbgTrace(D_WAAP_PARSER_PERCENT)
                         << "ParserPercentEncode::push(): call onValue with m_escaped = >>>"
                         << m_escaped
-                        << "<<<";
+                        << "<<< and m_escapedLen = "
+                        << m_escapedLen;
                     if (m_receiver.onValue(m_escaped, m_escapedLen) != 0)
                     {
                         m_state = s_error;

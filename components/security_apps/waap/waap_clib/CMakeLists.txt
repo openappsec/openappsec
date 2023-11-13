@@ -84,6 +84,7 @@ add_library(waap_clib
     WaapSampleValue.cc
     ParserGql.cc
     ParserPercentEncode.cc
+    ParserPairs.cc
 )
 
 add_definitions("-Wno-unused-function")

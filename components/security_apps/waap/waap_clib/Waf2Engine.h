@@ -283,6 +283,7 @@ private:
 
     // Matched override IDs
     std::set<std::string> m_matchedOverrideIds;
+    std::set<std::string> m_effectiveOverrideIds;
 
     //csrf state
     Waap::CSRF::State m_csrfState;
@@ -344,7 +345,6 @@ private:
 
     // Cached pointer to const triggerLog (hence mutable)
     mutable std::shared_ptr<Waap::Trigger::Log> m_triggerLog;
-
     Waf2TransactionFlags m_waf2TransactionFlags;
 
     // Grace period for logging

@@ -107,9 +107,10 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"Layer 7 Access Control", ReportIS::Tags::LAYER_7_ACCESS_CONTROL},
         {"Horizon Telemetry Metrics", ReportIS::Tags::HORIZON_TELEMETRY_METRICS},
         {"Crowdsec", ReportIS::Tags::CROWDSEC},
+        {"apiDiscoveryCloudMessaging", ReportIS::Tags::API_DISCOVERY},
         {"Playground", ReportIS::Tags::PLAYGROUND}
     };
-
+    
     auto report_is_tag = strings_to_tags.find(tag);
     if (report_is_tag != strings_to_tags.end()) return report_is_tag->second;
     return genError("illegal tag: " + tag);
@@ -267,7 +268,9 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::IOT_NEXT: return "iotNext";
         case IssuingEngine::SDWAN: return "sdwanGwSharing";
         case IssuingEngine::FILE_UPLOAD: return "fileUpload";
-        case IssuingEngine::IDA_NEXT: return "quantumMetaNotifyIdn";
+        case IssuingEngine::IDA_NEXT_BLADE_REGISTRATION: return "quantumMetaNotifyIdn";
+        case IssuingEngine::IDA_NEXT_CLIENT_IP_NOTIFY: return "quantumIPNotifyIdn";
+        case IssuingEngine::API_DISCOVERY: return "apiDiscoveryCloudMessaging";
         case IssuingEngine::HORIZON_TELEMETRY_METRICS: return "horizonTelemetryMetrics";
     }
 
@@ -310,7 +313,8 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Layer 7 Access Control",
     "Horizon Telemetry Metrics",
     "Crowdsec",
-    "Playground"
+    "Playground",
+    "apiDiscoveryCloudMessaging"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

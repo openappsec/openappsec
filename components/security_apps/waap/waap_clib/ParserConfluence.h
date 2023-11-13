@@ -19,7 +19,7 @@
 class ParserConfluence : public ParserBase
 {
 public:
-    ParserConfluence(IParserStreamReceiver& receiver);
+    ParserConfluence(IParserStreamReceiver& receiver, size_t parser_depth);
     virtual ~ParserConfluence();
 
     virtual size_t push(const char* data, size_t data_len);
@@ -43,6 +43,7 @@ private:
     state m_state;
     IParserStreamReceiver& m_receiver;
     std::string m_name;
+    size_t m_parser_depth;
 };
 
 #endif

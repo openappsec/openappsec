@@ -33,7 +33,7 @@
 
 // Interface for receiver classes that accept full key/value pairs
 struct IParserReceiver {
-    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags) = 0;
+    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth) = 0;
 };
 
 struct IParserReceiver2 {
@@ -80,11 +80,11 @@ struct IParserStreamReceiver : public IParserReceiver {
 // This will in many cases cause sub-parsers to also work in zero-copy style too!
 class BufferedReceiver : public IParserStreamReceiver {
 public:
-    BufferedReceiver(IParserReceiver &receiver);
+    BufferedReceiver(IParserReceiver &receiver, size_t parser_depth=0);
     virtual int onKey(const char *k, size_t k_len);
     virtual int onValue(const char *v, size_t v_len);
     virtual int onKvDone();
-    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags);
+    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth);
     virtual void clear();
 
     // Helper methods to access accumulated key and value (read-only)
@@ -97,6 +97,8 @@ private:
     // Accumulated key/value pair
     std::string m_key;
     std::string m_value;
+    size_t m_parser_depth;
+
 };
 
 // Base class for various streaming parsers that accept data stream in multiple pieces through
@@ -123,10 +125,11 @@ class BufferedParser : public ParserBase
 {
 public:
     template<typename ..._Args>
-    explicit BufferedParser(IParserReceiver &receiver, _Args... _args)
+    explicit BufferedParser(IParserReceiver &receiver, size_t parser_depth, _Args... _args)
     :
-        m_bufferedReceiver(receiver),
-        m_parser(m_bufferedReceiver, _args...) // pass any extra arguments to specific parser's constructor
+        m_bufferedReceiver(receiver, parser_depth),
+        // pass any extra arguments to specific parser's constructor
+        m_parser(m_bufferedReceiver, parser_depth, _args...)
     {}
     virtual ~BufferedParser() {}
     virtual size_t push(const char *data, size_t data_len) { return m_parser.push(data, data_len); }

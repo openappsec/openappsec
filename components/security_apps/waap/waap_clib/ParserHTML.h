@@ -24,7 +24,7 @@
 
 class ParserHTML : public ParserBase {
 public:
-    ParserHTML(IParserStreamReceiver &receiver);
+    ParserHTML(IParserStreamReceiver &receiver, size_t parser_depth);
     virtual ~ParserHTML();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -81,4 +81,5 @@ private:
     htmlParserCtxtPtr m_pushParserCtxPtr;
 
     static const std::string m_parserName;
+    size_t m_parser_depth;
 };

@@ -156,6 +156,7 @@ RulesTriggerSection::save(cereal::JSONOutputArchive &out_ar) const
 RulesConfigRulebase::RulesConfigRulebase(
     const string &_name,
     const string &_url,
+    const string &_port,
     const string &_uri,
     vector<PracticeSection> _practices,
     vector<ParametersSection> _parameters,
@@ -169,39 +170,19 @@ RulesConfigRulebase::RulesConfigRulebase(
     try {
         bool any = _name == "Any" && _url == "Any" && _uri == "Any";
         id = any ? "Any" : _url+_uri;
-        if (_uri != "/") {
-            context = any ? "All()" : "Any("
-                "All("
-                    "Any("
-                        "EqualHost(" + _url + ")"
-                    "),"
-                    "EqualListeningPort(80)" +
-                    string(_uri.empty() ? "" : ",BeginWithUri(" + _uri + ")") +
-                "),"
-                "All("
-                    "Any("
-                        "EqualHost(" + _url + ")"
-                    "),"
-                    "EqualListeningPort(443)" +
-                    string(_uri.empty() ? "" : ",BeginWithUri(" + _uri + ")") +
-                ")"
-            ")";
-        } else {
-            context = any ? "All()" : "Any("
-                "All("
-                    "Any("
-                        "EqualHost(" + _url + ")"
-                    "),"
-                    "EqualListeningPort(80)"
-                "),"
-                "All("
-                    "Any("
-                        "EqualHost(" + _url + ")"
-                    "),"
-                    "EqualListeningPort(443)"
-                ")"
-            ")";
+        if (any) {
+            context ="All()";
+            return;
         }
+        string host_check = "Any(EqualHost(" + _url + ")),";
+        string uri_check = (_uri.empty() || _uri == "/" ) ? "" : ",BeginWithUri(" + _uri + ")";
+        auto ports = _port.empty() ? vector<string>({"80", "443"}) : vector<string>({_port});
+        context = "Any(";
+        for (auto &port : ports) {
+            string check_last = (ports.size() == 1 || port == "443") ? ")" : "),";
+            context += "All(" + host_check + "EqualListeningPort(" + port + ")" + uri_check + check_last;
+        }
+        context += ")";
     } catch (const boost::uuids::entropy_error &e) {
         dbgWarning(D_LOCAL_POLICY) << "Failed to generate rule UUID. Error: " << e.what();
     }
@@ -284,6 +265,7 @@ UsersIdentifiersRulebase::UsersIdentifiersRulebase(
 const string &
 UsersIdentifiersRulebase::getIdentifier() const
 {
+    if (source_identifiers.empty()) return source_identifier;
     return source_identifiers[0].getIdentifier();
 }
 // LCOV_EXCL_STOP

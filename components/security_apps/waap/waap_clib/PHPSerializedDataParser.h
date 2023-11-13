@@ -20,7 +20,7 @@
 
 class PHPSerializedDataParser : public ParserBase {
 public:
-    PHPSerializedDataParser(IParserStreamReceiver &outReceiver);
+    PHPSerializedDataParser(IParserStreamReceiver &outReceiver, size_t parser_depth);
     size_t push(const char* buf, size_t len);
     void finish();
     virtual const std::string &name() const;
@@ -84,6 +84,6 @@ private:
     IParserStreamReceiver &m_outReceiver;
     KeyStack m_keyStack;
     std::stack <State> m_stack;
-
+    size_t m_parser_depth;
     static const std::string m_parserName;
 };

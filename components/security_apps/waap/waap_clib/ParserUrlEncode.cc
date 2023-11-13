@@ -16,27 +16,37 @@
 #include "debug.h"
 
 USE_DEBUG_FLAG(D_WAAP_PARSER_URLENCODE);
+USE_DEBUG_FLAG(D_WAAP);
 
 const std::string ParserUrlEncode::m_parserName = "ParserUrlEncode";
 
-ParserUrlEncode::ParserUrlEncode(IParserStreamReceiver &receiver, char separatorChar, bool should_decode_per)
-        :
+ParserUrlEncode::ParserUrlEncode(
+    IParserStreamReceiver &receiver, size_t parser_depth, char separatorChar, bool should_decode_per
+) :
     m_receiver(receiver),
     m_state(s_start),
     m_escapedLen(0),
     m_separatorChar(separatorChar),
     m_escapedCharCandidate(0),
-    should_decode_percent(should_decode_per)
+    should_decode_percent(should_decode_per),
+    m_parser_depth(parser_depth)
 {
-    dbgTrace(D_WAAP_PARSER_URLENCODE) << "should_decode_per=" << should_decode_per;
+    dbgTrace(D_WAAP)
+        << "should_decode_percent="
+        << should_decode_per
+        << "parser_depth="
+        << parser_depth;
+
     // TODO:: is there a need for this?
     memset(m_escaped, 0, sizeof(m_escaped));
 }
 
-ParserUrlEncode::~ParserUrlEncode() {
-}
+ParserUrlEncode::~ParserUrlEncode()
+{}
 
-size_t ParserUrlEncode::push(const char *buf, size_t len) {
+size_t
+ParserUrlEncode::push(const char *buf, size_t len)
+{
     size_t i = 0;
     size_t mark = 0;
     char c;
@@ -53,8 +63,7 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
                     m_state = s_error;
                     return i;
                 }
-            }
-            else if (m_state == s_value_start) {
+            } else if (m_state == s_value_start) {
                 if (m_receiver.onValue(m_escaped, m_escapedLen) != 0) {
                     m_state = s_error;
                     return i;
@@ -76,8 +85,7 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
         is_last = (i == (len - 1));
 
         // Checking valid char urlencode
-        if (c < 32)
-        {
+        if (c < 32) {
             dbgDebug(D_WAAP_PARSER_URLENCODE) << "invalid URL encoding character: " << c;
             m_state = s_error;
             return i;
@@ -119,8 +127,7 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
                 }
                 m_state = s_key_escaped1;
                 break;
-            }
-            else if (c == '+') {
+                } else if (c == '+') {
                 // convert plus character to space
                 if (i - mark > 0) {
                     if (m_receiver.onKey(buf + mark, i - mark) != 0) {
@@ -140,8 +147,7 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
                 }
                 m_state = s_key_start;
                 break;
-            }
-            else {
+                } else {
                 // flush unescaped data collected (if any)
                 if (m_escapedLen > 0) {
                     if (m_receiver.onKey(m_escaped, m_escapedLen) != 0) {
@@ -201,7 +207,6 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
 
                 // If the character is '%' - stay in the same state (correctly treat '%%%%hhh' sequences
                 if (c != '%') {
-
                     // pass the non-hex character back to the output too.
                     if (m_receiver.onKey(&c, 1) != 0) {
                         return i;
@@ -279,8 +284,7 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
                 }
                 m_state = s_value_escaped1;
                 break;
-            }
-            else if (c == '+') {
+                } else if (c == '+') {
                 // convert plus character to space
                 if (i - mark > 0) {
                     if (m_receiver.onValue(buf + mark, i - mark) != 0) {
@@ -299,8 +303,7 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
                 }
                 m_state = s_value_start;
                 break;
-            }
-            else {
+                } else {
                 // flush unescaped data collected (if any)
                 if (m_escapedLen > 0) {
                     if (m_receiver.onValue(m_escaped, m_escapedLen) != 0) {
@@ -425,15 +428,20 @@ size_t ParserUrlEncode::push(const char *buf, size_t len) {
     return len;
 }
 
-void ParserUrlEncode::finish() {
+void
+ParserUrlEncode::finish()
+{
     push(NULL, 0);
 }
 
 const std::string &
-ParserUrlEncode::name() const {
+ParserUrlEncode::name() const
+{
     return m_parserName;
 }
 
-bool ParserUrlEncode::error() const {
+bool
+ParserUrlEncode::error() const
+{
     return m_state == s_error;
 }

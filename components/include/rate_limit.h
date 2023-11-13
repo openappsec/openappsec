@@ -7,13 +7,15 @@
 #include "singleton.h"
 #include "i_mainloop.h"
 #include "i_environment.h"
+#include "i_generic_rulebase.h"
 
 class RateLimit
     :
     public Component,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_TimeGet>,
-    Singleton::Consume<I_Environment>
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<I_GenericRulebase>
 {
 public:
     RateLimit();

@@ -19,13 +19,19 @@
 #include "i_mainloop.h"
 #include "i_local_policy_mgmt_gen.h"
 #include "i_env_details.h"
+#include "i_shell_cmd.h"
+#include "i_orchestration_tools.h"
 
 class LocalPolicyMgmtGenerator
         :
     public Component,
     Singleton::Provide<I_LocalPolicyMgmtGen>,
     Singleton::Consume<I_MainLoop>,
-    Singleton::Consume<I_EnvDetails>
+    Singleton::Consume<I_EnvDetails>,
+    Singleton::Consume<I_ShellCmd>,
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<I_OrchestrationTools>,
+    Singleton::Consume<I_Messaging>
 {
 public:
     LocalPolicyMgmtGenerator();

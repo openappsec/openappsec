@@ -27,7 +27,11 @@ typedef size_t yajl_size_t;
 
 class ParserJson : public ParserBase {
 public:
-    ParserJson(IParserReceiver &receiver, IParserReceiver2 *receiver2=NULL);
+    ParserJson(
+        IParserReceiver &receiver,
+        bool should_collect_for_oa_schema_updater=false,
+        size_t parser_depth=0,
+        IParserReceiver2 *receiver2=NULL);
     virtual ~ParserJson();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -80,6 +84,10 @@ private:
     KeyStack m_key;
     std::vector<enum js_state> m_depthStack;
     yajl_handle m_jsonHandler;
+    bool is_map_empty;
+    bool should_collect_for_oa_schema_updater;
+
+    size_t m_parser_depth;
 public:
     static const std::string m_parserName;
 };

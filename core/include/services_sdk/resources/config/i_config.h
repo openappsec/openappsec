@@ -88,7 +88,7 @@ public:
 
     // TODO: merge both loadConfiguration functions to one with vector of streams input when moving to c++17
     // (c++ < 17 does not support copy of streams and thus it cannot be part of any container)
-    virtual bool loadConfiguration(istream &json_contents) = 0;
+    virtual bool loadConfiguration(istream &json_contents, const string &path = "") = 0;
     virtual bool loadConfiguration(const vector<string> &configuration_flags) = 0;
 
     virtual AsyncLoadConfigStatus

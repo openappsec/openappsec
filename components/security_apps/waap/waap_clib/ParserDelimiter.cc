@@ -16,15 +16,22 @@
 
 USE_DEBUG_FLAG(D_WAAP_PARSER_DELIMITER);
 
-ParserDelimiter::ParserDelimiter(IParserStreamReceiver& receiver, char delim, const std::string& delimName)
-    : ParserBase(),
+ParserDelimiter::ParserDelimiter(
+    IParserStreamReceiver& receiver,
+    size_t parser_depth,
+    char delim,
+    const std::string& delimName
+    ) : ParserBase(),
     m_state(s_start),
     m_receiver(receiver),
     m_delim(delim),
     m_delim_name(delimName),
-    m_found_delim(false)
+    m_found_delim(false),
+    m_parser_depth(parser_depth)
 {
-
+    dbgTrace(D_WAAP_PARSER_DELIMITER)
+        << "parsing delimiter: parser depth="
+        << parser_depth;
 }
 
 ParserDelimiter::~ParserDelimiter()

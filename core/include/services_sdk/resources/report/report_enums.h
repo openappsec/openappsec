@@ -65,6 +65,7 @@ enum class Tags {
     HORIZON_TELEMETRY_METRICS,
     CROWDSEC,
     PLAYGROUND,
+    API_DISCOVERY,
 
     COUNT
 };
@@ -152,8 +153,10 @@ enum class IssuingEngine {
     IOT_NEXT,
     SDWAN,
     FILE_UPLOAD,
-    IDA_NEXT,
-    HORIZON_TELEMETRY_METRICS
+    IDA_NEXT_BLADE_REGISTRATION,
+    IDA_NEXT_CLIENT_IP_NOTIFY,
+    HORIZON_TELEMETRY_METRICS,
+    API_DISCOVERY
 };
 
 } // namespace ReportIS

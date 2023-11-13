@@ -53,32 +53,37 @@ public:
     {
         auto service_controller = Singleton::Consume<I_ServiceController>::by<ServiceReconfStatusMonitor>();
         if (!finished.get()) {
-            service_controller->updateReconfStatus(id.get(), ReconfStatus::IN_PROGRESS);
+            service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::IN_PROGRESS);
             dbgTrace(D_ORCHESTRATOR)
-                << "Request for service reconfiguration, with id "
+                << "Request for service reconfiguration is still in progress. ID: "
                 << id.get()
-                << ", is still in progress.";
+                << ", Service Name: "
+                << service_name.get();
             return;
         }
         if (error.get()) {
-            service_controller->updateReconfStatus(id.get(), ReconfStatus::FAILED);
+            service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::FAILED);
             dbgError(D_ORCHESTRATOR)
-                << "Request for service reconfiguration, with id "
+                << "Request for service reconfiguration failed to complete. ID: "
                 << id.get()
-                << ", failed to complete."
+                << ", Service Name: "
+                << service_name.get()
+                << "."
                 << (error_message.isActive() ? " Error: " + error_message.get() : "");
             return;
         }
-        service_controller->updateReconfStatus(id.get(), ReconfStatus::SUCCEEDED);
+        service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::SUCCEEDED);
         dbgInfo(D_ORCHESTRATOR)
-            << "Request for service reconfiguration, with id "
+            << "Request for service reconfiguration successfully accomplished. Reconf ID: "
             << id.get()
-            << ", successfully accomplished.";
+            << ", Service Name: "
+            << service_name.get();
         return;
     }
 
 private:
     C2S_PARAM(int, id);
+    C2S_PARAM(string, service_name);
     C2S_PARAM(bool, error);
     C2S_PARAM(bool, finished);
     C2S_OPTIONAL_PARAM(string, error_message);
@@ -292,7 +297,7 @@ public:
     const string & getPolicyVersion() const override;
     const string & getUpdatePolicyVersion() const override;
     const string & getPolicyVersions() const override;
-    void updateReconfStatus(int id, ReconfStatus status) override;
+    void updateReconfStatus(int id, const string &service_name, ReconfStatus status) override;
     void startReconfStatus(
         int id,
         ReconfStatus status,
@@ -780,6 +785,7 @@ ServiceController::Impl::updateServiceConfiguration(
     string version_value;
     string send_signal_for_services_err;
 
+    changed_policy_files.clear();
     for (auto &single_policy : all_security_policies.unpack()) {
         if (single_policy.first == version_param) {
             version_value = single_policy.second;
@@ -1076,19 +1082,25 @@ ServiceController::Impl::getUpdatePolicyVersion() const
 }
 
 void
-ServiceController::Impl::updateReconfStatus(int id, ReconfStatus status)
+ServiceController::Impl::updateReconfStatus(int id, const string &service_name, ReconfStatus status)
 {
     if (status == ReconfStatus::FAILED) {
         failed_services.emplace(id, status);
     }
 
     if (services_reconf_status.find(id) == services_reconf_status.end()) {
-        dbgError(D_ORCHESTRATOR) << "Service reconfiguration monitor received illegal id :" << id;
+        dbgError(D_ORCHESTRATOR)
+            << "Unable to find a mapping for reconfiguration ID:"
+            << id
+            << ". Service name: "
+            << service_name;
         return;
     }
     dbgTrace(D_ORCHESTRATOR)
         << "Updating reconf status for reconfiguration ID "
         << id
+        << ", Service name: "
+        << service_name
         << ". Status: "
         << static_cast<int>(status);
     services_reconf_status[id] = status;

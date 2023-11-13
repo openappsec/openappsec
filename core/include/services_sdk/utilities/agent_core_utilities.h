@@ -18,6 +18,8 @@
 #include <string>
 #include <boost/regex.hpp>
 
+#include "maybe_res.h"
+
 namespace NGEN
 {
 
@@ -26,7 +28,7 @@ namespace Filesystem
 
 bool exists(const std::string &path);
 bool isDirectory(const std::string &path);
-
+Maybe<std::vector<std::string>> getDirectoryFiles(const std::string &path);
 bool makeDir(const std::string &path, mode_t permission = S_IRWXU);
 bool makeDirRecursive(const std::string &path, mode_t permission = S_IRWXU);
 bool deleteDirectory(const std::string &path, bool delete_content = false);

@@ -31,7 +31,7 @@ public:
     void setWaapAssetState(std::shared_ptr<WaapAssetState> pWaapAssetState);
     // This callback receives input key/value pairs, dissects, decodes and deep-scans these, recursively
     // finally, it calls onDetected() on each detected parameter.
-    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags);
+    virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth);
 
     void clear();
     void showStats(std::string& buff, const ValueStatsAnalyzer& valueStats);
@@ -44,7 +44,7 @@ public:
     void setMultipartBoundary(const std::string &boundary);
     const std::string &getMultipartBoundary() const;
     bool isBinaryData() const;
-    const std::string getLastParser() const;
+    const std::string getActualParser(size_t parser_depth) const;
     bool isWBXmlData() const;
     Maybe<std::string> getSplitType() const;
     std::vector<std::pair<std::string, std::string> > kv_pairs;
@@ -94,6 +94,7 @@ public:
     std::vector<KeywordInfo> m_keywordInfo;
 
     KeyStack m_key;
+    int getShiftInUrlEncodedBuffer(const ValueStatsAnalyzer &valueStats, std::string &cur_val);
 
 private:
     class Ref
@@ -115,18 +116,60 @@ private:
     // Split a value by given regexp. Return true if split, false otherwise.
     // note: This function calls onKv(), and the call can be recursive!
     // TODO:: maybe convert this splitter to Parser-derived class?!
-    bool splitByRegex(const std::string &val, const Regex &r, const char *keyPrefix);
-    void createInternalParser(const char *k, size_t k_len, std::string& cur_val,
+    bool splitByRegex(const std::string &val, const Regex &r, const char *keyPrefix, size_t parser_depth);
+
+    int createInternalParser(
+        const char *k,
+        size_t k_len,
+        std::string &cur_val,
         const ValueStatsAnalyzer &valueStats,
         bool isBodyPayload,
         bool isRefererPayload,
         bool isRefererParamPayload,
         bool isUrlPayload,
         bool isUrlParamPayload,
-        int flags);
-    int pushValueToTopParser(std::string& cur_val, int flags, bool base64ParamFound);
-    int parseBuffer(ValueStatsAnalyzer& valueStats, const std::string &cur_val, bool base64ParamFound,
-        bool shouldUpdateKeyStack);
+        int flags,
+        size_t parser_depth
+    );
+
+    int createUrlParserForJson(
+        const char *k,
+        size_t k_len,
+        std::string &cur_val,
+        const ValueStatsAnalyzer &valueStats,
+        bool isBodyPayload,
+        bool isRefererPayload,
+        bool isRefererParamPayload,
+        bool isUrlPayload,
+        bool isUrlParamPayload,
+        int flags,
+        size_t parser_depth
+    );
+
+    void printParserDeque();
+
+    int parseAfterMisleadingMultipartBoundaryCleaned(
+        const char *k,
+        size_t k_len,
+        std::string &cur_val,
+        const ValueStatsAnalyzer &valueStats,
+        bool isBodyPayload,
+        bool isRefererPayload,
+        bool isRefererParamPayload,
+        bool isUrlPayload,
+        bool isUrlParamPayload,
+        int flags,
+        size_t parser_depth,
+        bool base64ParamFound
+    );
+    int pushValueToTopParser(std::string &cur_val, int flags, bool base64ParamFound, int offset, size_t parser_depth);
+    int parseBuffer(
+        ValueStatsAnalyzer &valueStats,
+        const std::string &cur_val,
+        bool base64ParamFound,
+        bool shouldUpdateKeyStack,
+        size_t parser_depth
+    );
     bool shouldEnforceDepthLimit(const std::shared_ptr<ParserBase>& parser) const;
     void setLocalMaxObjectDepth(size_t depth) { m_localMaxObjectDepth = depth; }
     void setGlobalMaxObjectDepthReached() { m_globalMaxObjectDepthReached = true; }

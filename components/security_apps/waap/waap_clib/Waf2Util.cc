@@ -42,6 +42,7 @@ USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_EVASIONS);
 USE_DEBUG_FLAG(D_WAAP_BASE64);
 USE_DEBUG_FLAG(D_WAAP_JSON);
+USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 
 #define MIN_HEX_LENGTH 6
 #define charToDigit(c) (c - '0')
@@ -1186,7 +1187,7 @@ static const SingleRegex base64_key_value_detector_re(
         err,
         "base64_key_value");
 static const SingleRegex json_key_value_detector_re(
-        "^[^<>{};,&\\?|=\\s]+={.+(?s):.+(?s)}\\z",
+    "\\A[^<>{};,&\\?|=\\s]+=[{\\[][^;\",}\\]]*[,:\"].+[\\s\\S]",
         err,
         "json_key_value");
 static const SingleRegex base64_key_detector_re(
@@ -1444,6 +1445,7 @@ base64_variants b64Test (
             dbgTrace(D_WAAP_BASE64) << " ===b64Test===: FINAL key = '" << key << "'";
         }
         retVal = decodeBase64Chunk(s, start, s.end(), value);
+
         dbgTrace(D_WAAP_BASE64) << " ===b64Test===: After testing and conversion value = "
                 << value << "retVal = '" << retVal <<"'";
         if (!retVal) {

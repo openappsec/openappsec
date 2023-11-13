@@ -13,6 +13,7 @@
 #include "http_inspection_events.h"
 #include "Waf2Util.h"
 #include "generic_rulebase/evaluators/asset_eval.h"
+#include "generic_rulebase/parameters_config.h"
 #include "WaapConfigApi.h"
 #include "WaapConfigApplication.h"
 #include "PatternMatcher.h"
@@ -49,13 +50,13 @@ public:
     Maybe<string>
     extractUri(const string &address)
     {
-        size_t protocolPos = address.find("://");
-        if (protocolPos == std::string::npos) return genError("Invalid URI format: " + address);
+        size_t protocol_pos = address.find("://");
+        if (protocol_pos == string::npos) return genError("Invalid URI format: " + address);
 
-        size_t domainPos = address.find('/', protocolPos + 3);
-        if (domainPos == std::string::npos) return string("");
+        size_t domain_pos = address.find('/', protocol_pos + 3);
+        if (domain_pos == string::npos) return string("");
 
-        return address.substr(domainPos);
+        return address.substr(domain_pos);
     }
 
     bool
@@ -179,15 +180,35 @@ public:
     {
         if (!event.isLastHeader()) return INSPECT;
 
-        auto uri_ctx = Singleton::Consume<I_Environment>::by<RateLimit>()->get<string>(HttpTransactionData::uri_ctx);
+        auto env = Singleton::Consume<I_Environment>::by<RateLimit>();
+        auto uri_ctx = env->get<string>(HttpTransactionData::uri_ctx);
         if (!uri_ctx.ok()) {
             dbgWarning(D_RATE_LIMIT) << "Unable to get URL from context, Not enforcing rate limit";
             return ACCEPT;
         }
 
-        string asset_id;
         auto uri = uri_ctx.unpack();
         transform(uri.begin(), uri.end(), uri.begin(), [](unsigned char c) { return tolower(c); });
+
+        auto maybe_source_identifier = env->get<string>(HttpTransactionData::source_identifier);
+        if (!maybe_source_identifier.ok()) {
+            dbgWarning(D_RATE_LIMIT) << "Unable to get source identifier from context, not enforcing rate limit";
+            return ACCEPT;
+        }
+
+        auto &source_identifier = maybe_source_identifier.unpack();
+        dbgDebug(D_RATE_LIMIT) << "source identifier value: " << source_identifier;
+
+        auto maybe_source_ip = env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
+        string source_ip = "";
+        if (maybe_source_ip.ok()) source_ip = ipAddrToStr(maybe_source_ip.unpack());
+
+        if (shouldApplyException(uri, source_identifier, source_ip)) {
+            dbgDebug(D_RATE_LIMIT) << "found accept exception, not enforcing rate limit on this uri: " << uri;
+            return ACCEPT;
+        }
+
+        string asset_id;
         auto maybe_rule = findRateLimitRule(uri, asset_id);
         if (!maybe_rule.ok()) {
             dbgDebug(D_RATE_LIMIT) << "Not Enforcing Rate Limit: " << maybe_rule.getErr();
@@ -205,16 +226,6 @@ public:
             << (rule.getRateLimitScope() == "Minute" ? 60 : 1)
             << " seconds";
 
-        auto maybe_source_identifier =
-            Singleton::Consume<I_Environment>::by<RateLimit>()->get<string>(HttpTransactionData::source_identifier);
-        if (!maybe_source_identifier.ok()) {
-            dbgWarning(D_RATE_LIMIT) << "Unable to get source identifier from context, not enforcing rate limit";
-            return ACCEPT;
-        }
-
-        auto &source_identifier = maybe_source_identifier.unpack();
-        dbgDebug(D_RATE_LIMIT) << "source identifier value: " << source_identifier;
-
         string unique_key = asset_id + ":" + source_identifier + ":" + uri;
         if (unique_key.back() == '/') unique_key.pop_back();
 
@@ -224,7 +235,7 @@ public:
             return ACCEPT;
         }
 
-        if (verdict == RateLimitVedict::DROP_AND_LOG) sendLog(uri, source_identifier, rule);
+        if (verdict == RateLimitVedict::DROP_AND_LOG) sendLog(uri, source_identifier, source_ip, rule);
 
         if (mode == "Active") {
             dbgTrace(D_RATE_LIMIT) << "Received DROP verdict, this request will be blocked by rate limit";
@@ -242,7 +253,7 @@ public:
     }
 
     RateLimitVedict
-    decide(const std::string &key) {
+    decide(const string &key) {
         if (redis == nullptr) {
             dbgDebug(D_RATE_LIMIT)
                 << "there is no connection to the redis at the moment, unable to enforce rate limit";
@@ -288,7 +299,7 @@ public:
     }
 
     void
-    sendLog(const string &uri, const string &source_identifier, const RateLimitRule& rule)
+    sendLog(const string &uri, const string &source_identifier, const string &source_ip, const RateLimitRule &rule)
     {
         set<string> rate_limit_triggers_set;
         for (const auto &trigger : rule.getRateLimitTriggers()) {
@@ -296,7 +307,7 @@ public:
         }
 
         ScopedContext ctx;
-        ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, rate_limit_triggers_set);
+        ctx.registerValue<set<GenericConfigId>>(TriggerMatcher::ctx_key, rate_limit_triggers_set);
         auto log_trigger = getConfigurationWithDefault(LogTriggerConf(), "rulebase", "log");
 
         if (!log_trigger.isPreventLogActive(LogTriggerConf::SecurityType::AccessControl)) {
@@ -336,23 +347,42 @@ public:
             << LogField("securityAction", (mode == "Active" ? "Prevent" : "Detect"))
             << LogField("waapIncidentType", "Rate Limit");
 
-        auto http_method =
-            Singleton::Consume<I_Environment>::by<RateLimit>()->get<string>(HttpTransactionData::method_ctx);
+        auto env = Singleton::Consume<I_Environment>::by<RateLimit>();
+        auto http_method = env->get<string>(HttpTransactionData::method_ctx);
         if (http_method.ok()) log << LogField("httpMethod", http_method.unpack());
 
-        auto http_host =
-            Singleton::Consume<I_Environment>::by<RateLimit>()->get<string>(HttpTransactionData::host_name_ctx);
+        auto http_host = env->get<string>(HttpTransactionData::host_name_ctx);
         if (http_host.ok()) log << LogField("httpHostName", http_host.unpack());
 
-        auto source_ip =
-            Singleton::Consume<I_Environment>::by<RateLimit>()->get<IPAddr>(HttpTransactionData::client_ip_ctx);
-        if (source_ip.ok()) log << LogField("sourceIP", ipAddrToStr(source_ip.unpack()));
+        if (!source_ip.empty()) log << LogField("sourceIP", source_ip);
 
-        auto proxy_ip =
-            Singleton::Consume<I_Environment>::by<RateLimit>()->get<std::string>(HttpTransactionData::proxy_ip_ctx);
-        if (proxy_ip.ok() && source_ip.ok() && ipAddrToStr(source_ip.unpack()) != proxy_ip.unpack()) {
-            log << LogField("proxyIP", static_cast<std::string>(proxy_ip.unpack()));
+        auto proxy_ip = env->get<string>(HttpTransactionData::proxy_ip_ctx);
+        if (proxy_ip.ok() && !source_ip.empty() && source_ip != proxy_ip.unpack()) {
+            log << LogField("proxyIP", static_cast<string>(proxy_ip.unpack()));
         }
+    }
+
+    bool
+    shouldApplyException(const string &uri, const string &source_identifier, const string &source_ip)
+    {
+        dbgTrace(D_RATE_LIMIT) << "matching exceptions";
+        unordered_map<string, set<string>> exceptions_dict;
+
+        // collect sourceip, sourceIdentifier, url
+        if (!source_ip.empty()) exceptions_dict["sourceIP"].insert(source_ip);
+        exceptions_dict["sourceIdentifier"].insert(source_identifier);
+        exceptions_dict["url"].insert(uri);
+
+        auto behaviors = Singleton::Consume<I_GenericRulebase>::by<RateLimit>()->getBehavior(exceptions_dict);
+        for (auto const &behavior : behaviors) {
+            if (behavior == action_accept) {
+                dbgTrace(D_RATE_LIMIT) << "matched exceptions for " << uri << " should accept";
+                return true;
+            }
+        }
+
+        dbgTrace(D_RATE_LIMIT) << "No accept exceptions found for this uri and source ip";
+        return false;
     }
 
     string
@@ -368,14 +398,21 @@ public:
     {
         disconnectRedis();
 
-        const string &redis_ip = getConfigurationWithDefault<string>("127.0.0.1", "connection", "Redis IP");
-        int redis_port = getConfigurationWithDefault<int>(6379, "connection", "Redis Port");
+        redisOptions options;
+        memset(&options, 0, sizeof(redisOptions));
+        REDIS_OPTIONS_SET_TCP(
+            &options,
+            "127.0.0.1",
+            getConfigurationWithDefault<int>(6379, "connection", "Redis Port")
+        );
 
         timeval timeout;
         timeout.tv_sec = 0;
         timeout.tv_usec = getConfigurationWithDefault<int>(30000, "connection", "Redis Timeout");
+        options.connect_timeout = &timeout;
+        options.command_timeout = &timeout;
 
-        redisContext* context = redisConnectWithTimeout(redis_ip.c_str(), redis_port, timeout);
+        redisContext* context = redisConnectWithOptions(&options);
         if (context != nullptr && context->err) {
             dbgDebug(D_RATE_LIMIT)
                 << "Error connecting to Redis: "

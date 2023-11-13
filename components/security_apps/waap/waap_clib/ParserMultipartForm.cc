@@ -26,7 +26,14 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_MULTIPART_FORM);
 
 const std::string ParserMultipartForm::m_parserName = "ParserMultipartForm";
 
-int ParserMultipartForm::HdrValueAnalyzer::onKv(const char* k, size_t k_len, const char* v, size_t v_len, int flags)
+int ParserMultipartForm::HdrValueAnalyzer::onKv(
+    const char* k,
+    size_t k_len,
+    const char* v,
+    size_t v_len,
+    int flags,
+    size_t parser_depth
+    )
 {
     dbgTrace(D_WAAP_PARSER_MULTIPART_FORM) << "HdrValueAnalyzer::onKv(): k='%.*s' v='%.*s'" << (int)k_len << v;
     assert((flags & BUFFERED_RECEIVER_F_BOTH) == BUFFERED_RECEIVER_F_BOTH);
@@ -43,10 +50,8 @@ void ParserMultipartForm::HdrValueAnalyzer::clear() {
 }
 
 ParserMultipartForm::ParserMultipartForm(
-    IParserStreamReceiver& receiver,
-    const char* boundary,
-    size_t boundary_len)
-:
+    IParserStreamReceiver &receiver, size_t parser_depth, const char *boundary, size_t boundary_len
+) :
     m_receiver(receiver),
     m_partIdx(0),
     state(s_start),
@@ -55,9 +60,12 @@ ParserMultipartForm::ParserMultipartForm(
     lookbehind(NULL),
     multipart_boundary(NULL),
     m_headerValueParser(NULL),
-    m_hdrValueAnalyzerBufferedReceiver(m_hdrValueAnalyzer)
+    m_hdrValueAnalyzerBufferedReceiver(m_hdrValueAnalyzer),
+    m_parser_depth(parser_depth)
 {
-    dbgTrace(D_WAAP_PARSER_MULTIPART_FORM) << "ParserMultipartForm::ParserMultipartForm()";
+    dbgTrace(D_WAAP_PARSER_MULTIPART_FORM)
+        << "ParserMultipartForm::ParserMultipartForm() parser_depth="
+        << parser_depth;
     boundary_len += 2; // two hyphens will be prepended to boundary string provided
 
     multipart_boundary = (char*)malloc(boundary_len + boundary_len + 9);

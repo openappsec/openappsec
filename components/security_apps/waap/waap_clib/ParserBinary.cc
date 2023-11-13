@@ -18,13 +18,17 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_BINARY);
 
 #define MIN_TEXT_SIZE 10
 
-ParserBinary::ParserBinary(IParserStreamReceiver& receiver) :
+ParserBinary::ParserBinary(IParserStreamReceiver& receiver, size_t parser_depth) :
     m_parserName("binary"),
     m_receiver(receiver),
     m_state(s_start),
     m_textFromLastBuffer(),
-    m_textCharCount(0)
+    m_textCharCount(0),
+    m_parser_depth(parser_depth)
 {
+    dbgTrace(D_WAAP_PARSER_BINARY)
+        << "parser_depth="
+        << parser_depth;
 }
 
 ParserBinary::~ParserBinary()

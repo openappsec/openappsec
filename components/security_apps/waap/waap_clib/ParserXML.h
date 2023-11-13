@@ -24,7 +24,7 @@
 
 class ParserXML : public ParserBase {
 public:
-    ParserXML(IParserStreamReceiver &receiver);
+    ParserXML(IParserStreamReceiver &receiver, size_t parser_depth);
     virtual ~ParserXML();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -94,6 +94,7 @@ private:
     std::vector<ElemTrackInfo> m_elemTrackStack;
     xmlSAXHandler m_saxHandler;
     xmlParserCtxtPtr m_pushParserCtxPtr;
+    size_t m_parser_depth;
 public:
     static const std::string m_parserName;
 };

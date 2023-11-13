@@ -23,7 +23,6 @@
 #include "../waap_clib/UserLimitsPolicy.h"
 #include "../waap_clib/RateLimiting.h"
 #include "../waap_clib/SecurityHeadersPolicy.h"
-
 #include <memory>
 
 enum class BlockingLevel {

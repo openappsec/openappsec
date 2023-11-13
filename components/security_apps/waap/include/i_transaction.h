@@ -126,7 +126,6 @@ public:
     virtual void add_request_body_chunk(const char* data, int data_len) = 0;
     virtual void end_request_body() = 0;
     virtual void end_request() = 0;
-
     // Response
     virtual void start_response(int response_status, int http_version) = 0;
     virtual void start_response_hdrs() = 0;

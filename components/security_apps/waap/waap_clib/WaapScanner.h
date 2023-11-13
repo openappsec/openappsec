@@ -32,13 +32,17 @@ namespace Waap {
             m_bIgnoreOverride(false)
         {
         }
+
+
         bool suspiciousHit(Waf2ScanResult &res, DeepParser &dp,
                 const std::string &location, const std::string &param_name, const std::string &key);
-        int onKv(const char* k, size_t k_len, const char* v, size_t v_len, int flags) override;
+        int onKv(const char* k, size_t k_len, const char* v, size_t v_len, int flags, size_t parser_depth) override;
 
         const std::string &getAntibotCookie() const { return m_antibotCookie; }
         bool getIgnoreOverride() { return m_bIgnoreOverride; };
         const Waf2ScanResult &getLastScanResult() const { return m_lastScanResult; }
+
+        static const std::string xmlEntityAttributeId;
     private:
         double getScoreData(Waf2ScanResult& res, const std::string &poolName);
         bool shouldIgnoreOverride(const Waf2ScanResult &res);

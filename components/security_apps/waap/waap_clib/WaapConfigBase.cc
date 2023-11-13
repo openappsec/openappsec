@@ -24,6 +24,8 @@
 
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
 USE_DEBUG_FLAG(D_WAAP);
+USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
+
 using boost::algorithm::to_lower_copy;
 using namespace std;
 
@@ -253,12 +255,12 @@ void WaapConfigBase::loadOpenRedirectPolicy(cereal::JSONInputArchive& ar)
 }
 
 
+
 const std::vector<std::string> &
 WaapConfigBase::get_applicationUrls() const
 {
     return m_applicationUrls;
 }
-
 void WaapConfigBase::loadErrorDisclosurePolicy(cereal::JSONInputArchive& ar)
 {
     std::string failMessage = "Failed to load the WAAP Information Disclosure policy";
@@ -430,6 +432,7 @@ const std::shared_ptr<Waap::OpenRedirect::Policy>& WaapConfigBase::get_OpenRedir
 {
     return m_openRedirectPolicy;
 }
+
 
 
 const std::shared_ptr<Waap::ErrorDisclosure::Policy>& WaapConfigBase::get_ErrorDisclosurePolicy() const

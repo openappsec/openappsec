@@ -1797,7 +1797,6 @@ TEST_F(OrchestrationTest, GetRestOrchStatus)
                     "    \"Last update\": \"" + test_str + "\",\n"
                     "    \"Last update status\": \"" + test_str + "\",\n"
                     "    \"Policy version\": \"" + test_str + "\",\n"
-                    "    \"AI model version\": \"" + test_str + "\",\n"
                     "    \"Last policy update\": \"" + test_str + "\",\n"
                     "    \"Last manifest update\": \"" + test_str + "\",\n"
                     "    \"Last settings update\": \"" + test_str + "\",\n"
@@ -1824,7 +1823,6 @@ TEST_F(OrchestrationTest, GetRestOrchStatus)
     EXPECT_CALL(mock_status, getUpdateTime()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getLastManifestUpdate()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getPolicyVersion()).WillOnce(ReturnRef(test_str));
-    EXPECT_CALL(mock_status, getWaapModelVersion()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getLastPolicyUpdate()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getLastSettingsUpdate()).WillOnce(ReturnRef(test_str));
     EXPECT_CALL(mock_status, getUpgradeMode()).WillOnce(ReturnRef(test_str));

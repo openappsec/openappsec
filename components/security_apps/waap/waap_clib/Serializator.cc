@@ -96,7 +96,6 @@ Maybe<string> RestGetFile::genJson() const
             return genError("Failed to compress data");
         }
         data = string((const char *)res.output, res.num_output_bytes);
-
         json = data;
 
         if (res.output) free(res.output);
@@ -179,8 +178,52 @@ void SerializeToFileBase::saveData()
 
     serialize(ss);
 
+    string data = ss.str();
+
+    auto compression_stream = initCompressionStream();
+    CompressionResult res = compressData(
+        compression_stream,
+        CompressionType::GZIP,
+        data.size(),
+        reinterpret_cast<const unsigned char *>(data.c_str()),
+        true
+    );
+    finiCompressionStream(compression_stream);
+    if (!res.ok) {
+        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to gzip data";
+    } else {
+        ss.str(string((const char *)res.output, res.num_output_bytes));
+    }
+
+
     filestream << ss.str();
     filestream.close();
+}
+
+string decompress(string fileContent) {
+    if (!isGZipped(fileContent)) {
+        dbgTrace(D_WAAP) << "file note zipped";
+        return fileContent;
+    }
+    auto compression_stream = initCompressionStream();
+
+    DecompressionResult res = decompressData(
+        compression_stream,
+        fileContent.size(),
+        reinterpret_cast<const unsigned char *>(fileContent.c_str())
+    );
+
+    finiCompressionStream(compression_stream);
+
+    if (res.ok) {
+        string decompressedData = string((const char *)res.output, res.num_output_bytes);
+        if (res.output) free(res.output);
+        res.output = nullptr;
+        res.num_output_bytes = 0;
+        return decompressedData;
+    }
+
+    return fileContent;
 }
 
 void SerializeToFileBase::loadFromFile(string filePath)
@@ -239,8 +282,8 @@ void SerializeToFileBase::loadFromFile(string filePath)
 
     delete[] buffer;
 
-
-    stringstream ss(dataObfuscated);
+    stringstream ss;
+    ss << decompress(dataObfuscated);
 
     try
     {

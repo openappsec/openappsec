@@ -256,10 +256,23 @@ private:
         if (!getenv("DOCKER_RPM_ENABLED")) return HealthCheckStatus::IGNORED;
 
         static const string standalone_cmd = "/usr/sbin/cpnano -s --docker-rpm; echo $?";
+        static int timeout_tolerance = 1;
+        static HealthCheckStatus health_status = HealthCheckStatus::HEALTHY;
+
         dbgTrace(D_HEALTH_CHECK) << "Checking the standalone docker health status with command: " << standalone_cmd;
 
-        auto maybe_result = Singleton::Consume<I_ShellCmd>::by<HealthChecker>()->getExecOutput(standalone_cmd, 1000);
+        auto maybe_result = Singleton::Consume<I_ShellCmd>::by<HealthChecker>()->getExecOutput(standalone_cmd, 5000);
         if (!maybe_result.ok()) {
+            if (maybe_result.getErr().find("Reached timeout") != string::npos) {
+                dbgWarning(D_HEALTH_CHECK)
+                    << "Reached timeout while querying standalone health status, attempt number: "
+                    << timeout_tolerance;
+
+                return health_status == HealthCheckStatus::UNHEALTHY || timeout_tolerance++ > 3 ?
+                    HealthCheckStatus::UNHEALTHY :
+                    health_status;
+            }
+
             dbgWarning(D_HEALTH_CHECK) << "Unable to get the standalone docker status. Returning unhealthy status.";
             return HealthCheckStatus::UNHEALTHY;
         }
@@ -267,10 +280,10 @@ private:
 
         auto response = NGEN::Strings::removeTrailingWhitespaces(maybe_result.unpack());
 
-        if (response.back() == '0') return HealthCheckStatus::HEALTHY;
-        if (response.back() == '1') return HealthCheckStatus::UNHEALTHY;
+        if (response.back() == '1') return health_status = HealthCheckStatus::UNHEALTHY;
 
-        return HealthCheckStatus::DEGRADED;
+        timeout_tolerance = 1;
+        return health_status = (response.back() == '0') ? HealthCheckStatus::HEALTHY : HealthCheckStatus::DEGRADED;
     }
 
     bool

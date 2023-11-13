@@ -11,7 +11,6 @@
 #include "mock/mock_time_get.h"
 #include "mock/mock_orchestration_tools.h"
 #include "mock/mock_agent_details.h"
-#include "mock/mock_details_resolver.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_rest_api.h"
 
@@ -39,15 +38,7 @@ public:
             .WillOnce(DoAll(SaveArg<2>(&routine), Return(1))
         );
         EXPECT_CALL(mock_tools, readFile(file_path)).WillOnce(Return(start_file_content));
-        prepareResolvedDetails();
         orchestration_status.init();
-    }
-
-    void
-    prepareResolvedDetails()
-    {
-        map<string, string> resolved_details({{"AppSecModelVersion", waap_model}});
-        EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_details));
     }
 
     string
@@ -91,8 +82,7 @@ public:
         const string &registration_details_architecture = "",
         const string &agent_id = "None",
         const string &profile_id = "None",
-        const string &tenant_id = "None",
-        const string &waap_model_version = "Advanced model"
+        const string &tenant_id = "None"
     )
     {
         return  "{\n"
@@ -101,7 +91,6 @@ public:
                 "    \"Last update\": \"" + last_update + "\",\n"
                 "    \"Last manifest update\": \"" + last_manifest_update + "\",\n"
                 "    \"Policy version\": \"" + policy_version + "\",\n"
-                "    \"AI model version\": \"" + waap_model_version + "\",\n"
                 "    \"Last policy update\": \"" + last_policy_update + "\",\n"
                 "    \"Last settings update\": \"" + last_settings_update + "\",\n"
                 "    \"Upgrade mode\": \"" + upgrade_mode + "\",\n"
@@ -129,14 +118,12 @@ public:
     ostringstream capture_debug;
     StrictMock<MockOrchestrationTools> mock_tools;
     StrictMock<MockAgentDetails> mock_agent_details;
-    StrictMock<MockDetailsResolver> mock_details_resolver;
     OrchestrationStatus orchestration_status;
     I_OrchestrationStatus * i_orchestration_status =
         Singleton::Consume<I_OrchestrationStatus>::from(orchestration_status);
     string file_path;
     Maybe<string> start_file_content = genError("No file");
     I_MainLoop::Routine routine;
-    string waap_model = "Advanced model";
 };
 
 TEST_F(OrchestrationStatusTest, doNothing)
@@ -160,7 +147,6 @@ TEST_F(OrchestrationStatusTest, recoverFields)
 
 TEST_F(OrchestrationStatusTest, loadFromFile)
 {
-    prepareResolvedDetails();
     Maybe<string> status = genError("No file");;
     CPTestTempfile status_file;
     file_path = status_file.fname;
@@ -228,14 +214,12 @@ TEST_F(OrchestrationStatusTest, recoveryFields)
     const string agent_id = "AgentId";
     const string profile_id = "ProfileId";
     const string tenant_id = "TenantId";
-
     auto fog_addr = Maybe<string>(string("FogDomain"));
 
     EXPECT_CALL(mock_agent_details, getAgentId()).WillOnce(Return(agent_id));
     EXPECT_CALL(mock_agent_details, getProfileId()).WillOnce(Return(profile_id));
     EXPECT_CALL(mock_agent_details, getTenantId()).WillOnce(Return(tenant_id));
     EXPECT_CALL(mock_agent_details, getFogDomain()).WillOnce(Return(fog_addr));
-
     i_orchestration_status->writeStatusToFile();
     EXPECT_THAT(capture_debug.str(), HasSubstr("Repairing status fields"));
 
@@ -243,7 +227,6 @@ TEST_F(OrchestrationStatusTest, recoveryFields)
     EXPECT_EQ(i_orchestration_status->getProfileId(), profile_id);
     EXPECT_EQ(i_orchestration_status->getTenantId(), tenant_id);
     EXPECT_EQ(i_orchestration_status->getFogAddress(), fog_addr.unpack());
-    EXPECT_EQ(i_orchestration_status->getWaapModelVersion(), waap_model);
 }
 
 TEST_F(OrchestrationStatusTest, updateAllLastUpdatesTypes)
@@ -436,7 +419,6 @@ TEST_F(OrchestrationStatusTest, setAllFields)
                         "    \"Last update\": \"current time\",\n"
                         "    \"Last manifest update\": \"current time\",\n"
                         "    \"Policy version\": \"12\",\n"
-                        "    \"AI model version\": \"Advanced model\",\n"
                         "    \"Last policy update\": \"current time\",\n"
                         "    \"Last settings update\": \"current time\",\n"
                         "    \"Upgrade mode\": \"Test Mode\",\n"

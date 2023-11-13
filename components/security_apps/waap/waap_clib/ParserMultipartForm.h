@@ -18,18 +18,25 @@
 #include "ParserHdrValue.h"
 #include <boost/core/noncopyable.hpp>
 
-class ParserMultipartForm : public ParserBase, boost::noncopyable {
+class ParserMultipartForm : public ParserBase, boost::noncopyable
+{
 public:
-    class HdrValueAnalyzer : public IParserReceiver {
+    class HdrValueAnalyzer : public IParserReceiver
+    {
     public:
-        int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags);
+        int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth);
         void clear();
         const std::string &getPartName() const { return m_partName; }
     private:
         std::string m_partName;
     };
 
-    ParserMultipartForm(IParserStreamReceiver &receiver, const char *boundary, size_t boundary_len);
+    ParserMultipartForm(
+        IParserStreamReceiver &receiver,
+        size_t parser_depth,
+        const char *boundary,
+        size_t boundary_len
+        );
     virtual ~ParserMultipartForm();
     size_t push(const char *buf, size_t len);
     void finish();
@@ -37,7 +44,8 @@ public:
     virtual bool error() const;
     virtual size_t depth() { return 1; }
 private:
-    enum state {
+    enum state
+    {
         s_start,
         s_start_boundary,
         s_key_start,
@@ -88,6 +96,7 @@ private:
     std::string m_partName; // Part name
 
     static const std::string m_parserName;
+    size_t m_parser_depth;
 };
 
 #endif // __PARSER_MULTIPART_FORM_H__1c7eb4fa

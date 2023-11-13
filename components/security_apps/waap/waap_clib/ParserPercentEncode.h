@@ -22,7 +22,7 @@
 
 class ParserPercentEncode : public ParserBase {
 public:
-    ParserPercentEncode(IParserStreamReceiver &receiver);
+    ParserPercentEncode(IParserStreamReceiver &receiver, size_t parser_depth);
     virtual ~ParserPercentEncode();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -53,6 +53,7 @@ private:
     char m_escaped[MAX_PERCENT_ENCODED_SIZE];
     char m_escapedCharCandidate;
     static const std::string m_parserName;
+    size_t m_parser_depth;
 };
 
 #endif

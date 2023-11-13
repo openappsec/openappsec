@@ -18,7 +18,7 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_RAW);
 
 const std::string ParserRaw::m_parserName = "ParserRaw";
 
-ParserRaw::ParserRaw(IParserStreamReceiver &receiver, const std::string &key)
+ParserRaw::ParserRaw(IParserStreamReceiver &receiver, size_t parser_depth, const std::string &key)
 :m_receiver(receiver), m_key(key), m_state(s_start) {
 }
 

@@ -16,12 +16,17 @@
 
 USE_DEBUG_FLAG(D_WAAP_PARSER_CONFLUENCE);
 
-ParserConfluence::ParserConfluence(IParserStreamReceiver& receiver) :
+ParserConfluence::ParserConfluence(IParserStreamReceiver& receiver, size_t parser_depth) :
     m_parserName("confluence"),
     m_state(s_start),
     m_receiver(receiver),
-    m_name()
+    m_name(),
+    m_parser_depth(parser_depth)
 {
+    dbgTrace(D_WAAP_PARSER_CONFLUENCE)
+        << "parser_depth="
+        << parser_depth;
+
 }
 
 ParserConfluence::~ParserConfluence()

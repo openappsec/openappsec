@@ -44,7 +44,7 @@ void
 NewAppsecException::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading New AppSec exception";
-    parseAppsecJSONKey<string>("name", name, archive_in);
+    parseAppsecJSONKey<string>("name", name, archive_in, "exception");
     parseAppsecJSONKey<string>("action", action, archive_in);
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
     if (valid_actions.count(action) == 0) {

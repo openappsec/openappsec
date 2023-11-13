@@ -1928,6 +1928,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     reconf_status
         << "{"
         << "    \"id\": 1,"
+        << "    \"service_name\": \"max\","
         << "    \"finished\": true,"
         << "    \"error\": false,"
         << "    \"error_message\": \"\""

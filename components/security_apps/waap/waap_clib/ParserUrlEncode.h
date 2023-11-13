@@ -21,7 +21,11 @@
 
 class ParserUrlEncode : public ParserBase {
 public:
-    ParserUrlEncode(IParserStreamReceiver &receiver, char separatorChar = '&', bool should_decode_per = true);
+    ParserUrlEncode(
+        IParserStreamReceiver &receiver,
+        size_t parser_depth,
+        char separatorChar = '&',
+        bool should_decode_per = true);
     virtual ~ParserUrlEncode();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -52,6 +56,7 @@ private:
     char m_escapedCharCandidate;
     bool should_decode_percent;
     static const std::string m_parserName;
+    size_t m_parser_depth;
 };
 
 #endif // __PARSER_URL_ENCODE_H__29ebe806

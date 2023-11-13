@@ -31,7 +31,7 @@ public:
     virtual const std::string & getPolicyVersions() const = 0;
     virtual const std::string & getPolicyVersion() const = 0;
     virtual const std::string & getUpdatePolicyVersion() const = 0;
-    virtual void updateReconfStatus(int id, ReconfStatus status) = 0;
+    virtual void updateReconfStatus(int id, const std::string &service_name, ReconfStatus status) = 0;
     virtual void startReconfStatus(
         int id,
         ReconfStatus status,

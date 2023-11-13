@@ -19,7 +19,7 @@
 class ParserDelimiter : public ParserBase
 {
 public:
-    ParserDelimiter(IParserStreamReceiver& receiver, char delim, const std::string& delimName);
+    ParserDelimiter(IParserStreamReceiver& receiver, size_t parser_depth, char delim, const std::string& delimName);
     virtual ~ParserDelimiter();
 
     virtual size_t push(const char* data, size_t data_len);
@@ -45,6 +45,7 @@ private:
     char m_delim;
     std::string m_delim_name;
     bool m_found_delim;
+    size_t m_parser_depth;
 };
 
 

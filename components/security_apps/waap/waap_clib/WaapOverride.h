@@ -175,10 +175,13 @@ public:
         }
     }
 
+    const std::string &getParentId() const;
     const std::string &getAction() const;
     const std::string &getLog() const;
     const std::string &getSourceIdentifier() const;
+    void setParentId(const std::string& id);
 private:
+    std::string m_id;
     std::string m_action;
     std::string m_log;
     std::string m_sourceIdentifier;
@@ -195,20 +198,20 @@ public:
         }
         catch (const cereal::Exception &e)
         {
-            dbgTrace(D_WAAP_OVERRIDE) << "An override rule has no id.";
+            dbgDebug(D_WAAP_OVERRIDE) << "An override rule has no id.";
             m_id.clear();
         }
-
         ar(cereal::make_nvp("parsedMatch", m_match));
         ar(cereal::make_nvp("parsedBehavior", m_behaviors));
 
         m_isChangingRequestData = false;
 
-        for (std::vector<Waap::Override::Behavior>::const_iterator it = m_behaviors.begin();
+        for (std::vector<Waap::Override::Behavior>::iterator it = m_behaviors.begin();
             it != m_behaviors.end();
             ++it)
         {
-            const Behavior& behavior = *it;
+            Behavior& behavior = *it;
+            behavior.setParentId(m_id);
             if (!behavior.getSourceIdentifier().empty()) // this rule changes data in request itself
             {
                 m_isChangingRequestData = true;
@@ -223,8 +226,9 @@ public:
     {
         if (m_match.match(testFunctor)) {
             // extend matchedBehaviors list with all behaviors on this rule
-            dbgTrace(D_WAAP_OVERRIDE) << "Override rule matched. Adding " << m_behaviors.size() << " new behaviors:";
             std::string overrideId = getId();
+            dbgTrace(D_WAAP_OVERRIDE) << "Override rule matched id: " << overrideId <<
+                ". Adding " << m_behaviors.size() << " new behaviors:";
             if (!overrideId.empty()) {
                 matchedOverrideIds.insert(overrideId);
             }
@@ -308,8 +312,10 @@ private:
 struct State {
     // whether to force block regardless of stage2 response (and even if bSendRequest and/or bSendResponse are false)
     bool bForceBlock;
+    std::set<std::string> forceBlockIds;
     // exception (allow) was matched, so this request won't be blocked.
     bool bForceException;
+    std::set<std::string> forceExceptionIds;
     // overrides decision in case log should be ignored
     bool bIgnoreLog;
     // user identfier override to be applied
@@ -335,10 +341,12 @@ struct State {
             if (matchedBehavior.getAction() == "accept") {
                 dbgTrace(D_WAAP_OVERRIDE) << "applyOverride(): setting bForceException due to override behavior.";
                 bForceException = true;
+                forceExceptionIds.insert(matchedBehavior.getParentId());
             }
             else if (matchedBehavior.getAction() == "reject") {
                 dbgTrace(D_WAAP_OVERRIDE) << "applyOverride(): setting bForceBlock due to override behavior.";
                 bForceBlock = true;
+                forceBlockIds.insert(matchedBehavior.getParentId());
             }
 
             if (matchedBehavior.getLog() == "ignore")

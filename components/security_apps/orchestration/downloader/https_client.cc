@@ -592,13 +592,8 @@ HTTPClient::curlGetFileOverSSL(const URLParser &url, ofstream &out_file, const s
             proxy_config->getProxyCredentials(ProxyProtocol::HTTPS),
             cert_file_path);
 
-        bool connection_ok;
-        if (url.getBaseURL().unpack() == "downloads.openappsec.io") {
-            connection_ok = ssl_curl_client.downloadOpenAppsecPackages();
-        } else {
-            ssl_curl_client.setCurlOpts();
-            connection_ok = ssl_curl_client.connect();
-        }
+        ssl_curl_client.setCurlOpts();
+        bool connection_ok = ssl_curl_client.connect();
         if (!connection_ok)
         {
             stringstream url_s;

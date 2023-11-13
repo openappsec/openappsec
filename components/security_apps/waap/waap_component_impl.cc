@@ -41,6 +41,7 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
+USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 
 WaapComponent::Impl::Impl() :
     pending_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT),
@@ -90,7 +91,7 @@ WaapComponent::Impl::init(const std::string &waapDataFileName)
     reputationAggregator.init();
 
     waapStateTable = Singleton::Consume<I_Table>::by<WaapComponent>();
-
+    
     bool success = waf2_proc_start(waapDataFileName);
     if (!success) {
         dbgWarning(D_WAAP) << "WAF2 engine FAILED to initialize (probably failed to load signatures). Aborting!";
@@ -162,7 +163,6 @@ WaapComponent::Impl::respond(const NewHttpTransactionEvent &event)
     std::string httpMethodStr = event.getHttpMethod();
 
     dbgTrace(D_WAAP) << "start Transaction: " << httpMethodStr << " " << uri << " (REQUEST)";
-
     // See below..
     Waf2TransactionFlags &waf2TransactionFlags = waf2Transaction.getTransactionFlags();
     waf2TransactionFlags.requestDataPushStarted = false;
@@ -187,8 +187,10 @@ WaapComponent::Impl::respond(const NewHttpTransactionEvent &event)
     // Tell waf2 API that request headers started
     waf2Transaction.start_request_hdrs();
 
+
     return pending_response;
 }
+
 
 // Request headers coming
 // Should return pending_response to hold the data (not send to upstream)
@@ -209,6 +211,7 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
         dbgWarning(D_WAAP)
             << " * \e[31mNGEN_EVENT: http_header - "
             << "failed to get waf2 transaction, state not exist\e[0m";
+
         return drop_response;
     }
     IWaf2Transaction& waf2Transaction = waapStateTable->getState<Waf2Transaction>();
@@ -241,6 +244,7 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
     // Delete state before returning any verdict which is not pending
     if ((verdict.getVerdict() != pending_response.getVerdict()) &&  waapStateTable->hasState<Waf2Transaction>()) {
         finishTransaction(waf2Transaction);
+    } else {
     }
 
     return verdict;
@@ -282,6 +286,7 @@ WaapComponent::Impl::respond(const HttpRequestBodyEvent &event)
 
     return EventVerdict(verdict);
 }
+
 
 // Called when request ends and response starts.
 // For WAAP its time to decide and return either "accept_response" or "drop_response"
@@ -339,7 +344,6 @@ WaapComponent::Impl::respond(const ResponseCodeEvent &event)
     }
 
     IWaf2Transaction& waf2Transaction = waapStateTable->getState<Waf2Transaction>();
-
     // TODO:: extract HTTP version from attachment?
     static const int http_version = 0x11;
 

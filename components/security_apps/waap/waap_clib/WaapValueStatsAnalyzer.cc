@@ -94,7 +94,8 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
     canSplitSemicolon(true),
     canSplitPipe(true),
     hasSpace(false),
-    isUrlEncoded(false)
+    isUrlEncoded(false),
+    hasCharLess(false)
 {
     unsigned int zerosSeq[2] = {0};
     bool lastNul = false; // whether last processed character was ASCII NUL
@@ -138,6 +139,12 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
                 break;
             case '|':
                 hasCharPipe = true;
+                break;
+            case '<':
+                hasCharLess = true;
+                break;
+            case '\"':
+                hasDoubleQuote = true;
                 break;
         }
 
@@ -259,4 +266,8 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
     textual +=(hasSpace ? "true" : "false");
     textual.append("\nisUrlEncoded = ");
     textual +=(isUrlEncoded ? "true" : "false");
+    textual.append("\nhasCharLess = ");
+    textual +=(hasCharLess ? "true" : "false");
+    textual.append("\nhasDoubleQuote = ");
+    textual +=(hasDoubleQuote ? "true" : "false");
 }
