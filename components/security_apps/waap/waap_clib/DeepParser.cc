@@ -1121,11 +1121,12 @@ DeepParser::createInternalParser(
                     dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a JSON file";
                     // Send openApiReceiver as secondary receiver,
                     // but only if the JSON is passed in body and on the top level.
+                    bool should_collect_for_oa_schema_updater = false;
 
                     m_parsersDeque.push_back(
                         std::make_shared<BufferedParser<ParserJson>>(
                             *this,
-                            NULL,
+                            should_collect_for_oa_schema_updater,
                             parser_depth + 1
 ));
                     offset = 0;
