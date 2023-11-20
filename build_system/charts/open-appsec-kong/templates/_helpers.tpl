@@ -447,14 +447,28 @@ The name of the service used for the ingress controller's validation webhook
 {{ include "kong.fullname" . }}-validation-webhook
 {{- end -}}
 
+
+{{/*
+The name of the Service which will be used by the controller to update the Ingress status field.
+*/}}
+
+{{- define "kong.controller-publish-service" -}}
+{{- $proxyOverride := "" -}}
+  {{- if .Values.proxy.nameOverride -}}
+    {{- $proxyOverride = ( tpl .Values.proxy.nameOverride . ) -}}
+  {{- end -}}
+{{- (printf "%s/%s" ( include "kong.namespace" . ) ( default ( printf "%s-proxy" (include "kong.fullname" . )) $proxyOverride )) -}}
+{{- end -}}
+
 {{- define "kong.ingressController.env" -}}
 {{/*
     ====== AUTO-GENERATED ENVIRONMENT VARIABLES ======
 */}}
 
+
 {{- $autoEnv := dict -}}
   {{- $_ := set $autoEnv "CONTROLLER_KONG_ADMIN_TLS_SKIP_VERIFY" true -}}
-  {{- $_ := set $autoEnv "CONTROLLER_PUBLISH_SERVICE" (printf "%s/%s" ( include "kong.namespace" . ) ( .Values.proxy.nameOverride | default ( printf "%s-proxy" (include "kong.fullname" . )))) -}}
+  {{- $_ := set $autoEnv "CONTROLLER_PUBLISH_SERVICE" ( include "kong.controller-publish-service" . ) -}}
   {{- $_ := set $autoEnv "CONTROLLER_INGRESS_CLASS" .Values.ingressController.ingressClass -}}
   {{- $_ := set $autoEnv "CONTROLLER_ELECTION_ID" (printf "kong-ingress-controller-leader-%s" .Values.ingressController.ingressClass) -}}
 
@@ -1253,6 +1267,24 @@ resource roles into their separate templates.
   - namespaces
   verbs:
   - list
+{{- if (semverCompare ">= 3.0.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongupstreampolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongupstreampolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 {{- if (semverCompare ">= 2.11.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
 - apiGroups:
   - configuration.konghq.com
@@ -1429,7 +1461,7 @@ resource roles into their separate templates.
   - get
   - patch
   - update
-{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") }}
+{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1")}}
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
@@ -1620,7 +1652,7 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   - list
   - watch
 {{- end }}
-{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") }}
+{{- if or (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1alpha2") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1beta1") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1")}}
 - apiGroups:
   - gateway.networking.k8s.io
   resources:

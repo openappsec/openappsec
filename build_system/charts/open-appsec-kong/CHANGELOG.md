@@ -4,10 +4,59 @@
 
 Nothing yet.
 
+## 2.32.0
+
+### Improvements
+
+* Add new `deployment.hostname` value to make identifying instances in
+  controlplane/dataplane configurations easier.
+  [#943](https://github.com/Kong/charts/pull/943)
+
+## 2.31.0
+
+### Improvements
+
+* Added controller's RBAC rules for `KongUpstreamPolicy` CRD.
+  [#917](https://github.com/Kong/charts/pull/917)
+* Added services resource to admission webhook config for KIC >= 3.0.0.
+  [#919](https://github.com/Kong/charts/pull/919)
+* Update default ingress controller version to v3.0
+  [#929](https://github.com/Kong/charts/pull/929)
+  [#930](https://github.com/Kong/charts/pull/930)
+
+### Fixed
+
+* The target port for cmetrics should only be applied if the ingress controller is enabled.
+  [#926](https://github.com/Kong/charts/pull/926)
+* Fix RBAC for Gateway API v1.
+  [#928](https://github.com/Kong/charts/pull/928)
+* Enable Admission webhook for Gateway API v1 resources.
+  [#928](https://github.com/Kong/charts/pull/928)
+
+## 2.30.0
+
+### Improvements
+
+* Prevent installing PodDisruptionBudget for `replicaCount: 1` or `autoscaling.minReplicas: 1`.
+  [#896](https://github.com/Kong/charts/pull/896)
+* The admission webhook now will be triggered on Secrets creation for KIC 2.12.1+.
+  [#907](https://github.com/Kong/charts/pull/907)
+* Container security context defaults now comply with the restricted pod
+  security standard. This includes an enforced run as user ID set to 1000. UID
+  1000 is used for official Kong images other than Alpine images (which use UID
+  100) and for KIC images 3.0.0+ (older images use UID 65532). Images that do
+  not use UID 1000 can still run with this user, as static image files are
+  world-accessible and runtime-created files are created in temporary
+  directories created for the run as user.
+  [#911](https://github.com/Kong/charts/pull/911)
+* Allow using templates (via `tpl`) when specifying `proxy.nameOverride`.
+  [#914](https://github.com/Kong/charts/pull/914)
+
 ## 2.29.0
 
 ### Improvements
 * Make it possible to set the admission webhook's `timeoutSeconds`.
+  [#894](https://github.com/Kong/charts/pull/894)
 
 ## 2.28.1
 
@@ -16,6 +65,7 @@ Nothing yet.
 * The admission webhook now includes Gateway API resources and Ingress
   resources for controller versions 2.12+. This version introduces new
   validations for Kong's regex path implementation.
+  [#892](https://github.com/Kong/charts/pull/892)
 
 ## 2.28.0
 

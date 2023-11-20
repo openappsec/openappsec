@@ -45,9 +45,6 @@ proxy:
     parameters:
     - ssl
 
-# - PDB is enabled
-podDisruptionBudget:
-  enabled: true
 # update strategy
 updateStrategy:
   type: "RollingUpdate"

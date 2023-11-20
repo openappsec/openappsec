@@ -63,6 +63,9 @@ spec:
         {{ include "kong.renderTpl" (dict "value" .Values.podLabels "context" $) | nindent 8 }}
         {{- end }}
     spec:
+      {{- if .Values.deployment.hostname }}
+      hostname: {{ .Values.deployment.hostname }}
+      {{- end }}
       {{- if .Values.deployment.hostNetwork }}
       hostNetwork: true
       {{- end }}

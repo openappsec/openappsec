@@ -32,9 +32,9 @@ metadata:
   name: "{{ .Release.Name }}-httpbin"
   annotations:
     httpbin.ingress.kubernetes.io/rewrite-target: /
-    kubernetes.io/ingress.class: "kong"
     konghq.com/strip-path: "true"
 spec:
+  ingressClassName: kong
   rules:
   - http:
       paths:
@@ -46,14 +46,14 @@ spec:
             port:
               number: 80
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: GatewayClass
 metadata:
   name: "{{ .Release.Name }}-kong-test"
 spec:
   controllerName: konghq.com/kic-gateway-controller
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: Gateway
 metadata:
   name: "{{ .Release.Name }}-kong-test"
@@ -66,7 +66,7 @@ spec:
     protocol: HTTP
     port: 80
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: "{{ .Release.Name }}-httpbin"

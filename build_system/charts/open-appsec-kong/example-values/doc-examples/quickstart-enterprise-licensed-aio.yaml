@@ -9,7 +9,6 @@ admin:
       konghq.com/https-redirect-status-code: "301"
       konghq.com/protocols: https
       konghq.com/strip-path: "true"
-      kubernetes.io/ingress.class: default
       nginx.ingress.kubernetes.io/app-root: /
       nginx.ingress.kubernetes.io/backend-protocol: HTTPS
       nginx.ingress.kubernetes.io/permanent-redirect-code: "301"
@@ -176,8 +175,8 @@ manager:
   ingress:
     annotations:
       konghq.com/https-redirect-status-code: "301"
-      kubernetes.io/ingress.class: default
       nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    ingressClassName: kong
     enabled: true
     hostname: kong.127-0-0-1.nip.io
     path: /
@@ -209,7 +208,7 @@ portal:
       konghq.com/https-redirect-status-code: "301"
       konghq.com/protocols: https
       konghq.com/strip-path: "false"
-      kubernetes.io/ingress.class: default
+    ingressClassName: kong
     enabled: true
     hostname: developer.127-0-0-1.nip.io
     path: /
@@ -232,8 +231,8 @@ portalapi:
       konghq.com/https-redirect-status-code: "301"
       konghq.com/protocols: https
       konghq.com/strip-path: "true"
-      kubernetes.io/ingress.class: default
       nginx.ingress.kubernetes.io/app-root: /
+    ingressClassName: kong
     enabled: true
     hostname: developer.127-0-0-1.nip.io
     path: /api

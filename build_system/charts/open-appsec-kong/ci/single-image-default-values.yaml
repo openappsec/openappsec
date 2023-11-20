@@ -2,7 +2,7 @@
 # use single image strings instead of repository/tag
 
 image:
-  unifiedRepoTag: kong:3.4
+  unifiedRepoTag: kong:3.4.1
 
 env:
   anonymous_reports: "off"
@@ -10,4 +10,4 @@ ingressController:
   env:
     anonymous_reports: "false"
   image:
-    unifiedRepoTag: kong/kubernetes-ingress-controller:2.12
+    unifiedRepoTag: kong/kubernetes-ingress-controller:3.0

@@ -37,9 +37,6 @@ proxy:
     annotations: {}
     path: /
 
-# - PDB is enabled
-podDisruptionBudget:
-  enabled: true
 # update strategy
 updateStrategy:
   type: "RollingUpdate"

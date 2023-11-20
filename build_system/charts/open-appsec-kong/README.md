@@ -11,10 +11,10 @@ This chart bootstraps all the components needed to run Kong on a
 ## TL;DR;
 
 ```bash
-$ helm repo add kong https://charts.konghq.com
-$ helm repo update
+helm repo add kong https://charts.konghq.com
+helm repo update
 
-$ helm install kong/kong --generate-name
+helm install kong/kong --generate-name
 ```
 
 ## Table of contents
@@ -91,10 +91,10 @@ $ helm install kong/kong --generate-name
 To install Kong:
 
 ```bash
-$ helm repo add kong https://charts.konghq.com
-$ helm repo update
+helm repo add kong https://charts.konghq.com
+helm repo update
 
-$ helm install kong/kong --generate-name
+helm install kong/kong --generate-name
 ```
 
 ## Uninstall
@@ -102,7 +102,7 @@ $ helm install kong/kong --generate-name
 To uninstall/delete a Helm release `my-release`:
 
 ```bash
-$ helm delete my-release
+helm delete my-release
 ```
 
 The command removes all the Kubernetes components associated with the
@@ -451,6 +451,11 @@ documentation on Service
 DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
 for more detail.
 
+If you use multiple Helm releases to manage different data plane configurations
+attached to the same control plane, setting the `deployment.hostname` field
+will help you keep track of which is which in the `/clustering/data-plane`
+endpoint.
+
 ### Cert Manager Integration
 
 By default, Kong will create self-signed certificates on start for its TLS
@@ -508,9 +513,9 @@ event you need to recover from unintended CRD deletion.
 
 ### InitContainers
 
-The chart is able to deploy initcontainers along with Kong. This can be very
+The chart is able to deploy initContainers along with Kong. This can be very
 useful when there's a requirement for custom initialization. The
-`deployment.initcontainers` field in values.yaml takes an array of objects that
+`deployment.initContainers` field in values.yaml takes an array of objects that
 get appended as-is to the existing `spec.template.initContainers` array in the
 kong deployment resource.
 
@@ -581,7 +586,11 @@ namespaces. Limiting access requires several changes to configuration:
 Setting `deployment.daemonset: true` deploys Kong using a [DaemonSet
 controller](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
 instead of a Deployment controller. This runs a Kong Pod on every kubelet in
-the Kubernetes cluster.
+the Kubernetes cluster. For such configuration it may be desirable to configure
+Pods to use the network of the host they run on instead of a dedicated network
+namespace. The benefit of this approach is that the Kong can bind ports directly
+to Kubernetes nodes' network interfaces, without the extra network translation
+imposed by NodePort Services. It can be achieved by setting `deployment.hostNetwork: true`.
 
 ### Using dnsPolicy and dnsConfig
 
@@ -725,7 +734,7 @@ section of `values.yaml` file:
 |--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
 | enabled                                    | Deploy the ingress controller, rbac and crd                                                                                                              | true                               |
 | image.repository                           | Docker image with the ingress controller                                                                                                                 | kong/kubernetes-ingress-controller |
-| image.tag                                  | Version of the ingress controller                                                                                                                        | `2.12`                             |
+| image.tag                                  | Version of the ingress controller                                                                                                                        | `3.0`                              |
 | image.effectiveSemver                      | Version of the ingress controller used for version-specific features when image.tag is not a valid semantic version                                      |                                    |
 | readinessProbe                             | Kong ingress controllers readiness probe                                                                                                                 |                                    |
 | livenessProbe                              | Kong ingress controllers liveness probe                                                                                                                  |                                    |
@@ -791,6 +800,12 @@ Kong Ingress Controller v2.9 has introduced gateway discovery which allows
 the controller to discover Gateway instances that it should configure using
 an Admin API Kubernetes service.
 
+Using this feature requires a split release installation of Gateways and Ingress Controller.
+For exemplar `values.yaml` files which use this feature please see: [examples README.md](./example-values/README.md).
+or use the [`ingress` chart](../ingress/README.md) which can handle this for you.
+
+##### Configuration
+
 You'll be able to configure this feature through configuration section under
 `ingressController.gatewayDiscovery`:
 
@@ -813,12 +828,17 @@ You'll be able to configure this feature through configuration section under
   the chart will generate values for `name` and `namespace` based on the current release name and
   namespace. This is useful when consuming the `kong` chart as a subchart.
 
-Using this feature requires a split release installation of Gateways and Ingress Controller.
-For exemplar `values.yaml` files which use this feature please see: [examples README.md](./example-values/README.md).
+Additionally, you can control the addresses that are generated for your Gateways
+via the `--gateway-discovery-dns-strategy` CLI flag that can be set on the Ingress Controller
+(or an equivalent environment variable: `CONTROLLER_GATEWAY_DISCOVERY_DNS_STRATEGY`).
+It accepts 3 values which change the way that Gateway addresses are generated:
+- `service` - for service scoped pod DNS names: `pod-ip-address.service-name.my-namespace.svc.cluster-domain.example`
+- `pod` - for namespace scope pod DNS names: `pod-ip-address.my-namespace.pod.cluster-domain.example`
+- `ip` (default, retains behavior introduced in v2.9) - for regular IP addresses
 
 When using `gatewayDiscovery`, you should consider configuring the Admin service to use mTLS client verification to make
-this interface secure. Without that, anyone who can access the Admin API from inside the cluster can configure the Gateway
-instances.
+this interface secure.
+Without that, anyone who can access the Admin API from inside the cluster can configure the Gateway instances.
 
 On the controller release side, that can be achieved by setting `ingressController.adminApi.tls.client.enabled` to `true`.
 By default, Helm will generate a certificate Secret named `<release name>-admin-api-keypair` and
@@ -838,6 +858,7 @@ On the Gateway release side, set either `admin.tls.client.secretName` to the nam
 | deployment.minReadySeconds         | Minimum number of seconds for which newly created pods should be ready without any of its container crashing, for it to be considered available. |                     |
 | deployment.initContainers          | Create initContainers. Please go to Kubernetes doc for the spec of the initContainers |                     |
 | deployment.daemonset               | Use a DaemonSet instead of a Deployment                                               | `false`             |
+| deployment.hostname                | Set the Deployment's `.spec.template.hostname`. Kong reports this as its hostname.    |                     |
 | deployment.hostNetwork             | Enable hostNetwork, which binds to the ports to the host                              | `false`             |
 | deployment.userDefinedVolumes      | Create volumes. Please go to Kubernetes doc for the spec of the volumes               |                     |
 | deployment.userDefinedVolumeMounts | Create volumeMounts. Please go to Kubernetes doc for the spec of the volumeMounts     |                     |
@@ -878,7 +899,7 @@ On the Gateway release side, set either `admin.tls.client.secretName` to the nam
 | priorityClassName                  | Set pod scheduling priority class for Kong pods                                       | `""`                |
 | secretVolumes                      | Mount given secrets as a volume in Kong container to override default certs and keys. | `[]`                |
 | securityContext                    | Set the securityContext for Kong Pods                                                 | `{}`                |
-| containerSecurityContext           | Set the securityContext for Containers                                                | `{"readOnlyRootFilesystem": true}`                |
+| containerSecurityContext           | Set the securityContext for Containers                                                | See values.yaml     |
 | serviceMonitor.enabled             | Create ServiceMonitor for Prometheus Operator                                         | `false`             |
 | serviceMonitor.interval            | Scraping interval                                                                     | `30s`               |
 | serviceMonitor.namespace           | Where to create ServiceMonitor                                                        |                     |
@@ -1013,7 +1034,7 @@ If you have paid for a license, but you do not have a copy of yours, please
 contact Kong Support. Once you have it, you will need to store it in a Secret:
 
 ```bash
-$ kubectl create secret generic kong-enterprise-license --from-file=license=./license.json
+kubectl create secret generic kong-enterprise-license --from-file=license=./license.json
 ```
 
 Set the secret name in `values.yaml`, in the `.enterprise.license_secret` key.
@@ -1031,7 +1052,7 @@ from \<your username\> \> Edit Profile \> API Key. Use this to create registry
 secrets:
 
 ```bash
-$ kubectl create secret docker-registry kong-enterprise-edition-docker \
+kubectl create secret docker-registry kong-enterprise-edition-docker \
     --docker-server=hub.docker.io \
     --docker-username=<username-provided-to-you> \
     --docker-password=<password-provided-to-you>
@@ -1107,14 +1128,30 @@ whereas this is optional for the Developer Portal on versions 0.36+. Providing
 Portal session configuration in values.yaml provides the default session
 configuration, which can be overridden on a per-workspace basis.
 
+```bash
+cat admin_gui_session_conf
 ```
-$ cat admin_gui_session_conf
+
+```json
 {"cookie_name":"admin_session","cookie_samesite":"off","secret":"admin-secret-CHANGEME","cookie_secure":true,"storage":"kong"}
-$ cat portal_session_conf
+```
+
+```bash
+cat portal_session_conf
+```
+
+```json
 {"cookie_name":"portal_session","cookie_samesite":"off","secret":"portal-secret-CHANGEME","cookie_secure":true,"storage":"kong"}
-$ kubectl create secret generic kong-session-config --from-file=admin_gui_session_conf --from-file=portal_session_conf
+```
+
+```bash
+kubectl create secret generic kong-session-config --from-file=admin_gui_session_conf --from-file=portal_session_conf
+```
+
+```bash
 secret/kong-session-config created
 ```
+
 The exact plugin settings may vary in your environment. The `secret` should
 always be changed for both configurations.
 
@@ -1175,7 +1212,7 @@ between the initial install and upgrades. Both operations are a "sync" in Argo
 terms. This affects when migration Jobs execute in database-backed Kong
 installs.
 
-The chart sets the `Sync` and `BeforeHookCreation` deletion 
+The chart sets the `Sync` and `BeforeHookCreation` deletion
 [hook policies](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/)
 on the `init-migrations` and `pre-upgrade-migrations` Jobs.
 

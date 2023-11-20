@@ -40,8 +40,7 @@ admin:
     enabled: true
     tls: CHANGEME-admin-tls-secret
     hostname: admin.kong.CHANGEME.example
-    annotations:
-      kubernetes.io/ingress.class: "kong"
+    ingressClassName: kong
     path: /
 
 proxy:
@@ -148,8 +147,7 @@ portal:
     enabled: true
     tls: CHANGEME-portal-tls-secret
     hostname: portal.kong.CHANGEME.example
-    annotations:
-      kubernetes.io/ingress.class: "kong"
+    ingressClassName: kong
     path: /
 
   externalIPs: []
@@ -177,8 +175,7 @@ portalapi:
     enabled: true
     tls: CHANGEME-portalapi-tls-secret
     hostname: portalapi.kong.CHANGEME.example
-    annotations:
-      kubernetes.io/ingress.class: "kong"
+    ingressClassName: kong
     path: /
 
   externalIPs: []

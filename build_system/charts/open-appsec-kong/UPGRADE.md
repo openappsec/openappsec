@@ -193,7 +193,7 @@ database](https://www.postgresql.org/docs/current/backup-dump.html) and
 creating a separate release if you wish to continue using 8.6.8:
 
 ```
-$ helm install my-release -f values.yaml --version 8.6.8 bitnami/postgresql
+helm install my-release -f values.yaml --version 8.6.8 bitnami/postgresql
 ```
 
 Afterwords, you will upgrade your Kong chart release with
@@ -233,26 +233,28 @@ upgrade in multiple steps:
 First, pin the controller version and upgrade to chart 2.4.0:
 
 ```console
-$ helm upgrade --wait \
+helm upgrade --wait \
   --set ingressController.image.tag=<CURRENT_CONTROLLER_VERSION> \
   --version 2.4.0 \
   --namespace <YOUR_RELEASE_NAMESPACE> \
   <YOUR_RELEASE_NAME> kong/kong
 ```
+
 Second, temporarily disable the ingress controller:
 
 ```console
-$ helm upgrade --wait \
+helm upgrade --wait \
   --set ingressController.enabled=false \
   --set deployment.serviceaccount.create=true \
   --version 2.4.0 \
   --namespace <YOUR_RELEASE_NAMESPACE> \
   <YOUR_RELEASE_NAME> kong/kong
 ```
+
 Finally, re-enable the ingress controller at the new version:
 
 ```console
-$ helm upgrade --wait \
+helm upgrade --wait \
   --set ingressController.enabled=true \
   --set ingressController.image.tag=<NEW_CONTROLLER_VERSION> \
   --version 2.4.0 \
