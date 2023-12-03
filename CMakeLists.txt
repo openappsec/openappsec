@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 2.8.4)
 project (ngen)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wno-terminate -Dalpine")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wno-terminate")
 
 execute_process(COMMAND grep -c "Alpine Linux" /etc/os-release OUTPUT_VARIABLE IS_ALPINE)
 if(IS_ALPINE EQUAL "1")
