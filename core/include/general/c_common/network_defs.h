@@ -27,11 +27,7 @@
 #include <netinet/tcp.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
-#ifndef alpine
-#include <bits/endian.h>
-#else
 #include <endian.h>
-#endif
 
 // Sometimes BSD's flag definitions are just so much more convenient.
 // So let people use them.
