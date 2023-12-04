@@ -83,7 +83,7 @@ private:
 
     // Filter out errors that should be ignored. Returns true if error should be treated,
     // false if an error should be ignored
-    bool filterErrors(xmlErrorPtr xmlError);
+    bool filterErrors(const xmlError *xmlError);
 
     IParserStreamReceiver &m_receiver;
     enum state m_state;

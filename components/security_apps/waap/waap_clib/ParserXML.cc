@@ -234,7 +234,7 @@ ParserXML::~ParserXML() {
     }
 }
 
-bool ParserXML::filterErrors(xmlErrorPtr xmlError) {
+bool ParserXML::filterErrors(const xmlError *xmlError) {
     dbgDebug(D_WAAP_PARSER_XML) << "ParserXML::filterErrors(): xmlError " << xmlError->code << ": '" <<
         xmlError->message << "'";
 
@@ -262,7 +262,7 @@ size_t ParserXML::push(const char* data, size_t data_len) {
         // Send zero-length chunk with "terminate" flag enabled to signify end-of-stream
 
         if (xmlParseChunk(m_pushParserCtxPtr, m_buf, 0, 1)) {
-            xmlErrorPtr xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
+            auto xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
             if (xmlError && filterErrors(xmlError)) {
                 dbgDebug(D_WAAP_PARSER_XML) << "ParserXML::push(): xmlError: code=" << xmlError->code << ": '" <<
                     xmlError->message << "'";
@@ -316,7 +316,7 @@ size_t ParserXML::push(const char* data, size_t data_len) {
                 ": '" << std::string(data + i, data_len - i) << "'; i=" << i;
             if (m_pushParserCtxPtr) {
                 if (xmlParseChunk(m_pushParserCtxPtr, data + i, data_len - i, 0)) {
-                    xmlErrorPtr xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
+                    auto xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
                     if (xmlError && filterErrors(xmlError)) {
                         dbgDebug(D_WAAP_PARSER_XML) << "ParserXML::push(): xmlError: code=" << xmlError->code <<
                             ": '" << xmlError->message << "'";

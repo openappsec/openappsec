@@ -206,7 +206,7 @@ ParserHTML::~ParserHTML()
 }
 
 bool
-ParserHTML::filterErrors(xmlErrorPtr xmlError)
+ParserHTML::filterErrors(const xmlError *xmlError)
 {
     dbgDebug(D_WAAP_PARSER_HTML)
         << "ParserHTML::filterErrors(): xmlError "
@@ -245,7 +245,7 @@ ParserHTML::push(const char *data, size_t data_len)
         // Send zero-length chunk with "terminate" flag enabled to signify end-of-stream
 
         if (htmlParseChunk(m_pushParserCtxPtr, m_buf, 0, 1)) {
-            xmlErrorPtr xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
+            auto xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
             if (xmlError && filterErrors(xmlError)) {
                 dbgDebug(D_WAAP_PARSER_HTML)
                     << "ParserHTML::push(): xmlError: code="
@@ -320,7 +320,7 @@ ParserHTML::push(const char *data, size_t data_len)
                     << i;
             if (m_pushParserCtxPtr) {
                 if (htmlParseChunk(m_pushParserCtxPtr, data + i, data_len - i, 0)) {
-                    xmlErrorPtr xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
+                    auto xmlError = xmlCtxtGetLastError(m_pushParserCtxPtr);
                     if (xmlError && filterErrors(xmlError)) {
                             dbgDebug(D_WAAP_PARSER_HTML)
                                 << "ParserHTML::push(): xmlError: code="
