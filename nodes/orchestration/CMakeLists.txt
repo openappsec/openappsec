@@ -97,7 +97,7 @@ execute_process (
 install(FILES ${boost_thread} DESTINATION orchestration/lib/boost)
 
 execute_process (
-	COMMAND sh -c "find /usr/lib* -name \"libcrypto.so\" | awk '{printf $0\";\"}'"
+	COMMAND sh -c "find /usr/lib* -maxdepth 1 -name \"libcrypto.so*\" | awk '{printf $0\";\"}'"
 	OUTPUT_VARIABLE crypto
 )
 install(FILES ${crypto} DESTINATION orchestration/lib)
@@ -108,7 +108,7 @@ execute_process (
 install(FILES ${crypto2} DESTINATION orchestration/lib)
 
 execute_process (
-	 COMMAND sh -c "find /usr/lib* -name \"libssl.so\" | awk '{printf $1\";\"}'"
+	 COMMAND sh -c "find /usr/lib* -maxdepth 1 -name \"libssl.so*\" | awk '{printf $1\";\"}'"
 	 OUTPUT_VARIABLE ssl
 )
 install(FILES ${ssl} DESTINATION orchestration/lib)
