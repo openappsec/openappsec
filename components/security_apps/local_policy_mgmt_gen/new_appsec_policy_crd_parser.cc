@@ -35,6 +35,7 @@ NewParsedRule::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("customResponse", custom_response, archive_in);
     parseAppsecJSONKey<string>("sourceIdentifiers", source_identifiers, archive_in);
     parseAppsecJSONKey<string>("trustedSources", trusted_sources, archive_in);
+    parseAppsecJSONKey<string>("autoUpgrade", upgrade_settings, archive_in);
     try {
         archive_in(cereal::make_nvp("host", host));
     } catch (const cereal::Exception &e)
@@ -84,6 +85,12 @@ const string &
 NewParsedRule::getTrustedSources() const
 {
     return trusted_sources;
+}
+
+const string &
+NewParsedRule::getUpgradeSettings() const
+{
+    return upgrade_settings;
 }
 
 const string &

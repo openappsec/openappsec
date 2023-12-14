@@ -107,9 +107,9 @@ void
 NewAppSecWebAttackProtections::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Attack Protections";
-    parseAppsecJSONKey<string>("csrfEnabled", csrf_protection, archive_in, "inactive");
-    parseAppsecJSONKey<string>("errorDisclosureEnabled", error_disclosure, archive_in, "inactive");
-    parseAppsecJSONKey<string>("openRedirectEnabled", open_redirect, archive_in, "inactive");
+    parseAppsecJSONKey<string>("csrfProtection", csrf_protection, archive_in, "inactive");
+    parseAppsecJSONKey<string>("errorDisclosure", error_disclosure, archive_in, "inactive");
+    parseAppsecJSONKey<string>("openRedirect", open_redirect, archive_in, "inactive");
     parseAppsecJSONKey<bool>("nonValidHttpMethods", non_valid_http_methods, archive_in, false);
 }
 
@@ -441,6 +441,8 @@ NewSnortSignaturesAndOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Snort Signatures practice";
     parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
+    parseAppsecJSONKey<vector<string>>("files", files, archive_in);
+    is_temporary = false;
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Snort Signatures override mode invalid: " << override_mode;
     }
@@ -468,6 +470,18 @@ const vector<string> &
 NewSnortSignaturesAndOpenSchemaAPI::getConfigMap() const
 {
     return config_map;
+}
+
+bool
+NewSnortSignaturesAndOpenSchemaAPI::isTemporary() const
+{
+    return is_temporary;
+}
+
+void
+NewSnortSignaturesAndOpenSchemaAPI::setTemporary(bool val)
+{
+    is_temporary = val;
 }
 
 void

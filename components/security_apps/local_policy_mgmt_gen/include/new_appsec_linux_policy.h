@@ -32,7 +32,7 @@
 #include "new_practice.h"
 #include "access_control_practice.h"
 #include "new_trusted_sources.h"
-
+#include "new_auto_upgrade.h"
 
 class V1beta2AppsecLinuxPolicy : Singleton::Consume<I_Environment>
 {
@@ -48,7 +48,8 @@ public:
         const std::vector<NewAppSecCustomResponse> &_custom_responses,
         const std::vector<NewAppsecException> &_exceptions,
         const std::vector<NewTrustedSourcesSpec> &_trusted_sources,
-        const std::vector<NewSourcesIdentifiers> &_sources_identifiers)
+        const std::vector<NewSourcesIdentifiers> &_sources_identifiers,
+        const AppSecAutoUpgradeSpec &_auto_upgrade)
             :
         policies(_policies),
         threat_prevection_practices(_threat_prevention_practices),
@@ -57,7 +58,8 @@ public:
         custom_responses(_custom_responses),
         exceptions(_exceptions),
         trusted_sources(_trusted_sources),
-        sources_identifiers(_sources_identifiers) {}
+        sources_identifiers(_sources_identifiers),
+        auto_upgrade(_auto_upgrade) {}
     // LCOV_EXCL_STOP
     void serialize(cereal::JSONInputArchive &archive_in);
 
@@ -69,6 +71,7 @@ public:
     const std::vector<NewAppsecException> & getAppsecExceptions() const;
     const std::vector<NewTrustedSourcesSpec> & getAppsecTrustedSourceSpecs() const;
     const std::vector<NewSourcesIdentifiers> & getAppsecSourceIdentifierSpecs() const;
+    const AppSecAutoUpgradeSpec & getAppSecAutoUpgradeSpec() const;
     void addSpecificRule(const NewParsedRule &_rule);
 
 private:
@@ -80,6 +83,7 @@ private:
     std::vector<NewAppsecException> exceptions;
     std::vector<NewTrustedSourcesSpec> trusted_sources;
     std::vector<NewSourcesIdentifiers> sources_identifiers;
+    AppSecAutoUpgradeSpec auto_upgrade;
 };
 
 #endif // __NEW_APPSEC_LINUX_POLICY_H__

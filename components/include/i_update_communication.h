@@ -26,6 +26,7 @@ using OrchData      = Maybe<std::string>;
 class I_UpdateCommunication
 {
 public:
+    virtual void init() = 0;
     virtual Maybe<void> sendPolicyVersion(
         const std::string &policy_version,
         const std::string &policy_versions

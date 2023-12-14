@@ -7,6 +7,7 @@ INSTALLATION_TIME=$(date)
 
 WAAP_POLICY_FOLDER_PATH=/etc/cp/conf/waap
 IPS_POLICY_FOLDER_PATH=/etc/cp/conf/ips
+SNORT_SCRIPTS_PATH=/etc/cp/scripts/
 
 DEFAULT_HTTP_TRANSACTION_HANDLER_EVENT_BUFFER=/var/log/nano_agent/event_buffer/HTTP_TRANSACTION_HANDLER_events
 
@@ -215,6 +216,10 @@ run_installation()
 
     install_policy $is_debug_mode "$var_certs_dir"
     install_waap
+
+    cp_exec "cp -fr scripts/snort3_to_ips $SNORT_SCRIPTS_PATH/snort3_to_ips"
+    cp_exec "cp -f  scripts/exception.py $SNORT_SCRIPTS_PATH/exception.py"
+    cp_exec "cp -f scripts/snort_to_ips_local.py $SNORT_SCRIPTS_PATH/snort_to_ips_local.py"
 
     ${INSTALL_COMMAND} lib/libshmem_ipc.so /usr/lib/cpnano/
     ${INSTALL_COMMAND} lib/libcompression_utils.so /usr/lib/

@@ -30,9 +30,11 @@ class NewAppsecTriggerAccessControlLogging
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
+    bool isAcAllowEvents() const { return ac_allow_events; }
+    bool isAcDropEvents() const { return ac_drop_events; }
 private:
-    bool allow_events = false;
-    bool drop_events = false;
+    bool ac_allow_events = false;
+    bool ac_drop_events = false;
 };
 
 class NewAppsecTriggerAdditionalSuspiciousEventsLogging : public ClientRest
@@ -158,6 +160,7 @@ public:
     const NewAppsecTriggerLogging & getAppsecTriggerLogging() const;
     const NewAppsecTriggerExtendedLogging & getAppsecTriggerExtendedLogging() const;
     const NewAppsecTriggerLogDestination & getAppsecTriggerLogDestination() const;
+    const NewAppsecTriggerAccessControlLogging & getAppsecTriggerAccessControlLogging() const;
 
 private:
     NewAppsecTriggerAccessControlLogging access_control_logging;

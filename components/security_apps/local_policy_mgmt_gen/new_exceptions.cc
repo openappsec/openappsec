@@ -23,9 +23,9 @@ static const set<string> valid_actions = {"skip", "accept", "drop", "suppressLog
 void
 NewAppsecExceptionCondition::load(cereal::JSONInputArchive &archive_in)
 {
-    dbgTrace(D_LOCAL_POLICY) << "Loading New AppSec exception condition";
     parseAppsecJSONKey<string>("key", key, archive_in);
     parseAppsecJSONKey<string>("value", value, archive_in);
+    dbgTrace(D_LOCAL_POLICY) << "Key: " << key << " Value: " << value;
 }
 
 const string &

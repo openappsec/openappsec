@@ -35,7 +35,7 @@ void
 HybridCommunication::init()
 {
     FogAuthenticator::init();
-    declarative_policy_utils.init();
+    i_declarative_policy = Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>();
     dbgTrace(D_ORCHESTRATOR) << "Initializing the Hybrid Communication Component";
     if (getConfigurationFlag("otp") != "") {
         otp = getConfigurationFlag("otp");
@@ -69,14 +69,14 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
         dbgWarning(D_ORCHESTRATOR) << "Acccess Token not available.";
     }
 
-    if (!declarative_policy_utils.shouldApplyPolicy()) {
+    if (!i_declarative_policy->shouldApplyPolicy()) {
         request = CheckUpdateRequest(manifest_checksum, "", "", "", "", "");
         return Maybe<void>();
     }
 
     dbgTrace(D_ORCHESTRATOR) << "Getting policy update in Hybrid Communication";
 
-    string policy_response = declarative_policy_utils.getUpdate(request);
+    string policy_response = i_declarative_policy->getUpdate(request);
 
     auto env = Singleton::Consume<I_EnvDetails>::by<HybridCommunication>()->getEnvType();
     if (env == EnvType::K8S && !policy_response.empty()) {
@@ -123,7 +123,6 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
     }
 
     request = CheckUpdateRequest(manifest_checksum, policy_response, "", "", "", "");
-    declarative_policy_utils.turnOffApplyPolicyFlag();
 
     return Maybe<void>();
 }
@@ -136,7 +135,7 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         << resourse_file.getFileName();
 
     if (resourse_file.getFileName() =="policy") {
-        return declarative_policy_utils.getCurrPolicy();
+        return i_declarative_policy->getCurrPolicy();
     }
     if (resourse_file.getFileName() == "manifest") {
         if (!access_token.ok()) return genError("Acccess Token not available.");

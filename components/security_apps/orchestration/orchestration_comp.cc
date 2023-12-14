@@ -1668,6 +1668,7 @@ private:
 
         if (getAttribute("no-setting", "CROWDSEC_ENABLED") == "true") tags.insert(Tags::CROWDSEC);
         if (getAttribute("no-setting", "PLAYGROUND") == "true") tags.insert(Tags::PLAYGROUND);
+        if (getAttribute("no-setting", "nginxproxymanager") == "true") tags.insert(Tags::NGINX_PROXY_MANAGER);
 
         Report registration_report(
             "Local Agent Data",

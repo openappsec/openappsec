@@ -57,6 +57,7 @@ public:
     void
     init()
     {
+        declarative_policy_utils.init();
         auto rest = Singleton::Consume<I_RestApi>::by<UpdateCommunication>();
         rest->addRestCall<UpdateCommunication::Impl>(RestAction::SET, "orchestration-mode");
         setMode();
@@ -104,22 +105,17 @@ private:
     {
         if (getConfigurationFlag("orchestration-mode") == "offline_mode") {
             i_update_comm_impl = make_unique<LocalCommunication>();
-            LocalCommunication *local_comm = static_cast<LocalCommunication*>(i_update_comm_impl.get());
-            local_comm->init();
-            return;
         } else if (getConfigurationFlag("orchestration-mode") == "hybrid_mode") {
             i_update_comm_impl = make_unique<HybridCommunication>();
-            HybridCommunication *local_comm = static_cast<HybridCommunication*>(i_update_comm_impl.get());
-            local_comm->init();
-            return;
+        } else {
+            i_update_comm_impl = make_unique<FogCommunication>();
         }
 
-        i_update_comm_impl = make_unique<FogCommunication>();
-        FogCommunication *fog_comm = static_cast<FogCommunication*>(i_update_comm_impl.get());
-        fog_comm->init();
+        i_update_comm_impl->init();
     }
 
     std::unique_ptr<I_UpdateCommunication> i_update_comm_impl = nullptr;
+    DeclarativePolicyUtils declarative_policy_utils;
     S2C_LABEL_PARAM(string, status, "status");
 };
 

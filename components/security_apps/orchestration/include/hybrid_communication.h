@@ -54,7 +54,7 @@ public:
 private:
     Maybe<std::string> getNewVersion();
 
-    DeclarativePolicyUtils declarative_policy_utils;
+    I_DeclarativePolicy *i_declarative_policy = nullptr;
 };
 
 #endif // __HYBRID_COMMUNICATION_H__

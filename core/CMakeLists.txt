@@ -1,4 +1,4 @@
-#add_subdirectory(cptest)
+add_subdirectory(cptest)
 add_subdirectory(agent_core_utilities)
 add_subdirectory(shell_cmd)
 add_subdirectory(debug_is)

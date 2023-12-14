@@ -27,6 +27,7 @@
 #include "log_generator.h"
 #include "i_orchestration_tools.h"
 #include "customized_cereal_map.h"
+#include "declarative_policy_utils.h"
 
 using namespace std;
 using namespace ReportIS;
@@ -745,6 +746,7 @@ ServiceController::Impl::updateServiceConfiguration(
         dbgDebug(D_ORCHESTRATOR) << "Policy file was not updated. Sending reload command regarding settings and data";
         auto signal_services = sendSignalForServices(nano_services_to_update, "");
         if (!signal_services.ok()) return signal_services.passErr();
+        Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
         return Maybe<void>();
     }
 
@@ -888,6 +890,7 @@ ServiceController::Impl::updateServiceConfiguration(
         if (new_policy_path.compare(config_file_path) == 0) {
             dbgDebug(D_ORCHESTRATOR) << "Enforcing the default policy file";
             policy_version = version_value;
+            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
             return Maybe<void>();
         }
 
@@ -906,6 +909,7 @@ ServiceController::Impl::updateServiceConfiguration(
     }
 
     if (!was_policy_updated && !send_signal_for_services_err.empty()) return genError(send_signal_for_services_err);
+    Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
     return Maybe<void>();
 }
 

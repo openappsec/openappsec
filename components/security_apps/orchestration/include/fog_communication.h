@@ -47,7 +47,7 @@ public:
     ) const override;
 
 private:
-    DeclarativePolicyUtils declarative_policy_utils;
+    I_DeclarativePolicy *i_declarative_policy = nullptr;
 };
 
 #endif // __FOG_COMMUNICATION_H__

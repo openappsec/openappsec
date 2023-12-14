@@ -18,16 +18,12 @@ using namespace std;
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
-static const set<string> valid_modes    = {"prevent", "detect", "inactive"};
-static const set<string> valid_units    = {"minute", "second"};
-
-static const std::unordered_map<std::string, std::string> key_to_mode_val = {
-    { "prevent-learn", "Prevent"},
-    { "detect-learn", "Detect"},
-    { "prevent", "Prevent"},
-    { "detect", "Detect"},
-    { "inactive", "Inactive"}
+static const map<string, string> valid_modes_to_key = {
+    {"prevent", "Active"},
+    {"detect", "Detect"},
+    {"inactive", "Inactive"}
 };
+static const set<string> valid_units    = {"minute", "second"};
 
 static const std::unordered_map<std::string, std::string> key_to_units_val = {
     { "second", "Second"},
@@ -78,7 +74,7 @@ RateLimitSection::RateLimitSection(
 {
     bool any = asset_name == "Any" && url == "Any" && uri == "Any";
     string asset_id = any ? "Any" : url+uri;
-    context = "assetId(" + asset_id + ")";
+    context = any ? "All()" : "assetId(" + asset_id + ")";
 }
 
 void
@@ -86,7 +82,7 @@ RateLimitSection::save(cereal::JSONOutputArchive &out_ar) const
 {
     out_ar(
         cereal::make_nvp("context",         context),
-        cereal::make_nvp("mode",            key_to_mode_val.at(mode)),
+        cereal::make_nvp("mode",            mode),
         cereal::make_nvp("practiceId",      practice_id),
         cereal::make_nvp("name",            name),
         cereal::make_nvp("rules",           rules)
@@ -180,9 +176,13 @@ void
 AccessControlRateLimit::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading Access control rate limit";
-    parseAppsecJSONKey<string>("overrideMode", mode, archive_in, "Inactive");
-    if (valid_modes.count(mode) == 0) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec access control rate limit override mode invalid: " << mode;
+    string in_mode;
+    parseAppsecJSONKey<string>("overrideMode", in_mode, archive_in, "inactive");
+    if (valid_modes_to_key.find(in_mode) == valid_modes_to_key.end()) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec access control rate limit override mode invalid: " << in_mode;
+        mode = "Inactive";
+    } else {
+        mode = valid_modes_to_key.at(in_mode);
     }
     parseAppsecJSONKey<std::vector<AccessControlRateLimiteRules>>("rules", rules, archive_in);
 }

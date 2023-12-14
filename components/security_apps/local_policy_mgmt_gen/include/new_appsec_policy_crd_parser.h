@@ -42,6 +42,7 @@ public:
     const std::string & getSourceIdentifiers() const;
     const std::string & getCustomResponse() const;
     const std::string & getTrustedSources() const;
+    const std::string & getUpgradeSettings() const;
     const std::string & getHost() const;
     const std::string & getMode() const;
 
@@ -56,6 +57,7 @@ private:
     std::string                 source_identifiers;
     std::string                 custom_response;
     std::string                 trusted_sources;
+    std::string                 upgrade_settings;
     std::string                 host;
     std::string                 mode;
 };

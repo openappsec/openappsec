@@ -35,6 +35,8 @@ LogTriggerSection::LogTriggerSection(
     bool _responseBody,
     bool _tpDetect,
     bool _tpPrevent,
+    bool _acAllow,
+    bool _acDrop,
     bool _webBody,
     bool _webHeaders,
     bool _webRequests,
@@ -58,6 +60,8 @@ LogTriggerSection::LogTriggerSection(
     responseBody(_responseBody),
     tpDetect(_tpDetect),
     tpPrevent(_tpPrevent),
+    acAllow(_acAllow),
+    acDrop(_acDrop),
     webBody(_webBody),
     webHeaders(_webHeaders),
     webRequests(_webRequests),
@@ -88,8 +92,8 @@ LogTriggerSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("triggerName",              name),
         cereal::make_nvp("triggerType",              trigger_type),
         cereal::make_nvp("verbosity",                verbosity),
-        cereal::make_nvp("acAllow",                  false),
-        cereal::make_nvp("acDrop",                   false),
+        cereal::make_nvp("acAllow",                  acAllow),
+        cereal::make_nvp("acDrop",                   acDrop),
         cereal::make_nvp("complianceViolations",     false),
         cereal::make_nvp("complianceWarnings",       false),
         cereal::make_nvp("extendloggingMinSeverity", extendloggingMinSeverity),
@@ -242,8 +246,8 @@ void
 AppsecTriggerAccessControlLogging::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger - Access Control Logging";
-    parseAppsecJSONKey<bool>("allow-events", allow_events, archive_in, false);
-    parseAppsecJSONKey<bool>("drop-events", drop_events, archive_in, false);
+    parseAppsecJSONKey<bool>("allow-events", ac_allow_events, archive_in, false);
+    parseAppsecJSONKey<bool>("drop-events", ac_drop_events, archive_in, false);
 }
 
 void
@@ -525,6 +529,13 @@ AppsecTriggerSpec::getAppsecTriggerLogDestination() const
 {
     return log_destination;
 }
+
+const AppsecTriggerAccessControlLogging &
+AppsecTriggerSpec::getAppsecTriggerAccessControlLogging() const
+{
+    return access_control_logging;
+}
+
 
 void
 TriggersWrapper::save(cereal::JSONOutputArchive &out_ar) const

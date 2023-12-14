@@ -38,12 +38,6 @@ SecurityAppsWrapper::save(cereal::JSONOutputArchive &out_ar) const
     );
 }
 
-void
-PolicyWrapper::save(cereal::JSONOutputArchive &out_ar) const
-{
-    security_apps.save(out_ar);
-}
-
 string
 PolicyMakerUtils::getPolicyName(const string &policy_path)
 {
@@ -150,16 +144,19 @@ PolicyMakerUtils::splitHostName(const string &host_name)
 }
 
 string
-PolicyMakerUtils::dumpPolicyToFile(const PolicyWrapper &policy, const string &policy_path)
+PolicyMakerUtils::dumpPolicyToFile(
+    const PolicyWrapper &policy,
+    const string &policy_path,
+    const string &settings_path)
 {
     clearElementsMaps();
 
-    stringstream ss;
+    stringstream policy_ss, settings_ss;
     {
-        cereal::JSONOutputArchive ar(ss);
-        policy.save(ar);
+        cereal::JSONOutputArchive ar(policy_ss);
+        policy.getSecurityApps().save(ar);
     }
-    string policy_str = ss.str();
+    string policy_str = policy_ss.str();
     try {
         ofstream policy_file(policy_path);
         policy_file << policy_str;
@@ -168,6 +165,20 @@ PolicyMakerUtils::dumpPolicyToFile(const PolicyWrapper &policy, const string &po
         dbgDebug(D_NGINX_POLICY) << "Error while writing new policy to " << policy_path << ", Error: " << e.what();
         return "";
     }
+
+    {
+        cereal::JSONOutputArchive ar(settings_ss);
+        policy.getSettings().save(ar);
+    }
+    string settings_str = settings_ss.str();
+    try {
+        ofstream settings_file(settings_path);
+        settings_file << settings_str;
+        settings_file.close();
+    } catch (const ofstream::failure &e) {
+        dbgDebug(D_NGINX_POLICY) << "Error while writing settings to " << settings_path << ", Error: " << e.what();
+    }
+    dbgDebug(D_LOCAL_POLICY) << settings_path << " content: " << settings_str;
 
     return policy_str;
 }
@@ -517,6 +528,8 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
         trigger_spec.getAppsecTriggerAdditionalSuspiciousEventsLogging().getMinimumSeverity();
     bool tpDetect = trigger_spec.getAppsecTriggerLogging().isDetectEvents();
     bool tpPrevent = trigger_spec.getAppsecTriggerLogging().isPreventEvents();
+    bool acAllow = trigger_spec.getAppsecTriggerAccessControlLogging().isAcAllowEvents();
+    bool acDrop = trigger_spec.getAppsecTriggerAccessControlLogging().isAcDropEvents();
     bool webRequests = trigger_spec.getAppsecTriggerLogging().isAllWebRequests();
     bool webUrlPath = trigger_spec.getAppsecTriggerExtendedLogging().isUrlPath();
     bool webUrlQuery = trigger_spec.getAppsecTriggerExtendedLogging().isUrlQuery();
@@ -555,6 +568,8 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
         responseBody,
         tpDetect,
         tpPrevent,
+        acAllow,
+        acDrop,
         webBody,
         webHeaders,
         webRequests,
@@ -1004,13 +1019,21 @@ PolicyMakerUtils::createIpsSections(
 }
 
 void
-PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, const string &practice_name)
+PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, bool is_temporary)
 {
-    auto path = getFilesystemPathConfig() + "/conf/snort/snort_k8s_" + practice_name;
-    if (snort_protections.find(path) != snort_protections.end()) return;
+    auto path = getFilesystemPathConfig() + "/conf/snort/" + file_name;
+    string in_file = is_temporary ? path + ".rule" : path;
 
-    auto snort_scriipt_path = getFilesystemPathConfig() + "/scripts/snort_to_ips_local.py";
-    auto cmd = "python " + snort_scriipt_path + " " + path + ".rule " + path + ".out " + path + ".err";
+    if (snort_protections.find(path) != snort_protections.end()) {
+        dbgTrace(D_LOCAL_POLICY) << "Snort protections section for file " << file_name << " already exists";
+        return;
+    }
+    dbgTrace(D_LOCAL_POLICY)
+        << "Reading snort signatures from"
+        << (is_temporary ? " temporary" : "") << " file " << path;
+
+    auto snort_script_path = getFilesystemPathConfig() + "/scripts/snort_to_ips_local.py";
+    auto cmd = "python3 " + snort_script_path + " " + in_file + " " + path + ".out " + path + ".err";
 
     auto res = Singleton::Consume<I_ShellCmd>::by<LocalPolicyMgmtGenerator>()->getExecOutput(cmd);
 
@@ -1026,7 +1049,7 @@ PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, const st
     }
 
     auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalPolicyMgmtGenerator>();
-    i_orchestration_tools->removeFile(path + ".rule");
+    if (is_temporary) i_orchestration_tools->removeFile(in_file);
     i_orchestration_tools->removeFile(path + ".out");
     i_orchestration_tools->removeFile(path + ".err");
 
@@ -1055,7 +1078,14 @@ PolicyMakerUtils::createSnortSections(
         apssec_practice.getSnortSignatures().getFiles().size() == 0) {
         return;
     }
-    createSnortProtecionsSection(apssec_practice.getSnortSignatures().getFiles()[0], apssec_practice.getName());
+
+    if (apssec_practice.getSnortSignatures().isTemporary()) {
+        createSnortProtecionsSection("snort_k8s_" + apssec_practice.getName(), true);
+    } else if (apssec_practice.getSnortSignatures().getFiles().size() > 0) {
+        // when support for multiple files is ready, will iterate over the files array
+        auto file = apssec_practice.getSnortSignatures().getFiles()[0];
+        createSnortProtecionsSection(file, false);
+    }
 
     SnortProtectionsSection snort_section = SnortProtectionsSection(
         context,
@@ -1160,7 +1190,7 @@ PolicyMakerUtils::createWebAppSection(
         apssec_practice.getWebAttacks().getMaxUrlSizeBytes()
     );
     WebAppSection web_app = WebAppSection(
-        full_url == "Any" ? "" : full_url,
+        full_url == "Any" ? "http://*:*" : full_url,
         rule_config.getAssetId(),
         rule_config.getAssetName(),
         rule_config.getAssetId(),
@@ -1271,17 +1301,16 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
 
 }
 
-SettingsWrapper
-createProfilesSection()
+SettingsRulebase
+createSettingsSection(const AppSecAutoUpgradeSpec &upgrade_settings)
 {
     string agent_settings_key = "agent.test.policy";
     string agent_settings_value = "local policy";
     AgentSettingsSection agent_setting_1 = AgentSettingsSection(agent_settings_key, agent_settings_value);
 
-    SettingsRulebase settings_rulebase_1 = SettingsRulebase({agent_setting_1});
-    return SettingsWrapper(settings_rulebase_1);
+    return SettingsRulebase({agent_setting_1}, upgrade_settings);
+
 }
-// LCOV_EXCL_STOP
 
 PolicyWrapper
 PolicyMakerUtils::combineElementsToPolicy(const string &policy_version)
@@ -1313,8 +1342,8 @@ PolicyMakerUtils::combineElementsToPolicy(const string &policy_version)
         policy_version
     );
 
-    SettingsWrapper profiles_section = createProfilesSection();
-    PolicyWrapper policy_wrapper = PolicyWrapper(profiles_section, security_app_section);
+    SettingsRulebase settings_section = createSettingsSection(upgrade_settings);
+    PolicyWrapper policy_wrapper = PolicyWrapper(settings_section, security_app_section);
 
     return policy_wrapper;
 }
@@ -1433,7 +1462,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
 
         if (!web_apps.count(rule_config.getAssetName())) {
             WebAppSection web_app = WebAppSection(
-                full_url == "Any" ? "" : full_url,
+                full_url == "Any" ? "http://*:*" : full_url,
                 rule_config.getAssetId(),
                 rule_config.getAssetName(),
                 rule_config.getAssetId(),
@@ -1553,6 +1582,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
         rule_annotations
     );
 
+    upgrade_settings = policy.getAppSecAutoUpgradeSpec();
 }
 // LCOV_EXCL_STOP
 

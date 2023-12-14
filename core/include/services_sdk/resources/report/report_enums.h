@@ -66,6 +66,8 @@ enum class Tags {
     CROWDSEC,
     PLAYGROUND,
     API_DISCOVERY,
+    NGINX_PROXY_MANAGER,
+    WEB_SERVER_APISIX,
 
     COUNT
 };

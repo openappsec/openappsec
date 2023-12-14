@@ -481,17 +481,22 @@ private:
 class NewSnortSignaturesAndOpenSchemaAPI
 {
 public:
+    NewSnortSignaturesAndOpenSchemaAPI() : is_temporary(false) {};
+
     void load(cereal::JSONInputArchive &archive_in);
 
     void addFile(const std::string &file_name);
     const std::string & getOverrideMode() const;
     const std::vector<std::string> & getConfigMap() const;
     const std::vector<std::string> & getFiles() const;
+    bool isTemporary() const;
+    void setTemporary(bool val);
 
 private:
     std::string override_mode;
     std::vector<std::string> config_map;
     std::vector<std::string> files;
+    bool is_temporary;
 };
 
 class NewAppSecWebBotsURI
