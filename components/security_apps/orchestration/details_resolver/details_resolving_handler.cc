@@ -108,7 +108,7 @@ DetailsResolvingHanlder::Impl::getCommandOutput(const string &cmd)
     if (!result.ok()) return result;
 
     auto unpacked_result = result.unpack();
-    if (unpacked_result.back() == '\n') unpacked_result.pop_back();
+    if (!unpacked_result.empty() && unpacked_result.back() == '\n') unpacked_result.pop_back();
 
     return unpacked_result;
 }

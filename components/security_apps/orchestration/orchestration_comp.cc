@@ -1893,6 +1893,7 @@ private:
         auto result = i_shell_cmd->getExecOutput(openssl_dir_cmd);
         if (result.ok()) {
             string val_openssl_dir = result.unpack();
+            if (val_openssl_dir.empty()) return;
             if (val_openssl_dir.back() == '\n') val_openssl_dir.pop_back();
             dbgTrace(D_ORCHESTRATOR)
                 << "Adding OpenSSL default directory to agent details. Directory: "
