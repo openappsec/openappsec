@@ -218,6 +218,14 @@ private:
     Maybe<void>
     start()
     {
+        auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
+        auto agent_mode = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getOrchestrationMode();
+        auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
+        if (agent_mode == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
+            update_communication->authenticateAgent();
+            return Maybe<void>();
+        }
+
         bool enforce_policy_flag = false;
         Maybe<OrchestrationPolicy> maybe_policy = genError("Empty policy");
         string policy_version = "";
@@ -281,7 +289,6 @@ private:
             return genError("Failed to set fog address from policy");
         }
 
-        auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
         auto authentication_res = update_communication->authenticateAgent();
         if (authentication_res.ok() && !policy_version.empty()) {
             auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
@@ -292,7 +299,6 @@ private:
             }
         }
 
-        auto agent_mode = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getOrchestrationMode();
         if (agent_mode == OrchestrationMode::HYBRID) {
             return Maybe<void>();
         }
