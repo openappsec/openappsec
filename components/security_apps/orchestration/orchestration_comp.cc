@@ -299,9 +299,6 @@ private:
             }
         }
 
-        if (agent_mode == OrchestrationMode::HYBRID) {
-            return Maybe<void>();
-        }
         return authentication_res;
     }
 
