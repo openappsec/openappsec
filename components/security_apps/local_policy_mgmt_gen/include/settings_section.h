@@ -22,6 +22,7 @@
 #include "config.h"
 #include "debug.h"
 #include "local_policy_common.h"
+#include "new_auto_upgrade.h"
 
 // LCOV_EXCL_START Reason: no test exist
 class AgentSettingsSection
@@ -41,12 +42,18 @@ private:
 class SettingsRulebase
 {
 public:
-    SettingsRulebase(std::vector<AgentSettingsSection> _agentSettings) : agentSettings(_agentSettings) {}
+    SettingsRulebase(
+        std::vector<AgentSettingsSection> _agentSettings,
+        const AppSecAutoUpgradeSpec &_upgradeSettings)
+            :
+        agentSettings(_agentSettings),
+        upgrade_settings(_upgradeSettings) {}
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::vector<AgentSettingsSection> agentSettings;
+    AppSecAutoUpgradeSpec upgrade_settings;
 };
 
 class SettingsWrapper

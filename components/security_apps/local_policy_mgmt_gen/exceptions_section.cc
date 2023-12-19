@@ -241,10 +241,20 @@ ExceptionMatch::ExceptionMatch(const NewAppsecException &parsed_exception)
         items.push_back(ExceptionMatch("sourceIdentifier", parsed_exception.getSourceIdentifier()));
     }
     if (!parsed_exception.getSourceIp().empty()) {
-        items.push_back(ExceptionMatch("sourceIp", parsed_exception.getSourceIp()));
+        items.push_back(ExceptionMatch("sourceIP", parsed_exception.getSourceIp()));
     }
     if (!parsed_exception.getUrl().empty()) {
         items.push_back(ExceptionMatch("url", parsed_exception.getUrl()));
+    }
+
+    // when there is only one operand, there's no need for an additional 'and'/'or' condition enclosing it
+    if (items.size() == 1) {
+        auto & other = items[0];
+        match_type = other.match_type;
+        op = other.op;
+        key = other.key;
+        value = other.value;
+        items = other.items;
     }
 }
 

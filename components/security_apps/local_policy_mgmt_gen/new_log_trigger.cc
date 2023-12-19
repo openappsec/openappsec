@@ -26,8 +26,8 @@ void
 NewAppsecTriggerAccessControlLogging::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger - Access Control Logging";
-    parseAppsecJSONKey<bool>("allowEvents", allow_events, archive_in, false);
-    parseAppsecJSONKey<bool>("dropEvents", drop_events, archive_in, false);
+    parseAppsecJSONKey<bool>("allowEvents", ac_allow_events, archive_in, false);
+    parseAppsecJSONKey<bool>("dropEvents", ac_drop_events, archive_in, false);
 }
 
 void
@@ -306,6 +306,13 @@ NewAppsecLogTrigger::getAppsecTriggerLogging() const
 {
     return appsec_logging;
 }
+
+const NewAppsecTriggerAccessControlLogging &
+NewAppsecLogTrigger::getAppsecTriggerAccessControlLogging() const
+{
+    return access_control_logging;
+}
+
 
 const NewAppsecTriggerExtendedLogging &
 NewAppsecLogTrigger::getAppsecTriggerExtendedLogging() const

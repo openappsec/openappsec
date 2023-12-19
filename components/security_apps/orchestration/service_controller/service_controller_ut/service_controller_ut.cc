@@ -7,6 +7,7 @@
 #include "service_controller.h"
 #include "config.h"
 #include "config_component.h"
+#include "declarative_policy_utils.h"
 #include "mock/mock_orchestration_tools.h"
 #include "mock/mock_orchestration_status.h"
 #include "mock/mock_time_get.h"
@@ -158,10 +159,26 @@ public:
         return string_stream.str();
     }
 
+    void
+    expectNewConfigRequest(const string &req_body, const string &response)
+    {
+        EXPECT_CALL(
+            mock_message,
+            sendSyncMessage(
+                HTTPMethod::POST,
+                "/set-new-configuration",
+                req_body,
+                _,
+                _
+            )
+        ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response)));
+    }
+
     const uint16_t                      l4_firewall_service_port = 8888;
     const uint16_t                      waap_service_port = 7777;
     ::Environment                       env;
     ConfigComponent                     config;
+    DeclarativePolicyUtils              declarative_policy_utils;
     string                              configuration_dir;
     string                              policy_extension;
     string                              settings_extension;
@@ -176,7 +193,7 @@ public:
     string                              services_port;
     StrictMock<MockTimeGet>             time;
     StrictMock<MockRestApi>             mock_rest_api;
-    StrictMock<MockMessaging>           mock_message;
+    StrictMock<MockMessaging>         mock_message;
     StrictMock<MockMainLoop>            mock_ml;
     StrictMock<MockShellCmd>            mock_shell_cmd;
     StrictMock<MockOrchestrationStatus> mock_orchestration_status;
@@ -254,6 +271,9 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -262,23 +282,7 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
 
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -369,6 +373,9 @@ TEST_F(ServiceControllerTest, supportVersions)
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -377,23 +384,7 @@ TEST_F(ServiceControllerTest, supportVersions)
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
 
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -464,6 +455,9 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -493,24 +487,7 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
@@ -585,6 +562,9 @@ TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -593,23 +573,7 @@ TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
 
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -732,24 +696,11 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -818,6 +769,9 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -835,24 +789,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
     string general_settings_path = "/my/settings/path";
     string reply_msg1 = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg1)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg1);
 
     // both policy and settings now being updated
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
@@ -871,26 +808,14 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     general_settings_path += "/new";
 
     string reply_msg2 = "{\"id\": 2, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    Flags<MessageConnConfig> conn_flags2;
-    conn_flags2.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 2,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags2,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillRepeatedly(Return(Maybe<string>(reply_msg2)));
+    expectNewConfigRequest("{\n    \"id\": 2,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg2);
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
@@ -964,6 +889,9 @@ TEST_F(ServiceControllerTest, backup)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -988,21 +916,8 @@ TEST_F(ServiceControllerTest, backup)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            _,
-            _,
-            _,
-            "127.0.0.1",
-            l4_firewall_service_port,
-            _,
-            "/set-new-configuration",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    EXPECT_CALL(mock_message, sendSyncMessage(_, "/set-new-configuration", _, _, _))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, reply_msg)));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
@@ -1077,6 +992,9 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -1103,21 +1021,7 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            _,
-            _,
-            _,
-            "127.0.0.1",
-            l4_firewall_service_port,
-            _,
-            "/set-new-configuration",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
@@ -1192,6 +1096,9 @@ TEST_F(ServiceControllerTest, backupAttempts)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -1218,21 +1125,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            _,
-            _,
-            _,
-            "127.0.0.1",
-            l4_firewall_service_port,
-            _,
-            "/set-new-configuration",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_CALL(mock_ml, yield(false)).Times(2);
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -1316,6 +1209,9 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("orchestration", orchestration_policy_path, OrchestrationStatusConfigType::POLICY));
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, writeFile(orchestration, orchestration_policy_path, false))
@@ -1336,23 +1232,7 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     set<string> changed_policies = {
@@ -1388,6 +1268,9 @@ TEST_F(ServiceControllerTest, emptyServices)
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
@@ -1440,6 +1323,9 @@ TEST_F(ServiceControllerTest, failingWhileLoadingCurrentConfiguration)
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(err));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
     EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
@@ -1509,6 +1395,8 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
     );
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -1577,6 +1465,9 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
         mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY)
     );
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
@@ -1672,6 +1563,8 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
     );
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -1710,21 +1603,7 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
     EXPECT_CALL(tenant_manager, getInstances("tenant2", "1235")).WillOnce(Return(empty_ids));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            _,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            _,
-            string("/set-new-configuration"),
-            _,
-            _,
-            _
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     for(auto entry : tenant_files_input) {
         auto tenant = entry.first.first;
@@ -1800,6 +1679,9 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
         EXPECT_CALL(mock_orchestration_status, setServiceConfiguration(
             "l4_firewall", l4_firewall_policy_path_new, OrchestrationStatusConfigType::POLICY)
         );
+
+        EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, conf_file_name))
+            .WillRepeatedly(Return(version_value));
 
         string new_policy_file_path = "/etc/cp/conf/tenant_" + tenant + "_profile_" + profile + "/" + "policy.json";
         EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_file_path, new_policy_file_path + backup_extension))
@@ -1906,6 +1788,9 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
+        .WillOnce(Return(version_value));
+
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -1934,23 +1819,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
         << "    \"error_message\": \"\""
         << "}";
 
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            true,
-            "{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2\"\n}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            l4_firewall_service_port,
-            conn_flags,
-            string("/set-new-configuration"),
-            string(),
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(Maybe<string>(reply_msg)));
+    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
 
     auto func = [&] (chrono::microseconds) { set_reconf_status->performRestCall(reconf_status); };
     EXPECT_CALL(mock_ml, yield(chrono::microseconds(2000000))).WillOnce(Invoke(func));

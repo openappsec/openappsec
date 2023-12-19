@@ -32,7 +32,7 @@ void
 FogCommunication::init()
 {
     FogAuthenticator::init();
-    declarative_policy_utils.init();
+    i_declarative_policy = Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>();
 }
 
 Maybe<void>
@@ -67,15 +67,15 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
         Maybe<string> maybe_new_data = request.getData();
         string data_checksum = maybe_new_data.ok() ? maybe_new_data.unpack() : "";
 
-        if (declarative_policy_utils.shouldApplyPolicy()) {
-            string policy_response = declarative_policy_utils.getUpdate(request);
+        if (i_declarative_policy->shouldApplyPolicy()) {
+            string policy_response = i_declarative_policy->getUpdate(request);
             if (!policy_response.empty()) {
                 dbgTrace(D_ORCHESTRATOR) << "Apply policy - declarative mode";
                 auto agent_details = Singleton::Consume<I_AgentDetails>::by<DeclarativePolicyUtils>();
                 auto maybe_fog_address = agent_details->getFogDomain();
                 string fog_address = maybe_fog_address.ok() ? maybe_fog_address.unpack() : "";
 
-                declarative_policy_utils.sendUpdatesToFog(
+                i_declarative_policy->sendUpdatesToFog(
                     unpacked_access_token,
                     agent_details->getTenantId(),
                     agent_details->getProfileId(),
@@ -83,7 +83,6 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
                 );
             }
             request = CheckUpdateRequest(manifest_checksum, policy_response, settings_checksum, data_checksum, "", "");
-            declarative_policy_utils.turnOffApplyPolicyFlag();
         } else {
             request = CheckUpdateRequest(manifest_checksum, "", settings_checksum, data_checksum, "", "");
         }
@@ -103,7 +102,7 @@ FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
     string policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
     if (policy_mgmt_mode == "declarative" && resourse_file.getFileName() =="policy") {
         dbgDebug(D_ORCHESTRATOR) << "Download policy on declarative mode - returnig the local policy";
-        return declarative_policy_utils.getCurrPolicy();
+        return i_declarative_policy->getCurrPolicy();
     }
     static const string file_attribute_str = "/api/v2/agents/resources/";
     Maybe<string> attribute_file = Singleton::Consume<I_Messaging>::by<FogCommunication>()->downloadFile(

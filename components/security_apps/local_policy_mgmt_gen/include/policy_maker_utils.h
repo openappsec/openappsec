@@ -51,6 +51,7 @@ enum class AnnotationTypes {
     WEB_USER_RES,
     SOURCE_IDENTIFIERS,
     TRUSTED_SOURCES,
+    UPGRADE_SETTINGS,
     COUNT
 };
 
@@ -96,16 +97,17 @@ class PolicyWrapper
 {
 public:
     PolicyWrapper(
-        const SettingsWrapper &_settings,
+        const SettingsRulebase &_settings,
         const SecurityAppsWrapper &_security_apps)
             :
         settings(_settings),
         security_apps(_security_apps) {}
 
-    void save(cereal::JSONOutputArchive &out_ar) const;
+    const SettingsRulebase & getSettings() const { return settings; }
+    const SecurityAppsWrapper & getSecurityApps() const { return security_apps; }
 
 private:
-    SettingsWrapper settings;
+    SettingsRulebase settings;
     SecurityAppsWrapper security_apps;
 };
 
@@ -139,7 +141,11 @@ private:
 
     std::tuple<std::string, std::string, std::string> splitHostName(const std::string &host_name);
 
-    std::string dumpPolicyToFile(const PolicyWrapper &policy, const std::string &policy_path);
+    std::string dumpPolicyToFile(
+        const PolicyWrapper &policy,
+        const std::string &policy_path,
+        const std::string &settings_path = "/etc/cp/conf/settings.json"
+    );
 
     PolicyWrapper combineElementsToPolicy(const std::string &policy_version);
 
@@ -155,7 +161,7 @@ private:
         std::map<AnnotationTypes, std::string> &rule_annotations
     );
 
-    void createSnortProtecionsSection(const std::string &file_name, const std::string &practic_name);
+    void createSnortProtecionsSection(const std::string &file_name, bool is_temporary);
 
     void
     createSnortSections(
@@ -245,6 +251,7 @@ private:
     std::map<std::string, RateLimitSection> rate_limit;
     std::map<std::string, UsersIdentifiersRulebase> users_identifiers;
     std::map<std::string, AppSecTrustedSources> trusted_sources;
+    AppSecAutoUpgradeSpec upgrade_settings;
 };
 
 template<class T, class R>

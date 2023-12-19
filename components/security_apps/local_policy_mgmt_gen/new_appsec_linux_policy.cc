@@ -64,6 +64,12 @@ V1beta2AppsecLinuxPolicy::getAppsecSourceIdentifierSpecs() const
     return sources_identifiers;
 }
 
+const AppSecAutoUpgradeSpec &
+V1beta2AppsecLinuxPolicy::getAppSecAutoUpgradeSpec() const
+{
+    return auto_upgrade;
+}
+
 void
 V1beta2AppsecLinuxPolicy::addSpecificRule(const NewParsedRule &_rule)
 {
@@ -97,4 +103,5 @@ V1beta2AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<NewAppsecException>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<NewTrustedSourcesSpec>>("trustedSources", trusted_sources, archive_in);
     parseAppsecJSONKey<vector<NewSourcesIdentifiers>>("sourcesIdentifiers", sources_identifiers, archive_in);
+    parseAppsecJSONKey<AppSecAutoUpgradeSpec>("autoUpgrade", auto_upgrade, archive_in);
 }

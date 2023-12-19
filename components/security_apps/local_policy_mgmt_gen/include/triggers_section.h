@@ -44,6 +44,8 @@ public:
         bool _responseBody,
         bool _tpDetect,
         bool _tpPrevent,
+        bool _acAllow,
+        bool _acDrop,
         bool _webBody,
         bool _webHeaders,
         bool _webRequests,
@@ -76,6 +78,8 @@ private:
     bool responseBody;
     bool tpDetect;
     bool tpPrevent;
+    bool acAllow;
+    bool acDrop;
     bool webBody;
     bool webHeaders;
     bool webRequests;
@@ -158,9 +162,11 @@ class AppsecTriggerAccessControlLogging
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
+    bool isAcAllowEvents() const { return ac_allow_events; }
+    bool isAcDropEvents() const { return ac_drop_events; }
 private:
-    bool allow_events = false;
-    bool drop_events = false;
+    bool ac_allow_events = false;
+    bool ac_drop_events = false;
 };
 
 class AppsecTriggerAdditionalSuspiciousEventsLogging : public ClientRest
@@ -281,6 +287,7 @@ public:
     const AppsecTriggerLogging & getAppsecTriggerLogging() const;
     const AppsecTriggerExtendedLogging & getAppsecTriggerExtendedLogging() const;
     const AppsecTriggerLogDestination & getAppsecTriggerLogDestination() const;
+    const AppsecTriggerAccessControlLogging & getAppsecTriggerAccessControlLogging() const;
 
 private:
     AppsecTriggerAccessControlLogging access_control_logging;

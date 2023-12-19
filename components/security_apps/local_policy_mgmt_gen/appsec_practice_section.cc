@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "appsec_practice_section.h"
+#include <algorithm>
 
 using namespace std;
 
@@ -238,6 +239,7 @@ AppSecPracticeOpenSchemaAPI::getConfigMap() const
 {
     return config_map;
 }
+
 // LCOV_EXCL_STOP
 void
 AppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
@@ -272,6 +274,7 @@ AppSecPracticeSpec::getSnortSignatures() const
 {
     return snort_signatures;
 }
+
 // LCOV_EXCL_STOP
 
 const AppSecPracticeWebAttacks &
@@ -337,6 +340,7 @@ ParsedMatch::ParsedMatch(const ExceptionMatch &exceptions)
         parsed_match.push_back(ParsedMatch(exception_match));
     }
 }
+
 // LCOV_EXCL_STOP
 
 void
@@ -375,6 +379,7 @@ AppSecOverride::AppSecOverride(const InnerException &parsed_exceptions)
     map<string, string> behavior = {{parsed_exceptions.getBehaviorKey(), parsed_exceptions.getBehaviorValue()}};
     parsed_behavior.push_back(behavior);
 }
+
 // LCOV_EXCL_STOP
 
 void
@@ -426,10 +431,11 @@ WebAppSection::WebAppSection(
     web_attack_mitigation_mode(parsed_appsec_spec.getWebAttacks().getMode(default_mode)),
     practice_advanced_config(parsed_appsec_spec),
     anti_bots(parsed_appsec_spec.getAntiBot()),
-    trusted_sources({parsed_trusted_sources})
+    trusted_sources({ parsed_trusted_sources })
 {
     web_attack_mitigation = true;
     web_attack_mitigation_action =
+        web_attack_mitigation_mode != "Prevent" ? "Transparent" :
         web_attack_mitigation_severity == "critical" ? "low" :
         web_attack_mitigation_severity == "high" ? "balanced" :
         web_attack_mitigation_severity == "medium" ? "high" :
@@ -473,7 +479,7 @@ WebAppSection::WebAppSection(
     web_attack_mitigation_mode(_web_attack_mitigation_mode),
     practice_advanced_config(_practice_advanced_config),
     anti_bots(_anti_bots),
-    trusted_sources({parsed_trusted_sources})
+    trusted_sources({ parsed_trusted_sources })
 {
     web_attack_mitigation = true;
     web_attack_mitigation_action =
@@ -488,6 +494,7 @@ WebAppSection::WebAppSection(
         overrides.push_back(AppSecOverride(source_ident));
     }
 }
+
 // LCOV_EXCL_STOP
 
 void
@@ -525,7 +532,18 @@ WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("botProtection_v2",            detect_str)
     );
 }
+
 // LCOV_EXCL_START Reason: no test exist
+
+bool
+WebAppSection::operator<(const WebAppSection &other) const
+{
+    // for sorting from the most specific to the least specific rule
+    if (application_urls == default_appsec_url) return false;
+    if (other.application_urls == default_appsec_url) return true;
+    return application_urls.size() > other.application_urls.size();
+}
+
 void
 WebAPISection::save(cereal::JSONOutputArchive &out_ar) const
 {
@@ -554,7 +572,28 @@ WebAPISection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("overrides",                      empty_list)
     );
 }
+
+bool
+WebAPISection::operator<(const WebAPISection &other) const
+{
+    // for sorting from the most specific to the least specific rule
+    if (application_urls == default_appsec_url) return false;
+    if (other.application_urls == default_appsec_url) return true;
+    return application_urls.size() > other.application_urls.size();
+}
+
 // LCOV_EXCL_STOP
+
+AppSecRulebase::AppSecRulebase(
+    std::vector<WebAppSection> _webApplicationPractices,
+    std::vector<WebAPISection> _webAPIPractices
+) :
+    webApplicationPractices(_webApplicationPractices),
+    webAPIPractices(_webAPIPractices)
+{
+    sort(webAPIPractices.begin(), webAPIPractices.end());
+    sort(webApplicationPractices.begin(), webApplicationPractices.end());
+}
 
 void
 AppSecRulebase::save(cereal::JSONOutputArchive &out_ar) const
@@ -719,11 +758,7 @@ AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<vector<AppSecCustomResponseSpec>>("custom-responses", custom_responses, archive_in);
     parseAppsecJSONKey<vector<AppsecException>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<TrustedSourcesSpec>>("trusted-sources", trusted_sources, archive_in);
-    parseAppsecJSONKey<vector<SourceIdentifierSpecWrapper>>(
-        "source-identifiers",
-        sources_identifiers,
-        archive_in
-    );
+    parseAppsecJSONKey<vector<SourceIdentifierSpecWrapper>>("source-identifiers", sources_identifiers, archive_in);
 }
 
 const AppsecPolicySpec &
@@ -767,7 +802,6 @@ AppsecLinuxPolicy::getAppsecSourceIdentifierSpecs() const
 {
     return sources_identifiers;
 }
-
 
 const vector<RPMSettings> &
 AppsecLinuxPolicy::rpmGetRPSettings() const

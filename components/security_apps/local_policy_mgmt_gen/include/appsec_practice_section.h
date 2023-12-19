@@ -296,6 +296,8 @@ public:
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
+    bool operator< (const WebAppSection &other) const;
+
 private:
     std::string application_urls;
     std::string asset_id;
@@ -350,6 +352,8 @@ public:
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
+    bool operator< (const WebAPISection &other) const;
+
 private:
     std::string application_urls;
     std::string asset_id;
@@ -371,10 +375,7 @@ class AppSecRulebase
 public:
     AppSecRulebase(
         std::vector<WebAppSection> _webApplicationPractices,
-        std::vector<WebAPISection> _webAPIPractices)
-        :
-        webApplicationPractices(_webApplicationPractices),
-        webAPIPractices(_webAPIPractices) {}
+        std::vector<WebAPISection> _webAPIPractices);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 

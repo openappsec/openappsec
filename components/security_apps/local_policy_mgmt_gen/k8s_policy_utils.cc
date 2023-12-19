@@ -159,6 +159,7 @@ extractElementsFromNewRule(
     policy_elements_names[AnnotationTypes::WEB_USER_RES].insert(rule.getCustomResponse());
     policy_elements_names[AnnotationTypes::SOURCE_IDENTIFIERS].insert(rule.getSourceIdentifiers());
     policy_elements_names[AnnotationTypes::TRUSTED_SOURCES].insert(rule.getTrustedSources());
+    policy_elements_names[AnnotationTypes::UPGRADE_SETTINGS].insert(rule.getUpgradeSettings());
 }
 
 map<AnnotationTypes, unordered_set<string>>
@@ -356,8 +357,9 @@ K8sPolicyUtils::createSnortFile(vector<NewAppSecPracticeSpec> &practices) const
 {
     for (NewAppSecPracticeSpec &practice : practices) {
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<K8sPolicyUtils>();
-        auto path = "/etc/cp/conf/snort/snort_k8s_" + practice.getName() + ".rule";
+        auto path = getFilesystemPathConfig() + "/conf/snort/snort_k8s_" + practice.getName() + ".rule";
         bool append_mode = false;
+        practice.getSnortSignatures().setTemporary(true);
         for (const string &config_map : practice.getSnortSignatures().getConfigMap())
         {
             auto maybe_configmap = getObjectFromCluster<ConfigMaps>(
@@ -441,6 +443,15 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
         policy_elements_names[AnnotationTypes::TRUSTED_SOURCES]
     );
 
+    vector<AppSecAutoUpgradeSpec> vec_upgrade_settings = extractV1Beta2ElementsFromCluster<AppSecAutoUpgradeSpec>(
+        "autoupgrade",
+        policy_elements_names[AnnotationTypes::UPGRADE_SETTINGS]
+    );
+    if (vec_upgrade_settings.size() > 1) {
+        dbgWarning(D_LOCAL_POLICY) << "Only one definition of upgrade settings is required.";
+    }
+    auto upgrade_settings = vec_upgrade_settings.empty() ? AppSecAutoUpgradeSpec() : vec_upgrade_settings.front();
+
     V1beta2AppsecLinuxPolicy appsec_policy = V1beta2AppsecLinuxPolicy(
         appsec_policy_spec.getSpec(),
         threat_prevention_practices,
@@ -449,7 +460,8 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
         web_user_responses,
         exceptions,
         trusted_sources,
-        source_identifiers
+        source_identifiers,
+        upgrade_settings
     );
     return appsec_policy;
 }

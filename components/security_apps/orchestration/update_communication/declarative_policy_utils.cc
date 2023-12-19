@@ -27,7 +27,7 @@ DeclarativePolicyUtils::init()
         auto mainloop = Singleton::Consume<I_MainLoop>::by<DeclarativePolicyUtils>();
         mainloop->addRecurringRoutine(
             I_MainLoop::RoutineType::Offline,
-            chrono::minutes(1),
+            chrono::seconds(30),
             [&] () { periodicPolicyLoad(); },
             "Automatic Policy Loading"
         );

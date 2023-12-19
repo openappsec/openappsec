@@ -4,7 +4,7 @@ project (ngen)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -Wno-terminate")
 
 execute_process(COMMAND grep -c "Alpine Linux" /etc/os-release OUTPUT_VARIABLE IS_ALPINE)
-if(IS_ALPINE EQUAL "1")
+if(NOT IS_ALPINE EQUAL "0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dalpine")
 endif()
 

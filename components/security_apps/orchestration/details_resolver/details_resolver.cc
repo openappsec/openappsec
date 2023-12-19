@@ -127,7 +127,7 @@ DetailsResolver::Impl::isReverseProxy()
 {
 #if defined(gaia) || defined(smb)
     auto is_reverse_proxy = DetailsResolvingHanlder::getCommandOutput("cpprod_util CPPROD_IsConfigured CPwaap");
-    if (is_reverse_proxy.ok()) {
+    if (is_reverse_proxy.ok() && !is_reverse_proxy.unpack().empty()) {
         return is_reverse_proxy.unpack().front() == '1';
     }
 #endif
@@ -142,7 +142,7 @@ DetailsResolver::Impl::isKernelVersion3OrHigher()
         "| cut -d '.' -f 1 | awk -F: '{ if ( $1 >= 3 ) {print 1} else {print 0}}'";
 
     auto is_gogo = DetailsResolvingHanlder::getCommandOutput(cmd);
-    if (is_gogo.ok()) {
+    if (is_gogo.ok() && !is_gogo.unpack().empty()) {
         return is_gogo.unpack().front() == '1';
     }
     return false;
@@ -155,7 +155,7 @@ DetailsResolver::Impl::isGwNotVsx()
     static const string is_vsx_cmd = "cpprod_util FWisVSX";
     auto is_gw = DetailsResolvingHanlder::getCommandOutput(is_gw_cmd);
     auto is_vsx = DetailsResolvingHanlder::getCommandOutput(is_vsx_cmd);
-    if (is_gw.ok() && is_vsx.ok()) {
+    if (is_gw.ok() && is_vsx.ok() && !is_gw.unpack().empty() && !is_vsx.unpack().empty()) {
         return is_gw.unpack().front() == '1' && is_vsx.unpack().front() == '0';
     }
     return false;

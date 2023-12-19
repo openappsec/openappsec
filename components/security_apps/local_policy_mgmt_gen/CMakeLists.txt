@@ -13,6 +13,7 @@ add_library(local_policy_mgmt_gen
     local_policy_mgmt_gen.cc
     new_appsec_policy_crd_parser.cc
     new_appsec_linux_policy.cc
+    new_auto_upgrade.cc
     new_custom_response.cc
     new_trusted_sources.cc
     new_log_trigger.cc

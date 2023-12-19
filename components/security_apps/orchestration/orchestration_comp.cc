@@ -218,6 +218,14 @@ private:
     Maybe<void>
     start()
     {
+        auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
+        auto agent_mode = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getOrchestrationMode();
+        auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
+        if (agent_mode == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
+            update_communication->authenticateAgent();
+            return Maybe<void>();
+        }
+
         bool enforce_policy_flag = false;
         Maybe<OrchestrationPolicy> maybe_policy = genError("Empty policy");
         string policy_version = "";
@@ -281,7 +289,6 @@ private:
             return genError("Failed to set fog address from policy");
         }
 
-        auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
         auto authentication_res = update_communication->authenticateAgent();
         if (authentication_res.ok() && !policy_version.empty()) {
             auto service_controller = Singleton::Consume<I_ServiceController>::by<OrchestrationComp>();
@@ -292,10 +299,6 @@ private:
             }
         }
 
-        auto agent_mode = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getOrchestrationMode();
-        if (agent_mode == OrchestrationMode::HYBRID) {
-            return Maybe<void>();
-        }
         return authentication_res;
     }
 
@@ -1668,6 +1671,7 @@ private:
 
         if (getAttribute("no-setting", "CROWDSEC_ENABLED") == "true") tags.insert(Tags::CROWDSEC);
         if (getAttribute("no-setting", "PLAYGROUND") == "true") tags.insert(Tags::PLAYGROUND);
+        if (getAttribute("no-setting", "nginxproxymanager") == "true") tags.insert(Tags::NGINX_PROXY_MANAGER);
 
         Report registration_report(
             "Local Agent Data",
@@ -1892,6 +1896,7 @@ private:
         auto result = i_shell_cmd->getExecOutput(openssl_dir_cmd);
         if (result.ok()) {
             string val_openssl_dir = result.unpack();
+            if (val_openssl_dir.empty()) return;
             if (val_openssl_dir.back() == '\n') val_openssl_dir.pop_back();
             dbgTrace(D_ORCHESTRATOR)
                 << "Adding OpenSSL default directory to agent details. Directory: "

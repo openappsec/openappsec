@@ -14,7 +14,6 @@
 #include "i_orchestration_tools.h"
 #include "i_agent_details.h"
 #include "i_orchestration_status.h"
-#include "i_messaging.h"
 #include "i_mainloop.h"
 #include "i_encryptor.h"
 #include "i_details_resolver.h"
@@ -23,6 +22,7 @@
 #include "i_shell_cmd.h"
 #include "i_encryptor.h"
 #include "i_env_details.h"
+#include "i_declarative_policy.h"
 #include "maybe_res.h"
 #include "event.h"
 #include "rest.h"
@@ -43,6 +43,7 @@ private:
 
 class DeclarativePolicyUtils
         :
+    public Singleton::Provide<I_DeclarativePolicy>::SelfInterface,
     public Singleton::Consume<I_ShellCmd>,
     Singleton::Consume<I_LocalPolicyMgmtGen>,
     Singleton::Consume<I_EnvDetails>,
@@ -75,13 +76,12 @@ public:
         const std::string &tenant_id,
         const std::string &profile_id,
         const std::string &fog_address
-    );
-    std::string getUpdate(CheckUpdateRequest &request);
-    bool shouldApplyPolicy();
-    void turnOffApplyPolicyFlag();
+    ) override;
+    std::string getUpdate(CheckUpdateRequest &request) override;
+    bool shouldApplyPolicy() override;
+    void turnOffApplyPolicyFlag() override;
 
-    std::string getCurrVersion() { return curr_version; }
-    std::string getCurrPolicy() { return curr_policy; }
+    std::string getCurrPolicy() override { return curr_policy; }
 
     void upon(const ApplyPolicyEvent &event) override;
 
