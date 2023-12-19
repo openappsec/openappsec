@@ -109,6 +109,7 @@ public:
     load(cereal::JSONInputArchive &ar)
     {
         ar(cereal::make_nvp("Output", stream_name));
+        if (stream_name.empty()) stream_name = "STDOUT";
         if (stream_name != "FOG" && stream_name != "STDOUT" && stream_name.front() != '/') {
             stream_name = getLogFilesPathConfig() + "/" + stream_name;
         }
