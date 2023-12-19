@@ -539,6 +539,8 @@ bool
 WebAppSection::operator<(const WebAppSection &other) const
 {
     // for sorting from the most specific to the least specific rule
+    if (application_urls == default_appsec_url) return false;
+    if (other.application_urls == default_appsec_url) return true;
     return application_urls.size() > other.application_urls.size();
 }
 
@@ -575,6 +577,8 @@ bool
 WebAPISection::operator<(const WebAPISection &other) const
 {
     // for sorting from the most specific to the least specific rule
+    if (application_urls == default_appsec_url) return false;
+    if (other.application_urls == default_appsec_url) return true;
     return application_urls.size() > other.application_urls.size();
 }
 

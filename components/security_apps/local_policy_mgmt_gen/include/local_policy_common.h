@@ -56,6 +56,8 @@ static const std::unordered_map<std::string, std::string> key_to_practices_val =
     { "inactive", "Inactive"}
 };
 
+static const std::string default_appsec_url = "http://*:*";
+
 template <typename T>
 void
 parseAppsecJSONKey(

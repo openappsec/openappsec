@@ -1190,7 +1190,7 @@ PolicyMakerUtils::createWebAppSection(
         apssec_practice.getWebAttacks().getMaxUrlSizeBytes()
     );
     WebAppSection web_app = WebAppSection(
-        full_url == "Any" ? "http://*:*" : full_url,
+        full_url == "Any" ? default_appsec_url : full_url,
         rule_config.getAssetId(),
         rule_config.getAssetName(),
         rule_config.getAssetId(),
@@ -1462,7 +1462,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
 
         if (!web_apps.count(rule_config.getAssetName())) {
             WebAppSection web_app = WebAppSection(
-                full_url == "Any" ? "http://*:*" : full_url,
+                full_url == "Any" ? default_appsec_url : full_url,
                 rule_config.getAssetId(),
                 rule_config.getAssetName(),
                 rule_config.getAssetId(),
