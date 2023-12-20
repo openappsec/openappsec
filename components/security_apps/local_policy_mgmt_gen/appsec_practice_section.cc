@@ -187,11 +187,11 @@ AppSecPracticeWebAttacks::getMinimumConfidence() const
 const string &
 AppSecPracticeWebAttacks::getMode(const string &default_mode) const
 {
-    if (mode == "Unset" || (key_to_practices_val.find(mode) == key_to_practices_val.end())) {
+    if (mode == "Unset" || (key_to_practices_val2.find(mode) == key_to_practices_val2.end())) {
         dbgError(D_LOCAL_POLICY) << "Couldn't find a value for key: " << mode << ". Returning " << default_mode;
         return default_mode;
     }
-    return key_to_practices_val.at(mode);
+    return key_to_practices_val2.at(mode);
 }
 
 void
@@ -433,7 +433,7 @@ WebAppSection::WebAppSection(
     anti_bots(parsed_appsec_spec.getAntiBot()),
     trusted_sources({ parsed_trusted_sources })
 {
-    web_attack_mitigation = true;
+    web_attack_mitigation = web_attack_mitigation_mode != "Disabled";
     web_attack_mitigation_action =
         web_attack_mitigation_mode != "Prevent" ? "Transparent" :
         web_attack_mitigation_severity == "critical" ? "low" :
@@ -481,7 +481,7 @@ WebAppSection::WebAppSection(
     anti_bots(_anti_bots),
     trusted_sources({ parsed_trusted_sources })
 {
-    web_attack_mitigation = true;
+    web_attack_mitigation = web_attack_mitigation_mode != "Disabled";
     web_attack_mitigation_action =
         web_attack_mitigation_mode != "Prevent" ? "Transparent" :
         web_attack_mitigation_severity == "critical" ? "low" :
