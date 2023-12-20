@@ -56,6 +56,14 @@ static const std::unordered_map<std::string, std::string> key_to_practices_val =
     { "inactive", "Inactive"}
 };
 
+static const std::unordered_map<std::string, std::string> key_to_practices_val2 = {
+    { "prevent-learn", "Prevent"},
+    { "detect-learn", "Learn"},
+    { "prevent", "Prevent"},
+    { "detect", "Detect"},
+    { "inactive", "Disabled"}
+};
+
 static const std::string default_appsec_url = "http://*:*";
 
 template <typename T>

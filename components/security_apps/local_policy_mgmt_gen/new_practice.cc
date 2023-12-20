@@ -210,11 +210,11 @@ NewAppSecPracticeWebAttacks::getMinimumConfidence() const
 const string &
 NewAppSecPracticeWebAttacks::getMode(const string &default_mode) const
 {
-    if (mode == "Unset" || (key_to_practices_val.find(mode) == key_to_practices_val.end())) {
+    if (mode == "Unset" || (key_to_practices_val2.find(mode) == key_to_practices_val2.end())) {
         dbgError(D_LOCAL_POLICY) << "Couldn't find a value for key: " << mode << ". Returning " << default_mode;
         return default_mode;
     }
-    return key_to_practices_val.at(mode);
+    return key_to_practices_val2.at(mode);
 }
 
 SnortProtectionsSection::SnortProtectionsSection(
