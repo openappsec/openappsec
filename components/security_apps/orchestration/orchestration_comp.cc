@@ -219,7 +219,7 @@ private:
     start()
     {
         auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
-        auto agent_mode = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getOrchestrationMode();
+        auto agent_mode = getOrchestrationMode();
         auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
         if (agent_mode == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
             update_communication->authenticateAgent();
