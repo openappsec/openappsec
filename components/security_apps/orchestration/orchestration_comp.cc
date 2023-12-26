@@ -231,7 +231,6 @@ private:
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
         if (orchestration_tools->doesFileExist(orchestration_policy_file)) {
             maybe_policy = loadOrchestrationPolicy();
-            if (declarative) Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
             if (!maybe_policy.ok()) {
                 dbgWarning(D_ORCHESTRATOR) << "Failed to load Orchestration policy. Error: " << maybe_policy.getErr();
                 enforce_policy_flag = true;
@@ -272,7 +271,6 @@ private:
         if (enforce_policy_flag) {
             // Trying to create the Orchestration policy from the general policy file
             maybe_policy = enforceOrchestrationPolicy();
-            if (declarative) Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
             if (!maybe_policy.ok()) {
                 return genError(maybe_policy.getErr());
             }
@@ -298,6 +296,7 @@ private:
             }
         }
 
+	if (declarative) Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
         return authentication_res;
     }
 
