@@ -577,6 +577,7 @@ public:
     {
         try {
             cereal::load(ar, streams);
+            if (streams["Output"].empty()) streams["Output"] = "STDOUT";
             if (streams["Output"] != "FOG" && streams["Output"] != "STDOUT" && streams["Output"].front() != '/') {
                 streams["Output"] = log_files_path + "/" + streams["Output"];
             }
