@@ -221,10 +221,7 @@ private:
         auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
         auto agent_mode = getOrchestrationMode();
         auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
-        if (agent_mode == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
-            update_communication->authenticateAgent();
-            return Maybe<void>();
-        }
+        bool declarative = agent_mode == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative";
 
         bool enforce_policy_flag = false;
         Maybe<OrchestrationPolicy> maybe_policy = genError("Empty policy");
@@ -299,6 +296,7 @@ private:
             }
         }
 
+	if (declarative) Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
         return authentication_res;
     }
 

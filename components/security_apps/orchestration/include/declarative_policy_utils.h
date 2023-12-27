@@ -80,6 +80,7 @@ public:
     std::string getUpdate(CheckUpdateRequest &request) override;
     bool shouldApplyPolicy() override;
     void turnOffApplyPolicyFlag() override;
+    void turnOnApplyPolicyFlag() override;
 
     std::string getCurrPolicy() override { return curr_policy; }
 

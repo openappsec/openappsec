@@ -57,6 +57,12 @@ DeclarativePolicyUtils::turnOffApplyPolicyFlag()
     should_apply_policy = false;
 }
 
+void
+DeclarativePolicyUtils::turnOnApplyPolicyFlag()
+{
+    should_apply_policy = true;
+}
+
 Maybe<string>
 DeclarativePolicyUtils::getLocalPolicyChecksum()
 {

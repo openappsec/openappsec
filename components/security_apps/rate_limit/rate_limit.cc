@@ -114,7 +114,7 @@ public:
             }
 
             string application_uri = maybe_uri.unpack();
-            if (application_uri.back() == '/') application_uri.pop_back();
+            if (!application_uri.empty() && application_uri.back() == '/') application_uri.pop_back();
 
             for (const auto &rule : rate_limit_config.getRateLimitRules()) {
                 string full_rule_uri = application_uri + rule.getRateLimitUri();
@@ -227,7 +227,7 @@ public:
             << " seconds";
 
         string unique_key = asset_id + ":" + source_identifier + ":" + uri;
-        if (unique_key.back() == '/') unique_key.pop_back();
+        if (!unique_key.empty() && unique_key.back() == '/') unique_key.pop_back();
 
         auto verdict = decide(unique_key);
         if (verdict == RateLimitVedict::ACCEPT) {

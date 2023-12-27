@@ -1741,7 +1741,7 @@ Waf2Transaction::sendLog()
 
     static int cur_grace_logs = 0;
     bool grace_period = is_hybrid_mode && cur_grace_logs < max_grace_logs;
-    bool send_extended_log = grace_period || shouldSendExtendedLog(triggerLog);
+    bool send_extended_log = shouldSendExtendedLog(triggerLog);
     if (grace_period) {
         dbgTrace(D_WAAP)
             << "Waf2Transaction::sendLog: current grace log index: "
@@ -2339,7 +2339,7 @@ bool Waf2Transaction::shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger:
     ReportIS::Severity severity = Waap::Util::computeSeverityFromThreatLevel(
         autonomousSecurityDecision->getThreatLevel());
 
-    if (trigger_log->extendLoggingMinSeverity == "Critical")
+    if (trigger_log->extendLoggingMinSeverity == "Critical" || trigger_log->extendLoggingMinSeverity == "critical")
     {
         if (severity == ReportIS::Severity::CRITICAL)
         {
@@ -2349,7 +2349,7 @@ bool Waf2Transaction::shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger:
         dbgTrace(D_WAAP) << "Should not send extended logging. Min Severity Critical. Severity: " << (int) severity;
         return false;
     }
-    else if (trigger_log->extendLoggingMinSeverity == "High")
+    else if (trigger_log->extendLoggingMinSeverity == "High" || trigger_log->extendLoggingMinSeverity == "high")
     {
         if (severity == ReportIS::Severity::CRITICAL || severity == ReportIS::Severity::HIGH)
         {
