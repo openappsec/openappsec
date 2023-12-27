@@ -609,7 +609,7 @@ directory.
 | Parameter                          | Description                                                                           | Default             |
 | ---------------------------------- | ------------------------------------------------------------------------------------- | ------------------- |
 | image.repository                   | Kong image                                                                            | `kong`              |
-| image.tag                          | Kong image version                                                                    | `3.4`               |
+| image.tag                          | Kong image version                                                                    | `3.5`               |
 | image.effectiveSemver              | Semantic version to use for version-dependent features (if `tag` is not a semver)     |                     |
 | image.pullPolicy                   | Image pull policy                                                                     | `IfNotPresent`      |
 | image.pullSecrets                  | Image pull secrets                                                                    | `null`              |
@@ -777,7 +777,7 @@ section of `values.yaml` file:
 #### The `env` section
 For a complete list of all configuration values you can set in the
 `env` section, please read the Kong Ingress Controller's
-[configuration document](https://github.com/Kong/docs.konghq.com/blob/main/src/kubernetes-ingress-controller/references/cli-arguments.md).
+[configuration document](https://docs.konghq.com/kubernetes-ingress-controller/latest/reference/cli-arguments/).
 
 #### The `customEnv` section
 

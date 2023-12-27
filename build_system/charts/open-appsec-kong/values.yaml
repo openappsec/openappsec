@@ -126,10 +126,10 @@ extraLabels: {}
 # Specify Kong's Docker image and repository details here
 image:
   repository: kong
-  tag: "3.4"
+  tag: "3.5"
   # Kong Enterprise
   # repository: kong/kong-gateway
-  # tag: "3.4"
+  # tag: "3.5"
 
   # Specify a semver version if your image tag is not one (e.g. "nightly")
   effectiveSemver:
@@ -1247,7 +1247,7 @@ appsec:
     #registry:
     repository: ghcr.io/openappsec
     image: "agent"
-    tag: "1.1.1"
+    tag: "1.1.3"
     pullPolicy: Always
 
     securityContext:
@@ -1261,7 +1261,7 @@ appsec:
   kong:
     image:
       repository: "ghcr.io/openappsec/kong-attachment"
-      tag: "1.1.1"
+      tag: "1.1.3"
   configMapName: appsec-settings-configmap
   configMapContent:
     crowdsec:

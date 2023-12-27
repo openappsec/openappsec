@@ -1,0 +1,5 @@
+controller:
+  service:
+    type: ClusterIP
+  opentelemetry:
+    enabled: true

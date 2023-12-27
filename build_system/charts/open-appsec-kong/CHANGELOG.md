@@ -1,8 +1,36 @@
 # Changelog
 
-## Unreleased
+## 2.33.2
 
-Nothing yet.
+* Fix a template bug related to the `affinity` field for migrations Pods.
+  [#972](https://github.com/Kong/charts/pull/972)
+
+## 2.33.1
+
+### Fixed
+
+* Use changed `incubator.ingress-controller.konghq.com` API group name in `KongServiceFacade`
+  RBAC rules. Refer to [KIC#5302](https://github.com/Kong/kubernetes-ingress-controller/pull/5302)
+  for rename reasoning.
+  [#968](https://github.com/Kong/charts/pull/968)
+
+## 2.33.0
+
+### Improvements
+
+* Only allow `None` ClusterIPs on ClusterIP-type Services.
+  [#961](https://github.com/Kong/charts/pull/961)
+  [#962](https://github.com/Kong/charts/pull/962)
+* Bumped Kong version to 3.5.
+  [#957](https://github.com/Kong/charts/pull/957)
+* Support for `affinity` configuration has been added to migration job templates.
+* Display a warning message when Kong Manager is enabled and the Admin API is disabled.
+* Validate Gateway API's `Gateway` and `HTTPRoute` resources in the controller's
+  admission webhook only when KIC version is 3.0 or higher.
+  [#954](https://github.com/Kong/charts/pull/954)
+* Added controller's RBAC rules for `KongServiceFacade` CRD (installed only when
+  KongServiceFacade feature gate turned on and KIC version >= 3.1.0).
+  [#963](https://github.com/Kong/charts/pull/963)
 
 ## 2.32.0
 

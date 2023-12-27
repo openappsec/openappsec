@@ -104,7 +104,9 @@ webhooks:
     apiVersions:
     - 'v1alpha2'
     - 'v1beta1'
+{{- if (semverCompare ">= 3.0.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
     - 'v1'
+{{- end }}
     operations:
     - CREATE
     - UPDATE

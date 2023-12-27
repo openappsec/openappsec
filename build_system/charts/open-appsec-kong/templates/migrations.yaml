@@ -86,6 +86,10 @@ spec:
         {{- toYaml .Values.migrations.resources | nindent 10 }}
       securityContext:
       {{- include "kong.podsecuritycontext" . | nindent 8 }}
+      {{- if .Values.affinity }}
+      affinity:
+      {{- toYaml .Values.affinity | nindent 8 }}
+      {{- end }}
       {{- if .Values.nodeSelector }}
       nodeSelector:
       {{- toYaml .Values.nodeSelector | nindent 8 }}

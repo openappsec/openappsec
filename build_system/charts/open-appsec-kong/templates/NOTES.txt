@@ -12,9 +12,16 @@ Once installed, please follow along the getting started guide to start using
 Kong: https://docs.konghq.com/kubernetes-ingress-controller/latest/guides/getting-started/
 
 {{ $warnings := list -}}
+
 {{- if (hasKey .Values.ingressController "serviceAccount") -}}
 {{- if (or (hasKey .Values.ingressController.serviceAccount "name") (hasKey .Values.ingressController.serviceAccount "annotations")) -}}
 {{- $warnings = append $warnings "you have set either .ingressController.serviceAccount.name or .ingressController.serviceAccount.annotations. These settings have moved to .deployment.serviceAccount.name and .deployment.serviceAccount.annotations. You must move your configuration to the new location in values.yaml" -}}
+{{- end -}}
+{{- end -}}
+
+{{- if and .Values.manager.enabled (or .Values.manager.http.enabled .Values.manager.tls.enabled) -}}
+{{- if not (and .Values.admin.enabled (or .Values.admin.http.enabled .Values.admin.tls.enabled)) -}}
+{{- $warnings = append $warnings "Kong Manager will not be functional because the Admin API is not enabled. Setting both .admin.enabled and .admin.http.enabled and/or .admin.tls.enabled to true to enable the Admin API over HTTP/TLS." -}}
 {{- end -}}
 {{- end -}}
 

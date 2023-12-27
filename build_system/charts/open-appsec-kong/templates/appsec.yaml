@@ -22,6 +22,10 @@ metadata:
   {{- end }}
   {{- end }}
 spec:
+  {{- if eq .Values.kind "AppSecStateful" }}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+  {{- end }}
   {{- if not .Values.autoscaling.enabled }}
   {{- if eq .Values.kind "AppSecStateful" }}
   serviceName: "open-appsec-stateful-set"
