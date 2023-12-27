@@ -702,7 +702,7 @@ ConfigComponent::Impl::periodicRegistrationRefresh()
             mainloop->yield(chrono::milliseconds(500));
         } else {
             uint next_iteration_in_sec = getConfigurationWithDefault<uint>(
-                20,
+                600,
                 "Config Component",
                 "Refresh config update registration time interval"
             );

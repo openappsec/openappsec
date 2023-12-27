@@ -97,11 +97,17 @@ else
     fi
 fi
 
+alpine_pid()
+{
+   ps -ef | grep $1 | grep -v grep | awk '{printf $1 " "}'
+}
+
+
 ls -l /etc/ | grep release > /dev/null 2>&1
 retval=$?
 if [ $retval -eq 0 ]; then
     if [ ! -z "$(cat /etc/*release | grep alpine)" ]; then
-        pidof_cmd="pidof"
+        pidof_cmd="alpine_pid"
         ARCH="alpine"
         echo "alpine" >${FILESYSTEM_PATH}/watchdog/platform
     fi
