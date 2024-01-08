@@ -106,6 +106,11 @@ execute_process (
         OUTPUT_VARIABLE crypto2
 )
 install(FILES ${crypto2} DESTINATION orchestration/lib)
+execute_process (
+        COMMAND sh -c "find /usr/lib/x86_64-linux-gnu -name \"libcrypto.so*\" | awk '{printf $0\";\"}'"
+        OUTPUT_VARIABLE crypto3
+)
+install(FILES ${crypto3} DESTINATION orchestration/lib)
 
 execute_process (
 	 COMMAND sh -c "find /usr/lib* -maxdepth 1 -name \"libssl.so*\" | awk '{printf $1\";\"}'"
@@ -117,6 +122,11 @@ execute_process (
          OUTPUT_VARIABLE ssl2
 )
 install(FILES ${ssl2} DESTINATION orchestration/lib)
+execute_process (
+        COMMAND sh -c "find /usr/lib/x86_64-linux-gnu  -name \"libssl.so*\" | awk '{printf $1\";\"}'"
+        OUTPUT_VARIABLE ssl3
+)
+install(FILES ${ssl3} DESTINATION orchestration/lib)
 
 execute_process (
 	COMMAND sh -c "find /usr/lib* -name \"libcurl.so*\" | awk '{printf $1\";\"}'"
@@ -128,13 +138,17 @@ execute_process (
         OUTPUT_VARIABLE curl2
 )
 install(FILES ${curl2} DESTINATION orchestration/lib)
+execute_process (
+        COMMAND sh -c "find /usr/lib/x86_64-linux-gnu -name \"libcurl.so*\" | awk '{printf $1\";\"}'"
+        OUTPUT_VARIABLE curl3
+)
+install(FILES ${curl3} DESTINATION orchestration/lib)
 
 execute_process (
 	COMMAND sh -c "find /usr/lib* -name \"libz.so*\" | awk '{printf $0\";\"}'"
 	OUTPUT_VARIABLE z
 )
 install(FILES ${z} DESTINATION orchestration/lib)
-
 
 install(DIRECTORY scripts DESTINATION orchestration USE_SOURCE_PERMISSIONS)
 
