@@ -22,4 +22,4 @@ tests:
           of: Service
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-ingress-nginx-controller-internal
+          value: RELEASE-NAME-open-appsec-k8s-nginx-ingress-controller-internal

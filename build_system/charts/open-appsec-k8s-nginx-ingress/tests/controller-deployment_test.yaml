@@ -11,7 +11,7 @@ tests:
           of: Deployment
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-ingress-nginx-controller
+          value: RELEASE-NAME-open-appsec-k8s-nginx-ingress-controller
 
   - it: should create a Deployment with 3 replicas if `controller.replicaCount` is 3
     set:
