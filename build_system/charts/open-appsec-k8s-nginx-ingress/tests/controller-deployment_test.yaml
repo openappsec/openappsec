@@ -4,6 +4,8 @@ templates:
 
 tests:
   - it: should create a Deployment
+    set:
+      kind: Vanilla
     asserts:
       - hasDocuments:
           count: 1
@@ -16,6 +18,7 @@ tests:
   - it: should create a Deployment with 3 replicas if `controller.replicaCount` is 3
     set:
       controller.replicaCount: 3
+      kind: Vanilla
     asserts:
       - equal:
           path: spec.replicas
@@ -25,6 +28,7 @@ tests:
     set:
       controller.resources.limits.cpu: 500m
       controller.resources.limits.memory: 512Mi
+      kind: Vanilla
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.cpu

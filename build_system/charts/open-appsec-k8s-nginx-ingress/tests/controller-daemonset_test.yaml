@@ -6,6 +6,7 @@ tests:
   - it: should create a DaemonSet if `controller.kind` is "DaemonSet"
     set:
       controller.kind: DaemonSet
+      kind: Vanilla
     asserts:
       - hasDocuments:
           count: 1
