@@ -81,6 +81,8 @@ public:
         const string &service_name
     ) const override;
 
+    Maybe<string> checkIfFileExists(const Package &package) const override;
+    void removeDownloadFile(const string &file_name) const override;
     void createTenantProfileMap();
     string getProfileFromMap(const string &tenant_id) const override;
 
@@ -194,12 +196,18 @@ Downloader::Impl::downloadVirtualFileFromFog(
     static const string error_text     = "error";
 
     map<pair<string, string>, string> res;
+
+    string general_file_path = dir_path + "/" + resourse_file.getFileName() + "_general.download";
     I_UpdateCommunication *update_communication = Singleton::Consume<I_UpdateCommunication>::by<Downloader>();
-    auto downloaded_data = update_communication->downloadAttributeFile(resourse_file);
+    auto downloaded_data = update_communication->downloadAttributeFile(resourse_file, general_file_path);
     if (!downloaded_data.ok()) return downloaded_data.passErr();
 
+    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<Downloader>();
+    Maybe<string> file_content = orchestration_tools->readFile(general_file_path);
+    if (!file_content.ok()) return file_content.passErr();
+
     Document document;
-    document.Parse(downloaded_data.unpack().c_str());
+    document.Parse(file_content.unpack().c_str());
     if (document.HasParseError()) {
         dbgWarning(D_ORCHESTRATOR) << "JSON file is not valid";
         return genError("JSON file is not valid.");
@@ -241,7 +249,6 @@ Downloader::Impl::downloadVirtualFileFromFog(
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             artifact_data->value.Accept(writer);
 
-            I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<Downloader>();
             if (orchestration_tools->writeFile(buffer.GetString(), file_path)) {
                 res.insert({{tenant_id, profile_id}, file_path});
             }
@@ -325,6 +332,24 @@ Downloader::Impl::downloadFileFromURL(
 }
 
 Maybe<string>
+Downloader::Impl::checkIfFileExists(const Package &package) const
+{
+    string file_name = package.getName() + ".download";
+    Maybe<string> maybe_path = dir_path + "/" + file_name;
+
+    return validateChecksum(package.getChecksum(), package.getChecksumType(), maybe_path);
+}
+
+void
+Downloader::Impl::removeDownloadFile(const string &file_name) const
+{
+    string file_path = dir_path + "/" + file_name + ".download";
+    dbgInfo(D_ORCHESTRATOR) << "Removing download file " << file_path;
+    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<Downloader>();
+    orchestration_tools->removeFile(file_path);
+}
+
+Maybe<string>
 Downloader::Impl::validateChecksum(
     const string &checksum,
     Package::ChecksumTypes checksum_type,
@@ -355,13 +380,11 @@ Downloader::Impl::downloadFileFromFogByHTTP(const GetResourceFile &resourse_file
     dbgInfo(D_ORCHESTRATOR) << "Downloading file from fog. File: " << resourse_file.getFileName();
 
     I_UpdateCommunication *update_communication = Singleton::Consume<I_UpdateCommunication>::by<Downloader>();
-    auto downloaded_file = update_communication->downloadAttributeFile(resourse_file);
+    auto downloaded_file = update_communication->downloadAttributeFile(resourse_file, file_path);
     if (!downloaded_file.ok()) return genError(downloaded_file.getErr());
-    dbgInfo(D_ORCHESTRATOR) << "Download completed. File: " << resourse_file.getFileName();
 
-    I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<Downloader>();
-    if (orchestration_tools->writeFile(downloaded_file.unpack(), file_path)) return file_path;
-    return genError("Failed to write the attribute file. File: " + file_name);
+    dbgInfo(D_ORCHESTRATOR) << "Download completed. File: " << resourse_file.getFileName();
+    return file_path;
 }
 
 Maybe<string>

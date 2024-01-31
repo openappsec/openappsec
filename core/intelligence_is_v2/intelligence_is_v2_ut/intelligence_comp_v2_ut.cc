@@ -142,10 +142,9 @@ TEST_F(IntelligenceComponentTestV2, fakeOnlineIntelligenceTest)
     "}\n"
     );
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(response_str));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str)));
+
     auto maybe_ans = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans.ok());
     auto vec = maybe_ans.unpack();
@@ -285,10 +284,9 @@ TEST_F(IntelligenceComponentTestV2, multiAssetsIntelligenceTest)
     "}\n"
     );
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(response_str1));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str1)));
+
     auto maybe_ans = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans.ok());
     auto vec = maybe_ans.unpack();
@@ -415,10 +413,9 @@ TEST_F(IntelligenceComponentTestV2, inProgressQueryTest)
     "}\n"
     );
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(in_progress_response_str)).WillOnce(Return(done_response_str));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, in_progress_response_str))
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, done_response_str)));
 
     EXPECT_CALL(
         mock_ml,
@@ -605,10 +602,8 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     "}\n"
     );
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(paging_in_progress_response_str1));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_in_progress_response_str1)));
 
     request.setAssetsLimit(2);
     EXPECT_EQ(request.getAssetsLimit(), 2);
@@ -618,10 +613,8 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     EXPECT_EQ(vec1.size(), 1);
     EXPECT_EQ(request.isPagingFinished(), false);
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(paging_in_progress_response_str2));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_in_progress_response_str2)));
 
     auto maybe_ans2 = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans2.ok());
@@ -629,10 +622,9 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     EXPECT_EQ(vec2.size(), 2);
     EXPECT_EQ(request.isPagingFinished(), false);
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(paging_done_response_str));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_done_response_str)));
+
     auto maybe_ans3 = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans3.ok());
     auto vec3 = maybe_ans3.unpack();
@@ -840,10 +832,9 @@ TEST_F(IntelligenceComponentTestV2, bulkOnlineIntelligenceTest)
         "}\n"
     );
     Debug::setNewDefaultStdout(&cout);
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(response_str));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str)));
+
     auto maybe_ans = intell->queryIntelligence<Profile>(requests);
     EXPECT_TRUE(maybe_ans.ok());
     auto vec = maybe_ans.unpack();
@@ -1004,11 +995,9 @@ TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
     "}\n"
     );
 
-    EXPECT_CALL(
-        messaging_mock,
-        sendMessage(true, _, I_Messaging::Method::POST, _, _, _, _, MessageTypeTag::INTELLIGENCE))
-        .WillOnce(Return(paging_in_progress_response_str))
-        .WillOnce(Return(paging_done_response_str));
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_in_progress_response_str)))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_done_response_str)));
 
     I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
     QueryRequest request(Condition::EQUALS, "category", "cloud", true, AttributeKeyType::NONE);

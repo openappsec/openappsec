@@ -24,7 +24,6 @@
 #include <vector>
 
 using namespace std;
-using HTTPMethod = I_Messaging::Method;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -51,16 +50,17 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
     dbgTrace(D_ORCHESTRATOR) << "Getting updates in Hybrid Communication";
     if (access_token.ok()) {
         static const string check_update_str = "/api/v2/agents/resources";
-        auto request_status = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->sendObject(
-            request,
+        auto request_status = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->sendSyncMessage(
             HTTPMethod::POST,
-            fog_address_ex + check_update_str,
-            buildOAuth2Header((*access_token).getToken())
+            check_update_str,
+            request
         );
 
-        if (!request_status) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to get response after check update request.";
-            return genError("Failed to request updates");
+
+        if (!request_status.ok()) {
+            auto fog_err = request_status.getErr();
+            dbgDebug(D_ORCHESTRATOR) << "Check update request fail. Error: " << fog_err.getBody();
+            return genError(fog_err.getBody());
         }
 
         Maybe<string> maybe_new_manifest = request.getManifest();
@@ -82,14 +82,6 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
     if (env == EnvType::K8S && !policy_response.empty()) {
         dbgDebug(D_ORCHESTRATOR) << "Policy has changes, sending notification to tuning host";
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<HybridCommunication>();
-        I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<HybridCommunication>();
-
-        UpdatePolicyCrdObject policy_change_object(policy_response);
-
-        Flags<MessageConnConfig> conn_flags;
-        conn_flags.setFlag(MessageConnConfig::EXTERNAL);
-
-        string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
 
         auto get_tuning_host = []()
             {
@@ -107,18 +99,22 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
                 return tuning_host;
             };
 
-        bool ok = messaging->sendNoReplyObject(
-            policy_change_object,
-            I_Messaging::Method::POST,
-            get_tuning_host(),
-            80,
-            conn_flags,
+        MessageMetadata update_policy_crd_md(get_tuning_host(), 80);
+        update_policy_crd_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+        UpdatePolicyCrdObject policy_change_object(policy_response);
+
+        auto i_messaging = Singleton::Consume<I_Messaging>::by<HybridCommunication>();
+        bool tuning_req_status = i_messaging->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
             "/api/update-policy-crd",
-            tenant_header
+            policy_change_object,
+            MessageCategory::GENERIC,
+            update_policy_crd_md
         );
-        dbgDebug(D_ORCHESTRATOR) << "sent tuning policy update notification ok: " << ok;
-        if (!ok) {
-            dbgWarning(D_ORCHESTRATOR) << "failed to send  tuning notification";
+        if (!tuning_req_status) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to send tuning notification";
+        } else {
+            dbgDebug(D_ORCHESTRATOR) << "Successfully sent tuning policy update notification";
         }
     }
 
@@ -128,14 +124,17 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
 }
 
 Maybe<string>
-HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
+HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file, const string &file_path)
 {
     dbgTrace(D_ORCHESTRATOR)
         << "Downloading attribute file on hybrid mode, file name: "
         << resourse_file.getFileName();
 
     if (resourse_file.getFileName() =="policy") {
-        return i_declarative_policy->getCurrPolicy();
+        string downloaded_file = i_declarative_policy->getCurrPolicy();
+        auto *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<HybridCommunication>();
+        if (orchestration_tools->writeFile(downloaded_file, file_path)) return downloaded_file;
+        return genError("Failed to write the attribute file in hybrid mode. File: " + downloaded_file);
     }
     if (resourse_file.getFileName() == "manifest") {
         if (!access_token.ok()) return genError("Acccess Token not available.");
@@ -143,13 +142,16 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         auto unpacked_access_token = access_token.unpack().getToken();
 
         static const string file_attribute_str = "/api/v2/agents/resources/";
-        Maybe<string> attribute_file = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->downloadFile(
-            resourse_file,
+        auto attribute_file = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->downloadFile(
             resourse_file.getRequestMethod(),
-            fog_address_ex + file_attribute_str + resourse_file.getFileName(),
-            buildOAuth2Header((*access_token).getToken()) // Header
+            file_attribute_str + resourse_file.getFileName(),
+            file_path
         );
-        return attribute_file;
+        if (!attribute_file.ok()) {
+            auto fog_err = attribute_file.getErr();
+            return genError(fog_err.getBody());
+        }
+        return file_path;
     }
     dbgTrace(D_ORCHESTRATOR) << "Unnecessary attribute files downloading on hybrid mode";
     return string("");

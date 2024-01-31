@@ -1185,6 +1185,7 @@ namespace Util {
     std::string stripOptionalPort(const std::string::const_iterator &first, const std::string::const_iterator &last);
     std::string extractKeyValueFromCookie(const std::string &cookie, const std::string &key);
     bool isIpAddress(const std::string &ip_address);
+    bool isUuid(const std::string& str);
     bool vectorStringContain(const std::vector<std::string>& vec, const std::string& str);
     bool isIpTrusted(const std::string &ip, const std::vector<std::string> &trusted_ips);
 

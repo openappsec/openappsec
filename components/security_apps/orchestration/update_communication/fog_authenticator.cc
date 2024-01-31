@@ -17,6 +17,7 @@
 #include "log_generator.h"
 #include "agent_details.h"
 #include "version.h"
+#include "i_messaging.h"
 
 #include <algorithm>
 #include <map>
@@ -24,7 +25,6 @@
 
 using namespace std;
 using namespace cereal;
-using HTTPMethod = I_Messaging::Method;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -141,7 +141,7 @@ FogAuthenticator::registerAgent(
     const string &platform,
     const string &architecture) const
 {
-    dbgInfo(D_ORCHESTRATOR) << "Starting agent registration to fog";
+    dbgFlow(D_ORCHESTRATOR) << "Starting agent registration to fog";
 
     auto details_resolver = Singleton::Consume<I_DetailsResolver>::by<FogAuthenticator>();
     RegistrationRequest request(
@@ -201,8 +201,8 @@ FogAuthenticator::registerAgent(
         request << make_pair("isGwNotVsx", "true");
     }
 
-    if (details_resolver->isVersionEqualOrAboveR8110()) {
-        request << make_pair("isVersionEqualOrAboveR8110", "true");
+    if (details_resolver->isVersionAboveR8110()) {
+        request << make_pair("isVersionAboveR8110", "true");
     }
 
 #if defined(gaia) || defined(smb)
@@ -214,8 +214,13 @@ FogAuthenticator::registerAgent(
     }
 #endif // gaia || smb
 
-    auto fog_messaging = Singleton::Consume<I_Messaging>::by<FogAuthenticator>();
-    if (fog_messaging->sendObject(request, HTTPMethod::POST, fog_address_ex + "/agents")) {
+    dbgDebug(D_ORCHESTRATOR) << "Sending registration request to fog";
+    auto request_status = Singleton::Consume<I_Messaging>::by<FogAuthenticator>()->sendSyncMessage(
+        HTTPMethod::POST,
+        "/agents",
+        request
+    );
+    if (request_status.ok()) {
         dbgDebug(D_ORCHESTRATOR) << "Agent has registered successfully.";
         i_agent_details->setAgentId(request.getAgentId());
         i_agent_details->setProfileId(request.getProfileId());
@@ -236,7 +241,12 @@ FogAuthenticator::registerAgent(
         ReportIS::Tags::ORCHESTRATOR
     );
 
-    return genError("Failed to register agent with the Fog");
+    return genError(
+        "Failed to register agent with the Fog. " +
+        request_status.getErr().getBody() +
+        " " +
+        request_status.getErr().toString()
+    );
 }
 
 Maybe<FogAuthenticator::AccessToken>
@@ -246,15 +256,20 @@ FogAuthenticator::getAccessToken(const UserCredentials &user_credentials) const
     static const string grant_type_string = "/oauth/token?grant_type=client_credentials";
     TokenRequest request = TokenRequest();
 
-    auto fog_messaging = Singleton::Consume<I_Messaging>::by<FogAuthenticator>();
-    auto sending_result = fog_messaging->sendObject(
-        request,
-        HTTPMethod::POST,
-        fog_address_ex + grant_type_string,
+    MessageMetadata request_token_md;
+    request_token_md.insertHeader(
+        "Authorization",
         buildBasicAuthHeader(user_credentials.getClientId(), user_credentials.getSharedSecret())
     );
+    auto request_token_status = Singleton::Consume<I_Messaging>::by<FogAuthenticator>()->sendSyncMessage(
+        HTTPMethod::POST,
+        grant_type_string,
+        request,
+        MessageCategory::GENERIC,
+        request_token_md
+    );
 
-    if (sending_result) {
+    if (request_token_status.ok()) {
         auto data_path = getConfigurationWithDefault<string>(
             filesystem_prefix + "/data/",
             "encryptor",
@@ -371,6 +386,7 @@ FogAuthenticator::getCredentials()
         return maybe_credentials;
     }
 
+    dbgTrace(D_ORCHESTRATOR) << "Credentials were not not receoived from the file. Getting registration data.";
     auto reg_data = getRegistrationData();
     if (!reg_data.ok()) {
         return genError("Failed to load a valid registration token, Error: " + reg_data.getErr());
@@ -436,13 +452,7 @@ FogAuthenticator::buildBasicAuthHeader(const string &username, const string &pas
 {
     auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogAuthenticator>();
     auto auth_encode = orchestration_tools->base64Encode(username + ":" + pass);
-    return "Authorization: Basic " + auth_encode + "\r\n";
-}
-
-string
-FogAuthenticator::buildOAuth2Header(const string &token) const
-{
-    return "Authorization: Bearer " + token + "\r\n";
+    return "Basic " + auth_encode;
 }
 
 void
@@ -455,6 +465,7 @@ FogAuthenticator::setAddressExtenesion(const std::string &extension)
 Maybe<void>
 FogAuthenticator::authenticateAgent()
 {
+    dbgFlow(D_ORCHESTRATOR) << "Authenticating the agent";
     const int min_expiration_time = 10;
     if (!credentials.ok()) {
         dbgDebug(D_ORCHESTRATOR) << "Getting Agent credentials.";

@@ -17,14 +17,12 @@
 #include <string>
 #include "maybe_res.h"
 #include "url_parser.h"
-#include "i_messaging.h"
 #include "i_agent_details.h"
 #include "i_proxy_configuration.h"
 
 // LCOV_EXCL_START Reason: Depends on real download server.
 class HTTPClient
         :
-    public Singleton::Consume<I_Messaging>,
     public Singleton::Consume<I_AgentDetails>,
     public Singleton::Consume<I_ProxyConfiguration>
 {

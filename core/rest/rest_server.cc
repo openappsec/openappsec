@@ -121,6 +121,7 @@ RestServer::Impl::init()
 
         struct sockaddr_in addr;
         bzero(&addr, sizeof(addr));
+
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 

@@ -20,7 +20,7 @@
 #if defined(gaia)
 
 Maybe<string>
-checkHasSupportedBlade(const string &command_output)
+checkSAMLSupportedBlade(const string &command_output)
 {
     string supportedBlades[3] = {"identityServer", "vpn", "cvpn"};
     for(const string &blade : supportedBlades) {
@@ -29,11 +29,11 @@ checkHasSupportedBlade(const string &command_output)
         }
     }
 
-    return genError("Current host does not have IDA capability");
+    return genError("Current host does not have SAML capability");
 }
 
 Maybe<string>
-checkSamlPortal(const string &command_output)
+checkSAMLPortal(const string &command_output)
 {
     if (command_output.find("Portal is running") != string::npos) {
         return string("true");
@@ -43,9 +43,9 @@ checkSamlPortal(const string &command_output)
 }
 
 Maybe<string>
-getIDAGaia(const string &command_output)
+getIDASSamlGaia(const string &command_output)
 {
-    return string("ida_gaia");
+    return string("idaSaml_gaia");
 }
 
 Maybe<string>
@@ -209,6 +209,15 @@ Maybe<string>
 getClusterObjectIP(const string &command_output)
 {
     return getAttr(command_output, "Cluster object IP was not found");
+}
+
+Maybe<string>
+getFecApplicable(const string &command_output)
+{
+    if (command_output == "0") return string("true");
+    if (command_output == "1") return string("false");
+
+    return genError("Could not determine if fec applicable");
 }
 
 Maybe<string>

@@ -16,6 +16,7 @@
 #include "Waf2Util.h"
 #include "WaapAssetState.h"
 #include "i_instance_awareness.h"
+#include <boost/regex.hpp>
 #include <sstream>
 #include <fstream>
 #include <functional>
@@ -387,15 +388,14 @@ const vector<FileMetaData>& RemoteFilesList::getFilesMetadataList() const
     return files.get();
 }
 
-
 SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     ch::minutes interval,
     ch::seconds waitForSync,
-    const string& filePath,
-    const string& remotePath,
-    const string& assetId,
-    const string& owner)
-    :
+    const string &filePath,
+    const string &remotePath,
+    const string &assetId,
+    const string &owner
+) :
     SerializeToFileBase(filePath),
     m_remotePath(remotePath),
     m_interval(0),
@@ -408,6 +408,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     m_intervalsCounter(0),
     m_remoteSyncEnabled(true),
     m_assetId(assetId),
+    m_isAssetIdUuid(Waap::Util::isUuid(assetId)),
     m_shared_storage_host(genError("not set")),
     m_learning_host(genError("not set"))
 {
@@ -600,7 +601,7 @@ bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Getting files of all agents";
 
     bool isSuccessful = sendObjectWithRetry(rawDataFiles,
-        I_Messaging::Method::GET,
+        HTTPMethod::GET,
         getUri() + "/?list-type=2&prefix=" + m_remotePath + "/" + getWindowId() + "/");
 
     if (!isSuccessful)
@@ -655,14 +656,16 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
-    if (!m_remoteSyncEnabled || isBase() || !postData() ||
-        mode == OrchestrationMode::OFFLINE)
-    {
+    if (mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase() ||
+        (mode == OrchestrationMode::ONLINE && !m_isAssetIdUuid) || !postData()) {
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR)
-            << "Did not synchronize the data. Remote URL: "
+            << "Did not synchronize the data. for asset: "
+            << m_assetId
+            << " Remote URL: "
             << m_remotePath
             << " is enabled: "
-            << to_string(m_remoteSyncEnabled);
+            << to_string(m_remoteSyncEnabled)
+            << ", mode: " << int(mode);
         processData();
         saveData();
         return;
@@ -701,16 +704,15 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
 
         SyncLearningObject syncObj(m_assetId, m_type, getWindowId());
 
-        Flags<MessageConnConfig> conn_flags;
-        conn_flags.setFlag(MessageConnConfig::EXTERNAL);
-        string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
-        bool ok = messaging->sendNoReplyObject(syncObj,
-                I_Messaging::Method::POST,
-                getLearningHost(),
-                80,
-                conn_flags,
-                "/api/sync",
-                tenant_header);
+        MessageMetadata req_md(getLearningHost(), 80);
+        req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+        bool ok = messaging->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
+            "/api/sync",
+            syncObj,
+            MessageCategory::GENERIC,
+            req_md
+        );
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "sent learning sync notification ok: " << ok;
         if (!ok) {
             dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to send learning notification";
@@ -725,7 +727,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
             ReportIS::AudienceTeam::WAAP,
             syncNotification,
             false,
-            MessageTypeTag::WAAP_LEARNING,
+            MessageCategory::GENERIC,
             ReportIS::Tags::WAF,
             ReportIS::Notification::SYNC_LEARNING
         );
@@ -762,7 +764,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getRemoteProcessedFilesList()
 
     bool isSuccessful = sendObject(
         remoteFiles,
-        I_Messaging::Method::GET,
+        HTTPMethod::GET,
         getUri() + "/?list-type=2&prefix=" + m_remotePath + "/remote");
 
     if (!isSuccessful)
@@ -795,7 +797,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
 
     bool isSuccessful = sendObject(
         processedFilesList,
-        I_Messaging::Method::GET,
+        HTTPMethod::GET,
         getUri() + "/?list-type=2&prefix=" + m_remotePath + "/processed");
 
     if (!isSuccessful)
@@ -832,7 +834,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
 
     isSuccessful = sendObject(
         processedFilesList,
-        I_Messaging::Method::GET,
+        HTTPMethod::GET,
         getUri() + "/?list-type=2&prefix=" + bcRemotePath + "/processed");
 
     if (!isSuccessful)

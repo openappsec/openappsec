@@ -25,8 +25,8 @@ NewTrustedSourcesSpec::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading trusted sources spec";
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
-    parseAppsecJSONKey<int>("minNumOfSources", min_num_of_sources, archive_in, 3);
-    parseAppsecJSONKey<vector<string>>("sourcesIdentifiers", sources_identifiers, archive_in);
+    parseMandatoryAppsecJSONKey<int>("minNumOfSources", min_num_of_sources, archive_in, 3);
+    parseMandatoryAppsecJSONKey<vector<string>>("sourcesIdentifiers", sources_identifiers, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
 }
 
@@ -64,11 +64,12 @@ void
 Identifier::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading source identifiers spec";
-    parseAppsecJSONKey<string>("identifier", identifier, archive_in);
+    parseMandatoryAppsecJSONKey<string>("identifier", identifier, archive_in, "sourceip");
     if (valid_identifiers.count(identifier) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec identifier invalid: " << identifier;
+        identifier = "sourceip";
     }
-    parseAppsecJSONKey<vector<string>>("value", value, archive_in);
+    parseMandatoryAppsecJSONKey<vector<string>>("value", value, archive_in);
 }
 
 const string &
@@ -88,7 +89,11 @@ NewSourcesIdentifiers::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading Sources Identifiers";
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
-    parseAppsecJSONKey<vector<Identifier>>("sourcesIdentifiers", sources_identifiers, archive_in);
+    parseMandatoryAppsecJSONKey<vector<Identifier>>("sourcesIdentifiers", sources_identifiers, archive_in);
+    if (sources_identifiers.empty()) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec sources identifiers empty";
+        throw PolicyGenException("AppSec sources identifiers empty");
+    }
     parseAppsecJSONKey<string>("name", name, archive_in);
 }
 

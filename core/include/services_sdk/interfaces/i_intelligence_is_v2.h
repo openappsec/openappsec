@@ -131,20 +131,18 @@ private:
         IntelligenceQuery<Data> &intelligence_query,
         const std::string &query_uri,
         I_Messaging *i_message,
-        Flags<MessageConnConfig> conn_flags,
+        Flags<MessageConnectionConfig> conn_flags,
         const std::string &ip,
         uint server_port
     ) {
         if (ip == "" && server_port == 0) {
-            return i_message->sendObject(
-                intelligence_query,
-                I_Messaging::Method::POST,
+            auto req_status = i_message->sendSyncMessage(
+                HTTPMethod::POST,
                 query_uri,
-                "",
-                nullptr,
-                true,
-                MessageTypeTag::INTELLIGENCE
+                intelligence_query,
+                MessageCategory::INTELLIGENCE
             );
+            return req_status.ok();
         }
 
         dbgTrace(D_INTELLIGENCE)
@@ -154,18 +152,15 @@ private:
             << server_port
             << " query_uri: "
             << query_uri;
-
-        return i_message->sendObject(
-            intelligence_query,
-            I_Messaging::Method::POST,
-            ip,
-            server_port,
-            conn_flags,
+        MessageMetadata req_md(ip, server_port, conn_flags);
+        auto req_status = i_message->sendSyncMessage(
+            HTTPMethod::POST,
             query_uri,
-            "",
-            nullptr,
-            MessageTypeTag::INTELLIGENCE
+            intelligence_query,
+            MessageCategory::INTELLIGENCE,
+            req_md
         );
+        return req_status.ok();
     }
 
     template<typename Data>
@@ -174,7 +169,7 @@ private:
         IntelligenceQuery<Data> &intelligence_query,
         const std::string &query_uri,
         I_Messaging *i_message,
-        Flags<MessageConnConfig> conn_flags,
+        Flags<MessageConnectionConfig> conn_flags,
         const std::string &ip = "",
         uint server_port = 0
     ) {
@@ -233,7 +228,7 @@ private:
         const std::string &query_uri,
         int assets_limit,
         I_Messaging *i_message,
-        Flags<MessageConnConfig> conn_flags,
+        Flags<MessageConnectionConfig> conn_flags,
         const std::string &ip = "",
         uint server_port = 0
     ) {
@@ -265,7 +260,7 @@ private:
         bool is_primary_port,
         int assets_limit,
         I_Messaging *i_message,
-        Flags<MessageConnConfig> conn_flags
+        Flags<MessageConnectionConfig> conn_flags
     ) {
         static const std::string primary_port_setting = "local intelligence server primary port";
         static const std::string secondary_port_setting = "local intelligence server secondary port";
@@ -299,7 +294,7 @@ private:
     sendQueryObject(IntelligenceQuery<Data> &intelligence_query, const std::string &query_uri, int assets_limit)
     {
         auto i_message = getMessaging();
-        Flags<MessageConnConfig> conn_flags;
+        Flags<MessageConnectionConfig> conn_flags;
 
         bool crowdsec_enabled = std::getenv("CROWDSEC_ENABLED") ?
             std::string(std::getenv("CROWDSEC_ENABLED")) == "true" :

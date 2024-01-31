@@ -88,10 +88,8 @@ WaapComponent::Impl::init(const std::string &waapDataFileName)
     //waf2_set_log_target(WAF2_LOGTARGET_STDERR);
     dbgTrace(D_WAAP) << "WaapComponent::Impl::init() ...";
 
-    reputationAggregator.init();
-
     waapStateTable = Singleton::Consume<I_Table>::by<WaapComponent>();
-    
+
     bool success = waf2_proc_start(waapDataFileName);
     if (!success) {
         dbgWarning(D_WAAP) << "WAF2 engine FAILED to initialize (probably failed to load signatures). Aborting!";
@@ -169,6 +167,7 @@ WaapComponent::Impl::respond(const NewHttpTransactionEvent &event)
     waf2TransactionFlags.endResponseHeadersCalled = false;
     waf2TransactionFlags.responseDataPushStarted = false;
 
+
     waf2Transaction.start();
 
     char sourceIpStr[INET_ADDRSTRLEN];
@@ -186,7 +185,6 @@ WaapComponent::Impl::respond(const NewHttpTransactionEvent &event)
 
     // Tell waf2 API that request headers started
     waf2Transaction.start_request_hdrs();
-
 
     return pending_response;
 }
@@ -242,7 +240,7 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
     }
 
     // Delete state before returning any verdict which is not pending
-    if ((verdict.getVerdict() != pending_response.getVerdict()) &&  waapStateTable->hasState<Waf2Transaction>()) {
+    if ((verdict.getVerdict() != pending_response.getVerdict()) && waapStateTable->hasState<Waf2Transaction>()) {
         finishTransaction(waf2Transaction);
     } else {
     }
@@ -344,6 +342,7 @@ WaapComponent::Impl::respond(const ResponseCodeEvent &event)
     }
 
     IWaf2Transaction& waf2Transaction = waapStateTable->getState<Waf2Transaction>();
+
     // TODO:: extract HTTP version from attachment?
     static const int http_version = 0x11;
 

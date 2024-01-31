@@ -624,3 +624,4 @@ ReportIS::Severity Waf2Transaction::computeEventSeverityFromDecision() const
 
     return ReportIS::Severity::INFO;
 }
+

@@ -32,31 +32,21 @@ K8sSvcStream::~K8sSvcStream()
 {
 }
 
-string
-K8sSvcStream::genHeader()
-{
-    return "X-Tenant-Id: " + Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getTenantId();
-}
-
 void
 K8sSvcStream::sendLog(const Report &log)
 {
     auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
     auto K8sSvc_log_uri = getConfigurationWithDefault(default_log_uri, "Logging", "K8sSvc Log URI");
     LogRest rest(log);
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::EXTERNAL);
 
-    bool ok = i_msg->sendNoReplyObject(
-        rest,
-        I_Messaging::Method::POST,
-        svc_host,
-        80,
-        conn_flags,
+    MessageMetadata rest_req_md(svc_host, 80);
+    rest_req_md.insertHeader("X-Tenant-Id", Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getTenantId());
+    bool ok = i_msg->sendSyncMessageWithoutResponse(
+        HTTPMethod::POST,
         K8sSvc_log_uri,
-        genHeader(),
-        nullptr,
-        MessageTypeTag::LOG
+        rest,
+        MessageCategory::LOG,
+        rest_req_md
     );
 
     if (!ok) {
@@ -76,19 +66,15 @@ K8sSvcStream::sendLog(const LogBulkRest &logs, bool persistence_only)
 
     auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
     auto K8sSvc_log_uri = getConfigurationWithDefault(default_bulk_uri, "Logging", "K8sSvc Bulk Log URI");
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::EXTERNAL);
 
-    bool ok = i_msg->sendNoReplyObject(
-        logs,
-        I_Messaging::Method::POST,
-        svc_host,
-        80,
-        conn_flags,
+    MessageMetadata rest_req_md(svc_host, 80);
+    rest_req_md.insertHeader("X-Tenant-Id", Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getTenantId());
+    bool ok = i_msg->sendSyncMessageWithoutResponse(
+        HTTPMethod::POST,
         K8sSvc_log_uri,
-        genHeader(),
-        nullptr,
-        MessageTypeTag::LOG
+        logs,
+        MessageCategory::LOG,
+        rest_req_md
     );
 
     if (!ok) {

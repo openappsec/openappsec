@@ -43,6 +43,12 @@ public:
     static Maybe<string> getCommandOutput(const string &cmd);
 
 private:
+#define SHELL_PRE_CMD(NAME, COMMAND) {NAME, COMMAND},
+    map<string, string> shell_pre_commands = {
+        #include "details_resolver_impl.h"
+    };
+#undef SHELL_PRE_CMD
+
 #define SHELL_CMD_OUTPUT(ATTRIBUTE, COMMAND) SHELL_CMD_HANDLER(ATTRIBUTE, COMMAND, [](const string &s) { return s; })
 #define SHELL_CMD_HANDLER(ATTRIBUTE, COMMAND, HANDLER) {ATTRIBUTE, {COMMAND, ShellCommandHandler(HANDLER)}},
     map<string, pair<string, ShellCommandHandler>> shell_command_handlers = {
@@ -61,6 +67,21 @@ private:
 map<string, string>
 DetailsResolvingHanlder::Impl::getResolvedDetails() const
 {
+    I_ShellCmd *shell = Singleton::Consume<I_ShellCmd>::by<DetailsResolvingHanlder>();
+    uint32_t timeout = getConfigurationWithDefault<uint32_t>(5000, "orchestration", "Details resolver time out");
+
+    for (auto &shell_pre_command : shell_pre_commands) {
+        const string &name = shell_pre_command.first;
+        const string &command = shell_pre_command.second;
+        Maybe<int> command_ret = shell->getExecReturnCode(command, timeout);
+
+        if (!command_ret.ok()) {
+            dbgWarning(D_AGENT_DETAILS) << "Failed to run pre-command " << name;
+        } else if (*command_ret) {
+            dbgWarning(D_AGENT_DETAILS) << "Pre-command " << name << " failed (rc: " << *command_ret << ")";
+        }
+    }
+
     map<string, string> resolved_details;
     for (auto shell_handler : shell_command_handlers) {
         const string &attr = shell_handler.first;
@@ -115,7 +136,6 @@ DetailsResolvingHanlder::Impl::getCommandOutput(const string &cmd)
 
 DetailsResolvingHanlder::DetailsResolvingHanlder() : pimpl(make_unique<Impl>()) {}
 DetailsResolvingHanlder::~DetailsResolvingHanlder() {}
-
 
 map<string, string>
 DetailsResolvingHanlder::getResolvedDetails() const

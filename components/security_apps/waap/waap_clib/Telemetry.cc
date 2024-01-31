@@ -23,8 +23,6 @@
 
 USE_DEBUG_FLAG(D_WAAP);
 
-#define LOGGING_INTERVAL_IN_MINUTES 10
-
 using namespace std;
 
 const static string default_host = "open-appsec-tuning-svc";
@@ -34,26 +32,25 @@ WaapTelemetryBase::sendLog(const LogRest &metric_client_rest) const
 {
     OrchestrationMode mode = Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getOrchestrationMode();
 
+    GenericMetric::sendLog(metric_client_rest);
+
     if (mode == OrchestrationMode::ONLINE) {
-        GenericMetric::sendLog(metric_client_rest);
         return;
     }
     auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::EXTERNAL);
     string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
-    std::string tenant_header = "X-Tenant-Id: " +
-                                Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getTenantId();
-    Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendNoReplyObject(
-        metric_client_rest,
-        I_Messaging::Method::POST,
-        svc_host,
-        80,
-        conn_flags,
+    MessageMetadata req_md(svc_host, 80);
+    req_md.insertHeader(
+        "X-Tenant-Id",
+        Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getTenantId()
+    );
+    Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendSyncMessageWithoutResponse(
+        HTTPMethod::POST,
         fog_metric_uri,
-        tenant_header,
-        nullptr,
-        MessageTypeTag::METRIC);
+        metric_client_rest,
+        MessageCategory::METRIC,
+        req_md
+    );
 }
 
 void
@@ -141,6 +138,56 @@ WaapTelemetrics::updateMetrics(const string &asset_id, const DecisionTelemetryDa
 }
 
 void
+WaapTrafficTelemetrics::initMetrics()
+{
+    post_requests.report(0);
+    get_requests.report(0);
+    put_requests.report(0);
+    patch_requests.report(0);
+    delete_requests.report(0);
+    other_requests.report(0);
+
+    response_2xx.report(0);
+    response_4xx.report(0);
+    response_5xx.report(0);
+}
+
+void
+WaapTrafficTelemetrics::updateMetrics(const string &asset_id, const DecisionTelemetryData &data)
+{
+    initMetrics();
+    switch (data.method)
+    {
+        case POST:
+            post_requests.report(1);
+            break;
+        case GET:
+            get_requests.report(1);
+            break;
+        case PUT:
+            put_requests.report(1);
+            break;
+        case PATCH:
+            patch_requests.report(1);
+            break;
+        case DELETE:
+            delete_requests.report(1);
+            break;
+        default:
+            other_requests.report(1);
+            break;
+    }
+
+    if (data.responseCode >= 500) {
+        response_5xx.report(1);;
+    } else if (data.responseCode >= 400) {
+        response_4xx.report(1);
+    } else if (data.responseCode >= 200 && data.responseCode < 300) {
+        response_2xx.report(1);
+    }
+}
+
+void
 WaapAttackTypesMetrics::initMetrics()
 {
     sql_inj.report(0);
@@ -195,85 +242,17 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
         << ", Threat level: "
         << data.threat;
 
-    if (!telemetries.count(asset_id)) {
-        telemetries.emplace(asset_id, make_shared<WaapTelemetrics>());
-        telemetries[asset_id]->init(
-            "WAAP telemetry",
-            ReportIS::AudienceTeam::WAAP,
-            ReportIS::IssuingEngine::AGENT_CORE,
-            chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
-            true,
-            ReportIS::Audience::SECURITY
-        );
-
-        telemetries[asset_id]->registerContext<string>(
-            "pracitceType",
-            string("Threat Prevention"),
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        telemetries[asset_id]->registerContext<string>(
-            "practiceSubType",
-            string("Web Application"),
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        telemetries[asset_id]->registerContext<string>("assetId", asset_id, EnvKeyAttr::LogSection::SOURCE);
-        telemetries[asset_id]->registerContext<string>("assetName", data.assetName, EnvKeyAttr::LogSection::SOURCE);
-        telemetries[asset_id]->registerContext<string>("practiceId", data.practiceId, EnvKeyAttr::LogSection::SOURCE);
-        telemetries[asset_id]->registerContext<string>(
-            "practiceName",
-            data.practiceName,
-            EnvKeyAttr::LogSection::SOURCE
-        );
-
-        telemetries[asset_id]->registerListener();
-    }
-    if (!attack_types_telemetries.count(asset_id)) {
-        attack_types_telemetries.emplace(asset_id, make_shared<WaapAttackTypesMetrics>());
-        attack_types_telemetries[asset_id]->init(
-            "WAAP attack type telemetry",
-            ReportIS::AudienceTeam::WAAP,
-            ReportIS::IssuingEngine::AGENT_CORE,
-            chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
-            true,
-            ReportIS::Audience::SECURITY
-        );
-
-        attack_types_telemetries[asset_id]->registerContext<string>(
-            "pracitceType",
-            string("Threat Prevention"),
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        attack_types_telemetries[asset_id]->registerContext<string>(
-            "practiceSubType",
-            string("Web Application"),
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        attack_types_telemetries[asset_id]->registerContext<string>(
-            "assetId",
-            asset_id,
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        attack_types_telemetries[asset_id]->registerContext<string>(
-            "assetName",
-            data.assetName,
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        attack_types_telemetries[asset_id]->registerContext<string>(
-            "practiceId",
-            data.practiceId,
-            EnvKeyAttr::LogSection::SOURCE
-        );
-        attack_types_telemetries[asset_id]->registerContext<string>(
-            "practiceName",
-            data.practiceName,
-            EnvKeyAttr::LogSection::SOURCE
-        );
-
-        attack_types_telemetries[asset_id]->registerListener();
-    }
+    initializeTelemetryData<WaapTelemetrics>(asset_id, data, "WAAP telemetry", telemetries);
+    initializeTelemetryData<WaapAttackTypesMetrics>(
+        asset_id, data,
+        "WAAP attack type telemetry",
+        attack_types_telemetries
+    );
+    initializeTelemetryData<WaapTrafficTelemetrics>(asset_id, data, "WAAP traffic telemetry", traffic_telemetries);
 
     telemetries[asset_id]->updateMetrics(asset_id, data);
     attack_types_telemetries[asset_id]->updateMetrics(asset_id, data);
+    traffic_telemetries[asset_id]->updateMetrics(asset_id, data);
 
     auto agent_mode = Singleton::Consume<I_AgentDetails>::by<WaapMetricWrapper>()->getOrchestrationMode();
     string tenant_id = Singleton::Consume<I_AgentDetails>::by<WaapMetricWrapper>()->getTenantId();

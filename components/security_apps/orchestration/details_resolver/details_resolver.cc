@@ -41,7 +41,7 @@ public:
     string getAgentVersion() override;
     bool isKernelVersion3OrHigher() override;
     bool isGwNotVsx() override;
-    bool isVersionEqualOrAboveR8110() override;
+    bool isVersionAboveR8110() override;
     bool isReverseProxy() override;
     Maybe<tuple<string, string, string>> parseNginxMetadata() override;
 #if defined(gaia) || defined(smb)
@@ -193,10 +193,12 @@ DetailsResolver::Impl::getCheckpointVersion() const
 #endif // gaia || smb
 
 bool
-DetailsResolver::Impl::isVersionEqualOrAboveR8110()
+DetailsResolver::Impl::isVersionAboveR8110()
 {
-#if defined(gaia) || defined(smb)
-    return compareCheckpointVersion(8110, std::greater_equal<int>());
+#if defined(gaia)
+    return compareCheckpointVersion(8110, std::greater<int>());
+#elif defined(smb)
+    return true;
 #endif
     return false;
 }

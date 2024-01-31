@@ -78,6 +78,52 @@ TEST(QueryRequestTestV2, QueryTest)
         request2.saveToJson(out_ar2);
     }
     EXPECT_EQ(out2.str(), output_json2);
+
+    vector<string> range1;
+    range1.push_back("224.10.10.16");
+    range1.push_back("224.10.10.31");
+
+    vector<string> range2;
+    range2.push_back("224.11.10.16");
+    range2.push_back("224.11.10.31");
+
+    QueryRequest request3(Condition::RANGE, "ipv4AddressesRange", range1, true);
+    request3.addCondition(Condition::RANGE, "ipv4AddressesRange", range2);
+
+    string output_json3=
+    "{\n"
+    "    \"limit\": 20,\n"
+    "    \"fullResponse\": true,\n"
+    "    \"query\": {\n"
+    "        \"operator\": \"and\",\n"
+    "        \"operands\": [\n"
+    "            {\n"
+    "                \"operator\": \"range\",\n"
+    "                \"key\": \"mainAttributes.ipv4AddressesRange\",\n"
+    "                \"value\": [\n"
+    "                    \"224.10.10.16\",\n"
+    "                    \"224.10.10.31\"\n"
+    "                ]\n"
+    "            },\n"
+    "            {\n"
+    "                \"operator\": \"range\",\n"
+    "                \"key\": \"mainAttributes.ipv4AddressesRange\",\n"
+    "                \"value\": [\n"
+    "                    \"224.11.10.16\",\n"
+    "                    \"224.11.10.31\"\n"
+    "                ]\n"
+    "            }\n"
+    "        ]\n"
+    "    }\n"
+    "}";
+
+
+    stringstream out3;
+    {
+        cereal::JSONOutputArchive out_ar3(out3);
+        request3.saveToJson(out_ar3);
+    }
+    EXPECT_EQ(out3.str(), output_json3);
 }
 
 TEST(QueryRequestTestV2, AttributesTest)

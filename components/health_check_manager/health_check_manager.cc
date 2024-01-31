@@ -166,11 +166,16 @@ private:
     bool
     sendHealthCheckPatch()
     {
-        dbgFlow(D_HEALTH_CHECK_MANAGER);
+        dbgFlow(D_HEALTH_CHECK_MANAGER) << "Sending a health check patch";
 
         HealthCheckPatch patch_to_send(general_health_aggregated_status, all_comps_health_status);
         auto messaging = Singleton::Consume<I_Messaging>::by<HealthCheckManager>();
-        return messaging->sendNoReplyObject(patch_to_send, I_Messaging::Method::PATCH, "/agents");
+        return messaging->sendSyncMessageWithoutResponse(
+            HTTPMethod::PATCH,
+            "/agents",
+            patch_to_send,
+            MessageCategory::GENERIC
+        );
     }
 
     void

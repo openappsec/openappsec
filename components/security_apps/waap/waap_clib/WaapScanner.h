@@ -33,7 +33,6 @@ namespace Waap {
         {
         }
 
-
         bool suspiciousHit(Waf2ScanResult &res, DeepParser &dp,
                 const std::string &location, const std::string &param_name, const std::string &key);
         int onKv(const char* k, size_t k_len, const char* v, size_t v_len, int flags, size_t parser_depth) override;

@@ -16,15 +16,23 @@
 #include "graphqlparser/AstVisitor.h"
 #include "graphqlparser/GraphQLParser.h"
 #include "debug.h"
+#include "oas_updater_entry_saver.h"
 
 USE_DEBUG_FLAG(D_WAAP_PARSER_GQL);
+USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 
 const std::string ParserGql::m_parserName = "gqlParser";
 
-ParserGql::ParserGql(IParserReceiver &receiver, size_t parser_depth) :
+ParserGql::ParserGql(
+    IParserReceiver &receiver,
+    size_t parser_depth,
+    IWaf2Transaction *pTransaction)
+        :
     m_receiver(receiver),
     m_error(false),
     m_curNameValues(0),
+    m_pTransaction(pTransaction),
+    field_depth(0),
     m_parser_depth(parser_depth)
 {
     dbgFlow(D_WAAP_PARSER_GQL);
@@ -93,6 +101,7 @@ bool ParserGql::visitValue(const char *value)
 bool ParserGql::visitName(const facebook::graphql::ast::Name &node)
 {
     dbgTrace(D_WAAP_PARSER_GQL) << node.getValue() << "'";
+
     bool ret = true;
     if (m_curNameValues == 0 && !m_curNodeName.empty()) {
         ret = m_receiver.onKv(
@@ -104,6 +113,13 @@ bool ParserGql::visitName(const facebook::graphql::ast::Name &node)
     m_curNameValues = 0;
     return ret;
 }
+
+bool ParserGql::visitOperationDefinition(const facebook::graphql::ast::OperationDefinition &node)
+{
+    dbgFlow(D_OA_SCHEMA_UPDATER) << "getOperation()";
+    return true;
+}
+
 
 bool ParserGql::visitIntValue(const facebook::graphql::ast::IntValue &node)
 {

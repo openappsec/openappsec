@@ -802,7 +802,11 @@ TEST(DebugFogTest, fog_stream)
 
     StrictMock<MockMainLoop> mock_mainloop;
     StrictMock<MockTimeGet> mock_time;
-    StrictMock<MockAgentDetails> mock_agent_details;
+    NiceMock<MockAgentDetails> mock_agent_details;
+
+    ON_CALL(mock_agent_details, getFogDomain()).WillByDefault(Return(Maybe<string>(string("fog_domain.com"))));
+    ON_CALL(mock_agent_details, getFogPort()).WillByDefault(Return(Maybe<uint16_t>(443)));
+
     EXPECT_CALL(mock_agent_details, getAgentId()).WillRepeatedly(Return("Unknown"));
     EXPECT_CALL(mock_agent_details, getOrchestrationMode()).WillRepeatedly(Return(OrchestrationMode::ONLINE));
 
@@ -814,15 +818,14 @@ TEST(DebugFogTest, fog_stream)
 
     StrictMock<MockMessaging> messaging_mock;
     string message_body;
-    EXPECT_CALL(messaging_mock, mockSendPersistentMessage(
-        false,
-        _,
+
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
         _,
         "/api/v1/agents/events/bulk",
         _,
         _,
-        MessageTypeTag::DEBUG
-    )).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(
         vector<string>{"--orchestration-mode=online_mode"}
@@ -953,7 +956,7 @@ TEST(DebugFogTest, fog_stream)
         "                    \"agentId\": \"Unknown\",\n"
         "                    \"issuingFunction\": \"handleThresholdReach\",\n"
         "                    \"issuingFile\": \"debug_streams.cc\",\n"
-        "                    \"issuingLine\": 345,\n"
+        "                    \"issuingLine\": 344,\n"
         "                    \"eventTraceId\": \"\",\n"
         "                    \"eventSpanId\": \"\",\n"
         "                    \"issuingEngineVersion\": \"\",\n"
@@ -977,12 +980,9 @@ TEST(DebugFogTest, fog_stream)
         .WillOnce(DoAll(InvokeMainLoopCB(), Return(0)));
 
     string message_body_1, message_body_2;
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::DEBUG)
-    ).WillOnce(DoAll(SaveArg<1>(&message_body_1), Return(Maybe<string>(string(""))))).WillOnce(
-        DoAll(SaveArg<1>(&message_body_2), Return(Maybe<string>(string(""))))
-    );
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(_, "/api/v1/agents/events", _, MessageCategory::DEBUG, _))
+        .WillOnce(SaveArg<2>(&message_body_1))
+        .WillOnce(SaveArg<2>(&message_body_2));
 
     doFWError();
     line1 = line;

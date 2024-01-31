@@ -55,7 +55,7 @@ HttpCurl::HttpCurl(
     const string &_bearer,
     const Maybe<string> &proxy_url,
     const Maybe<uint16_t> &proxy_port,
-    const Maybe<string> &proxy_auth)
+    const Maybe<string> &_proxy_auth)
             :
         url(_url),
         out_file(_out_file),
@@ -85,10 +85,10 @@ HttpCurl::HttpCurl(
             proxy = proxy_url.unpack() + ":" + to_string(proxy_port.unpack());
         }
     }
-    if (proxy_auth.ok())
+    if (_proxy_auth.ok())
     {
         I_Encryptor *encryptor = Singleton::Consume<I_Encryptor>::by<HttpCurl>();
-        proxy_credentials = "Proxy-Authorization: Basic " + encryptor->base64Encode(proxy_auth.unpack());
+        proxy_auth = "Proxy-Authorization: Basic " + encryptor->base64Encode(_proxy_auth.unpack());
     }
 }
 
@@ -98,7 +98,7 @@ HttpCurl::HttpCurl(const HttpCurl &other)
     out_file(other.out_file),
     bearer(other.bearer),
     proxy(other.proxy),
-    proxy_credentials(other.proxy_credentials),
+    proxy_auth(other.proxy_auth),
     curl(unique_ptr<CURL, function<void(CURL *)>>(curl_easy_init(), curl_easy_cleanup))
     {
     }
@@ -133,9 +133,9 @@ HttpCurl::setCurlOpts(long timeout, HTTP_VERSION http_version)
     if (!proxy.empty())
     {
         curl_easy_setopt(curl_handle, CURLOPT_PROXY, proxy.c_str());
-        if (!proxy_credentials.empty())
+        if (!proxy_auth.empty())
         {
-            proxy_headers = curl_slist_append(proxy_headers, proxy_credentials.c_str());
+            proxy_headers = curl_slist_append(proxy_headers, proxy_auth.c_str());
             //Apply proxy headers
             curl_easy_setopt(curl_handle, CURLOPT_PROXYHEADER, proxy_headers);
         }
@@ -330,9 +330,9 @@ HttpsCurl::setCurlOpts(long timeout, HTTP_VERSION http_version)
     if (!proxy.empty())
     {
         curl_easy_setopt(curl_handle, CURLOPT_PROXY, proxy.c_str());
-        if (!proxy_credentials.empty())
+        if (!proxy_auth.empty())
         {
-            proxy_headers = curl_slist_append(proxy_headers, proxy_credentials.c_str());
+            proxy_headers = curl_slist_append(proxy_headers, proxy_auth.c_str());
             //Apply proxy headers
             curl_easy_setopt(curl_handle, CURLOPT_PROXYHEADER, proxy_headers);
         }

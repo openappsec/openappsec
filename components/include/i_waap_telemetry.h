@@ -23,6 +23,8 @@ struct DecisionTelemetryData
     std::string practiceId;
     std::string practiceName;
     std::string source;
+    TrafficMethod method;
+    int responseCode;
     std::set<std::string> attackTypes;
 
     DecisionTelemetryData() :
@@ -32,6 +34,8 @@ struct DecisionTelemetryData
         practiceId(),
         practiceName(),
         source(),
+        method(POST),
+        responseCode(0),
         attackTypes()
     {
     }

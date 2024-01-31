@@ -43,8 +43,6 @@ K8sPolicyUtils::init()
     if (env_type == EnvType::K8S) {
         token = env_details->getToken();
         messaging = Singleton::Consume<I_Messaging>::by<K8sPolicyUtils>();
-        conn_flags.setFlag(MessageConnConfig::SECURE_CONN);
-        conn_flags.setFlag(MessageConnConfig::IGNORE_SSL_VALIDATION);
     }
 }
 
@@ -79,17 +77,19 @@ Maybe<T, string>
 K8sPolicyUtils::getObjectFromCluster(const string &path) const
 {
     T object;
-    bool res = messaging->sendObject(
-        object,
-        I_Messaging::Method::GET,
-        "kubernetes.default.svc",
-        443,
-        conn_flags,
+    MessageMetadata k8s_md("kubernetes.default.svc", 443);
+    k8s_md.insertHeader("Authorization", "Bearer " + token);
+    k8s_md.insertHeader("Connection", "close");
+    k8s_md.setConnectioFlag(MessageConnectionConfig::IGNORE_SSL_VALIDATION);
+    auto res = messaging->sendSyncMessage(
+        HTTPMethod::GET,
         path,
-        "Authorization: Bearer " + token + "\nConnection: close"
+        object,
+        MessageCategory::GENERIC,
+        k8s_md
     );
 
-    if (res) return object;
+    if (res.ok()) return object;
 
     return genError(string("Was not able to get object form k8s cluser in path: " + path));
 }
@@ -488,23 +488,33 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
     if (!maybe_appsec_policy_spec.ok() ||
         !doesVersionExist(maybe_appsec_policy_spec.unpack().getMetaData().getAnnotations(), "v1beta1")
     ) {
-        dbgWarning(D_LOCAL_POLICY)
-            << "Failed to retrieve Appsec policy with crds version: v1beta1, Trying version: v1beta2";
-        auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
-            "/apis/openappsec.io/v1beta2/policies/" + policy_name
-        );
-        if(!maybe_v1beta2_appsec_policy_spec.ok()) {
-            dbgWarning(D_LOCAL_POLICY)
-                << "Failed to retrieve AppSec policy. Error: "
-                << maybe_v1beta2_appsec_policy_spec.getErr();
+        try {
+            dbgWarning(D_LOCAL_POLICY
+            ) << "Failed to retrieve Appsec policy with crds version: v1beta1, Trying version: v1beta2";
+            auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
+                "/apis/openappsec.io/v1beta2/policies/" + policy_name
+            );
+            if (!maybe_v1beta2_appsec_policy_spec.ok()) {
+                dbgWarning(D_LOCAL_POLICY)
+                    << "Failed to retrieve AppSec policy. Error: " << maybe_v1beta2_appsec_policy_spec.getErr();
+                return std::make_tuple(
+                    genError("Failed to retrieve AppSec v1beta1 policy. Error: " + maybe_appsec_policy_spec.getErr()),
+                    genError(
+                        "Failed to retrieve AppSec v1beta2 policy. Error: " + maybe_v1beta2_appsec_policy_spec.getErr()
+                    )
+                );
+            }
             return std::make_tuple(
-                genError("Failed to retrieve AppSec v1beta1 policy. Error: " + maybe_appsec_policy_spec.getErr()),
-                genError(
-                    "Failed to retrieve AppSec v1beta2 policy. Error: " + maybe_v1beta2_appsec_policy_spec.getErr()));
+                genError("There is no v1beta1 policy"),
+                createAppsecPolicyK8sFromV1beta2Crds(maybe_v1beta2_appsec_policy_spec.unpack(), ingress_mode)
+            );
+        } catch (const PolicyGenException &e) {
+            dbgDebug(D_LOCAL_POLICY) << "Failed in policy generation. Error: " << e.what();
+            return std::make_tuple(
+                genError("There is no v1beta1 policy"),
+                genError("Failed to retrieve AppSec v1beta2 policy. Error: " + string(e.what()))
+            );
         }
-        return std::make_tuple(
-            genError("There is no v1beta1 policy"),
-            createAppsecPolicyK8sFromV1beta2Crds(maybe_v1beta2_appsec_policy_spec.unpack(), ingress_mode));
     }
 
     return std::make_tuple(
@@ -521,22 +531,22 @@ K8sPolicyUtils::createPolicy(
     const SingleIngressData &item) const
 {
     for (const IngressDefinedRule &rule : item.getSpec().getRules()) {
-            string url = rule.getHost();
-            for (const IngressRulePath &uri : rule.getPathsWrapper().getRulePaths()) {
-                if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(url + uri.getPath())) {
-                    dbgTrace(D_LOCAL_POLICY)
-                        << "Inserting Host data to the specific asset set:"
-                        << "URL: '"
-                        << url
-                        << "' uri: '"
-                        << uri.getPath()
-                        << "'";
-                    K ingress_rule = K(url + uri.getPath());
-                    appsec_policy.addSpecificRule(ingress_rule);
-                }
+        string url = rule.getHost();
+        for (const IngressRulePath &uri : rule.getPathsWrapper().getRulePaths()) {
+            if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(url + uri.getPath())) {
+                dbgTrace(D_LOCAL_POLICY)
+                    << "Inserting Host data to the specific asset set:"
+                    << "URL: '"
+                    << url
+                    << "' uri: '"
+                    << uri.getPath()
+                    << "'";
+                K ingress_rule = K(url + uri.getPath());
+                appsec_policy.addSpecificRule(ingress_rule);
             }
         }
-        policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
+    }
+    policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
 }
 
 

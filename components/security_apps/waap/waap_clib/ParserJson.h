@@ -20,17 +20,22 @@
 #include "ParserBase.h"
 #include "KeyStack.h"
 #include "yajl/yajl_parse.h"
+#include "singleton.h"
+#include "i_oa_schema_updater.h"
 
 #define FIRST_JSON_BUFFER_SIZE 4 // must buffer at least 4 first bytes to allow unicode autodetection (BOM).
 
 typedef size_t yajl_size_t;
 
-class ParserJson : public ParserBase {
+class ParserJson :
+    public ParserBase,
+    Singleton::Consume<I_OASUpdater> {
 public:
     ParserJson(
         IParserReceiver &receiver,
-        bool should_collect_for_oa_schema_updater=false,
         size_t parser_depth=0,
+        IWaf2Transaction *pTransaction = nullptr,
+        bool should_collect_for_oa_schema_updater=false,
         IParserReceiver2 *receiver2=NULL);
     virtual ~ParserJson();
     size_t push(const char *data, size_t data_len);
@@ -86,8 +91,9 @@ private:
     yajl_handle m_jsonHandler;
     bool is_map_empty;
     bool should_collect_for_oa_schema_updater;
-
+    IWaf2Transaction *m_pTransaction;
     size_t m_parser_depth;
+    bool is_graphql_operation_name;
 public:
     static const std::string m_parserName;
 };

@@ -22,6 +22,7 @@
 #include "i_table.h"
 #include "i_agent_details.h"
 #include "i_instance_awareness.h"
+#include "i_messaging.h"
 
 class ReputationFeaturesEntry : public TableOpaqueSerialize<ReputationFeaturesEntry>
 {

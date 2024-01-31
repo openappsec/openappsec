@@ -27,6 +27,15 @@
 // use SHELL_CMD_HANDLER(key as string, shell command as string, ptr to Maybe<string> handler(const string&))
 // to return a string value for an attribute key based on a logic executed in a handler that receives
 // shell command execution output as its input
+
+#ifdef SHELL_PRE_CMD
+#if defined(gaia) || defined(smb)
+SHELL_PRE_CMD("read sdwan data",
+    "(cpsdwan get_data > /tmp/cpsdwan_getdata_orch.json~) "
+    "&& (mv /tmp/cpsdwan_getdata_orch.json~ /tmp/cpsdwan_getdata_orch.json)")
+#endif
+#endif
+
 #ifdef SHELL_CMD_HANDLER
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
@@ -41,7 +50,7 @@ SHELL_CMD_HANDLER("isCPotelcolGRET64",
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
-    "CPSDWAN_NOLOGS=1 cpsdwan get_data -f can_update_sdwan_data | jq -r .can_update_sdwan_data",
+    "jq -r .can_update_sdwan_data /tmp/cpsdwan_getdata_orch.json",
     checkCanUpdateSDWanData
 )
 SHELL_CMD_HANDLER(
@@ -50,7 +59,8 @@ SHELL_CMD_HANDLER(
     checkIfSdwanRunning)
 SHELL_CMD_HANDLER(
     "IP Address",
-    "cpsdwan get_data | jq -r .main_ip",
+    "[ $(cpprod_util FWisDAG) -eq 1 ] && echo \"Dynamic Address\" "
+    "|| (jq -r .main_ip /tmp/cpsdwan_getdata_orch.json)",
     getGWIPAddress
 )
 SHELL_CMD_HANDLER(
@@ -60,18 +70,23 @@ SHELL_CMD_HANDLER(
 )
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectIP",
-    "obj=\"$(cpsdwan get_data | jq -r .cluster_name)\";"
+    "obj=\"$(jq -r .cluster_name /tmp/cpsdwan_getdata_orch.json)\";"
     " awk -v obj=\"$obj\" '$1 == \":\" && $2 == \"(\" obj, $1 == \":ip_address\" { if ($1 == \":ip_address\")"
     " { gsub(/[()]/, \"\", $2); print $2; exit; } }'"
     " $FWDIR/state/local/FW1/local.gateway_cluster",
     getClusterObjectIP
 )
+SHELL_CMD_HANDLER(
+    "isFecApplicable",
+    "fw ctl get int support_fec |& grep -sq \"support_fec =\";echo $?",
+    getFecApplicable
+)
 #endif //gaia || smb
 
 #if defined(gaia)
-SHELL_CMD_HANDLER("hasSupportedBlade", "enabled_blades", checkHasSupportedBlade)
-SHELL_CMD_HANDLER("hasSamlPortal", "mpclient status saml-vpn", checkSamlPortal)
-SHELL_CMD_HANDLER("requiredNanoServices", "ida_gaia", getIDAGaia)
+SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
+SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status saml-vpn", checkSAMLPortal)
+SHELL_CMD_HANDLER("requiredNanoServices", "ida_saml_gaia", getIDASSamlGaia)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "cat $FWDIR/database/myself_objects.C "
@@ -109,12 +124,12 @@ SHELL_CMD_HANDLER(
 #if defined(smb)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
-    "cpsdwan get_data | jq -r .cluster_name",
+    "jq -r .cluster_name /tmp/cpsdwan_getdata_orch.json",
     getSmbMgmtParentObjName
 )
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectUid",
-    "cpsdwan get_data | jq -r .cluster_uuid",
+    "jq -r .cluster_uuid /tmp/cpsdwan_getdata_orch.json",
     getSmbMgmtParentObjUid
 )
 SHELL_CMD_HANDLER(
@@ -150,7 +165,11 @@ SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
 
 #if defined(gaia)
 
-FILE_CONTENT_HANDLER("hasIdpConfigured", "/opt/CPSamlPortal/phpincs/spPortal/idpPolicy.xml", checkIDP)
+FILE_CONTENT_HANDLER(
+    "hasIdpConfigured",
+    (getenv("SAMLPORTAL_HOME") ? string(getenv("SAMLPORTAL_HOME")) : "") + "/phpincs/spPortal/idpPolicy.xml",
+    checkIDP
+)
 FILE_CONTENT_HANDLER(
     "cpProductIntegrationMgmtObjectName",
     (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",

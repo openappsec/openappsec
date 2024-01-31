@@ -30,7 +30,7 @@ using namespace Intelligence_IS_V2;
 class SerializableQueryCondition
 {
 public:
-    typedef boost::variant<int64_t, std::string> ValueVariant;
+    typedef boost::variant<int64_t, std::string, std::vector<std::string>> ValueVariant;
 
     SerializableQueryCondition() {}
 
@@ -42,6 +42,13 @@ public:
         {}
 
     SerializableQueryCondition(Condition _condition_type, std::string _key, int64_t _value)
+            :
+        condition_type(_condition_type),
+        key(_key),
+        value(_value)
+        {}
+
+    SerializableQueryCondition(Condition _condition_type, std::string _key, std::vector<std::string> _value)
             :
         condition_type(_condition_type),
         key(_key),
@@ -66,11 +73,13 @@ public:
     SerializableQueryFilter() {}
     SerializableQueryFilter(Condition condition_type, const std::string &key, const std::string &value);
     SerializableQueryFilter(Condition condition_type, const std::string &key, const int64_t &value);
+    SerializableQueryFilter(Condition condition_type, const std::string &key, const std::vector<std::string> &value);
 
     void save(cereal::JSONOutputArchive &ar) const;
 
     void addCondition(Condition condition_type, const std::string &key, const std::string &value);
     void addCondition(Condition condition_type, const std::string &key, const int64_t &value);
+    void addCondition(Condition condition_type, const std::string &key, const std::vector<std::string> &value);
 
     Operator getOperator() const { return operator_type; }
     const std::vector<SerializableQueryCondition> & getConditionOperands() const { return condition_operands; }

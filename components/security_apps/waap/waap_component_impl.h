@@ -81,7 +81,6 @@ private:
     // instance of singleton classes
     DeepAnalyzer deepAnalyzer;
     WaapAssetStatesManager waapAssetStatesManager;
-    ReputationFeaturesAgg reputationAggregator;
     std::unordered_set<std::string> m_seen_assets_id;
 };
 

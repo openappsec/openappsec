@@ -229,13 +229,11 @@ void
 GenericMetric::sendLog(const LogRest &metric_client_rest) const
 {
     string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
-    Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendObjectWithPersistence(
-        metric_client_rest,
-        I_Messaging::Method::POST,
+    Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendAsyncMessage(
+        HTTPMethod::POST,
         fog_metric_uri,
-        "",
-        true,
-        MessageTypeTag::METRIC
+        metric_client_rest,
+        MessageCategory::METRIC
     );
 }
 

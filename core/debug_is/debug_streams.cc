@@ -296,8 +296,7 @@ DebugFogStream::sendBufferedMessages()
 
     while (!reports.empty()) {
         auto rest = reports.pop();
-        using Method = I_Messaging::Method;
-        i_msg->sendObjectWithPersistence(rest, Method::POST, fog_debug_uri, "", true, MessageTypeTag::DEBUG);
+        i_msg->sendAsyncMessage(HTTPMethod::POST, fog_debug_uri, rest, MessageCategory::DEBUG);
     }
 }
 void
@@ -310,7 +309,7 @@ DebugFogStream::sendSingleMessage(const LogRest &rest)
     );
 
     auto i_msg = Singleton::Consume<I_Messaging>::by<Debug>();
-    i_msg->sendObjectWithPersistence(rest, I_Messaging::Method::POST, fog_debug_uri, "", true, MessageTypeTag::DEBUG);
+    i_msg->sendAsyncMessage(HTTPMethod::POST, fog_debug_uri, rest, MessageCategory::DEBUG);
 }
 
 void

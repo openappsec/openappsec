@@ -31,7 +31,6 @@
 #include "rest_server.h"
 #include "logging_comp.h"
 #include "log_generator.h"
-#include "proto_message_comp.h"
 #include "table.h"
 #include "agent_details.h"
 #include "encryptor.h"
@@ -42,12 +41,12 @@
 #include "socket_is.h"
 #include "generic_rulebase/generic_rulebase.h"
 #include "generic_rulebase/generic_rulebase_context.h"
-#include "messaging_buffer.h"
 #include "shell_cmd.h"
 #include "generic_metric.h"
 #include "tenant_manager.h"
 #include "buffer.h"
 #include "intelligence_comp_v2.h"
+#include "messaging.h"
 
 USE_DEBUG_FLAG(D_COMP_IS);
 
@@ -209,6 +208,7 @@ class ComponentListCore
         Buffer,
         ShellCmd,
         GenericMetric,
+        Messaging,
         ConfigComponent,
         InstanceAwareness,
         IntelligenceComponentV2,
@@ -220,11 +220,9 @@ class ComponentListCore
         RestServer,
         Encryptor,
         SocketIS,
-        ProtoMessageComp,
         CPUCalculator,
         CPUManager,
         MemoryCalculator,
-        MessagingBuffer,
         TenantManager,
         GenericRulebase,
         Components...

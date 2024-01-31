@@ -29,6 +29,7 @@
 #include "waap.h"
 #include "generic_metric.h"
 
+#define LOGGING_INTERVAL_IN_MINUTES 10
 enum class AssetType { API, WEB, ALL, COUNT };
 
 class WaapTelemetryEvent : public Event<WaapTelemetryEvent>
@@ -74,6 +75,24 @@ private:
     std::unordered_set<std::string> sources_seen;
 };
 
+class WaapTrafficTelemetrics : public WaapTelemetryBase
+{
+public:
+    void updateMetrics(const std::string &asset_id, const DecisionTelemetryData &data);
+    void initMetrics();
+
+private:
+    MetricCalculations::Counter post_requests{this, "reservedNgenA"};
+    MetricCalculations::Counter get_requests{this, "reservedNgenB"};
+    MetricCalculations::Counter put_requests{this, "reservedNgenC"};
+    MetricCalculations::Counter patch_requests{this, "reservedNgenD"};
+    MetricCalculations::Counter delete_requests{this, "reservedNgenE"};
+    MetricCalculations::Counter other_requests{this, "reservedNgenF"};
+    MetricCalculations::Counter response_2xx{this, "reservedNgenG"};
+    MetricCalculations::Counter response_4xx{this, "reservedNgenH"};
+    MetricCalculations::Counter response_5xx{this, "reservedNgenI"};
+};
+
 class WaapAttackTypesMetrics : public WaapTelemetryBase
 {
 public:
@@ -100,8 +119,62 @@ public:
 private:
     std::map<std::string, std::shared_ptr<WaapTelemetrics>> metrics;
     std::map<std::string, std::shared_ptr<WaapTelemetrics>> telemetries;
+    std::map<std::string, std::shared_ptr<WaapTrafficTelemetrics>> traffic_telemetries;
     std::map<std::string, std::shared_ptr<WaapAttackTypesMetrics>> attack_types;
     std::map<std::string, std::shared_ptr<WaapAttackTypesMetrics>> attack_types_telemetries;
+
+    template <typename T>
+    void initializeTelemetryData(
+        const std::string& asset_id,
+        const DecisionTelemetryData& data,
+        const std::string& telemetryName,
+        std::map<std::string, std::shared_ptr<T>>& telemetryMap
+    ) {
+        if (!telemetryMap.count(asset_id)) {
+            telemetryMap.emplace(asset_id, std::make_shared<T>());
+            telemetryMap[asset_id]->init(
+                telemetryName,
+                ReportIS::AudienceTeam::WAAP,
+                ReportIS::IssuingEngine::AGENT_CORE,
+                std::chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
+                true,
+                ReportIS::Audience::SECURITY
+            );
+
+            telemetryMap[asset_id]->template registerContext<std::string>(
+                "pracitceType",
+                std::string("Threat Prevention"),
+                EnvKeyAttr::LogSection::SOURCE
+            );
+            telemetryMap[asset_id]->template registerContext<std::string>(
+                "practiceSubType",
+                std::string("Web Application"),
+                EnvKeyAttr::LogSection::SOURCE
+            );
+            telemetryMap[asset_id]->template registerContext<std::string>(
+                "assetId",
+                asset_id,
+                EnvKeyAttr::LogSection::SOURCE
+            );
+            telemetryMap[asset_id]->template registerContext<std::string>(
+                "assetName",
+                data.assetName,
+                EnvKeyAttr::LogSection::SOURCE
+            );
+            telemetryMap[asset_id]->template registerContext<std::string>(
+                "practiceId",
+                data.practiceId,
+                EnvKeyAttr::LogSection::SOURCE
+            );
+            telemetryMap[asset_id]->template registerContext<std::string>(
+                "practiceName",
+                data.practiceName,
+                EnvKeyAttr::LogSection::SOURCE
+            );
+
+            telemetryMap[asset_id]->registerListener();
+        }
+    }
 };
 
 class AssetCountEvent : public Event<AssetCountEvent>

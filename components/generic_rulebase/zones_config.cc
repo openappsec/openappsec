@@ -49,7 +49,7 @@ ZonesConfig::load(cereal::JSONInputArchive &archive_in)
             return;
         }
 
-        dbgWarning(D_RULEBASE_CONFIG)
+        dbgDebug(D_RULEBASE_CONFIG)
             << "Adding specific zone to cache. Zone ID: "
             << single_zone.getId()
             << ", name: "
@@ -93,7 +93,7 @@ ZonesConfig::load(cereal::JSONInputArchive &archive_in)
     }
     for (GenericConfigId &implied_id: implied_zones) {
         if (all_zones.find(implied_id) != all_zones.end()) {
-            dbgWarning(D_RULEBASE_CONFIG) << "Adding implied zone to cache. Zone ID: " << implied_id;
+            dbgDebug(D_RULEBASE_CONFIG) << "Adding implied zone to cache. Zone ID: " << implied_id;
             active_zones_set.emplace(implied_id, all_zones[implied_id]);
             if (any_zone_id != "" && active_zones_set.count(any_zone_id) == 0) {
                 active_zones_set.emplace(any_zone_id, all_zones[any_zone_id]);

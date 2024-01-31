@@ -86,44 +86,34 @@ public:
 TEST_F(AgentReporterTest, dataReport)
 {
     string custom_data = "Linux version 24.00.15F";
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {\n"
-            "        \"custom_data\": \"Linux version 24.00.15F\"\n"
-            "    }"
-            "\n}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {\n"
+        "        \"custom_data\": \"Linux version 24.00.15F\"\n"
+        "    }"
+        "\n}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
     AgentDataReport() << AgentReportField(custom_data);;
 }
 
 TEST_F(AgentReporterTest, labeledDataReport)
 {
     string data = "Linux version 24.00.15F";
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {\n"
-            "        \"this_is_custom_label\": \"Linux version 24.00.15F\"\n"
-            "    }"
-            "\n}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {\n"
+        "        \"this_is_custom_label\": \"Linux version 24.00.15F\"\n"
+        "    }"
+        "\n}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
     AgentDataReport() << AgentReportFieldWithLabel("this_is_custom_label", data);
 }
 
@@ -131,24 +121,18 @@ TEST_F(AgentReporterTest, multiDataReport)
 {
     string custom_data = "Linux version 24.00.15F";
     string data_to_report = "Agent Version 95.95.95.00A";
-
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {\n"
-            "        \"custom_data\": \"Linux version 24.00.15F\",\n"
-            "        \"this_is_custom_label\": \"Agent Version 95.95.95.00A\"\n"
-            "    }"
-            "\n}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {\n"
+        "        \"custom_data\": \"Linux version 24.00.15F\",\n"
+        "        \"this_is_custom_label\": \"Agent Version 95.95.95.00A\"\n"
+        "    }"
+        "\n}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     AgentDataReport()
         << AgentReportField(custom_data)
@@ -160,27 +144,22 @@ TEST_F(AgentReporterTest, multiDataReportWithRegistrationData)
     string custom_data = "Linux version 24.00.15F";
     string data_to_report = "Agent Version 95.95.95.00A";
 
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {\n"
-            "        \"custom_data\": \"Linux version 24.00.15F\",\n"
-            "        \"this_is_custom_label\": \"Agent Version 95.95.95.00A\"\n"
-            "    },\n"
-            "    \"agentVersion\": \"1.15.9\",\n"
-            "    \"policyVersion\": \"ccc\",\n"
-            "    \"platform\": \"bbb\",\n"
-            "    \"architecture\": \"aaa\"\n"
-            "}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {\n"
+        "        \"custom_data\": \"Linux version 24.00.15F\",\n"
+        "        \"this_is_custom_label\": \"Agent Version 95.95.95.00A\"\n"
+        "    },\n"
+        "    \"agentVersion\": \"1.15.9\",\n"
+        "    \"policyVersion\": \"ccc\",\n"
+        "    \"platform\": \"bbb\",\n"
+        "    \"architecture\": \"aaa\"\n"
+        "}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     AgentDataReport agent_data;
     agent_data
@@ -195,44 +174,34 @@ TEST_F(AgentReporterTest, multiDataReportWithRegistrationData)
 
 TEST_F(AgentReporterTest, basicAttrTest)
 {
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {}\n"
-            "}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {}\n"
+        "}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     {
         AgentDataReport agent_data;
     }
 
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {},\n"
-            "    \"attributes\": {\n"
-            "        \"1\": \"2\",\n"
-            "        \"a\": \"1\",\n"
-            "        \"c\": \"d\"\n"
-            "    }\n"
-            "}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {},\n"
+        "    \"attributes\": {\n"
+        "        \"1\": \"2\",\n"
+        "        \"a\": \"1\",\n"
+        "        \"c\": \"d\"\n"
+        "    }\n"
+        "}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     EXPECT_TRUE(report->addAttr("a", "b"));
     EXPECT_TRUE(report->addAttr({{"c", "d"}, {"1", "2"}, {"delete", "me"}}));
@@ -243,20 +212,15 @@ TEST_F(AgentReporterTest, basicAttrTest)
         AgentDataReport agent_data;
     }
 
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"additionalMetaData\": {}\n"
-            "}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"additionalMetaData\": {}\n"
+        "}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     {
         AgentDataReport agent_data;
@@ -271,25 +235,20 @@ TEST_F(AgentReporterTest, advancedAttrTest)
     EXPECT_TRUE(report->addAttr({{"c", "d"}, {"1", "2"}, {"send", "me"}}));
     EXPECT_TRUE(report->addAttr("a", "b"));
 
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"attributes\": {\n"
-            "        \"1\": \"2\",\n"
-            "        \"a\": \"b\",\n"
-            "        \"c\": \"d\",\n"
-            "        \"send\": \"me\"\n"
-            "    }\n"
-            "}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"attributes\": {\n"
+        "        \"1\": \"2\",\n"
+        "        \"a\": \"b\",\n"
+        "        \"c\": \"d\",\n"
+        "        \"send\": \"me\"\n"
+        "    }\n"
+        "}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     periodic_report();
 
@@ -300,26 +259,21 @@ TEST_F(AgentReporterTest, advancedAttrTest)
     EXPECT_TRUE(report->addAttr("new", "key val"));
     EXPECT_TRUE(report->addAttr("a", "key val override", true));
 
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            "{\n"
-            "    \"attributes\": {\n"
-            "        \"1\": \"2\",\n"
-            "        \"a\": \"key val override\",\n"
-            "        \"c\": \"d\",\n"
-            "        \"new\": \"key val\",\n"
-            "        \"send\": \"me\"\n"
-            "    }\n"
-            "}",
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        "{\n"
+        "    \"attributes\": {\n"
+        "        \"1\": \"2\",\n"
+        "        \"a\": \"key val override\",\n"
+        "        \"c\": \"d\",\n"
+        "        \"new\": \"key val\",\n"
+        "        \"send\": \"me\"\n"
+        "    }\n"
+        "}",
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     periodic_report();
 }
@@ -338,35 +292,29 @@ TEST_F(AgentReporterTest, RestDetailsTest)
         << "}";
     add_details_rest_cb->performRestCall(rest_call_parameters);
 
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            rest_call_parameters.str(),
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        rest_call_parameters.str(),
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
 
     EXPECT_TRUE(report->sendAttributes());
 
     is_server_mode = false;
 
-    EXPECT_CALL(mock_mainloop, addRecurringRoutine(_, _, _, "Report agent details attributes", _)).WillOnce(Return(2));
+    EXPECT_CALL(
+        mock_mainloop,
+        addRecurringRoutine(_, _, _, "Report agent details attributes", _)
+    ).WillOnce(Return(2));
 
     EXPECT_CALL(mock_rest, mockRestCall(RestAction::ADD, "agent-details-attr", _)).Times(0);
-    agent_details_reporter_comp.init();
 
-    EXPECT_TRUE(report->addAttr("new", "key val"));
-    ::Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    EXPECT_CALL(
-        mock_messaging,
-        sendMessage(
-            true,
+    EXPECT_CALL(mock_messaging,
+        sendSyncMessage(
+            HTTPMethod::POST,
+            "add-agent-details-attr",
             "{\n"
             "    \"attributes\": {\n"
             "        \"1\": \"2\",\n"
@@ -376,16 +324,13 @@ TEST_F(AgentReporterTest, RestDetailsTest)
             "        \"send\": \"me\"\n"
             "    }\n"
             "}",
-            I_Messaging::Method::POST,
-            string("127.0.0.1"),
-            7777,
-            conn_flags,
-            string("add-agent-details-attr"),
-            string(),
             _,
-            MessageTypeTag::GENERIC
+            _
         )
-    ).WillOnce(Return(Maybe<string>(string("{\"status\":true}"))));
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "{\"status\":true}")));
+    agent_details_reporter_comp.init();
+
+    EXPECT_TRUE(report->addAttr("new", "key val"));
 
     periodic_report();
 }
@@ -416,19 +361,13 @@ TEST_F(AgentReporterTest, PersistenceAttrTest)
     EXPECT_CALL(mock_rest, mockRestCall(RestAction::ADD, "agent-details-attr", _)).WillOnce(Return(true));
     agent_details_reporter_comp.init();
 
-
-    EXPECT_CALL(
-        mock_messaging,
-        mockSendPersistentMessage(
-            _,
-            expected_attributes,
-            I_Messaging::Method::PATCH,
-            "/agents",
-            _,
-            _,
-            MessageTypeTag::GENERIC
-        )
-    ).WillOnce(Return(string()));
+    EXPECT_CALL(mock_messaging, sendAsyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        expected_attributes,
+        MessageCategory::GENERIC,
+        _
+    )).Times(1);
     EXPECT_TRUE(report->sendAttributes());
 
     EXPECT_TRUE(report->addAttr("new attr", "to add before fini"));

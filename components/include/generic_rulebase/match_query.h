@@ -54,6 +54,8 @@ public:
 
     MatchQuery(): is_specific_label(false), is_ignore_keyword(false) {}
 
+    MatchQuery(const std::string &match);
+
     void load(cereal::JSONInputArchive &archive_in);
 
     MatchType getType() const { return type; }

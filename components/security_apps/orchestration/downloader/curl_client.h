@@ -83,7 +83,7 @@ protected:
     std::ofstream &out_file;
     std::string bearer;
     std::string proxy;
-    std::string proxy_credentials;
+    std::string proxy_auth;
     std::unique_ptr<CURL, std::function<void(CURL *)>> curl;
     std::string curl_url;
 };

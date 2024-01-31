@@ -43,6 +43,10 @@ NewAppsecTriggerAdditionalSuspiciousEventsLogging::load(cereal::JSONInputArchive
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec AppSec Trigger - Additional Suspicious Events Logging minimum severity invalid: "
             << minimum_severity;
+        throw PolicyGenException(
+            "AppSec AppSec Trigger - Additional Suspicious Events Logging minimum severity invalid: "
+            + minimum_severity
+        );
     }
 }
 
@@ -132,6 +136,7 @@ NewLoggingService::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("proto", proto, archive_in);
     if (valid_protocols.count(proto) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Logging Service - proto invalid: " << proto;
+        throw PolicyGenException("AppSec Logging Service - proto invalid: " + proto);
     }
 
     parseAppsecJSONKey<int>("port", port, archive_in, 514);
@@ -156,6 +161,7 @@ NewStdoutLogging::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("format", format, archive_in, "json");
     if (valid_formats.count(format) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Stdout Logging - format invalid: " << format;
+        throw PolicyGenException("AppSec Stdout Logging - format invalid: " + format);
     }
 }
 
@@ -261,19 +267,19 @@ NewAppsecLogTrigger::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec log trigger";
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
-    parseAppsecJSONKey<NewAppsecTriggerAccessControlLogging>(
+    parseMandatoryAppsecJSONKey<NewAppsecTriggerAccessControlLogging>(
         "accessControlLogging",
         access_control_logging,
         archive_in
     );
-    parseAppsecJSONKey<NewAppsecTriggerAdditionalSuspiciousEventsLogging>(
+    parseMandatoryAppsecJSONKey<NewAppsecTriggerAdditionalSuspiciousEventsLogging>(
         "additionalSuspiciousEventsLogging",
         additional_suspicious_events_logging,
         archive_in
     );
-    parseAppsecJSONKey<NewAppsecTriggerLogging>("appsecLogging", appsec_logging, archive_in);
-    parseAppsecJSONKey<NewAppsecTriggerExtendedLogging>("extendedLogging", extended_logging, archive_in);
-    parseAppsecJSONKey<NewAppsecTriggerLogDestination>("logDestination", log_destination, archive_in);
+    parseMandatoryAppsecJSONKey<NewAppsecTriggerLogging>("appsecLogging", appsec_logging, archive_in);
+    parseMandatoryAppsecJSONKey<NewAppsecTriggerExtendedLogging>("extendedLogging", extended_logging, archive_in);
+    parseMandatoryAppsecJSONKey<NewAppsecTriggerLogDestination>("logDestination", log_destination, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
 }
 

@@ -27,12 +27,12 @@ enum class ProxyProtocol
 class I_ProxyConfiguration
 {
 public:
-    virtual Maybe<std::string> getProxyDomain(ProxyProtocol protocol)      const = 0;
-    virtual Maybe<std::string> getProxyCredentials(ProxyProtocol protocol) const = 0;
-    virtual Maybe<uint16_t> getProxyPort(ProxyProtocol protocol)           const = 0;
-    virtual bool getProxyExists(ProxyProtocol protocol)                    const = 0;
-    virtual Maybe<std::string> getProxyAddress(ProxyProtocol protocol)     const = 0;
-    virtual Maybe<void> loadProxy()                                              = 0;
+    virtual Maybe<std::string> getProxyDomain(ProxyProtocol protocol)         const = 0;
+    virtual Maybe<std::string> getProxyAuthentication(ProxyProtocol protocol) const = 0;
+    virtual Maybe<uint16_t> getProxyPort(ProxyProtocol protocol)              const = 0;
+    virtual bool getProxyExists(ProxyProtocol protocol)                       const = 0;
+    virtual Maybe<std::string> getProxyAddress(ProxyProtocol protocol)        const = 0;
+    virtual Maybe<void> loadProxy()                                                 = 0;
 };
 
 #endif // __I_PROXY_CONFIGURATION_H__

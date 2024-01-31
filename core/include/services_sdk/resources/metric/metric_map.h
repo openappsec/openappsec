@@ -27,16 +27,30 @@ namespace MetricCalculations
 template <typename PrintableKey, typename Metric>
 class MetricMap : public MetricCalc
 {
-    class InnerMap : public std::map<std::string, Metric>
+    class InnerMap
     {
     public:
         void
         save(cereal::JSONOutputArchive &ar) const
         {
-            for (auto &metric : *this) {
+            for (auto &metric : inner_map) {
                 metric.second.save(ar);
             }
         }
+
+        std::pair<typename std::map<std::string, Metric>::iterator, bool>
+        emplace(const std::string &key, Metric &&metric)
+        {
+            return inner_map.emplace(key, std::move(metric));
+        }
+
+        void clear() { inner_map.clear(); }
+
+        typename std::map<std::string, Metric>::const_iterator begin() const { return inner_map.begin(); }
+        typename std::map<std::string, Metric>::const_iterator end() const { return inner_map.end(); }
+
+    private:
+        std::map<std::string, Metric> inner_map;
     };
 
 public:

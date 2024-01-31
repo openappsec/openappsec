@@ -2,67 +2,69 @@
 #define __MOCK_MESSAGING_H__
 
 #include "i_messaging.h"
-
 #include "cptest.h"
+
 class MockMessaging : public Singleton::Provide<I_Messaging>::From<MockProvider<I_Messaging>>
 {
 public:
     using string = std::string;
-    MOCK_METHOD10(
-        sendMessage,
-        Maybe<string> (
-            bool,
-            const string &,
-            Method,
-            const string &,
-            uint16_t,
-            Flags<MessageConnConfig> &,
+    MOCK_METHOD5(
+        sendSyncMessage,
+        Maybe<HTTPResponse, HTTPResponse> (
+            HTTPMethod,
             const string &,
             const string &,
-            I_Messaging::ErrorCB,
-            MessageTypeTag
+            MessageCategory,
+            MessageMetadata
+        )
+    );
+    MOCK_METHOD5(
+        sendAsyncMessage,
+        void (
+            HTTPMethod,
+            const string &,
+            const string &,
+            MessageCategory,
+            MessageMetadata
         )
     );
 
-    MOCK_METHOD7(
-        mockSendPersistentMessage,
-        Maybe<string>(bool, const string &, Method, const string &, const string &, bool, MessageTypeTag)
-    );
-
-    Maybe<string>
-    sendPersistentMessage(
-        bool get_reply,
-        const string &&body,
-        Method method,
-        const string &url,
-        const string &headers,
-        bool should_yield,
-        MessageTypeTag tag,
-        bool)
-    {
-        return mockSendPersistentMessage(get_reply, body, method, url, headers, should_yield, tag);
-    }
-
-    MOCK_METHOD8(
-        sendMessage,
-        Maybe<string> (
-            bool,
-            const string &,
-            Method,
+    MOCK_METHOD5(
+        downloadFile,
+        Maybe<HTTPStatusCode, HTTPResponse> (
+            HTTPMethod,
             const string &,
             const string &,
-            I_Messaging::ErrorCB,
-            bool,
-            MessageTypeTag
+            MessageCategory,
+            MessageMetadata
         )
     );
 
-    MOCK_METHOD0(setActiveFog,      bool());
-    MOCK_METHOD1(setActiveFog,      bool(MessageTypeTag));
-    MOCK_METHOD0(unsetFogProxy,     void());
-    MOCK_METHOD0(loadFogProxy,      void());
-    MOCK_METHOD4(setActiveFog,      bool(const string &, const uint16_t, const bool, MessageTypeTag));
+    MOCK_METHOD4(
+        uploadFile,
+        Maybe<HTTPStatusCode, HTTPResponse> (
+            const string &,
+            const string &,
+            MessageCategory,
+            MessageMetadata
+        )
+    );
 
+    MOCK_METHOD4(setFogConnection, bool(const string &, uint16_t, bool, MessageCategory));
+    MOCK_METHOD0(setFogConnection, bool());
+    MOCK_METHOD1(setFogConnection, bool(MessageCategory));
 };
+
+static std::ostream &
+operator<<(std::ostream &os, const HTTPResponse &)
+{
+    return os;
+}
+
+static std::ostream &
+operator<<(std::ostream &os, const HTTPStatusCode &)
+{
+    return os;
+}
 
 #endif // __MOCK_MESSAGING_H__

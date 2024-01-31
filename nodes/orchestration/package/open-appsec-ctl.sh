@@ -129,7 +129,11 @@ CUSTOM_POLICY_CONF_FILE="${FILESYSTEM_PATH}/${cp_nano_conf_location}/custom_poli
 if [ -f ${CUSTOM_POLICY_CONF_FILE} ]; then
     . $CUSTOM_POLICY_CONF_FILE
 else
-    var_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+    if [ -f /ext/appsec/local_policy.yaml ]; then
+        var_policy_file=/ext/appsec/local_policy.yaml
+    else
+        var_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+    fi;
 fi
 
 is_arm32=
@@ -1617,7 +1621,7 @@ stop_service() # Initials - stops
     eval "$stops_cmd"
     stops_exit_code=$?
     if [ $stops_exit_code -eq 0 ]; then
-        echo "Successfully stoped the $stops_service_to_stop service"
+        echo "Successfully stopped the $stops_service_to_stop service"
         exit 0
     fi
     echo "Failed to stop the $stops_service_to_stop service"
@@ -1759,7 +1763,11 @@ run() # Initials - r
         shift
         if [ ! -z $1 ]; then
             if [ "-d" = "$1" ] || [ "--default-policy" = "$1" ]; then
-                var_new_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+                if [ -f /ext/appsec/local_policy.yaml ]; then
+                    var_new_policy_file=/ext/appsec/local_policy.yaml
+                else
+                    var_new_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+                fi
             elif [ -f $1 ]; then
                 var_new_policy_file=$1
             else
@@ -1767,7 +1775,11 @@ run() # Initials - r
                 exit 1
             fi
         else
-            var_new_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+            if [ -f /ext/appsec/local_policy.yaml ]; then
+                var_new_policy_file=/ext/appsec/local_policy.yaml
+            else
+                var_new_policy_file="${FILESYSTEM_PATH}/${cp_nano_conf_location}/local_policy.yaml"
+            fi
         fi
 
         is_apply_policy_needed
@@ -1782,7 +1794,13 @@ run() # Initials - r
             http://127.0.0.1:"$(extract_api_port 'orchestration')"/set-apply-policy 2>&1)
         is_policy_file_changed
         is_changed=$?
+        counter=0
         while [ ${is_changed} -eq 0 ]; do
+            counter=$((counter+1))
+            if [ ${counter} -gt 40 ]; then
+                echo "\nPolicy didn't change please verify that you have a legal new policy"
+                exit 1
+            fi
             echo -n "."
             sleep 3
             is_policy_file_changed
@@ -1799,7 +1817,11 @@ run() # Initials - r
         echo $var_policy_file
     elif [ "-vl" = "$1" ] || [ "--view-logs" = "$1" ]; then
         record_command $@
-        less $LOG_FILE_PATH/nano_agent/cp-nano-http-transaction-handler.log?
+        if ls /var/log/nano_agent/cp-nano-http-transaction-handler.log? 1>dev/null 2>&1; then
+            less $LOG_FILE_PATH/nano_agent/cp-nano-http-transaction-handler.log?
+        else
+            echo "No logs found"
+        fi
     else
         usage
     fi

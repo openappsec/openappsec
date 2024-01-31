@@ -26,13 +26,16 @@ NewParsedRule::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec NewParsedRule";
     parseAppsecJSONKey<vector<string>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<string>>("triggers", log_triggers, archive_in);
-    parseAppsecJSONKey<vector<string>>("threatPreventionPractices", threat_prevention_practices, archive_in);
-    parseAppsecJSONKey<vector<string>>("accessControlPractices", access_control_practices, archive_in);
+    parseMandatoryAppsecJSONKey<vector<string>>(
+        "threatPreventionPractices",
+        threat_prevention_practices,
+        archive_in);
+    parseMandatoryAppsecJSONKey<vector<string>>("accessControlPractices", access_control_practices, archive_in);
     parseAppsecJSONKey<string>("mode", mode, archive_in);
     if (valid_modes.count(mode) == 0) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec New Parsed Rule mode invalid: " << mode;
+        throw PolicyGenException("AppSec New Parsed Rule mode invalid: " + mode);
     }
-    parseAppsecJSONKey<string>("customResponse", custom_response, archive_in);
+    parseAppsecJSONKey<string>("customResponse", custom_response, archive_in, "403");
     parseAppsecJSONKey<string>("sourceIdentifiers", source_identifiers, archive_in);
     parseAppsecJSONKey<string>("trustedSources", trusted_sources, archive_in);
     parseAppsecJSONKey<string>("autoUpgrade", upgrade_settings, archive_in);

@@ -120,10 +120,10 @@ public:
         return std::string();
     }
 
-    I_Messaging::Method
+    HTTPMethod
     getRequestMethod() const
     {
-        return isVirtual() ? I_Messaging::Method::POST : I_Messaging::Method::GET;
+        return isVirtual() ? HTTPMethod::POST : HTTPMethod::GET;
     }
 
 private:

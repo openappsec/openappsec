@@ -23,9 +23,9 @@ static const set<string> valid_actions = {"skip", "accept", "drop", "suppressLog
 void
 NewAppsecExceptionCondition::load(cereal::JSONInputArchive &archive_in)
 {
-    parseAppsecJSONKey<string>("key", key, archive_in);
-    parseAppsecJSONKey<string>("value", value, archive_in);
-    dbgTrace(D_LOCAL_POLICY) << "Key: " << key << " Value: " << value;
+    parseMandatoryAppsecJSONKey<string>("key", key, archive_in);
+    parseMandatoryAppsecJSONKey<string>("value", value, archive_in);
+    dbgTrace(D_LOCAL_POLICY) << "Parsed exception condition: Key: " << key << " Value: " << value;
 }
 
 const string &
@@ -45,12 +45,17 @@ NewAppsecException::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading New AppSec exception";
     parseAppsecJSONKey<string>("name", name, archive_in, "exception");
-    parseAppsecJSONKey<string>("action", action, archive_in);
+    parseMandatoryAppsecJSONKey<string>("action", action, archive_in, "accept");
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
     if (valid_actions.count(action) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec exception action invalid: " << action;
+        action = "accept";
     }
-    parseAppsecJSONKey<vector<NewAppsecExceptionCondition>>("condition", conditions, archive_in);
+    parseMandatoryAppsecJSONKey<vector<NewAppsecExceptionCondition>>("condition", conditions, archive_in);
+    if (conditions.empty()) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec exception conditions empty";
+        throw PolicyGenException("AppSec exception conditions empty");
+    }
 }
 
 void

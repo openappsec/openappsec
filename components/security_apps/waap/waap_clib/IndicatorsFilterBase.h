@@ -14,7 +14,6 @@
 #pragma once
 
 #include "i_indicatorsFilter.h"
-#include "i_messaging.h"
 #include "waap.h"
 #include "TrustedSources.h"
 #include "TrustedSourcesConfidence.h"

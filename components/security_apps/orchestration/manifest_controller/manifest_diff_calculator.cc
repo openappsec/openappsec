@@ -13,6 +13,8 @@
 
 #include "manifest_diff_calculator.h"
 
+#include <algorithm>
+
 #include "debug.h"
 #include "config.h"
 
@@ -59,6 +61,8 @@ ManifestDiffCalculator::filterUntrackedPackages(
     return packages_to_remove;
 }
 
+// LCOV_EXCL_START Reason: temp disabling corrupted packages mechanism
+
 // If one of the new packages is already known as corrupted, new_packages map is
 // updated accordingly.
 // Otherwise, corrupted_packages is updated and old corrupted package is deleted.
@@ -102,38 +106,71 @@ ManifestDiffCalculator::filterCorruptedPackages(
     }
     return no_corrupted_package_exist;
 }
+// LCOV_EXCL_STOP
 
-// This function build the installation queue recursively and return true if succeeded, false otherwise
-//  At the beginning, installation_queue is empty and will be filled according package dependences
-bool
-ManifestDiffCalculator::buildInstallationQueue(
-    const Package &updated_package,
+Maybe<void>
+ManifestDiffCalculator::buildRecInstallationQueue(
+    const Package &package,
     vector<Package> &installation_queue,
     const map<string, Package> &current_packages,
     const map<string, Package> &new_packages)
 {
-    vector<string> requires = updated_package.getRequire();
+    const vector<string> &requires = package.getRequire();
 
-    for (size_t i = 0; i < requires.size(); i++) {
-        auto installed_package = current_packages.find(requires[i]);
-        auto new_package = new_packages.find(requires[i]);
+    for (const auto &require : requires) {
+        auto installed_package = current_packages.find(require);
+        auto new_package = new_packages.find(require);
 
         if (installed_package == current_packages.end() ||
             (new_package != new_packages.end() && *installed_package != *new_package)) {
-                if(!buildInstallationQueue(new_package->second,
-                                            installation_queue,
-                                            current_packages,
-                                            new_packages)) {
-                    return false;
-                }
+                auto rec_res = buildRecInstallationQueue(
+                    new_package->second,
+                    installation_queue,
+                    current_packages,
+                    new_packages
+                );
+                if (!rec_res.ok()) return rec_res.passErr();
             } else if (installed_package != current_packages.end()) {
-                dbgDebug(D_ORCHESTRATOR) << "Package is already installed. Package: " << installed_package->first;
+                dbgDebug(D_ORCHESTRATOR) << "Package is already in the queue. Package: " << installed_package->first;
             } else if (new_package == new_packages.end()) {
-                dbgWarning(D_ORCHESTRATOR) << "One of the requested dependencies is corrupted or doesn't exist."
-                    << " Package: "<< requires[i];
-                return false;
+                return genError(
+                    "One of the requested dependencies is corrupted or doesn't exist. Package: " + require
+                );
             }
     }
-    installation_queue.push_back(updated_package);
-    return true;
+    if (find(installation_queue.begin(), installation_queue.end(), package) == installation_queue.end()) {
+        installation_queue.push_back(package);
+    }
+    return Maybe<void>();
+}
+
+// This function build the installation queue recursively and return true if succeeded, false otherwise
+//  At the beginning, installation_queue is empty and will be filled according package dependences
+Maybe<vector<Package>>
+ManifestDiffCalculator::buildInstallationQueue(
+    const map<string, Package> &current_packages,
+    const map<string, Package> &new_packages)
+{
+    vector<Package> installation_queue;
+    installation_queue.reserve(new_packages.size());
+    auto orchestration_it = new_packages.find("orchestration");
+    if (orchestration_it != new_packages.end()) {
+        installation_queue.push_back(orchestration_it->second);
+    }
+
+    auto wlp_standalone_it = new_packages.find("wlpStandalone");
+    if (wlp_standalone_it != new_packages.end()){
+        installation_queue.push_back(wlp_standalone_it->second);
+    }
+
+    for (auto &package_pair : new_packages) {
+        auto build_queue_res = buildRecInstallationQueue(
+            package_pair.second,
+            installation_queue,
+            current_packages,
+            new_packages
+        );
+        if (!build_queue_res.ok()) return build_queue_res.passErr();
+    }
+    return installation_queue;
 }

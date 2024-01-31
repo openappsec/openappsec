@@ -249,8 +249,9 @@ ParserJson::p_end_array(void *ctx)
 
 ParserJson::ParserJson(
     IParserReceiver &receiver,
-    bool should_collect_oas,
     size_t parser_depth,
+    IWaf2Transaction *pTransaction,
+    bool should_collect_oas,
     IParserReceiver2 *receiver2)
         :
     m_receiver(receiver),
@@ -260,10 +261,12 @@ ParserJson::ParserJson(
     m_key("json_parser"),
     m_jsonHandler(NULL),
     is_map_empty(false),
-    should_collect_for_oa_schema_updater(should_collect_oas),
-    m_parser_depth(parser_depth)
+    m_pTransaction(pTransaction),
+    m_parser_depth(parser_depth),
+    is_graphql_operation_name(false)
 {
     dbgTrace(D_WAAP_PARSER_JSON) << "parser_depth= " << parser_depth;
+    should_collect_for_oa_schema_updater = should_collect_oas;
 
     // TODO:: do we really want to clear this?
     memset(m_buf, 0, sizeof(m_buf));

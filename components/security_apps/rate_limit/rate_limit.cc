@@ -37,7 +37,7 @@ USE_DEBUG_FLAG(D_RATE_LIMIT);
 
 using namespace std;
 
-enum class RateLimitVedict { ACCEPT, DROP, DROP_AND_LOG };
+enum class RateLimitVerdict { ACCEPT, DROP, DROP_AND_LOG };
 
 class RateLimit::Impl
     :
@@ -74,8 +74,100 @@ public:
         return !should_rule_be_exact_match && str_starts_with(request_uri, rule_uri);
     }
 
+    bool
+    isRuleMatchingUri(const string &rule_uri, const string &request_uri, const RateLimitRule &rule)
+    {
+        if (rule_uri == request_uri ||
+            rule_uri == request_uri + "/" ||
+            rule_uri + "/" == request_uri) {
+            dbgDebug(D_RATE_LIMIT)
+                << "Found Exact match to request URI: "
+                << request_uri
+                << ", rule URI: "
+                << rule_uri;
+            return true;
+        }
+
+        if (rule_uri == "/") {
+            dbgDebug(D_RATE_LIMIT)
+                << "Matched new longest rule, request URI: "
+                << request_uri
+                << ", rule URI: "
+                << rule_uri;
+            return true;
+        }
+
+        if (isRuleMatchingUri(rule_uri, request_uri, rule.isExactMatch())) {
+            dbgDebug(D_RATE_LIMIT)
+                << "Matched new longest rule, request URI: "
+                << request_uri
+                << ", rule URI: "
+                << rule_uri;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool
+    shouldUpdateBestMatchingRule(
+        const RateLimitRule &rule,
+        const unordered_map<string, set<string>> &condition_map,
+        int full_rule_uri_length,
+        int rate_limit_longest_match,
+        float current_matched_rule_limit,
+        RateLimitAction current_matched_rule_verdict)
+    {
+        if (!rule.isMatchAny() && !rule.getRateLimitMatch().matchAttributes(condition_map)) {
+            dbgTrace(D_RATE_LIMIT) << "The request does not match the rule's condition";
+            return false;
+        }
+
+        RateLimitAction rule_action = calcRuleAction(rule);
+        if (current_matched_rule_verdict < rule_action) {
+            dbgTrace(D_RATE_LIMIT)
+                << "Rule's action is more strict than already matched rule. current rule's action: "
+                << RateLimitConfig::rate_limit_action_to_string.at(rule_action)
+                << ", previously matched rule's action: "
+                << RateLimitConfig::rate_limit_action_to_string.at(current_matched_rule_verdict);
+            return true;
+        }
+
+        if (rule_action < current_matched_rule_verdict) {
+            dbgTrace(D_RATE_LIMIT)
+                << "Rule's action is less strict than already matched rule. current rule's action: "
+                << RateLimitConfig::rate_limit_action_to_string.at(rule_action)
+                << ", previously matched rule's action: "
+                << RateLimitConfig::rate_limit_action_to_string.at(current_matched_rule_verdict);
+            return false;
+        }
+
+        if (full_rule_uri_length < rate_limit_longest_match) {
+            dbgTrace(D_RATE_LIMIT)
+                << "rule is shorter than already matched rule. current rule length: "
+                << full_rule_uri_length
+                << ", previously longest matched rule length: "
+                << rate_limit_longest_match;
+            return false;
+        }
+
+        if (full_rule_uri_length == rate_limit_longest_match && current_matched_rule_limit < calcRuleLimit(rule)) {
+            dbgTrace(D_RATE_LIMIT)
+                << "rule limit is more permissive than already matched rule. current rule limit: "
+                << limit
+                << ", previously matched rule limit: "
+                << current_matched_rule_limit;
+            return false;
+        }
+
+        return true;
+    }
+
     Maybe<RateLimitRule>
-    findRateLimitRule(const string &matched_uri, string &asset_id)
+    findRateLimitRule(
+        const string &matched_uri,
+        string &asset_id,
+        const unordered_map<string, set<string>> &condition_map)
     {
         WaapConfigAPI api_config;
         WaapConfigApplication application_config;
@@ -97,13 +189,14 @@ public:
             return genError("Failed to get rate limit configuration. Skipping rate limit check.");
 
         const auto &rate_limit_config = maybe_rate_limit_config.unpack();
-        mode = rate_limit_config.getRateLimitMode();
+        practice_action = rate_limit_config.getRateLimitMode();
 
-        if (mode == "Inactive") return genError("Rate limit mode is Inactive in policy");
+        if (practice_action == RateLimitAction::INACTIVE) return genError("Rate limit mode is Inactive in policy");
 
-        set<string> rule_set;
         Maybe<RateLimitRule> matched_rule = genError("URI did not match any rate limit rule.");
         int rate_limit_longest_match = 0;
+        float current_matched_rule_limit = 0;
+        RateLimitAction current_matched_rule_verdict = RateLimitAction::INACTIVE;
         for (const auto &application_url : site_config->get_applicationUrls()) {
             dbgTrace(D_RATE_LIMIT) << "Application URL: " << application_url;
 
@@ -120,54 +213,30 @@ public:
                 string full_rule_uri = application_uri + rule.getRateLimitUri();
                 int full_rule_uri_length = full_rule_uri.length();
 
-                // avoiding duplicates
-                if (!rule_set.insert(full_rule_uri).second) continue;
-
                 dbgTrace(D_RATE_LIMIT)
-                    << "Trying to match rule uri: "
+                    << "Trying to match rule URI: "
                     << full_rule_uri
-                    << " with request uri: "
+                    << " with request URI: "
                     << matched_uri;
 
-                if (full_rule_uri_length < rate_limit_longest_match) {
-                    dbgDebug(D_RATE_LIMIT)
-                        << "rule is shorter then already matched rule. current rule length: "
-                        << full_rule_uri_length
-                        << ", previously longest matched rule length: "
-                        << rate_limit_longest_match;
+                if (!isRuleMatchingUri(full_rule_uri, matched_uri, rule)) {
+                    dbgTrace(D_RATE_LIMIT) << "No match";
                     continue;
                 }
 
-                if (full_rule_uri == matched_uri ||
-                    full_rule_uri == matched_uri + "/" ||
-                    full_rule_uri + "/" == matched_uri) {
-                    dbgDebug(D_RATE_LIMIT)
-                        << "Found Exact match to request uri: "
-                        << matched_uri
-                        << ", rule uri: "
-                        << full_rule_uri;
-                    return rule;
-                }
+                bool should_update_rule = shouldUpdateBestMatchingRule(
+                    rule,
+                    condition_map,
+                    full_rule_uri_length,
+                    rate_limit_longest_match,
+                    current_matched_rule_limit,
+                    current_matched_rule_verdict);
 
-                if (rule.getRateLimitUri() == "/") {
-                    dbgDebug(D_RATE_LIMIT)
-                        << "Matched new longest rule, request uri: "
-                        << matched_uri
-                        << ", rule uri: "
-                        << full_rule_uri;
+                if (should_update_rule) {
                     matched_rule = rule;
                     rate_limit_longest_match = full_rule_uri_length;
-                    continue;
-                }
-
-                if (isRuleMatchingUri(full_rule_uri, matched_uri, rule.isExactMatch())) {
-                    dbgDebug(D_RATE_LIMIT)
-                        << "Matched new longest rule, request uri: "
-                        << matched_uri
-                        << ", rule uri: "
-                        << full_rule_uri;
-                    matched_rule = rule;
-                    rate_limit_longest_match = full_rule_uri_length;
+                    current_matched_rule_verdict = calcRuleAction(rule);
+                    current_matched_rule_limit = calcRuleLimit(rule);
                 }
             }
         }
@@ -203,21 +272,27 @@ public:
         string source_ip = "";
         if (maybe_source_ip.ok()) source_ip = ipAddrToStr(maybe_source_ip.unpack());
 
-        if (shouldApplyException(uri, source_identifier, source_ip)) {
-            dbgDebug(D_RATE_LIMIT) << "found accept exception, not enforcing rate limit on this uri: " << uri;
+        unordered_map<string, set<string>> condition_map = createConditionMap(uri, source_ip, source_identifier);
+        if (shouldApplyException(condition_map)) {
+            dbgDebug(D_RATE_LIMIT) << "found accept exception, not enforcing rate limit on this URI: " << uri;
             return ACCEPT;
         }
 
         string asset_id;
-        auto maybe_rule = findRateLimitRule(uri, asset_id);
+        auto maybe_rule = findRateLimitRule(uri, asset_id, condition_map);
         if (!maybe_rule.ok()) {
             dbgDebug(D_RATE_LIMIT) << "Not Enforcing Rate Limit: " << maybe_rule.getErr();
             return ACCEPT;
         }
 
         const auto &rule = maybe_rule.unpack();
+        if (rule.getRateLimitAction() == RateLimitAction::INACTIVE) {
+            dbgDebug(D_RATE_LIMIT) << "Rule's action is Inactive, rate limit will not be enforced";
+            return ACCEPT;
+        }
+
         burst = rule.getRateLimit();
-        limit = static_cast<float>(rule.getRateLimit()) / (rule.getRateLimitScope() == "Minute" ? 60 : 1);
+        limit = calcRuleLimit(rule);
 
         dbgTrace(D_RATE_LIMIT)
             << "found rate limit rule with: "
@@ -226,18 +301,18 @@ public:
             << (rule.getRateLimitScope() == "Minute" ? 60 : 1)
             << " seconds";
 
-        string unique_key = asset_id + ":" + source_identifier + ":" + uri;
-        if (!unique_key.empty() && unique_key.back() == '/') unique_key.pop_back();
+        string unique_key = asset_id + ":" + source_identifier + ":" + rule.getRateLimitUri();
+        if (unique_key.back() == '/') unique_key.pop_back();
 
         auto verdict = decide(unique_key);
-        if (verdict == RateLimitVedict::ACCEPT) {
+        if (verdict == RateLimitVerdict::ACCEPT) {
             dbgTrace(D_RATE_LIMIT) << "Received ACCEPT verdict.";
             return ACCEPT;
         }
 
-        if (verdict == RateLimitVedict::DROP_AND_LOG) sendLog(uri, source_identifier, source_ip, rule);
+        if (verdict == RateLimitVerdict::DROP_AND_LOG) sendLog(uri, source_identifier, source_ip, rule);
 
-        if (mode == "Active") {
+        if (calcRuleAction(rule) == RateLimitAction::PREVENT) {
             dbgTrace(D_RATE_LIMIT) << "Received DROP verdict, this request will be blocked by rate limit";
             return DROP;
         }
@@ -246,19 +321,33 @@ public:
         return ACCEPT;
     }
 
+    RateLimitAction
+    calcRuleAction(const RateLimitRule &rule)
+    {
+        if (rule.getRateLimitAction() == RateLimitAction::ACCORDING_TO_PRACTICE) return practice_action;
+
+        return rule.getRateLimitAction();
+    }
+
+    float
+    calcRuleLimit(const RateLimitRule &rule)
+    {
+        return static_cast<float>(rule.getRateLimit()) / (rule.getRateLimitScope() == "Minute" ? 60 : 1);
+    }
+
     string
     getListenerName() const override
     {
         return "rate limit";
     }
 
-    RateLimitVedict
+    RateLimitVerdict
     decide(const string &key) {
         if (redis == nullptr) {
             dbgDebug(D_RATE_LIMIT)
                 << "there is no connection to the redis at the moment, unable to enforce rate limit";
             reconnectRedis();
-            return RateLimitVedict::ACCEPT;
+            return RateLimitVerdict::ACCEPT;
         }
 
         redisReply* reply = static_cast<redisReply*>(redisCommand(redis, "EVALSHA %s 1 %s %f %d",
@@ -268,26 +357,26 @@ public:
             dbgDebug(D_RATE_LIMIT)
                 << "Error executing Redis command: No reply received, unable to enforce rate limit";
             reconnectRedis();
-            return RateLimitVedict::ACCEPT;
+            return RateLimitVerdict::ACCEPT;
         }
 
         // redis's lua script returned true - accept
         if (reply->type == REDIS_REPLY_INTEGER) {
             freeReplyObject(reply);
-            return RateLimitVedict::ACCEPT;
+            return RateLimitVerdict::ACCEPT;
         }
 
         // redis's lua script returned false - drop, no need to log
         if (reply->type == REDIS_REPLY_NIL) {
             freeReplyObject(reply);
-            return RateLimitVedict::DROP;
+            return RateLimitVerdict::DROP;
         }
 
         // redis's lua script returned string - drop and send log
         const char* log_str = "BLOCK AND LOG";
         if (reply->type == REDIS_REPLY_STRING && strncmp(reply->str, log_str, strlen(log_str)) == 0) {
             freeReplyObject(reply);
-            return RateLimitVedict::DROP_AND_LOG;
+            return RateLimitVerdict::DROP_AND_LOG;
         }
 
         dbgDebug(D_RATE_LIMIT)
@@ -295,7 +384,7 @@ public:
             << reply->type
             << ". not enforcing rate limit for this request.";
         freeReplyObject(reply);
-        return RateLimitVedict::ACCEPT;
+        return RateLimitVerdict::ACCEPT;
     }
 
     void
@@ -344,7 +433,7 @@ public:
             << LogField("ruleName", rule_by_ctx.getRuleName())
             << LogField("httpUriPath", uri)
             << LogField("httpSourceId", source_identifier)
-            << LogField("securityAction", (mode == "Active" ? "Prevent" : "Detect"))
+            << LogField("securityAction", (calcRuleAction(rule) == RateLimitAction::PREVENT ? "Prevent" : "Detect"))
             << LogField("waapIncidentType", "Rate Limit");
 
         auto env = Singleton::Consume<I_Environment>::by<RateLimit>();
@@ -363,26 +452,31 @@ public:
     }
 
     bool
-    shouldApplyException(const string &uri, const string &source_identifier, const string &source_ip)
+    shouldApplyException(const unordered_map<string, set<string>> &exceptions_dict)
     {
         dbgTrace(D_RATE_LIMIT) << "matching exceptions";
-        unordered_map<string, set<string>> exceptions_dict;
-
-        // collect sourceip, sourceIdentifier, url
-        if (!source_ip.empty()) exceptions_dict["sourceIP"].insert(source_ip);
-        exceptions_dict["sourceIdentifier"].insert(source_identifier);
-        exceptions_dict["url"].insert(uri);
 
         auto behaviors = Singleton::Consume<I_GenericRulebase>::by<RateLimit>()->getBehavior(exceptions_dict);
         for (auto const &behavior : behaviors) {
             if (behavior == action_accept) {
-                dbgTrace(D_RATE_LIMIT) << "matched exceptions for " << uri << " should accept";
+                dbgTrace(D_RATE_LIMIT) << "matched exceptions for current request, should accept";
                 return true;
             }
         }
 
-        dbgTrace(D_RATE_LIMIT) << "No accept exceptions found for this uri and source ip";
+        dbgTrace(D_RATE_LIMIT) << "No accept exceptions found for this request";
         return false;
+    }
+
+    unordered_map<string, set<string>>
+    createConditionMap(const string &uri, const string &source_ip, const string &source_identifier)
+    {
+        unordered_map<string, set<string>> condition_map;
+        if (!source_ip.empty()) condition_map["sourceIP"].insert(source_ip);
+        condition_map["sourceIdentifier"].insert(source_identifier);
+        condition_map["url"].insert(uri);
+
+        return condition_map;
     }
 
     string
@@ -398,7 +492,7 @@ public:
     {
         disconnectRedis();
 
-        const string &redis_ip = getConfigurationWithDefault<string>("127.0.0.1", "connection", "Redis IP");
+        const string redis_ip = getConfigurationWithDefault<string>("127.0.0.1", "connection", "Redis IP");
         int redis_port = getConfigurationWithDefault<int>(6379, "connection", "Redis Port");
 
         timeval timeout;
@@ -476,7 +570,6 @@ public:
                 false
             );
         }
-
     }
 
     void
@@ -529,7 +622,7 @@ private:
     static constexpr auto ACCEPT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
     static constexpr auto INSPECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
 
-    string mode;
+    RateLimitAction practice_action;
     string rate_limit_lua_script_hash;
     int burst;
     float limit;

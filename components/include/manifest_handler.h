@@ -24,6 +24,8 @@
 #include "i_details_resolver.h"
 #include "i_time_get.h"
 
+using packageFilePath = std::string;
+
 class ManifestHandler
         :
     Singleton::Consume<I_MainLoop>,
@@ -36,28 +38,23 @@ class ManifestHandler
     Singleton::Consume<I_DetailsResolver>
 {
 public:
-    using packageFilePath = std::string;
 
     ManifestHandler() = default;
     void init();
 
-    bool
-    downloadPackages(
-        const std::vector<Package> &updated_packages,
-        std::vector<std::pair<Package, packageFilePath>> &downloaded_packages
+    Maybe<std::vector<std::pair<Package, packageFilePath>>> downloadPackages(
+        const std::map<std::string, Package> &new_packages_to_download
     );
 
-    bool
-    installPackages(
-        const std::vector<std::pair<Package, packageFilePath>> &downloaded_packages_files,
+    bool installPackage(
+        const std::pair<Package, std::string> &package_downloaded_file,
         std::map<packageFilePath, Package> &current_packages,
         std::map<packageFilePath, Package> &corrupted_packages
     );
 
     bool uninstallPackage(Package &removed_package);
 
-    bool
-    selfUpdate(
+    bool selfUpdate(
         const Package &updated_package,
         std::map<packageFilePath, Package> &current_packages,
         const packageFilePath &installation_file

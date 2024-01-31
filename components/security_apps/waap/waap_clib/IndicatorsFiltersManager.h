@@ -19,7 +19,6 @@
 #include "TypeIndicatorsFilter.h"
 #include "WaapParameters.h"
 #include "i_waapConfig.h"
-#include "i_messaging.h"
 #include "ScannersDetector.h"
 #include "TuningDecisions.h"
 #include <cereal/cereal.hpp>

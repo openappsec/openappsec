@@ -93,6 +93,7 @@ enum class Service {
     DEDICATED_NETWORK_HANDLER,
     HELLO_WORLD,
     IDA,
+    IDA_SAML,
     IOT_ACCESS_CONTROL,
     HORIZON_TELEMETRY,
 
@@ -169,6 +170,7 @@ getServiceString(const Service service)
         case (Service::IOT_WLP): return "workload-protection";
         case (Service::HELLO_WORLD): return "hello-world";
         case (Service::IDA): return "identity-awareness";
+        case (Service::IDA_SAML): return "ida-saml";
         case (Service::IOT_ACCESS_CONTROL): return "iot-access-control";
         case (Service::HORIZON_TELEMETRY): return "horizon-telemetry";
         default:
@@ -343,6 +345,11 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-ida-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-ida.dbg"
+            );
+        case (Service::IDA_SAML):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-ida-saml-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-ida-saml.dbg"
             );
         case (Service::HELLO_WORLD):
             return ServiceConfig(
@@ -1284,6 +1291,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::IOT_WLP);
         } else if (getServiceString(Service::IDA).find(maybe_service) == 0) {
             services.push_back(Service::IDA);
+        } else if (getServiceString(Service::IDA_SAML).find(maybe_service) == 0) {
+            services.push_back(Service::IDA_SAML);
         } else if (getServiceString(Service::IOT_ACCESS_CONTROL).find(maybe_service) == 0) {
             services.push_back(Service::IOT_ACCESS_CONTROL);
         } else if (getServiceString(Service::HORIZON_TELEMETRY).find(maybe_service) == 0) {

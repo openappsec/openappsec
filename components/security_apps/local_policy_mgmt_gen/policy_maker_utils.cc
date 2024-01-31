@@ -1649,36 +1649,39 @@ PolicyMakerUtils::proccesSingleAppsecPolicy(
     const string &local_appsec_policy_path)
 {
 
-    Maybe<V1beta2AppsecLinuxPolicy> maybe_policy_v1beta2 = openFileAsJson<V1beta2AppsecLinuxPolicy>(policy_path);
-    if (maybe_policy_v1beta2.ok()) {
-        policy_version_name = "v1beta2";
-        createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, NewParsedRule>(
-            getPolicyName(policy_path),
-            maybe_policy_v1beta2.unpack()
-        );
-    } else {
-        policy_version_name = "v1beta1";
-        dbgInfo(D_LOCAL_POLICY)
-            << "Failed to retrieve AppSec local policy with version: v1beta2, Trying version: v1beta1";
+    try {
+        Maybe<V1beta2AppsecLinuxPolicy> maybe_policy_v1beta2 = openFileAsJson<V1beta2AppsecLinuxPolicy>(policy_path);
+        if (maybe_policy_v1beta2.ok()) {
+            policy_version_name = "v1beta2";
+            createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+                getPolicyName(policy_path), maybe_policy_v1beta2.unpack()
+            );
+        } else {
+            policy_version_name = "v1beta1";
+            dbgInfo(D_LOCAL_POLICY
+            ) << "Failed to retrieve AppSec local policy with version: v1beta2, Trying version: v1beta1";
 
-        Maybe<AppsecLinuxPolicy> maybe_policy_v1beta1 = openFileAsJson<AppsecLinuxPolicy>(policy_path);
-        if (!maybe_policy_v1beta1.ok()){
-            dbgWarning(D_LOCAL_POLICY) << maybe_policy_v1beta1.getErr();
-            return "";
+            Maybe<AppsecLinuxPolicy> maybe_policy_v1beta1 = openFileAsJson<AppsecLinuxPolicy>(policy_path);
+            if (!maybe_policy_v1beta1.ok()) {
+                dbgWarning(D_LOCAL_POLICY) << maybe_policy_v1beta1.getErr();
+                return "";
+            }
+            createAgentPolicyFromAppsecPolicy<AppsecLinuxPolicy, ParsedRule>(
+                getPolicyName(policy_path), maybe_policy_v1beta1.unpack()
+            );
+
+            if (getenv("OPENAPPSEC_STANDALONE")) rpmBuildNginxServers(maybe_policy_v1beta1.unpack());
         }
-        createAgentPolicyFromAppsecPolicy<AppsecLinuxPolicy, ParsedRule>(
-            getPolicyName(policy_path),
-            maybe_policy_v1beta1.unpack()
+
+        PolicyWrapper policy_wrapper = combineElementsToPolicy(policy_version);
+        return dumpPolicyToFile(
+            policy_wrapper,
+            local_appsec_policy_path
         );
-
-        if (getenv("OPENAPPSEC_STANDALONE")) rpmBuildNginxServers(maybe_policy_v1beta1.unpack());
+    } catch (const PolicyGenException &e) {
+        dbgDebug(D_LOCAL_POLICY) << "Policy generation failed. Error: " << e.what();
+        return "";
     }
-
-    PolicyWrapper policy_wrapper = combineElementsToPolicy(policy_version);
-    return dumpPolicyToFile(
-        policy_wrapper,
-        local_appsec_policy_path
-    );
 }
 
 void

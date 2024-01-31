@@ -24,7 +24,6 @@
 
 using namespace std;
 using namespace cereal;
-using HTTPMethod = I_Messaging::Method;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
@@ -43,16 +42,16 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
 
     auto unpacked_access_token = access_token.unpack().getToken();
     static const string check_update_str = "/api/v2/agents/resources";
-    auto request_status = Singleton::Consume<I_Messaging>::by<FogCommunication>()->sendObject(
-        request,
+    auto response = Singleton::Consume<I_Messaging>::by<FogCommunication>()->sendSyncMessage(
         HTTPMethod::POST,
-        fog_address_ex + check_update_str,
-        buildOAuth2Header(unpacked_access_token)
+        check_update_str,
+        request
     );
 
-    if (!request_status) {
-        dbgDebug(D_ORCHESTRATOR) << "Failed to get response after check update request.";
-        return genError("Failed to request updates");
+    if (!response.ok()) {
+        const auto &fog_err = response.getErr();
+        dbgDebug(D_ORCHESTRATOR) << "Check update request fail. Error: " << fog_err.getBody();
+        return genError(fog_err.getBody());
     }
 
     string policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
@@ -93,7 +92,7 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
 }
 
 Maybe<string>
-FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
+FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file, const string &file_path)
 {
     if (!access_token.ok()) return genError("Acccess Token not available.");
 
@@ -105,27 +104,34 @@ FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file)
         return i_declarative_policy->getCurrPolicy();
     }
     static const string file_attribute_str = "/api/v2/agents/resources/";
-    Maybe<string> attribute_file = Singleton::Consume<I_Messaging>::by<FogCommunication>()->downloadFile(
-        resourse_file,
-        resourse_file.getRequestMethod(),
-        fog_address_ex + file_attribute_str + resourse_file.getFileName(),
-        buildOAuth2Header(unpacked_access_token) // Header
-    );
 
-    return attribute_file;
+    auto attribute_file = Singleton::Consume<I_Messaging>::by<FogCommunication>()->downloadFile(
+        resourse_file.getRequestMethod(),
+        file_attribute_str + resourse_file.getFileName(),
+        file_path
+    );
+    if (!attribute_file.ok()) {
+        const auto &fog_err = attribute_file.getErr();
+        return genError(fog_err.getBody());
+    }
+    return file_path;
 }
 
 Maybe<void>
 FogCommunication::sendPolicyVersion(const string &policy_version, const string &policy_versions) const
 {
-    PolicyVersionPatchRequest request(policy_version, policy_versions);
-    auto fog_messaging = Singleton::Consume<I_Messaging>::by<FogCommunication>();
     dbgTrace(D_ORCHESTRATOR)
         << "Sending patch request to the fog. Policy version: "
         << policy_version
         << " , Policy versions: "
         << policy_versions;
-    if (fog_messaging->sendNoReplyObject(request, HTTPMethod::PATCH, fog_address_ex + "/agents")) {
+    PolicyVersionPatchRequest request(policy_version, policy_versions);
+    auto request_status = Singleton::Consume<I_Messaging>::by<FogCommunication>()->sendSyncMessageWithoutResponse(
+        HTTPMethod::PATCH,
+        "/agents",
+        request
+    );
+    if (request_status) {
         dbgTrace(D_ORCHESTRATOR)
             << "Patch request was sent successfully to the fog."
             << " Policy versions: "

@@ -91,6 +91,16 @@ public:
         archive_in(ret);
     }
 
+    void checkIfFileExistsCall(const Package &package)
+    {
+        Maybe<string> checksum_validation(
+            genError("File /tmp/orchestration_downloads/" + package.getName() + ".download does not exist.")
+        );
+        EXPECT_CALL(
+            mock_downloader,
+            checkIfFileExists(package)).WillRepeatedly(Return(checksum_validation));
+    }
+
     string manifest_file_path;
     string corrupted_file_list;
     string temp_ext;
@@ -171,6 +181,10 @@ TEST_F(ManifestControllerTest, createNewManifest)
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     //mock_downloader
     EXPECT_CALL(
         mock_downloader,
@@ -187,6 +201,8 @@ TEST_F(ManifestControllerTest, createNewManifest)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     load(manifest, new_services);
@@ -236,6 +252,10 @@ TEST_F(ManifestControllerTest, badChecksum)
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
 
     //mock_downloader
     Maybe<string> err(genError("Empty"));
@@ -300,6 +320,11 @@ TEST_F(ManifestControllerTest, updateManifest)
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     //mock_downloader
     EXPECT_CALL(
         mock_downloader,
@@ -316,6 +341,8 @@ TEST_F(ManifestControllerTest, updateManifest)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my")).Times(2);
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration")).Times(2);
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     load(manifest, new_services);
@@ -366,6 +393,9 @@ TEST_F(ManifestControllerTest, updateManifest)
         "   ]"
         "}";
 
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -411,6 +441,10 @@ TEST_F(ManifestControllerTest, selfUpdate)
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration"));
 
     EXPECT_CALL(
         mock_downloader,
@@ -491,63 +525,6 @@ TEST_F(ManifestControllerTest, successLoadAfteSelfUpdate)
     EXPECT_TRUE(i_manifest_controller->loadAfterSelfUpdate());
 }
 
-TEST_F(ManifestControllerTest, updateWhileErrorPackageExist)
-{
-    new_services.clear();
-    old_services.clear();
-    string manifest =
-        "{"
-        "   \"packages\": ["
-        "       {"
-        "           \"name\": \"my\","
-        "           \"version\": \"c\","
-        "           \"download-path\": \"http://172.23.92.135/my.sh\","
-        "           \"relative-path\": \"\","
-        "           \"checksum-type\": \"sha1sum\","
-        "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c805\","
-        "           \"package-type\": \"service\","
-        "            \"require\": []"
-        "       },"
-        "       {"
-        "           \"name\": \"orchestration\","
-        "           \"version\": \"c\","
-        "           \"download-path\": \"http://172.23.92.135/my.sh\","
-        "           \"relative-path\": \"\","
-        "           \"checksum-type\": \"sha1sum\","
-        "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c805\","
-        "           \"package-type\": \"service\","
-        "            \"require\": []"
-        "       }"
-        "   ]"
-        "}";
-
-    string corrupted_packages_manifest =
-        "{"
-        "   \"packages\": ["
-        "       {"
-        "           \"name\": \"my\","
-        "           \"version\": \"c\","
-        "           \"download-path\": \"http://172.23.92.135/my.sh\","
-        "           \"relative-path\": \"\","
-        "           \"checksum-type\": \"sha1sum\","
-        "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c805\","
-        "           \"package-type\": \"service\","
-        "            \"require\": []"
-        "       }"
-        "   ]"
-        "}";
-
-    load(manifest, new_services);
-    load(old_manifest, old_services);
-    load(corrupted_packages_manifest, corrupted_packages);
-
-    EXPECT_CALL(mock_orchestration_tools,
-        loadPackagesFromJson(corrupted_file_list)).WillOnce(Return(corrupted_packages));
-    EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
-    EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(manifest_file_path)).WillOnce(Return(old_services));
-    EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
-}
-
 TEST_F(ManifestControllerTest, removeCurrentErrorPackage)
 {
     new_services.clear();
@@ -598,6 +575,8 @@ TEST_F(ManifestControllerTest, removeCurrentErrorPackage)
     load(old_manifest, old_services);
     load(corrupted_packages_manifest, corrupted_packages);
 
+    checkIfFileExistsCall(new_services.at("my"));
+
     //mock_downloader
     EXPECT_CALL(
         mock_downloader,
@@ -613,6 +592,8 @@ TEST_F(ManifestControllerTest, removeCurrentErrorPackage)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
@@ -629,8 +610,6 @@ TEST_F(ManifestControllerTest, removeCurrentErrorPackage)
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
 
     corrupted_packages.clear();
-    EXPECT_CALL(mock_orchestration_tools, packagesToJsonFile(corrupted_packages,
-                                                            corrupted_file_list)).WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -655,6 +634,10 @@ TEST_F(ManifestControllerTest, selfUpdateWithOldCopy)
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration"));
 
     EXPECT_CALL(
         mock_downloader,
@@ -709,6 +692,10 @@ TEST_F(ManifestControllerTest, selfUpdateWithOldCopyWithError)
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration"));
 
     EXPECT_CALL(
         mock_downloader,
@@ -775,6 +762,10 @@ TEST_F(ManifestControllerTest, installAndRemove)
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     //mock_downloader
     EXPECT_CALL(
         mock_downloader,
@@ -791,6 +782,8 @@ TEST_F(ManifestControllerTest, installAndRemove)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     load(manifest, new_services);
@@ -839,6 +832,9 @@ TEST_F(ManifestControllerTest, installAndRemove)
         "   ]"
         "}";
 
+    load(new_manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my1"));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -854,6 +850,8 @@ TEST_F(ManifestControllerTest, installAndRemove)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my1", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my1", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my1", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my1"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my1", "/tmp/temp_file")).WillOnce(Return(true));
 
     EXPECT_CALL(mock_orchestration_tools, packagesToJsonFile(old_services, manifest_file_path)).WillOnce(Return(true));
@@ -899,6 +897,10 @@ TEST_F(ManifestControllerTest, badInstall)
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
 
     //mock_downloader
     EXPECT_CALL(
@@ -979,6 +981,10 @@ TEST_F(ManifestControllerTest, failToDownloadWithselfUpdate)
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration"));
+
     Maybe<string> err(genError("Empty"));
     EXPECT_CALL(
         mock_downloader,
@@ -1019,7 +1025,7 @@ TEST_F(ManifestControllerTest, requireUpdate)
         "{"
         "   \"packages\": ["
         "       {"
-        "           \"name\": \"orchestration\","
+        "           \"name\": \"orchestration1\","
         "           \"version\": \"c\","
         "           \"download-path\": \"http://172.23.92.135/my.sh\","
         "           \"relative-path\": \"\","
@@ -1040,16 +1046,22 @@ TEST_F(ManifestControllerTest, requireUpdate)
         "       }"
         "   ]"
         "}";
-    EXPECT_CALL(mock_status, writeStatusToFile());
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration1"));
+    checkIfFileExistsCall(manifest_services.at("pre_orchestration"));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
             "http://172.23.92.135/my.sh",
             "a58bbab8020b0e6d08568714b5e582a3adf9c805",
             Package::ChecksumTypes::SHA1,
-            "orchestration"
+            "orchestration1"
         )
     ).WillOnce(Return(string("/tmp/temp_file1")));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -1059,10 +1071,16 @@ TEST_F(ManifestControllerTest, requireUpdate)
             "pre_orchestration"
         )
     ).WillOnce(Return(string("/tmp/temp_file2")));
-    string temp_orc_file = "/etc/cp/packages/orchestration/orchestration_temp";
-    EXPECT_CALL(mock_package_handler, preInstallPackage(orch_service_name, temp_orc_file))
+    EXPECT_CALL(mock_package_handler, preInstallPackage("orchestration1", "/tmp/temp_file1"))
         .WillOnce(Return(true));
-    EXPECT_CALL(mock_package_handler, installPackage(orch_service_name, temp_orc_file, _))
+    EXPECT_CALL(mock_package_handler, installPackage("orchestration1", "/tmp/temp_file1", _))
+        .WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_package_handler,
+        shouldInstallPackage("orchestration1", "/tmp/temp_file1")
+    ).WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, postInstallPackage("orchestration1", "/tmp/temp_file1"))
         .WillOnce(Return(true));
 
     EXPECT_CALL(
@@ -1075,7 +1093,11 @@ TEST_F(ManifestControllerTest, requireUpdate)
         .WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("pre_orchestration", "/tmp/temp_file2"))
         .WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("pre_orchestration"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("pre_orchestration", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration1"));
+    EXPECT_CALL(mock_package_handler, updateSavedPackage("orchestration1", "/tmp/temp_file1"))
         .WillOnce(Return(true));
 
 
@@ -1088,20 +1110,24 @@ TEST_F(ManifestControllerTest, requireUpdate)
         .WillOnce(Return(new_services));
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(manifest_file_path))
         .WillOnce(Return(old_services));
-    string temp_manifest_path = manifest_file_path + temp_ext;
-    EXPECT_CALL(mock_orchestration_tools, packagesToJsonFile(new_services, temp_manifest_path))
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(manifest_file_path))
         .WillOnce(Return(true));
 
-    string path = packages_dir + "/" + orch_service_name + "/" +
-                            orch_service_name;
+    string temp_manifest_path = manifest_file_path + temp_ext;
+
+    string path = packages_dir + "/orchestration1/" + "orchestration1";
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(path)).Times(2).WillOnce(Return(false));
     EXPECT_CALL(
         mock_orchestration_tools,
         doesFileExist("/etc/cp/packages/pre_orchestration/pre_orchestration")
     ).Times(2).WillOnce(Return(true));
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file1", path + temp_ext))
+    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path))
+            .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(manifest_file_path, "/etc/cp/conf/manifest.json.bk"))
         .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, removeFile("new_manifest.json")).WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1141,6 +1167,11 @@ TEST_F(ManifestControllerTest, sharedObjectNotInstalled)
     EXPECT_CALL(mock_orchestration_tools,
         loadPackagesFromJson(corrupted_file_list)).WillOnce(Return(corrupted_packages));
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration"));
+    checkIfFileExistsCall(manifest_services.at("pre_orchestration"));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -1150,6 +1181,16 @@ TEST_F(ManifestControllerTest, sharedObjectNotInstalled)
             "orchestration"
         )
     ).WillOnce(Return(string("/tmp/temp_file1")));
+
+    EXPECT_CALL(
+        mock_downloader,
+        downloadFileFromURL(
+            "http://172.23.92.135/my.sh",
+            "a58bbab8020b0e6d08568714b5e582a3adf9c806",
+            Package::ChecksumTypes::SHA1,
+            "pre_orchestration"
+        )
+    ).WillOnce(Return(string("/tmp/temp_file2")));
 
     string temp_manifest_path = manifest_file_path + temp_ext;
     string writen_manifest =
@@ -1181,7 +1222,10 @@ TEST_F(ManifestControllerTest, sharedObjectNotInstalled)
     string path = packages_dir + "/" + orch_service_name + "/" +
         orch_service_name;
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(path)).Times(2).WillOnce(Return(false));
-
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/packages/pre_orchestration/pre_orchestration")
+    ).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file1", path +
         temp_ext)).WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
@@ -1195,7 +1239,7 @@ TEST_F(ManifestControllerTest, requireSharedObjectUpdate)
         "{"
         "   \"packages\": ["
         "       {"
-        "           \"name\": \"orchestration\","
+        "           \"name\": \"orchestration1\","
         "           \"version\": \"c\","
         "           \"download-path\": \"http://172.23.92.135/my.sh\","
         "           \"relative-path\": \"\","
@@ -1211,11 +1255,16 @@ TEST_F(ManifestControllerTest, requireSharedObjectUpdate)
         "           \"relative-path\": \"\","
         "           \"checksum-type\": \"sha1sum\","
         "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c806\","
-        "           \"package-type\": \"shared objects\","
+        "           \"package-type\": \"service\","
         "            \"require\": []"
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration1"));
+    checkIfFileExistsCall(manifest_services.at("pre_orchestration"));
 
     EXPECT_CALL(
         mock_downloader,
@@ -1223,9 +1272,10 @@ TEST_F(ManifestControllerTest, requireSharedObjectUpdate)
             "http://172.23.92.135/my.sh",
             "a58bbab8020b0e6d08568714b5e582a3adf9c805",
             Package::ChecksumTypes::SHA1,
-            "orchestration"
+            "orchestration1"
         )
     ).WillOnce(Return(string("/tmp/temp_file1")));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -1235,15 +1285,26 @@ TEST_F(ManifestControllerTest, requireSharedObjectUpdate)
             "pre_orchestration"
         )
     ).WillOnce(Return(string("/tmp/temp_file2")));
-    EXPECT_CALL(mock_status, writeStatusToFile());
-    string temp_orc_file = "/etc/cp/packages/orchestration/orchestration_temp";
+    string temp_orc_file = "/etc/cp/packages/orchestration1/orchestration_temp";
     EXPECT_CALL(mock_package_handler, shouldInstallPackage(_, _)).WillRepeatedly(Return(true));
-    EXPECT_CALL(mock_package_handler, preInstallPackage(orch_service_name,
-        temp_orc_file)).WillOnce(Return(true));
-    EXPECT_CALL(mock_package_handler, installPackage(orch_service_name,
-        temp_orc_file, _)).WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, installPackage("orchestration1", "/tmp/temp_file1", _))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("pre_orchestration",
         "/tmp/temp_file2", _)).WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, preInstallPackage("orchestration1", "/tmp/temp_file1"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, postInstallPackage("orchestration1", "/tmp/temp_file1"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration1"));
+    EXPECT_CALL(mock_package_handler, updateSavedPackage("orchestration1", "/tmp/temp_file1"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, preInstallPackage("pre_orchestration", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, postInstallPackage("pre_orchestration", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("pre_orchestration"));
+    EXPECT_CALL(mock_package_handler, updateSavedPackage("pre_orchestration", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools,
         loadPackagesFromJson(corrupted_file_list)).WillOnce(Return(corrupted_packages));
 
@@ -1252,18 +1313,22 @@ TEST_F(ManifestControllerTest, requireSharedObjectUpdate)
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(manifest_file_path)).WillOnce(Return(old_services));
     string temp_manifest_path = manifest_file_path + temp_ext;
-    EXPECT_CALL(mock_orchestration_tools, packagesToJsonFile(new_services, temp_manifest_path)).WillOnce(Return(true));
 
-    string path = packages_dir + "/" + orch_service_name + "/" +
-        orch_service_name;
+    string path = packages_dir + "/" + "orchestration1" + "/" + "orchestration1";
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(path)).Times(2).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/manifest.json"))
+        .WillOnce(Return(false));
     EXPECT_CALL(
         mock_orchestration_tools,
         doesFileExist("/etc/cp/packages/pre_orchestration/pre_orchestration")
     ).Times(2).WillOnce(Return(false));
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file1", path +
-        temp_ext)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile("new_manifest.json", "/etc/cp/conf/manifest.json"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/etc/cp/conf/manifest.json"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, removeFile("new_manifest.json"))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1297,6 +1362,21 @@ TEST_F(ManifestControllerTest, failureOnDownloadSharedObject)
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration"));
+    checkIfFileExistsCall(manifest_services.at("pre_orchestration"));
+
+    EXPECT_CALL(
+        mock_downloader,
+        downloadFileFromURL(
+            "http://172.23.92.135/my.sh",
+            "a58bbab8020b0e6d08568714b5e582a3adf9c805",
+            Package::ChecksumTypes::SHA1,
+            "orchestration"
+        )
+    ).WillOnce(Return(string("/tmp/temp_file1")));
+
     Maybe<string> err = genError("error");
     EXPECT_CALL(
         mock_downloader,
@@ -1316,9 +1396,14 @@ TEST_F(ManifestControllerTest, failureOnDownloadSharedObject)
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(manifest_file_path)).WillOnce(Return(old_services));
     EXPECT_CALL(
         mock_orchestration_tools,
+        doesFileExist("/etc/cp/packages/orchestration/orchestration")
+    ).WillOnce(Return(false));
+    EXPECT_CALL(
+        mock_orchestration_tools,
         doesFileExist("/etc/cp/packages/pre_orchestration/pre_orchestration")
     ).WillOnce(Return(false));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(string("hostname")));
+    EXPECT_CALL(mock_orchestration_tools, removeFile("/tmp/temp_file1")).WillOnce(Return(true));
     EXPECT_CALL(
         mock_status,
         setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
@@ -1337,7 +1422,7 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
         "{"
         "   \"packages\": ["
         "       {"
-        "           \"name\": \"orchestration\","
+        "           \"name\": \"orchestration1\","
         "           \"version\": \"c\","
         "           \"download-path\": \"http://172.23.92.135/my.sh\","
         "           \"relative-path\": \"\","
@@ -1353,7 +1438,7 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
         "           \"relative-path\": \"\","
         "           \"checksum-type\": \"sha1sum\","
         "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c806\","
-        "           \"package-type\": \"shared objects\","
+        "           \"package-type\": \"service\","
         "            \"require\": []"
         "       },"
         "       {"
@@ -1363,11 +1448,17 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
         "           \"relative-path\": \"\","
         "           \"checksum-type\": \"sha1sum\","
         "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c807\","
-        "           \"package-type\": \"shared objects\","
+        "           \"package-type\": \"service\","
         "           \"require\": [ \"pre_orchestration001\" ]"
         "       }"
         "   ]"
         "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("orchestration1"));
+    checkIfFileExistsCall(manifest_services.at("pre_orchestration001"));
+    checkIfFileExistsCall(manifest_services.at("pre_orchestration002"));
 
     EXPECT_CALL(
         mock_downloader,
@@ -1375,7 +1466,7 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
             "http://172.23.92.135/my.sh",
             "a58bbab8020b0e6d08568714b5e582a3adf9c805",
             Package::ChecksumTypes::SHA1,
-            "orchestration"
+            "orchestration1"
         )
     ).WillOnce(Return(string("/tmp/temp_file1")));
     EXPECT_CALL(
@@ -1396,13 +1487,9 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
             "pre_orchestration002"
         )
     ).WillOnce(Return(string("/tmp/temp_file3")));
-    EXPECT_CALL(mock_status, writeStatusToFile());
-    string temp_orc_file = "/etc/cp/packages/orchestration/orchestration_temp";
     EXPECT_CALL(mock_package_handler, shouldInstallPackage(_, _)).WillRepeatedly(Return(true));
-    EXPECT_CALL(mock_package_handler, preInstallPackage(orch_service_name,
-        temp_orc_file)).WillOnce(Return(true));
-    EXPECT_CALL(mock_package_handler, installPackage(orch_service_name,
-        temp_orc_file, _)).WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, installPackage("orchestration1",
+        "/tmp/temp_file1", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("pre_orchestration001",
         "/tmp/temp_file2", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("pre_orchestration002",
@@ -1410,15 +1497,37 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
     EXPECT_CALL(mock_orchestration_tools,
         loadPackagesFromJson(corrupted_file_list)).WillOnce(Return(corrupted_packages));
 
+    EXPECT_CALL(mock_package_handler, preInstallPackage("orchestration1", "/tmp/temp_file1"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, preInstallPackage("pre_orchestration001", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, preInstallPackage("pre_orchestration002", "/tmp/temp_file3"))
+        .WillOnce(Return(true));
+
+    EXPECT_CALL(mock_package_handler, postInstallPackage("orchestration1", "/tmp/temp_file1"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, postInstallPackage("pre_orchestration001", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_package_handler, postInstallPackage("pre_orchestration002", "/tmp/temp_file3"))
+        .WillOnce(Return(true));
+
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration1"));
+    EXPECT_CALL(mock_package_handler, updateSavedPackage("orchestration1", "/tmp/temp_file1"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("pre_orchestration001"));
+    EXPECT_CALL(mock_package_handler, updateSavedPackage("pre_orchestration001", "/tmp/temp_file2"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("pre_orchestration002"));
+    EXPECT_CALL(mock_package_handler, updateSavedPackage("pre_orchestration002", "/tmp/temp_file3"))
+        .WillOnce(Return(true));
+
     load(manifest, new_services);
 
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(manifest_file_path)).WillOnce(Return(old_services));
     string temp_manifest_path = manifest_file_path + temp_ext;
-    EXPECT_CALL(mock_orchestration_tools, packagesToJsonFile(new_services, temp_manifest_path)).WillOnce(Return(true));
 
-    string path = packages_dir + "/" + orch_service_name + "/" +
-        orch_service_name;
+    string path = packages_dir + "/" + "orchestration1" + "/" + "orchestration1";
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(path)).Times(2).WillOnce(Return(false));
     EXPECT_CALL(
         mock_orchestration_tools,
@@ -1429,8 +1538,14 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
         doesFileExist("/etc/cp/packages/pre_orchestration002/pre_orchestration002")
     ).Times(2).WillOnce(Return(false));
 
-    EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file1", path +
-        temp_ext)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/manifest.json"))
+        .WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, copyFile("new_manifest.json", "/etc/cp/conf/manifest.json"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/etc/cp/conf/manifest.json"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, removeFile("new_manifest.json"))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1476,6 +1591,10 @@ TEST_F(ManifestControllerTest, createNewManifestWithUninstallablePackage)
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     //mock_downloader
     EXPECT_CALL(
         mock_downloader,
@@ -1492,6 +1611,9 @@ TEST_F(ManifestControllerTest, createNewManifestWithUninstallablePackage)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("waap"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     load(manifest, new_services);
@@ -1552,15 +1674,17 @@ TEST_F(ManifestControllerTest, updateUninstallPackage)
     EXPECT_CALL(mock_orchestration_tools,
         loadPackagesFromJson(corrupted_file_list)).Times(2).WillRepeatedly(Return(corrupted_packages));
 
-    EXPECT_CALL(mock_orchestration_tools, doesFileExist(manifest_file_path)).Times(2).WillRepeatedly(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools,
-        copyFile(manifest_file_path, "/etc/cp/conf/manifest.json.bk")).Times(2).WillRepeatedly(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path))
+        copyFile(manifest_file_path, "/etc/cp/conf/manifest.json.bk")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/packages/my/my"))
         .Times(2).WillRepeatedly(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).Times(2).WillRepeatedly(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).Times(2).WillRepeatedly(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/packages/my/my")).Times(2).WillOnce(Return(true));
     string hostname = "hostname";
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
@@ -1590,6 +1714,10 @@ TEST_F(ManifestControllerTest, updateUninstallPackage)
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -1605,6 +1733,8 @@ TEST_F(ManifestControllerTest, updateUninstallPackage)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     //mock_orchestration_tools
@@ -1671,6 +1801,16 @@ public:
         std::stringstream os(manifest);
         cereal::JSONInputArchive archive_in(os);
         archive_in(ret);
+    }
+
+    void checkIfFileExistsCall(const Package &package)
+    {
+        Maybe<string> checksum_validation(
+            genError("File /tmp/orchestration_downloads/" + package.getName() + ".download does not exist.")
+        );
+        EXPECT_CALL(
+            mock_downloader,
+            checkIfFileExists(package)).WillRepeatedly(Return(checksum_validation));
     }
 
     string manifest_file_path;
@@ -1801,6 +1941,9 @@ TEST_F(ManifestControllerIgnorePakckgeTest, addAndUpdateIgnorePackage)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("dummy_service"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
@@ -1855,10 +1998,12 @@ TEST_F(ManifestControllerIgnorePakckgeTest, addAndUpdateIgnorePackage)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("dummy_service"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
-
 
 TEST_F(ManifestControllerIgnorePakckgeTest, addIgnorePackageAndUpdateNormal)
 {
@@ -1916,6 +2061,9 @@ TEST_F(ManifestControllerIgnorePakckgeTest, addIgnorePackageAndUpdateNormal)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("dummy_service"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
@@ -1958,6 +2106,7 @@ TEST_F(ManifestControllerIgnorePakckgeTest, addIgnorePackageAndUpdateNormal)
 
     //mock_orchestration_tools
     load(manifest, new_services);
+    checkIfFileExistsCall(new_services.at("my"));
 
     //mock_downloader
     EXPECT_CALL(
@@ -1975,6 +2124,9 @@ TEST_F(ManifestControllerIgnorePakckgeTest, addIgnorePackageAndUpdateNormal)
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("dummy_service"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     load(manifest, new_services);
@@ -2050,6 +2202,9 @@ TEST_F(ManifestControllerIgnorePakckgeTest, removeIgnoredPackage)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("dummy_service"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
@@ -2094,6 +2249,8 @@ TEST_F(ManifestControllerIgnorePakckgeTest, removeIgnoredPackage)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
@@ -2147,6 +2304,8 @@ TEST_F(ManifestControllerIgnorePakckgeTest, freezeIgnoredPackage)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
 
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
@@ -2210,6 +2369,10 @@ TEST_F(ManifestControllerIgnorePakckgeTest, overrideIgnoredPackageFromProfileSet
         "   ]"
         "}";
 
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
     //mock_downloader
     EXPECT_CALL(
         mock_downloader,
@@ -2226,6 +2389,8 @@ TEST_F(ManifestControllerIgnorePakckgeTest, overrideIgnoredPackageFromProfileSet
     EXPECT_CALL(mock_package_handler, preInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, installPackage("my", "/tmp/temp_file", _)).WillOnce(Return(true));
     EXPECT_CALL(mock_package_handler, postInstallPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("my"));
+    EXPECT_CALL(mock_downloader, removeDownloadFile("orchestration"));
     EXPECT_CALL(mock_package_handler, updateSavedPackage("my", "/tmp/temp_file")).WillOnce(Return(true));
 
     load(manifest, new_services);
@@ -2270,6 +2435,17 @@ public:
 
         manifest_controller.init();
     }
+
+    void checkIfFileExistsCall(const Package &package)
+    {
+        Maybe<string> checksum_validation(
+            genError("File /tmp/orchestration_downloads/" + package.getName() + ".download does not exist.")
+        );
+        EXPECT_CALL(
+            mock_downloader,
+            checkIfFileExists(package)).WillRepeatedly(Return(checksum_validation));
+    }
+
     ::Environment env;
     ConfigComponent config;
 
@@ -2335,6 +2511,9 @@ TEST_F(ManifestDownloadTest, download_relative_path)
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson("/etc/cp/conf/corrupted_packages.json"))
         .WillOnce(Return(corrupted_packages));
     EXPECT_CALL(agent_details, getFogDomain()).WillOnce(Return(fog_domain));
+
+    checkIfFileExistsCall(new_packages.at("orchestration"));
+
     EXPECT_CALL(
         mock_downloader,
         downloadFileFromURL(
@@ -2412,6 +2591,8 @@ TEST_F(ManifestDownloadTest, download_relative_path_no_fog_domain)
     ).WillOnce(Return(false));
     string not_error;
     EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(not_error));
+
+    checkIfFileExistsCall(new_packages.at("orchestration"));
 
     EXPECT_CALL(
         mock_downloader,

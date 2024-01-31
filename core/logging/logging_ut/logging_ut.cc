@@ -166,12 +166,14 @@ public:
 
         Debug::setUnitTestFlag(D_REPORT, Debug::DebugLevel::DEBUG);
         Debug::setNewDefaultStdout(&capture_debug);
-        EXPECT_CALL(
-            mock_fog_msg,
-            mockSendPersistentMessage(_, _, _, _, _, _, MessageTypeTag::LOG)
-        ).WillRepeatedly(DoAll(SaveArg<1>(&body), Return(string())));
+        EXPECT_CALL(mock_msg, sendAsyncMessage(
+            _,
+            _,
+            _,
+            MessageCategory::LOG,
+            _
+        )).WillRepeatedly(SaveArg<2>(&body));
     }
-
     ~LogTest()
     {
         is_domain = false;
@@ -273,9 +275,9 @@ public:
         return Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(str_stream);
     }
 
-    StrictMock<MockMainLoop>  mock_mainloop;
-    StrictMock<MockMessaging> mock_fog_msg;
-    StrictMock<MockSocketIS>  mock_socket_is;
+    StrictMock<MockMainLoop>    mock_mainloop;
+    StrictMock<MockMessaging>   mock_msg;
+    StrictMock<MockSocketIS>    mock_socket_is;
 
     ostringstream             capture_debug;
     LoggingComp               log_comp;
@@ -738,11 +740,13 @@ TEST_F(LogTest, FogBulkLogs)
 {
     loadFakeConfiguration(true);
     string local_body;
-    string res("[{\"id\": 1, \"code\": 400, \"message\": \"yes\"}]");
-    EXPECT_CALL(
-        mock_fog_msg,
-        mockSendPersistentMessage(_, _, _, _, _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&local_body), Return(res)));
+    EXPECT_CALL(mock_msg, sendAsyncMessage(
+        _,
+        _,
+        _,
+        MessageCategory::LOG,
+        _
+    )).WillRepeatedly(SaveArg<2>(&local_body));
 
     Tags tag1 = Tags::POLICY_INSTALLATION;
     Tags tag2 = Tags::ACCESS_CONTROL;
@@ -799,9 +803,12 @@ TEST_F(LogTest, OfflineK8sSvcTest)
     string local_body;
     string res("[{\"id\": 1, \"code\": 400, \"message\": \"yes\"}]");
     EXPECT_CALL(
-        mock_fog_msg,
-        sendMessage(_, _, _, "open-appsec-tuning-svc", _, _, "/api/v1/agents/events", _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&local_body), Return(res)));
+        mock_msg,
+        sendSyncMessage(_, "/api/v1/agents/events", _, MessageCategory::LOG, _)
+    ).WillRepeatedly(DoAll(
+        SaveArg<2>(&local_body),
+        Return(HTTPResponse(HTTPStatusCode::HTTP_OK, res))
+    ));
 
     string str1(
         "{\n"
@@ -846,9 +853,12 @@ TEST_F(LogTest, OfflineK8sSvcBulkLogs)
     string local_body;
     string res("[{\"id\": 1, \"code\": 400, \"message\": \"yes\"}]");
     EXPECT_CALL(
-        mock_fog_msg,
-        sendMessage(_, _, _, "open-appsec-tuning-svc", _, _, "/api/v1/agents/events/bulk", _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&local_body), Return(res)));
+        mock_msg,
+        sendSyncMessage(_, "/api/v1/agents/events/bulk", _, MessageCategory::LOG, _)
+    ).WillRepeatedly(DoAll(
+        SaveArg<2>(&local_body),
+        Return(HTTPResponse(HTTPStatusCode::HTTP_OK, res))
+    ));
 
     Tags tag1 = Tags::POLICY_INSTALLATION;
     Tags tag2 = Tags::ACCESS_CONTROL;
@@ -1123,15 +1133,19 @@ TEST(LogTestInstanceAwareness, LogGenInstanceAwareness)
     ConfigComponent config;
     StrictMock<MockMainLoop>  mock_mainloop;
     StrictMock<MockTimeGet> mock_timer;
-    StrictMock<MockMessaging> mock_fog_msg;
     StrictMock<MockSocketIS> mock_socket_is;
+    StrictMock<MockMessaging> mock_msg;
     AgentDetails agent_details;
     LoggingComp log_comp;
 
-    EXPECT_CALL(
-        mock_fog_msg,
-        mockSendPersistentMessage(_, _, _, _, _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_msg, sendAsyncMessage(
+        _,
+        _,
+        _,
+        MessageCategory::LOG,
+        _
+    )).Times(AnyNumber());
+
     EXPECT_CALL(mock_socket_is, genSocket(_, _, _, _)).WillRepeatedly(Return(1));
     EXPECT_CALL(mock_socket_is, closeSocket(_)).Times(AnyNumber());
     EXPECT_CALL(mock_mainloop, doesRoutineExist(_)).WillRepeatedly(Return(true));
@@ -1225,14 +1239,17 @@ TEST(LogTestWithoutComponent, RegisterBasicConfig)
     ConfigComponent config;
     NiceMock<MockMainLoop> mock_mainloop;
     NiceMock<MockTimeGet> mock_timer;
-    StrictMock<MockMessaging> mock_fog_msg;
     StrictMock<MockAgentDetails> mock_agent_details;
+    StrictMock<MockMessaging> mock_msg;
     EXPECT_CALL(mock_agent_details, getOrchestrationMode()).WillRepeatedly(Return(OrchestrationMode::ONLINE));
 
-    EXPECT_CALL(
-        mock_fog_msg,
-        mockSendPersistentMessage(_, _, _, _, _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_msg, sendAsyncMessage(
+        _,
+        _,
+        _,
+        MessageCategory::LOG,
+        _
+    )).Times(AnyNumber());
 
     LoggingComp log_comp;
     log_comp.preload();
@@ -1269,14 +1286,17 @@ TEST(LogTestWithoutComponent, RegisterAdvancedConfig)
     ConfigComponent config;
     NiceMock<MockMainLoop> mock_mainloop;
     NiceMock<MockTimeGet> mock_timer;
-    StrictMock<MockMessaging> mock_fog_msg;
     StrictMock<MockAgentDetails> mock_agent_details;
+    StrictMock<MockMessaging> mock_msg;
     EXPECT_CALL(mock_agent_details, getOrchestrationMode()).WillRepeatedly(Return(OrchestrationMode::ONLINE));
 
-    EXPECT_CALL(
-        mock_fog_msg,
-        mockSendPersistentMessage(_, _, _, _, _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_msg, sendAsyncMessage(
+        _,
+        _,
+        _,
+        MessageCategory::LOG,
+        _
+    )).Times(AnyNumber());
 
     LoggingComp log_comp;
     log_comp.preload();
@@ -1340,10 +1360,14 @@ TEST_F(LogTest, BulkModification)
 {
     string local_body;
     string res("[{\"id\": 1, \"code\": 400, \"message\": \"yes\"}]");
-    EXPECT_CALL(
-        mock_fog_msg,
-        mockSendPersistentMessage(_, _, _, _, _, _, MessageTypeTag::LOG)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&local_body), Return(res)));
+
+    EXPECT_CALL(mock_msg, sendAsyncMessage(
+        _,
+        _,
+        _,
+        MessageCategory::LOG,
+        _
+    )).WillRepeatedly(SaveArg<2>(&local_body));
 
     logger->addGeneralModifier(changeOne);
     logger->addGeneralModifier(changeTwo);

@@ -29,7 +29,7 @@
 // Code taken from N4189 pending standard - www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n4189.pdf
 // (with some minor adaptations for C++11)
 
-#include <type_traits> // For ::std::remove_reference
+#include <utility>
 
 namespace std
 {
@@ -56,7 +56,6 @@ public:
         if (execute_on_destruction) this->exit_function();
     }
 
-// LCOV_EXCL_START Reason: coverage upgrade
     // move
     scope_exit(scope_exit &&rhs) noexcept
             :
@@ -65,7 +64,6 @@ public:
     {
         rhs.release();
     }
-// LCOV_EXCL_STOP
 
     void
     release() noexcept

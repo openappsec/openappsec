@@ -37,7 +37,7 @@ public:
             audience_team,
             obj,
             false,
-            MessageTypeTag::GENERIC,
+            MessageCategory::GENERIC,
             std::forward<Args>(args)...
         )
     {
@@ -56,7 +56,7 @@ public:
             audience_team,
             obj,
             is_async_message,
-            MessageTypeTag::GENERIC,
+            MessageCategory::GENERIC,
             std::forward<Args>(args)...
         )
     {
@@ -68,7 +68,7 @@ public:
         const ReportIS::AudienceTeam &audience_team,
         const T &obj,
         bool is_async_message,
-        const MessageTypeTag &message_type,
+        const MessageCategory &message_type,
         Args ...args)
             :
         ReportMessaging(
@@ -100,7 +100,7 @@ public:
             priority,
             obj,
             false,
-            MessageTypeTag::GENERIC,
+            MessageCategory::GENERIC,
             std::forward<Args>(args)...
         )
     {
@@ -115,7 +115,7 @@ public:
         const ReportIS::Priority &priority,
         const T &obj,
         bool _is_async_message,
-        const MessageTypeTag &message_type,
+        const MessageCategory &message_type,
         Args ...args)
             :
         report(
@@ -144,7 +144,7 @@ public:
 private:
     Report report;
     bool is_async_message;
-    MessageTypeTag message_type_tag;
+    MessageCategory message_type_tag;
 };
 
 #endif // __REPORT_MESSAGING_H__

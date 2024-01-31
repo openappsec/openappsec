@@ -162,11 +162,12 @@ NewAppSecPracticeWebAttacks::load(cereal::JSONInputArchive &archive_in)
     }
 
     if (getMode() == "Prevent") {
-        parseAppsecJSONKey<string>("minimumConfidence", minimum_confidence, archive_in, "critical");
+        parseMandatoryAppsecJSONKey<string>("minimumConfidence", minimum_confidence, archive_in, "critical");
         if (valid_confidences.count(minimum_confidence) == 0) {
             dbgWarning(D_LOCAL_POLICY)
                 << "AppSec practice override minimum confidence invalid: "
                 << minimum_confidence;
+            throw PolicyGenException("AppSec practice override minimum confidence invalid: " + minimum_confidence);
         }
     } else {
         minimum_confidence = "Transparent";
@@ -440,11 +441,12 @@ NewSnortSignaturesAndOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Snort Signatures practice";
     parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
-    parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
+    parseMandatoryAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
     parseAppsecJSONKey<vector<string>>("files", files, archive_in);
     is_temporary = false;
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Snort Signatures override mode invalid: " << override_mode;
+        throw PolicyGenException("AppSec Snort Signatures override mode invalid: " + override_mode);
     }
 }
 
@@ -567,12 +569,16 @@ NewIntrusionPrevention::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Intrusion Prevention override mode invalid: " << override_mode;
+        throw PolicyGenException("AppSec Intrusion Prevention override mode invalid: " + override_mode);
     }
-    parseAppsecJSONKey<string>("maxPerformanceImpact", max_performance_impact, archive_in, "low");
+    parseAppsecJSONKey<string>("maxPerformanceImpact", max_performance_impact, archive_in, "medium");
     if (performance_impacts.count(max_performance_impact) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec Intrusion Prevention max performance impact invalid: "
             << max_performance_impact;
+        throw PolicyGenException(
+            "AppSec Intrusion Prevention max performance impact invalid: " + max_performance_impact
+        );
     }
     parseAppsecJSONKey<string>("minSeverityLevel", min_severity_level, archive_in, "low");
     if (severity_levels.count(min_severity_level) == 0) {
@@ -580,23 +586,32 @@ NewIntrusionPrevention::load(cereal::JSONInputArchive &archive_in)
         << "AppSec Intrusion Prevention min severity level invalid: "
         << min_severity_level;
     }
-    parseAppsecJSONKey<string>("highConfidenceEventAction", high_confidence_event_action, archive_in, "inactive");
+    parseAppsecJSONKey<string>("highConfidenceEventAction", high_confidence_event_action, archive_in, "prevent");
     if (confidences_actions.count(high_confidence_event_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
         << "AppSec Intrusion Prevention high confidence event invalid: "
         << high_confidence_event_action;
+        throw PolicyGenException(
+            "AppSec Intrusion Prevention high confidence event invalid: " + high_confidence_event_action
+        );
     }
-    parseAppsecJSONKey<string>("mediumConfidenceEventAction", medium_confidence_event_action, archive_in, "inactive");
+    parseAppsecJSONKey<string>("mediumConfidenceEventAction", medium_confidence_event_action, archive_in, "prevent");
     if (confidences_actions.count(medium_confidence_event_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
         << "AppSec Intrusion Prevention medium confidence event invalid: "
         << medium_confidence_event_action;
+        throw PolicyGenException(
+            "AppSec Intrusion Prevention medium confidence event invalid: " + medium_confidence_event_action
+        );
     }
-    parseAppsecJSONKey<string>("lowConfidenceEventAction", low_confidence_event_action, archive_in, "inactive");
+    parseAppsecJSONKey<string>("lowConfidenceEventAction", low_confidence_event_action, archive_in, "detect");
     if (confidences_actions.count(low_confidence_event_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
         << "AppSec Intrusion Prevention low confidence event action invalid: "
         << low_confidence_event_action;
+        throw PolicyGenException(
+            "AppSec Intrusion Prevention low confidence event action invalid: " + low_confidence_event_action
+        );
     }
     parseAppsecJSONKey<int>("minCveYear", min_cve_Year, archive_in);
 }
@@ -733,29 +748,36 @@ void
 NewFileSecurityArchiveInspection::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec File Security Archive Inspection practice";
-    parseAppsecJSONKey<bool>("extractArchiveFiles", extract_archive_files, archive_in);
-    parseAppsecJSONKey<uint64_t>("scanMaxFileSize", scan_max_file_size, archive_in, 0);
-    parseAppsecJSONKey<string>("scanMaxFileSizeUnit", scan_max_file_size_unit, archive_in, "bytes");
+    parseAppsecJSONKey<bool>("extractArchiveFiles", extract_archive_files, archive_in, true);
+    parseAppsecJSONKey<uint64_t>("scanMaxFileSize", scan_max_file_size, archive_in, 10);
+    parseAppsecJSONKey<string>("scanMaxFileSizeUnit", scan_max_file_size_unit, archive_in, "MB");
     if (size_unit.count(scan_max_file_size_unit) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security Archive Inspection scan max file size unit invalid: "
             << scan_max_file_size_unit;
+        throw PolicyGenException(
+            "AppSec File Security Archive Inspection scan max file size unit invalid: " + scan_max_file_size_unit
+        );
     }
     parseAppsecJSONKey<string>(
         "archivedFilesWithinArchivedFiles",
         archived_files_within_archived_files,
         archive_in,
-        "inactive");
+        "prevent");
     if (confidences_actions.count(archived_files_within_archived_files) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security Archive Inspection archived files within archived files invalid: "
             << archived_files_within_archived_files;
+        throw PolicyGenException(
+            "AppSec File Security Archive Inspection archived files within archived files invalid: "
+            + archived_files_within_archived_files
+        );
     }
     parseAppsecJSONKey<string>(
         "archivedFilesWhereContentExtractionFailed",
         archived_files_where_content_extraction_failed,
         archive_in,
-        "inactive");
+        "prevent");
     if (confidences_actions.count(archived_files_where_content_extraction_failed) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security Archive Inspection archived files within archived file invalid: "
@@ -798,22 +820,29 @@ void
 NewFileSecurityLargeFileInspection::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec File Security large File Inspection practice";
-    parseAppsecJSONKey<uint64_t>("fileSizeLimit", file_size_limit, archive_in);
-    parseAppsecJSONKey<string>("fileSizeLimitUnit", file_size_limit_unit, archive_in, "bytes");
+    parseAppsecJSONKey<uint64_t>("fileSizeLimit", file_size_limit, archive_in, 10);
+    parseAppsecJSONKey<string>("fileSizeLimitUnit", file_size_limit_unit, archive_in, "MB");
     if (size_unit.count(file_size_limit_unit) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security large File Inspection file size limit unit invalid: "
             << file_size_limit_unit;
+        throw PolicyGenException(
+            "AppSec File Security large File Inspection file size limit unit invalid: " + file_size_limit_unit
+        );
     }
     parseAppsecJSONKey<string>(
         "filesExceedingSizeLimitAction",
         files_exceeding_size_limit_action,
         archive_in,
-        "inactive");
+        "prevent");
     if (confidences_actions.count(files_exceeding_size_limit_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security Archive Inspection archived files within archived files invalid: "
             << files_exceeding_size_limit_action;
+        throw PolicyGenException(
+            "AppSec File Security Archive Inspection archived files within archived files invalid: "
+            + files_exceeding_size_limit_action
+        );
     }
 }
 
@@ -843,38 +872,52 @@ NewFileSecurity::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec File Security override mode invalid: " << override_mode;
+        throw PolicyGenException("AppSec File Security override mode invalid: " + override_mode);
     }
-    parseAppsecJSONKey<string>("minSeverityLevel", min_severity_level, archive_in, "low");
+    parseMandatoryAppsecJSONKey<string>("minSeverityLevel", min_severity_level, archive_in, "low");
     if (severity_levels.count(min_severity_level) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec File Security min severity level invalid: " << min_severity_level;
+        min_severity_level = "low";
     }
-    parseAppsecJSONKey<string>("highConfidenceEventAction", high_confidence_event_action, archive_in, "inactive");
+    parseMandatoryAppsecJSONKey<string>(
+        "highConfidenceEventAction", high_confidence_event_action, archive_in, "inactive"
+    );
     if (confidences_actions.count(high_confidence_event_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security high confidence event invalid: "
             << high_confidence_event_action;
+        high_confidence_event_action = "inactive";
     }
-    parseAppsecJSONKey<string>("mediumConfidenceEventAction", medium_confidence_event_action, archive_in, "inactive");
+    parseMandatoryAppsecJSONKey<string>(
+        "mediumConfidenceEventAction", medium_confidence_event_action, archive_in, "inactive"
+    );
     if (confidences_actions.count(medium_confidence_event_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security medium confidence event invalid: "
             << medium_confidence_event_action;
+        medium_confidence_event_action = "inactive";
     }
-    parseAppsecJSONKey<string>("lowConfidenceEventAction", low_confidence_event_action, archive_in, "inactive");
+    parseMandatoryAppsecJSONKey<string>(
+        "lowConfidenceEventAction", low_confidence_event_action, archive_in, "inactive"
+    );
     if (confidences_actions.count(low_confidence_event_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security low confidence event action invalid: "
             << low_confidence_event_action;
+        low_confidence_event_action = "inactive";
     }
-    parseAppsecJSONKey<string>("unnamedFilesAction", unnamed_files_action, archive_in, "inactive");
+    parseMandatoryAppsecJSONKey<string>("unnamedFilesAction", unnamed_files_action, archive_in, "inactive");
     if (confidences_actions.count(unnamed_files_action) == 0) {
         dbgWarning(D_LOCAL_POLICY)
             << "AppSec File Security low unnamed files action invalid: "
             << unnamed_files_action;
+        unnamed_files_action = "inactive";
     }
     parseAppsecJSONKey<bool>("threatEmulationEnabled", threat_emulation_enabled, archive_in);
-    parseAppsecJSONKey<NewFileSecurityArchiveInspection>("archiveInspection", archive_inspection, archive_in);
-    parseAppsecJSONKey<NewFileSecurityLargeFileInspection>("largeFileInspection", large_file_inspection, archive_in);
+    parseMandatoryAppsecJSONKey<NewFileSecurityArchiveInspection>("archiveInspection", archive_inspection, archive_in);
+    parseMandatoryAppsecJSONKey<NewFileSecurityLargeFileInspection>(
+        "largeFileInspection", large_file_inspection, archive_in
+    );
 }
 
 const string &
@@ -939,7 +982,7 @@ NewAppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<NewFileSecurity>("fileSecurity", file_security, archive_in);
     parseAppsecJSONKey<NewIntrusionPrevention>("intrusionPrevention", intrusion_prevention, archive_in);
     parseAppsecJSONKey<NewSnortSignaturesAndOpenSchemaAPI>("snortSignatures", snort_signatures, archive_in);
-    parseAppsecJSONKey<NewAppSecPracticeWebAttacks>("webAttacks", web_attacks, archive_in);
+    parseMandatoryAppsecJSONKey<NewAppSecPracticeWebAttacks>("webAttacks", web_attacks, archive_in);
     parseAppsecJSONKey<NewAppSecPracticeAntiBot>("antiBot", anti_bot, archive_in);
     parseAppsecJSONKey<string>("name", practice_name, archive_in);
 }

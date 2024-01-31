@@ -1,0 +1,2 @@
+add_library(messaging_buffer_comp messaging_buffer_comp.cc buffered_message.cc)
+add_subdirectory(messaging_buffer_comp_ut)

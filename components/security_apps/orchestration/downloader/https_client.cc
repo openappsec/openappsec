@@ -544,7 +544,7 @@ HTTPClient::getFileSSL(const URLParser &url, ofstream &out_file, const string &t
             url,
             proxy_config->getProxyDomain(ProxyProtocol::HTTPS),
             proxy_config->getProxyPort(ProxyProtocol::HTTPS),
-            proxy_config->getProxyCredentials(ProxyProtocol::HTTPS),
+            proxy_config->getProxyAuthentication(ProxyProtocol::HTTPS),
             token
         );
 
@@ -589,7 +589,7 @@ HTTPClient::curlGetFileOverSSL(const URLParser &url, ofstream &out_file, const s
             token,
             proxy_config->getProxyDomain(ProxyProtocol::HTTPS),
             proxy_config->getProxyPort(ProxyProtocol::HTTPS),
-            proxy_config->getProxyCredentials(ProxyProtocol::HTTPS),
+            proxy_config->getProxyAuthentication(ProxyProtocol::HTTPS),
             cert_file_path);
 
         ssl_curl_client.setCurlOpts();

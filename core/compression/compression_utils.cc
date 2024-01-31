@@ -167,7 +167,7 @@ struct CompressionStream
         basic_string<unsigned char> res;
         int retries = 0;
 
-        while (stream.avail_in != 0) {
+        while (stream.avail_in != 0 || is_last_chunk) {
             stream.avail_out = work_space.capacity();
             stream.next_out = work_space.data();
 

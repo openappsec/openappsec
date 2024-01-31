@@ -3,6 +3,7 @@
 # Copyright Check Point Software Technologies LTD
 FILESYSTEM_PATH="/etc/cp"
 LOG_FILE_PATH="/var/log"
+SMB_LOG_FILE_PATH="/storage"
 USR_LIB_PATH="/usr/lib"
 USR_SBIN_PATH="/usr/sbin"
 INIT_D_PATH="/etc/init.d"
@@ -383,7 +384,7 @@ cp_print()
     if [ "$is_smb" != "1" ]; then
         printf "%b\n" "$1" >> ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
     else
-        printf "%b\n" "$1" > ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
+        printf "%b\n" "$1" >> ${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
     fi
 }
 
@@ -488,7 +489,12 @@ install_watchdog()
     fi
     if [ "$old_cp_nano_watchdog_md5" = "$new_cp_nano_watchdog_md5" ]; then
         # Watchdog did not changed
-        cp_print "There is no update in watchdog. Everything is up to date."
+        cp_print "There is no update in watchdog. Everything is up to date. Reregistering services to be on the sae side."
+        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+        if [ "$IS_K8S_ENV" = "true" ]; then
+            cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
+        fi
+
         return
     fi
     cp_print "Installing the watchdog" ${FORCE_STDOUT}

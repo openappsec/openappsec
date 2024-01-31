@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <exception>
 #include <cereal/archives/json.hpp>
 
 #include "config.h"
@@ -66,25 +67,55 @@ static const std::unordered_map<std::string, std::string> key_to_practices_val2 
 
 static const std::string default_appsec_url = "http://*:*";
 
+class PolicyGenException : public std::exception
+{
+public:
+    PolicyGenException(const std::string& msg="") noexcept : m_msg(msg) {}
+
+    const char* what() const noexcept override
+    {
+        return m_msg.c_str();
+    }
+
+private:
+    std::string m_msg;
+};
+
 template <typename T>
 void
 parseAppsecJSONKey(
     const std::string &key_name,
     T &value,
     cereal::JSONInputArchive &archive_in,
-    const T &default_value = T())
+    const T &default_value = T(),
+    bool mandatory = false)
 {
     try {
         archive_in(cereal::make_nvp(key_name, value));
     } catch (const cereal::Exception &e) {
         archive_in.setNextName(nullptr);
         value = default_value;
-        dbgDebug(D_LOCAL_POLICY)
-            << "Could not parse the required key. Key: \""
-            << key_name
-            << "\", Error: "
-            << e.what();
+        if (!mandatory) {
+            dbgDebug(D_LOCAL_POLICY)
+                << "Could not parse the required key. Key: \""<< key_name
+                << "\", Error: " << e.what();
+        } else {
+            throw PolicyGenException(
+                "Could not parse a mandatory key: \"" + key_name + "\", Error: " + std::string(e.what())
+            );
+        }
     }
+}
+
+template <typename T>
+void
+parseMandatoryAppsecJSONKey(
+    const std::string &key_name,
+    T &value,
+    cereal::JSONInputArchive &archive_in,
+    const T &default_value = T())
+{
+    parseAppsecJSONKey(key_name, value, archive_in, default_value, true);
 }
 
 class AppsecSpecParserMetaData

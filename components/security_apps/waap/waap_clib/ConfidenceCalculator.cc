@@ -16,7 +16,6 @@
 #include "waap.h"
 #include "ConfidenceFile.h"
 #include "i_agent_details.h"
-#include "i_messaging.h"
 #include "i_mainloop.h"
 #include <math.h>
 
@@ -138,7 +137,7 @@ bool ConfidenceCalculator::postData()
 
     WindowLogPost currentWindow(m_time_window_logger_backup);
     bool ok = sendNoReplyObjectWithRetry(currentWindow,
-        I_Messaging::Method::PUT,
+        HTTPMethod::PUT,
         url);
     if (!ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
@@ -164,7 +163,7 @@ void ConfidenceCalculator::pullData(const std::vector<std::string>& files)
         dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Pulling the file: " << file;
         WindowLogGet getWindow;
         bool ok = sendObjectWithRetry(getWindow,
-            I_Messaging::Method::GET,
+            HTTPMethod::GET,
             getUri() + "/" + file);
 
         if (!ok) {
@@ -213,7 +212,7 @@ void ConfidenceCalculator::pullProcessedData(const std::vector<std::string>& fil
     {
         ConfidenceFileDecryptor getConfFile;
         bool res = sendObjectWithRetry(getConfFile,
-            I_Messaging::Method::GET,
+            HTTPMethod::GET,
             getUri() + "/" + file);
         is_ok |= res;
         if (res && getConfFile.getConfidenceSet().ok())
@@ -243,7 +242,7 @@ void ConfidenceCalculator::postProcessedData()
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Posting the confidence set object to: " << postUrl;
     ConfidenceFileEncryptor postConfFile(m_confident_sets, m_confidence_level);
     sendNoReplyObjectWithRetry(postConfFile,
-        I_Messaging::Method::PUT,
+        HTTPMethod::PUT,
         postUrl);
 }
 

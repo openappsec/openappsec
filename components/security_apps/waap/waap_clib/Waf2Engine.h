@@ -346,10 +346,6 @@ private:
     // Cached pointer to const triggerLog (hence mutable)
     mutable std::shared_ptr<Waap::Trigger::Log> m_triggerLog;
     Waf2TransactionFlags m_waf2TransactionFlags;
-
-    // Grace period for logging
-    int max_grace_logs;
-    bool is_hybrid_mode = false;
 };
 
 #endif // __WAF2_TRANSACTION_H__99e4201a

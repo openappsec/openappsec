@@ -98,7 +98,7 @@ public:
     addStream(StreamType type) override
     {
         if (streams_preperation.find(type) != streams_preperation.end()) {
-            dbgWarning(D_REPORT)
+            dbgDebug(D_REPORT)
                 << "Cannot add second instance of the same stream. Stream type: "
                 << TagAndEnumManagement::convertToString(type);
             return false;
@@ -119,7 +119,7 @@ public:
     {
         string log_type = TagAndEnumManagement::convertToString(type);
         if (streams_preperation.find(type) != streams_preperation.end()) {
-            dbgWarning(D_REPORT)
+            dbgDebug(D_REPORT)
                 << "Cannot add second instance of the same stream. Stream type: "
                 << log_type;
             return false;
@@ -319,6 +319,7 @@ LoggingComp::preload()
     registerExpectedConfiguration<string>("Logging", "Log file name");
     registerExpectedConfiguration<string>("Logging", "Log file line separator");
     registerExpectedConfiguration<string>("Logging", "Fog Log URI");
+    registerExpectedConfiguration<string>("Logging", "K8sSvc Log host");
     registerExpectedConfiguration<string>("Logging", "Syslog IP");
     registerExpectedConfiguration<uint>("Logging", "Syslog port");
     registerExpectedConfiguration<string>("Logging", "CEF IP");

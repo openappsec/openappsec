@@ -13,7 +13,6 @@
 
 #include "ScannersDetector.h"
 #include "waap.h"
-#include "i_messaging.h"
 #include <boost/algorithm/string/predicate.hpp>
 
 USE_DEBUG_FLAG(D_WAAP);
@@ -101,7 +100,7 @@ bool ScannerDetector::postData()
 
     SourcesMonitorPost currentWindow(m_sources_monitor_backup);
     bool ok = sendNoReplyObjectWithRetry(currentWindow,
-        I_Messaging::Method::PUT,
+        HTTPMethod::PUT,
         url);
     if (!ok) {
         dbgError(D_WAAP) << "Failed to post collected data to: " << url;
@@ -123,7 +122,7 @@ void ScannerDetector::pullData(const std::vector<std::string>& files)
         dbgTrace(D_WAAP) << "Pulling the file: " << file;
         SourcesMonitorGet getMonitor;
         bool ok = sendObjectWithRetry(getMonitor,
-            I_Messaging::Method::GET,
+            HTTPMethod::GET,
             getUri() + "/" + file);
 
         if (!ok) {

@@ -117,7 +117,7 @@ private:
 
     I_Messaging *i_messaging = nullptr;
     TenantManagerType type;
-    ::Flags<MessageConnConfig> conn_flags;
+    ::Flags<MessageConnectionConfig> conn_flags;
 };
 
 class LoadNewTenants : public ServerRest
@@ -205,7 +205,7 @@ TenantManager::Impl::init()
     auto is_orchestrator = Singleton::Consume<I_Environment>::by<TenantManager>()->get<bool>("Is Orchestrator");
     type = (is_orchestrator.ok() && *is_orchestrator) ? TenantManagerType::SERVER : TenantManagerType::CLIENT;
 
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
+    conn_flags.setFlag(MessageConnectionConfig::ONE_TIME_CONN);
     i_messaging = Singleton::Consume<I_Messaging>::by<TenantManager>();
 
     if (type == TenantManagerType::SERVER) {
@@ -229,27 +229,34 @@ TenantManager::Impl::getAllTenants() const
 
     GetActiveTenants active_tenant;
 
-    auto res = i_messaging->sendObject(
+    MessageMetadata get_active_tenants_req_md("127.0.0.1", 7777, conn_flags);
+    get_active_tenants_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+    auto get_active_tenants_req_status = i_messaging->sendSyncMessage(
+        HTTPMethod::POST,
+        "/show-active-tenants",
         active_tenant,
-        I_Messaging::Method::POST,
-        "127.0.0.1",
-        7777,
-        conn_flags,
-        "/show-active-tenants"
+        MessageCategory::GENERIC,
+        get_active_tenants_req_md
     );
 
-    if (!res) {
-        i_messaging->sendObject(
+    if (!get_active_tenants_req_status.ok()) {
+        MessageMetadata secondery_port_req_md("127.0.0.1", 7778, conn_flags);
+        secondery_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        get_active_tenants_req_status = i_messaging->sendSyncMessage(
+            HTTPMethod::POST,
+            "/show-active-tenants",
             active_tenant,
-            I_Messaging::Method::POST,
-            "127.0.0.1",
-            7778,
-            conn_flags,
-            "/show-active-tenants"
+            MessageCategory::GENERIC,
+            secondery_port_req_md
         );
     }
 
+    if (!get_active_tenants_req_status.ok()) {
+        auto err = get_active_tenants_req_status.getErr();
+        dbgWarning(D_TENANT_MANAGER) << "Failed to get all active tenants. Error: " << err.getBody();
+    }
     return active_tenant.active_tenants.get();
+
 }
 
 set<string>
@@ -259,26 +266,32 @@ TenantManager::Impl::getProfileIds(const string &_tenant_id) const
 
     GetProfileIds tenant_id(_tenant_id);
 
-    auto res = i_messaging->sendObject(
+    MessageMetadata get_profile_id_req_md("127.0.0.1", 7777, conn_flags);
+    get_profile_id_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+    auto get_profile_id_req_status = i_messaging->sendSyncMessage(
+        HTTPMethod::POST,
+        "/show-profile-ids",
         tenant_id,
-        I_Messaging::Method::POST,
-        "127.0.0.1",
-        7777,
-        conn_flags,
-        "/show-profile-ids"
+        MessageCategory::GENERIC,
+        get_profile_id_req_md
     );
 
-    if (!res) {
-        i_messaging->sendObject(
+
+    if (!get_profile_id_req_status.ok()) {
+        MessageMetadata secondery_port_req_md("127.0.0.1", 7778, conn_flags);
+        secondery_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        get_profile_id_req_status = i_messaging->sendSyncMessage(
+            HTTPMethod::POST,
+            "/show-profile-ids",
             tenant_id,
-            I_Messaging::Method::POST,
-            "127.0.0.1",
-            7778,
-            conn_flags,
-            "/show-profile-ids"
+            MessageCategory::GENERIC,
+            secondery_port_req_md
         );
     }
-
+    if (!get_profile_id_req_status.ok()) {
+        auto err = get_profile_id_req_status.getErr();
+        dbgWarning(D_TENANT_MANAGER) << "Failed to get all active tenants. Error: " << err.getBody();
+    }
     return tenant_id.profile_ids.get();
 }
 

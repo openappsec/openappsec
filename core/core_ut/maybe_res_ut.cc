@@ -359,6 +359,15 @@ TEST(Maybe, maybe_void_error_passing)
     EXPECT_EQ("error", err2.getErr());
 }
 
+TEST(Maybe, maybe_void_error_passing2)
+{
+    Maybe<void> err1 = genError("error");
+    Maybe<void> err2 = err1.passErr();
+
+    EXPECT_FALSE(err2.ok());
+    EXPECT_EQ("error", err2.getErr());
+}
+
 TEST(Maybe, printing)
 {
     ostringstream os;

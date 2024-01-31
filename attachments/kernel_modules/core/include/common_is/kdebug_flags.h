@@ -33,5 +33,6 @@ DEFINE_KDEBUG_FLAG(kernelMetric)
 DEFINE_KDEBUG_FLAG(tproxy)
 DEFINE_KDEBUG_FLAG(tenantStats)
 DEFINE_KDEBUG_FLAG(uuidTranslation)
+DEFINE_KDEBUG_FLAG(antibotResolver)
 
 #endif // DEFINE_KDEBUG_FLAG

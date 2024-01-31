@@ -187,6 +187,7 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     bool isCookiePayload = (m_key.first().size() == 6 && m_key.first() == "cookie");
     bool isBodyPayload = (m_key.first().size() == 4 && m_key.first() == "body");
 
+
     // If csrf/antibot cookie - send to Waf2Transaction for collection of cookie value.
     if (m_depth == 1 && isCookiePayload && (m_key.str() == "x-chkp-csrf-token" || m_key.str() == "__fn1522082288")) {
         std::string cur_val = std::string(v, v_len);
@@ -388,20 +389,16 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
         && m_parsersDeque.size() > parser_depth
         &&!m_parsersDeque.at(parser_depth)->getRecursionFlag()
         ) {
-        ScopedContext ctx;
-        ctx.registerValue<IWaf2Transaction *>("waap_transaction", m_pTransaction);
         rc = pushValueToTopParser(cur_val, flags, base64ParamFound, offset, parser_depth);
         if (rc != CONTINUE_PARSING) {
             if (shouldUpdateKeyStack) {
                 m_key.pop("deep parser key");
             }
 
-
             m_depth--;
             return rc;
         }
     }
-
 
     if (rc == CONTINUE_PARSING) {
         // Try  to eliminate m_multipart_boundary  to allow other parser to work instead of multipart
@@ -853,20 +850,16 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
         && m_parsersDeque.size() > parser_depth
         &&!m_parsersDeque.at(parser_depth)->getRecursionFlag()
     ) {
-        ScopedContext ctx;
-        ctx.registerValue<IWaf2Transaction *>("waap_transaction", m_pTransaction);
         rc = pushValueToTopParser(cur_val, flags, base64ParamFound, offset, parser_depth);
         if (rc != CONTINUE_PARSING) {
             if (shouldUpdateKeyStack) {
                 m_key.pop("deep parser key");
             }
 
-
             m_depth--;
             return rc;
         }
     }
-
 
     return rc;
 }
@@ -1091,7 +1084,12 @@ DeepParser::createInternalParser(
         ) {
         // Graphql value detected
         dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse graphql";
-        m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserGql>>(*this, parser_depth + 1));
+
+        m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserGql>>(
+            *this,
+            parser_depth + 1,
+            m_pTransaction));
+
         offset = 0;
     } else if (cur_val.length() > 0
         && (cur_val[0] == '[' || cur_val[0] == '{')
@@ -1123,12 +1121,12 @@ DeepParser::createInternalParser(
                     // but only if the JSON is passed in body and on the top level.
                     bool should_collect_for_oa_schema_updater = false;
 
-                    m_parsersDeque.push_back(
-                        std::make_shared<BufferedParser<ParserJson>>(
-                            *this,
-                            should_collect_for_oa_schema_updater,
-                            parser_depth + 1
-));
+                    m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserJson>>(
+                        *this,
+                        parser_depth + 1,
+                        m_pTransaction,
+                        should_collect_for_oa_schema_updater
+                    ));
                     offset = 0;
                 }
             }
@@ -1325,7 +1323,6 @@ DeepParser::createInternalParser(
     }
     return offset;
 }
-
 
 void
 DeepParser::apiProcessKey(const char *v, size_t v_len)

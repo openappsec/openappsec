@@ -270,8 +270,8 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::IOT_NEXT: return "iotNext";
         case IssuingEngine::SDWAN: return "sdwanGwSharing";
         case IssuingEngine::FILE_UPLOAD: return "fileUpload";
-        case IssuingEngine::IDA_NEXT_BLADE_REGISTRATION: return "quantumMetaNotifyIdn";
-        case IssuingEngine::IDA_NEXT_CLIENT_IP_NOTIFY: return "quantumIPNotifyIdn";
+        case IssuingEngine::IDA_SAML_IDN_BLADE_REGISTRATION: return "quantumMetaNotifyIdn";
+        case IssuingEngine::IDA_SAML_IDN_CLIENT_IP_NOTIFY: return "quantumIPNotifyIdn";
         case IssuingEngine::API_DISCOVERY: return "apiDiscoveryCloudMessaging";
         case IssuingEngine::HORIZON_TELEMETRY_METRICS: return "horizonTelemetryMetrics";
     }
