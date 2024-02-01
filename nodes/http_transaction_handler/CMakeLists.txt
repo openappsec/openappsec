@@ -41,6 +41,8 @@ target_link_libraries(cp-nano-http-transaction-handler
 	-Wl,--end-group
 )
 
+add_dependencies(cp-nano-http-transaction-handler ngen_core)
+
 install(TARGETS cp-nano-http-transaction-handler DESTINATION bin)
 install(TARGETS cp-nano-http-transaction-handler DESTINATION http_transaction_handler_service/bin)
 
