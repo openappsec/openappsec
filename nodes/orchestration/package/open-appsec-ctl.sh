@@ -1817,7 +1817,7 @@ run() # Initials - r
         echo $var_policy_file
     elif [ "-vl" = "$1" ] || [ "--view-logs" = "$1" ]; then
         record_command $@
-        if ls /var/log/nano_agent/cp-nano-http-transaction-handler.log? 1>dev/null 2>&1; then
+        if ls /var/log/nano_agent/cp-nano-http-transaction-handler.log? 1>/dev/null 2>&1; then
             less $LOG_FILE_PATH/nano_agent/cp-nano-http-transaction-handler.log?
         else
             echo "No logs found"
