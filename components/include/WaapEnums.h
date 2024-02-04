@@ -24,6 +24,15 @@
 #define MAX_FINAL_SCORE 10.0
 #define ATTACK_IN_PARAM "attack_in_param"
 
+enum TrafficMethod {
+    POST,
+    GET,
+    PUT,
+    PATCH,
+    DELETE,
+    OTHER
+};
+
 enum ThreatLevel {
     NO_THREAT = 0,
     THREAT_INFO,

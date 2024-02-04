@@ -90,19 +90,15 @@ TEST_F(OrchestrationToolsTest, getClusterId)
     string namespaces = getResource("k8s_namespaces.json");
     EXPECT_CALL(
         mock_messaging,
-        sendMessage(
-            true,
-            "",
-            I_Messaging::Method::GET,
-            "kubernetes.default.svc",
-            443,
-            _,
+        sendSyncMessage(
+            HTTPMethod::GET,
             "/api/v1/namespaces/",
-            "Authorization: Bearer 123\nConnection: close",
+            _,
             _,
             _
         )
-    ).WillRepeatedly(Return(Maybe<string>(namespaces)));
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, namespaces)));
+
     i_orchestration_tools->getClusterId();
     routine();
 }

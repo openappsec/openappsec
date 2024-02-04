@@ -9,9 +9,20 @@
 #include "debug.h"
 #include "generic_rulebase/rulebase_config.h"
 #include "generic_rulebase/triggers_config.h"
+#include "generic_rulebase/match_query.h"
 #include "generic_rulebase/evaluators/trigger_eval.h"
 
-USE_DEBUG_FLAG(D_REVERSE_PROXY);
+USE_DEBUG_FLAG(D_RATE_LIMIT);
+
+enum class RateLimitAction
+{
+    INACTIVE,
+    ACCORDING_TO_PRACTICE,
+    DETECT,
+    PREVENT,
+
+    UNKNOWN
+};
 
 class RateLimitTrigger
 {
@@ -34,12 +45,12 @@ public:
     operator bool() const
     {
         if (uri.empty()) {
-            dbgTrace(D_REVERSE_PROXY) << "Recived empty URI in rate-limit rule";
+            dbgTrace(D_RATE_LIMIT) << "Recived empty URI in rate-limit rule";
             return false;
         }
 
         if (uri.at(0) != '/') {
-            dbgWarning(D_REVERSE_PROXY)
+            dbgWarning(D_RATE_LIMIT)
                 << "Recived invalid rate-limit URI in rate-limit rule: "
                 << uri
                 << " rate-limit URI must start with /";
@@ -47,7 +58,7 @@ public:
         }
 
         if (limit <= 0) {
-            dbgWarning(D_REVERSE_PROXY)
+            dbgWarning(D_RATE_LIMIT)
                 << "Recived invalid rate-limit limit in rate-limit rule: "
                 << limit
                 << " rate-limit rule limit must be positive";
@@ -70,10 +81,13 @@ public:
     const std::string & getRateLimitReq() const { return limit_req_template_value; }
     const std::string & getRateLimitUri() const { return uri; }
     const std::string & getRateLimitScope() const { return scope; }
+    const RateLimitAction & getRateLimitAction() const { return action; }
+    const MatchQuery & getRateLimitMatch() const { return match; }
     const LogTriggerConf & getRateLimitTrigger() const { return trigger; }
     const std::vector<RateLimitTrigger> & getRateLimitTriggers() const { return rate_limit_triggers; }
 
     bool isRootLocation() const;
+    bool isMatchAny() const;
 
     bool operator==(const RateLimitRule &rhs) { return uri == rhs.uri; }
     bool operator<(const RateLimitRule &rhs) { return uri < rhs.uri; }
@@ -87,21 +101,27 @@ private:
     std::string limit_req_template_value;
     std::string limit_req_zone_template_value;
     std::string cache_size = "5m";
+    RateLimitAction action = RateLimitAction::ACCORDING_TO_PRACTICE;
+    MatchQuery match = MatchQuery(default_match);
     std::vector<RateLimitTrigger> rate_limit_triggers;
     LogTriggerConf trigger;
     int limit;
     bool exact_match = false;
+
+    static const std::string default_match;
 };
 
 class RateLimitConfig
 {
 public:
     void load(cereal::JSONInputArchive &ar);
-    void addSiblingRateLimitRule(RateLimitRule &rule);
+    void addSiblingRateLimitRules();
     void prepare();
 
     const std::vector<RateLimitRule> & getRateLimitRules() const { return rate_limit_rules; }
-    const std::string & getRateLimitMode() const { return mode; }
+    const RateLimitAction & getRateLimitMode() const { return mode; }
+
+    RateLimitRule generateSiblingRateLimitRule(const RateLimitRule &rule);
 
     const LogTriggerConf
     getRateLimitTrigger(const std::string &nginx_uri) const
@@ -110,7 +130,7 @@ public:
 
         std::set<std::string> rate_limit_triggers_set;
         for (const RateLimitTrigger &rate_limit_trigger : rule.getRateLimitTriggers()) {
-            dbgTrace(D_REVERSE_PROXY)
+            dbgTrace(D_RATE_LIMIT)
                 << "Adding trigger ID: "
                 << rate_limit_trigger.getTriggerId()
                 << " of rule URI: "
@@ -130,12 +150,15 @@ public:
 
     static bool isActive() { return is_active; }
 
+    static const std::map<RateLimitAction, std::string> rate_limit_action_to_string;
+    static const std::map<std::string, RateLimitAction> rate_limit_string_to_action;
+
 private:
     const RateLimitRule
     findLongestMatchingRule(const std::string &nginx_uri) const;
 
     static bool is_active;
-    std::string mode;
+    RateLimitAction mode;
     std::vector<RateLimitRule> rate_limit_rules;
 };
 

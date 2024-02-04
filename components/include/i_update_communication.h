@@ -33,7 +33,10 @@ public:
     ) const = 0;
     virtual Maybe<void> authenticateAgent() = 0;
     virtual Maybe<void> getUpdate(CheckUpdateRequest &request) = 0;
-    virtual Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) = 0;
+    virtual Maybe<std::string> downloadAttributeFile(
+        const GetResourceFile &resourse_file,
+        const std::string &file_path
+    ) = 0;
     virtual void setAddressExtenesion(const std::string &extension) = 0;
 };
 

@@ -31,7 +31,10 @@ public:
     Maybe<void> authenticateAgent() override;
     Maybe<void> getUpdate(CheckUpdateRequest &request) override;
 
-    Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) override;
+    Maybe<std::string> downloadAttributeFile(
+        const GetResourceFile &resourse_file,
+        const std::string &file_path
+    ) override;
     void setAddressExtenesion(const std::string &extension) override;
     Maybe<void> sendPolicyVersion(
         const std::string &policy_version,

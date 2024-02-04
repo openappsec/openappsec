@@ -82,9 +82,9 @@ public:
     }
 
     Maybe<string>
-    downloadAttributeFile(const GetResourceFile &resourse_file) override
+    downloadAttributeFile(const GetResourceFile &resourse_file, const string &file_path) override
     {
-        return i_update_comm_impl->downloadAttributeFile(resourse_file);
+        return i_update_comm_impl->downloadAttributeFile(resourse_file, file_path);
     }
 
     void

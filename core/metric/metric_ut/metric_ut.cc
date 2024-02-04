@@ -210,10 +210,13 @@ TEST_F(MetricTest, basicMetricTest)
         "}";
 
     string message_body;
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     string expected_message =
         "{\n"
@@ -275,10 +278,13 @@ TEST_F(MetricTest, basicMetricTest)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     expected_message =
         "{\n"
@@ -342,10 +348,13 @@ TEST_F(MetricTest, basicMetricTest)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     expected_message =
         "{\n"
@@ -419,10 +428,13 @@ TEST_F(MetricTest, printMetricsTest)
     cpu_event.setProcessCPU(89);
     cpu_event.notify();
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(Return(Maybe<string>(string(""))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).Times(AnyNumber());
 
     string metric_str =
         "{\n"
@@ -486,10 +498,14 @@ TEST_F(MetricTest, metricTestWithReset)
         "}";
 
     string message_body;
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     string expected_message =
         "{\n"
@@ -550,10 +566,13 @@ TEST_F(MetricTest, metricTestWithReset)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     expected_message =
         "{\n"
@@ -614,10 +633,13 @@ TEST_F(MetricTest, metricTestWithReset)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     expected_message =
         "{\n"
@@ -699,10 +721,14 @@ TEST_F(MetricTest, generateReportWithReset)
         "}";
 
     string message_body;
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     string expected_message =
         "{\n"
@@ -770,10 +796,13 @@ TEST_F(MetricTest, generateReportWithReset)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     expected_message =
         "{\n"
@@ -835,10 +864,13 @@ TEST_F(MetricTest, generateReportWithReset)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
 
     expected_message =
         "{\n"
@@ -980,10 +1012,14 @@ TEST_F(MetricTest, testMapMetric)
     HttpTransaction("/index.html", 40).notify();
 
     string message_body;
-    EXPECT_CALL(
-        messaging_mock,
-        mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, MessageTypeTag::METRIC)
-    ).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
     routine();
 
     string msg_str =

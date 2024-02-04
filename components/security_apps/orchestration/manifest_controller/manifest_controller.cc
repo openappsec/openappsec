@@ -13,6 +13,8 @@
 
 #include "manifest_controller.h"
 
+#include <algorithm>
+
 #include "config.h"
 #include "debug.h"
 #include "environment.h"
@@ -80,9 +82,8 @@ private:
 
     bool
     handlePackage(
-        const Package &updated_package,
+        const pair<Package, string> &package_downloaded_file,
         map<string, Package> &current_packages,
-        const map<string, Package> &new_packages,
         map<string, Package> &corrupted_packages
     );
 
@@ -179,6 +180,34 @@ ManifestController::Impl::updateIgnoreListForNSaaS()
     return true;
 }
 
+static vector<pair<Package, string>>::const_iterator
+findPackage(const vector<pair<Package, string>> &packages, const string &name)
+{
+    using Pair = pair<Package, string>;
+    return find_if(packages.begin(), packages.end(), [&] (const Pair &pair) { return pair.first.getName() == name; });
+}
+
+static vector<pair<Package, string>>
+sortByInstallationQueue(
+    const vector<pair<Package, string>> &downloaded_files,
+    const vector<Package> &installation_queue)
+{
+    vector<pair<Package, string>> sorted_queue;
+    for (auto &package_file : installation_queue) {
+        if (package_file.getName() == "accessControlApp" || package_file.getName() == "accessControlKernel") continue;
+
+        auto package_it = findPackage(downloaded_files, package_file.getName());
+        if (package_it != downloaded_files.end()) sorted_queue.push_back(*package_it);
+    }
+
+    auto ac_app_it = findPackage(downloaded_files, "accessControlApp");
+    auto ac_kernel_it = findPackage(downloaded_files, "accessControlKernel");
+    if (ac_app_it != downloaded_files.end()) sorted_queue.push_back(*ac_app_it);
+    if (ac_kernel_it != downloaded_files.end()) sorted_queue.push_back(*ac_kernel_it);
+
+    return sorted_queue;
+}
+
 bool
 ManifestController::Impl::updateManifest(const string &new_manifest_file)
 {
@@ -220,6 +249,7 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
     }
 
     map<string, Package> new_packages = parsed_manifest.unpack();
+    map<string, Package> all_packages = parsed_manifest.unpack();
     map<string, Package> current_packages;
     parsed_manifest = orchestration_tools->loadPackagesFromJson(manifest_file_path);
 
@@ -256,13 +286,14 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
     auto packages_to_remove = manifest_diff_calc.filterUntrackedPackages(current_packages, new_packages);
     for (auto remove_package = packages_to_remove.begin(); remove_package != packages_to_remove.end();) {
         bool uninstall_response = true;
-        if (remove_package->second.isInstallable().ok()) {
+        if (remove_package->second.isInstallable()) {
             uninstall_response = manifest_handler.uninstallPackage(remove_package->second);
         }
 
         if (!uninstall_response) {
             dbgWarning(D_ORCHESTRATOR)
-                << "Failed to uninstall package. Package: " << remove_package->second.getName();
+                << "Failed to uninstall package. Package: "
+                << remove_package->second.getName();
             all_cleaned = false;
             remove_package++;
         } else {
@@ -284,42 +315,40 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
 
     bool no_change = new_packages.size() == 0;
     // Both new_packages & corrupted_packages will be updated based on updated manifest
-    bool no_corrupted_package = manifest_diff_calc.filterCorruptedPackages(new_packages, corrupted_packages);
 
-    auto orchestration_service = new_packages.find("orchestration");
-    if (orchestration_service != new_packages.end()) {
-        // Orchestration needs special handling as manifest should be backup differently
-        return handlePackage(
-            orchestration_service->second,
-            current_packages,
-            new_packages,
-            corrupted_packages
-        );
+    const auto &download_packages_res = manifest_handler.downloadPackages(new_packages);
+    if (!download_packages_res.ok()) {
+        dbgWarning(D_ORCHESTRATOR)
+            << "Failed to download required packages. Error: "
+            << download_packages_res.getErr();
+        return false;
     }
-    auto wlp_standalone_service = new_packages.find("wlpStandalone");
-    if (wlp_standalone_service != new_packages.end()) {
-        // wlpStandalone needs special handling as manifest should be backup differently
-        return handlePackage(
-            wlp_standalone_service->second,
+    const vector<pair<Package, string>> &downloaded_files = download_packages_res.unpack();
+    const auto &installation_queue_res = manifest_diff_calc.buildInstallationQueue(
             current_packages,
-            new_packages,
-            corrupted_packages
-        );
+            new_packages
+    );
+    if (!installation_queue_res.ok()) {
+        dbgWarning(D_ORCHESTRATOR)
+            << "Failed building installation queue. Error: "
+            << installation_queue_res.getErr();
+        return false;
     }
+    const vector<Package> &installation_queue = installation_queue_res.unpack();
+
+    const auto &sortd_downloaded_files = sortByInstallationQueue(downloaded_files, installation_queue);
 
     bool all_installed = true;
     bool any_installed = false;
 
-    dbgDebug(D_ORCHESTRATOR) << "Starting to handle " << new_packages.size() <<" new packages";
-    for (auto &new_package : new_packages) {
-
-        if (new_package.second.getType() != Package::PackageType::Service) continue;
-
+    dbgDebug(D_ORCHESTRATOR) << "Starting to handle " << downloaded_files.size() << " new packages";
+    for (auto &package : sortd_downloaded_files) {
+        if (package.first.getType() != Package::PackageType::Service) continue;
         size_t prev_size = corrupted_packages.size();
+
         bool handling_response = handlePackage(
-            new_package.second,
+            package,
             current_packages,
-            new_packages,
             corrupted_packages
         );
 
@@ -331,7 +360,10 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
         }
 
         // Orchestration needs special handling as manifest should be backup differently
-        if (new_package.first.compare(orch_service_name) == 0) {
+        if (package.first.getName().compare(orch_service_name) == 0) {
+            return handling_response;
+        }
+        if (package.first.getName().compare("wlpStandalone") == 0) {
             return handling_response;
         }
 
@@ -341,14 +373,22 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
 
     bool manifest_file_update = true;
 
-    if (all_installed && (any_installed || no_change) && no_corrupted_package) {
+    if (all_installed && (any_installed || no_change)) {
         manifest_file_update = changeManifestFile(new_manifest_file);
         // In NSaaS - set ignore packages to any
         ignore_packages_update = updateIgnoreListForNSaaS();
     } else if (any_installed) {
         manifest_file_update = orchestration_tools->packagesToJsonFile(current_packages, manifest_file_path);
     }
-    return all_installed && manifest_file_update && no_corrupted_package && all_cleaned;
+    if (all_installed) {
+        auto orchestration_downloader = Singleton::Consume<I_Downloader>::by<ManifestHandler>();
+        for (auto &package : all_packages) {
+            dbgDebug(D_ORCHESTRATOR)
+                << "Removing temp Download file after successfull installation : " << package.second.getName();
+            orchestration_downloader->removeDownloadFile(package.second.getName());
+        }
+    }
+    return all_installed && manifest_file_update && all_cleaned;
 }
 
 // Orchestration package needs a special handling. Old service will die during the upgrade
@@ -425,35 +465,26 @@ ManifestController::Impl::changeManifestFile(const string &new_manifest_file)
 
 bool
 ManifestController::Impl::handlePackage(
-    const Package &package,
+    const pair<Package, string> &package_downloaded_file,
     map<string, Package> &current_packages,
-    const map<string, Package> &new_packages,
     map<string, Package> &corrupted_packages)
 {
+    auto &package = package_downloaded_file.first;
+
     auto i_env = Singleton::Consume<I_Environment>::by<ManifestController>();
     auto span_scope = i_env->startNewSpanScope(Span::ContextType::CHILD_OF);
     dbgDebug(D_ORCHESTRATOR) << "Handling package. Package: " << package.getName();
 
-    if (!package.isInstallable().ok()) {
+    if (!package.isInstallable()) {
         string report_msg =
-            "Skipping installation of package: " + package.getName() + ". Reason: " + package.isInstallable().getErr();
+            "Skipping installation of package: " + package.getName() + ". Reason: " + package.getErrorMessage();
         dbgWarning(D_ORCHESTRATOR) << report_msg;
         LogGen(report_msg, Audience::SECURITY, Severity::CRITICAL, Priority::HIGH, Tags::ORCHESTRATOR);
         current_packages.insert(make_pair(package.getName(), package));
         return true;
     }
 
-    vector<Package> installation_queue;
-
-    if (!manifest_diff_calc.buildInstallationQueue(package, installation_queue, current_packages, new_packages)) {
-        dbgWarning(D_ORCHESTRATOR) << "Failed building installation queue. Package: " << package.getName();
-        return false;
-    }
-
-    vector<pair<Package, string>> downloaded_files;
-
-    if (!manifest_handler.downloadPackages(installation_queue, downloaded_files)) return false;
-    if (!manifest_handler.installPackages(downloaded_files, current_packages, corrupted_packages)) {
+    if (!manifest_handler.installPackage(package_downloaded_file, current_packages, corrupted_packages)) {
         LogGen(
             "Failed to install package: " + package.getName(),
             Audience::SECURITY,

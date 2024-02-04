@@ -18,7 +18,7 @@
 
 #include "cereal/types/bitset.hpp"
 
-template <typename EnumClass, uint NumberOfValues = static_cast<uint>(EnumClass::COUNT) + 1>
+template <typename EnumClass, uint32_t NumberOfValues = static_cast<uint32_t>(EnumClass::COUNT) + 1>
 class Flags
 {
     static_assert(NumberOfValues > 0, "Number of possible Flags must be positive");
@@ -39,7 +39,7 @@ public:
     void serialize(Archive &ar, uint32_t) { ar(flags); }
 
 private:
-    uint getIndex(const EnumClass &flag) const { return static_cast<uint>(flag); }
+    uint32_t getIndex(const EnumClass &flag) const { return static_cast<uint32_t>(flag); }
 
     std::bitset<NumberOfValues> flags;
 };

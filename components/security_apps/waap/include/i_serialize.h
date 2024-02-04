@@ -143,7 +143,7 @@ protected:
     size_t getIntervalsCount();
 
     template<typename T>
-    bool sendObject(T &obj, I_Messaging::Method method, std::string uri)
+    bool sendObject(T &obj, HTTPMethod method, std::string uri)
     {
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
@@ -152,33 +152,28 @@ protected:
             return false;
         }
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
-            Flags <MessageConnConfig> conn_flags;
-            conn_flags.setFlag(MessageConnConfig::EXTERNAL);
-            std::string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
-
-            return messaging->sendObject(
-                obj,
+            MessageMetadata req_md(getSharedStorageHost(), 80);
+            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            auto req_status = messaging->sendSyncMessage(
                 method,
-                getSharedStorageHost(),
-                80,
-                conn_flags,
                 uri,
-                tenant_header,
-                nullptr,
-                MessageTypeTag::WAAP_LEARNING);
+                obj,
+                MessageCategory::GENERIC,
+                req_md
+            );
+            return req_status.ok();
         }
-        return messaging->sendObject(
-            obj,
+        auto req_status = messaging->sendSyncMessage(
             method,
             uri,
-            "",
-            nullptr,
-            true,
-            MessageTypeTag::WAAP_LEARNING);
+            obj,
+            MessageCategory::GENERIC
+        );
+        return req_status.ok();
     }
 
     template<typename T>
-    bool sendObjectWithRetry(T &obj, I_Messaging::Method method, std::string uri)
+    bool sendObjectWithRetry(T &obj, HTTPMethod method, std::string uri)
     {
         I_MainLoop *mainloop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
         for (uint i = 0; i < max_send_obj_retries; i++)
@@ -198,7 +193,7 @@ protected:
     }
 
     template<typename T>
-    bool sendNoReplyObject(T &obj, I_Messaging::Method method, std::string uri)
+    bool sendNoReplyObject(T &obj, HTTPMethod method, std::string uri)
     {
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
@@ -207,32 +202,26 @@ protected:
             return false;
         }
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
-            Flags<MessageConnConfig> conn_flags;
-            conn_flags.setFlag(MessageConnConfig::EXTERNAL);
-            std::string tenant_header = "X-Tenant-Id: " + agentDetails->getTenantId();
-            return messaging->sendNoReplyObject(
-                obj,
+            MessageMetadata req_md(getSharedStorageHost(), 80);
+            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            return messaging->sendSyncMessageWithoutResponse(
                 method,
-                getSharedStorageHost(),
-                80,
-                conn_flags,
                 uri,
-                tenant_header,
-                nullptr,
-                MessageTypeTag::WAAP_LEARNING);
+                obj,
+                MessageCategory::GENERIC,
+                req_md
+            );
         }
-        return messaging->sendNoReplyObject(
-            obj,
+        return messaging->sendSyncMessageWithoutResponse(
             method,
             uri,
-            "",
-            nullptr,
-            true,
-            MessageTypeTag::WAAP_LEARNING);
+            obj,
+            MessageCategory::GENERIC
+        );
     }
 
     template<typename T>
-    bool sendNoReplyObjectWithRetry(T &obj, I_Messaging::Method method, std::string uri)
+    bool sendNoReplyObjectWithRetry(T &obj, HTTPMethod method, std::string uri)
     {
         I_MainLoop *mainloop= Singleton::Consume<I_MainLoop>::by<WaapComponent>();
         for (uint i = 0; i < max_send_obj_retries; i++)
@@ -273,6 +262,7 @@ private:
     size_t m_intervalsCounter;
     bool m_remoteSyncEnabled;
     const std::string m_assetId;
+    const bool m_isAssetIdUuid;
     std::string m_type;
     std::string m_lastProcessedModified;
     Maybe<std::string> m_shared_storage_host;

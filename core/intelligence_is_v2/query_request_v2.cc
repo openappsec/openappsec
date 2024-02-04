@@ -23,7 +23,7 @@ using namespace Intelligence_IS_V2;
 
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
-static const EnumArray<ObjectType, string> object_type_to_string_array{ "asset", "zone", "configuration" };
+static const EnumArray<ObjectType, string> object_type_to_string_array{"asset", "zone", "configuration", "shortLived"};
 
 BulkQueryRequest::BulkQueryRequest(QueryRequest &_request, int _index)
         :
@@ -62,6 +62,18 @@ QueryRequest::QueryRequest(
     Condition condition_type,
     const string &key,
     const int64_t &value,
+    bool full_reponse,
+    AttributeKeyType attribute_type
+) {
+    query = SerializableQueryFilter(condition_type, createAttributeString(key, attribute_type), value);
+    assets_limit = default_assets_limit;
+    full_response = full_reponse;
+}
+
+QueryRequest::QueryRequest(
+    Condition condition_type,
+    const string &key,
+    const vector<string> &value,
     bool full_reponse,
     AttributeKeyType attribute_type
 ) {
@@ -156,6 +168,16 @@ QueryRequest::addCondition (
     Condition condition_type,
     const string &key,
     const int64_t &value,
+    AttributeKeyType attribute_type
+) {
+    query.addCondition(condition_type, createAttributeString(key, attribute_type), value);
+}
+
+void
+QueryRequest::addCondition (
+    Condition condition_type,
+    const string &key,
+    const vector<string> &value,
     AttributeKeyType attribute_type
 ) {
     query.addCondition(condition_type, createAttributeString(key, attribute_type), value);

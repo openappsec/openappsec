@@ -69,7 +69,8 @@ TEST_F(ReportMessagingTest, title_only)
 {
     EXPECT_CALL(
         mock_messaging,
-        mockSendPersistentMessage(
+        sendAsyncMessage(
+            _,
             _,
             "{\n"
             "    \"log\": {\n"
@@ -98,20 +99,18 @@ TEST_F(ReportMessagingTest, title_only)
             "    }\n"
             "}",
             _,
-            _,
-            _,
-            _,
             _
         )
-    ).WillOnce(Return(string()));
-    ReportMessaging("test", ReportIS::AudienceTeam::AGENT_CORE, 1, ReportIS::Tags::ACCESS_CONTROL);
+    ).Times(1);
+    ReportMessaging("test", ReportIS::AudienceTeam::AGENT_CORE, 1, true, ReportIS::Tags::ACCESS_CONTROL);
 }
 
 TEST_F(ReportMessagingTest, with_dynamic_fields)
 {
     EXPECT_CALL(
         mock_messaging,
-        mockSendPersistentMessage(
+        sendAsyncMessage(
+            _,
             _,
             "{\n"
             "    \"log\": {\n"
@@ -141,12 +140,9 @@ TEST_F(ReportMessagingTest, with_dynamic_fields)
             "    }\n"
             "}",
             _,
-            _,
-            _,
-            _,
             _
         )
-    ).WillOnce(Return(string()));
+    ).Times(1);
     ReportMessaging("test", ReportIS::AudienceTeam::AGENT_CORE, 1, ReportIS::Tags::ACCESS_CONTROL)
         << LogField("ASD", "QWE");
 }
@@ -155,7 +151,8 @@ TEST_F(ReportMessagingTest, custom_event_object)
 {
     EXPECT_CALL(
         mock_messaging,
-        mockSendPersistentMessage(
+        sendAsyncMessage(
+            _,
             _,
             "{\n"
             "    \"log\": {\n"
@@ -192,12 +189,9 @@ TEST_F(ReportMessagingTest, custom_event_object)
             "    }\n"
             "}",
             _,
-            _,
-            _,
-            _,
             _
         )
-    ).WillOnce(Return(string()));
+    ).Times(1);
 
     ReportMessaging(
         "test",
@@ -211,7 +205,8 @@ TEST_F(ReportMessagingTest, custom_priority)
 {
     EXPECT_CALL(
         mock_messaging,
-        mockSendPersistentMessage(
+        sendAsyncMessage(
+            _,
             _,
             "{\n"
             "    \"log\": {\n"
@@ -248,12 +243,9 @@ TEST_F(ReportMessagingTest, custom_priority)
             "    }\n"
             "}",
             _,
-            _,
-            _,
-            _,
             _
         )
-    ).WillOnce(Return(string()));
+    ).Times(1);
 
     ReportMessaging(
         "test",
@@ -279,7 +271,8 @@ TEST_F(ReportMessagingTest, with_env_details)
 
     EXPECT_CALL(
         mock_messaging,
-        mockSendPersistentMessage(
+        sendAsyncMessage(
+            _,
             _,
             "{\n"
             "    \"log\": {\n"
@@ -316,12 +309,9 @@ TEST_F(ReportMessagingTest, with_env_details)
             "    }\n"
             "}",
             _,
-            _,
-            _,
-            _,
             _
         )
-    ).WillOnce(Return(string()));
+    ).Times(1);
 
     ReportMessaging(
         "test",

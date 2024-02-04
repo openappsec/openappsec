@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "TrustedSourcesConfidence.h"
-#include "i_messaging.h"
 #include "waap.h"
 #include "Waf2Util.h"
 
@@ -97,7 +96,7 @@ bool TrustedSourcesConfidenceCalculator::postData()
 
     TrsutedSourcesLogger logger(m_logger);
     bool ok = sendNoReplyObjectWithRetry(logger,
-        I_Messaging::Method::PUT,
+        HTTPMethod::PUT,
         url);
     if (!ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
@@ -118,7 +117,7 @@ void TrustedSourcesConfidenceCalculator::pullData(const std::vector<std::string>
         }
         GetTrustedFile getTrustFile;
         bool res = sendObjectWithRetry(getTrustFile,
-            I_Messaging::Method::GET,
+            HTTPMethod::GET,
             getUri() + "/" + file);
         if (!res)
         {
@@ -149,7 +148,7 @@ void TrustedSourcesConfidenceCalculator::pullProcessedData(const std::vector<std
     for (auto file: files) {
         GetTrustedFile getTrustFile;
         bool res = sendObjectWithRetry(getTrustFile,
-            I_Messaging::Method::GET,
+            HTTPMethod::GET,
             getUri() + "/" + file);
         pull_ok |= res;
         if (res && getTrustFile.getTrustedLogs().ok()) {
@@ -168,7 +167,7 @@ void TrustedSourcesConfidenceCalculator::postProcessedData()
 
     TrsutedSourcesLogger logger(m_logger);
     sendNoReplyObjectWithRetry(logger,
-        I_Messaging::Method::PUT,
+        HTTPMethod::PUT,
         url);
 }
 

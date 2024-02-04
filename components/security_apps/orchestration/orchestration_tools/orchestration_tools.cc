@@ -147,21 +147,21 @@ getNamespaceDataFromCluster(const string &path)
 {
     NamespaceData name_space;
     string token = Singleton::Consume<I_EnvDetails>::by<OrchestrationTools>()->getToken();
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::SECURE_CONN);
-    conn_flags.setFlag(MessageConnConfig::IGNORE_SSL_VALIDATION);
     auto messaging = Singleton::Consume<I_Messaging>::by<OrchestrationTools>();
-    bool res = messaging->sendObject(
-        name_space,
-        I_Messaging::Method::GET,
-        "kubernetes.default.svc",
-        443,
-        conn_flags,
+
+    MessageMetadata get_ns_md("kubernetes.default.svc", 443);
+    get_ns_md.insertHeader("Authorization", "Bearer " + token);
+    get_ns_md.insertHeader("Connection", "close");
+    get_ns_md.setConnectioFlag(MessageConnectionConfig::IGNORE_SSL_VALIDATION);
+    auto res = messaging->sendSyncMessage(
+        HTTPMethod::GET,
         path,
-        "Authorization: Bearer " + token + "\nConnection: close"
+        name_space,
+        MessageCategory::GENERIC,
+        get_ns_md
     );
 
-    if (res) return name_space;
+    if (res.ok()) return name_space;
 
     return genError(string("Was not able to get object form k8s cluser in path: " + path));
 }

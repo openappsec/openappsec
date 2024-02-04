@@ -228,35 +228,37 @@ AgentDetailsReporter::Impl::sendAttributes()
     if (is_server) {
         AttrSerializer<ofstream, cereal::JSONOutputArchive>(attributes, "save");
 
-        messaging->sendObjectWithPersistence(attr_to_send, I_Messaging::Method::PATCH, "/agents");
+        messaging->sendAsyncMessage(HTTPMethod::PATCH, "/agents", attr_to_send);
         dbgDebug(D_AGENT_DETAILS) << "Triggered persistent message request with attributes to the Fog";
         new_attributes.clear();
         return true;
     }
 
     for (uint retry = 3; retry > 0; retry--) {
-        ::Flags<MessageConnConfig> conn_flags;
-        conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-        bool is_success = messaging->sendObject(
+        MessageMetadata add_agent_details_req_md("127.0.0.1", 7777);
+        add_agent_details_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+        add_agent_details_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        auto add_agent_details_status = messaging->sendSyncMessage(
+            HTTPMethod::POST,
+            "add-agent-details-attr",
             attr_to_send,
-            I_Messaging::Method::POST,
-            "127.0.0.1",
-            7777, // primary Orchestrator's port
-            conn_flags,
-            "add-agent-details-attr"
+            MessageCategory::GENERIC,
+            add_agent_details_req_md
         );
-        if (!is_success) {
-            is_success = messaging->sendObject(
+        if (!add_agent_details_status.ok()) {
+            MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
+            secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+            secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            add_agent_details_status = messaging->sendSyncMessage(
+                HTTPMethod::POST,
+                "add-agent-details-attr",
                 attr_to_send,
-                I_Messaging::Method::POST,
-                "127.0.0.1",
-                7778, // secondary Orchestrator's port
-                conn_flags,
-                "add-agent-details-attr"
+                MessageCategory::GENERIC,
+                secondary_port_req_md
             );
         }
 
-        if (is_success) {
+        if (add_agent_details_status.ok()) {
             dbgDebug(D_AGENT_DETAILS) << "Successfully sent attributes to the Orchestrator";
             new_attributes.clear();
             return true;
@@ -390,7 +392,7 @@ AgentDetailsReporter::Impl::sendReport(
         additional_metadata.setAdditionalAttributes(attributes);
     }
 
-    messaging->sendObjectWithPersistence(additional_metadata, I_Messaging::Method::PATCH, "/agents");
+    messaging->sendAsyncMessage(HTTPMethod::PATCH, "/agents", additional_metadata);
 }
 
 AgentDetailsReporter::AgentDetailsReporter()

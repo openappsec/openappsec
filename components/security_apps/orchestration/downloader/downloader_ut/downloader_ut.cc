@@ -18,6 +18,7 @@ class DownloaderTest : public Test
 public:
     DownloaderTest()
     {
+        Debug::setUnitTestFlag(D_ORCHESTRATOR, Debug::DebugLevel::TRACE);
         setConfiguration<string>("/tmp", "orchestration", "Default file download path");
         EXPECT_CALL(mock_orchestration_tools, createDirectory("/tmp")).WillOnce(Return(true));
         downloader.init();
@@ -44,15 +45,14 @@ TEST_F(DownloaderTest, downloadFileFromFog)
 
     GetResourceFile resourse_file(GetResourceFile::ResourceFileType::VIRTUAL_SETTINGS);
 
-    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
+    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file, "/tmp/virtualSettings.download"))
+        .WillOnce(Return(fog_response));
 
     EXPECT_CALL(
         mock_orchestration_tools,
         calculateChecksum(Package::ChecksumTypes::SHA256, "/tmp/virtualSettings.download")
     ).WillOnce(Return(string("123")));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(fog_response, "/tmp/virtualSettings.download", false))
-        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/tmp/virtualSettings.download")).WillOnce(Return(true));
 
     Maybe<string> downloaded_file = i_downloader->downloadFileFromFog(
@@ -71,7 +71,10 @@ TEST_F(DownloaderTest, downloadFileFromFogFailure)
     Maybe<string> fog_response(genError("Failed to download"));
     GetResourceFile resourse_file(GetResourceFile::ResourceFileType::SETTINGS);
 
-    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
+    EXPECT_CALL(
+        mock_communication,
+        downloadAttributeFile(resourse_file, "/tmp/settings.download")
+    ).WillOnce(Return(fog_response));
 
     Maybe<string> downloaded_file = i_downloader->downloadFileFromFog(
         checksum,
@@ -122,6 +125,53 @@ TEST_F(DownloaderTest, registerConfig)
     );
 
     env.fini();
+}
+
+TEST_F(DownloaderTest, checkIfFileExists)
+{
+    string local_file_path = "/tmp/test_file.sh";
+    string url = "file://" + local_file_path;
+    string dir_path = getConfigurationWithDefault<string>(
+        "/tmp/orchestration_downloads",
+        "orchestration",
+        "Default file download path"
+    );
+    string manifest =
+        "{"
+        "   \"packages\": ["
+        "       {"
+        "           \"name\": \"test\","
+        "           \"version\": \"c\","
+        "           \"download-path\": \"http://172.23.92.135/my.sh\","
+        "           \"relative-path\": \"\","
+        "           \"checksum-type\": \"sha1sum\","
+        "           \"checksum\": \"1234\","
+        "           \"package-type\": \"service\","
+        "            \"require\": []"
+        "       }"
+        "   ]"
+        "}";
+
+    vector<Package> manifest_services;
+    std::stringstream os(manifest);
+    cereal::JSONInputArchive archive_in(os);
+    archive_in(manifest_services);
+
+    string service_name = "test";
+    string file_name = service_name + ".download";
+    string file_path = dir_path + "/" + file_name;
+    string checksum = "1234";
+    Package::ChecksumTypes checksum_type = Package::ChecksumTypes::SHA1;
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(checksum_type, file_path)).WillOnce(Return(checksum));
+    i_downloader->checkIfFileExists(manifest_services[0]);
+}
+
+TEST_F(DownloaderTest, removeDownloadFile)
+{
+    string file_path = "/tmp/package.download";
+    EXPECT_CALL(mock_orchestration_tools, removeFile(file_path)).WillOnce(Return(true));
+    i_downloader->removeDownloadFile("package");
 }
 
 TEST_F(DownloaderTest, downloadWithBadChecksum)
@@ -181,10 +231,9 @@ TEST_F(DownloaderTest, downloadEmptyFileFromFog)
 
     GetResourceFile resourse_file(GetResourceFile::ResourceFileType::MANIFEST);
 
-    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
+    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file, "/tmp/manifest.download"))
+        .WillOnce(Return(fog_response));
 
-    EXPECT_CALL(mock_orchestration_tools, writeFile(fog_response, "/tmp/manifest.download", false))
-        .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/tmp/manifest.download")).WillOnce(Return(false));
 
     EXPECT_CALL(
@@ -340,7 +389,13 @@ TEST_F(DownloaderTest, download_virtual_policy)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
+    EXPECT_CALL(
+        mock_communication,
+        downloadAttributeFile(resourse_file, "/tmp/virtualPolicy_general.download"))
+    .WillOnce(Return(fog_response));
+
+    EXPECT_CALL(mock_orchestration_tools, readFile("/tmp/virtualPolicy_general.download"))
+        .WillOnce(Return(fog_response));
 
     EXPECT_CALL(
         mock_orchestration_tools,
@@ -428,7 +483,15 @@ TEST_F(DownloaderTest, download_virtual_settings)
         "    ]\n"
         "}";
 
-    EXPECT_CALL(mock_communication, downloadAttributeFile(resourse_file)).WillOnce(Return(fog_response));
+    EXPECT_CALL(
+        mock_communication,
+        downloadAttributeFile(resourse_file, "/tmp/virtualSettings_general.download"))
+    .WillOnce(Return(fog_response));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        readFile("/tmp/virtualSettings_general.download")
+    ).WillOnce(Return(fog_response));
 
     stringstream tenant_0000_path;
     tenant_0000_path << "/tmp/virtualSettings_4c721b40-85df-4364-be3d-303a10ee9789"

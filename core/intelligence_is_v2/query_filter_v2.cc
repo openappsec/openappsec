@@ -65,6 +65,16 @@ SerializableQueryFilter::SerializableQueryFilter(
     condition_operands.emplace_back(condition_type, key, value);
 }
 
+
+SerializableQueryFilter::SerializableQueryFilter(
+    Condition condition_type,
+    const std::string &key,
+    const vector<string> &value
+) {
+    condition_operands.emplace_back(condition_type, key, value);
+}
+
+
 void
 SerializableQueryFilter::save(cereal::JSONOutputArchive &ar) const
 {
@@ -88,6 +98,17 @@ SerializableQueryFilter::addCondition(Condition condition_type, const string &ke
 
 void
 SerializableQueryFilter::addCondition(Condition condition_type, const string &key, const int64_t &value)
+{
+    if (queries_operands.size() > 0) {
+        queries_operands.emplace_back(condition_type, key, value);
+        return;
+    }
+    if (condition_operands.size() == 1 && operator_type == Operator::NONE) operator_type = Operator::AND;
+    condition_operands.emplace_back(condition_type, key, value);
+}
+
+void
+SerializableQueryFilter::addCondition(Condition condition_type, const string &key, const vector<string> &value)
 {
     if (queries_operands.size() > 0) {
         queries_operands.emplace_back(condition_type, key, value);

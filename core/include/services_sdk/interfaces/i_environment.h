@@ -80,6 +80,7 @@ public:
     virtual std::string getCurrentTrace() const = 0;
     virtual std::string getCurrentSpan() const = 0;
     virtual std::string getCurrentHeaders() = 0;
+    virtual std::map<std::string, std::string> getCurrentHeadersMap() = 0;
     virtual void startNewTrace(bool new_span = true, const std::string &_trace_id = std::string()) = 0;
     virtual void startNewSpan(
         Span::ContextType _type,

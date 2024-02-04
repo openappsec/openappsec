@@ -73,7 +73,7 @@ TEST_F(PackageTest, serializationFromString)
     EXPECT_EQ("orchestration", package.getName());
     EXPECT_EQ("c", package.getVersion());
     EXPECT_EQ(Package::PackageType::Service, package.getType());
-    EXPECT_TRUE(package.isInstallable().ok());
+    EXPECT_TRUE(package.isInstallable());
 }
 
 TEST_F(PackageTest, writeAsJson)
@@ -86,7 +86,8 @@ TEST_F(PackageTest, writeAsJson)
                         "    \"name\": \"orchestration\",\n"
                         "    \"checksum-type\": \"sha1sum\",\n"
                         "    \"checksum\": \"8d4a5709673a05b380ba7d6567e28910019118f5\",\n"
-                        "    \"package-type\": \"service\"\n"
+                        "    \"package-type\": \"service\",\n"
+                        "    \"status\": true\n"
                         "}";
     Package package;
     EXPECT_EQ(true, load(string_stream, package));
@@ -99,7 +100,7 @@ TEST_F(PackageTest, writeAsJson)
     EXPECT_EQ("orchestration", package.getName());
     EXPECT_EQ("c", package.getVersion());
     EXPECT_EQ(Package::PackageType::Service, package.getType());
-    EXPECT_TRUE(package.isInstallable().ok());
+    EXPECT_TRUE(package.isInstallable());
 
     write("service.json", package);
     string data = readFile("service.json");
@@ -232,5 +233,6 @@ TEST_F(PackageTest, uninstallablePackage)
                         "}";
     Package package;
     EXPECT_TRUE(load(string_stream, package));
-    EXPECT_THAT(package.isInstallable(), IsError("This security app isn't valid for this agent"));
+    EXPECT_FALSE(package.isInstallable());
+    EXPECT_EQ(package.getErrorMessage(), "This security app isn't valid for this agent");
 }

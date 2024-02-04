@@ -42,6 +42,16 @@ public:
     );
 
     MOCK_CONST_METHOD1(
+        checkIfFileExists,
+        Maybe<std::string>(const Package &)
+    );
+
+    MOCK_CONST_METHOD1(
+        removeDownloadFile,
+        void(const std::string &)
+    );
+
+    MOCK_CONST_METHOD1(
         getProfileFromMap,
         std::string(const std::string &)
     );

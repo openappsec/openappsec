@@ -60,6 +60,22 @@ static const unordered_map<string, MatchQuery::StaticKeys> string_to_key = {
     { "domain", MatchQuery::StaticKeys::Domain }
 };
 
+MatchQuery::MatchQuery(const string &match) : is_specific_label(false), is_ignore_keyword(false)
+{
+    try {
+        stringstream ss;
+        ss.str(match);
+        cereal::JSONInputArchive archive_in(ss);
+        load(archive_in);
+    } catch (const exception &e) {
+        dbgWarning(D_RULEBASE_CONFIG)
+            << "Unable to load match query JSON. JSON content: "
+            << match
+            << ", Error: "
+            << e.what();
+    }
+}
+
 void
 MatchQuery::load(cereal::JSONInputArchive &archive_in)
 {

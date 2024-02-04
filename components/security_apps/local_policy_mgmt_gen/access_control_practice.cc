@@ -133,11 +133,12 @@ AccessControlRateLimiteRules::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading Access control rate limite rules";
     parseAppsecJSONKey<int>("limit", limit, archive_in);
     parseAppsecJSONKey<string>("uri", uri, archive_in);
-    parseAppsecJSONKey<string>("unit", unit, archive_in);
+    parseAppsecJSONKey<string>("unit", unit, archive_in, "minute");
     if (valid_units.count(unit) == 0) {
         dbgWarning(D_LOCAL_POLICY)
         << "Access control rate limite rules units invalid: "
         << unit;
+        throw PolicyGenException("Access control rate limite rules units invalid: " + unit);
     }
     parseAppsecJSONKey<string>("comment", comment, archive_in);
     parseAppsecJSONKey<vector<string>>("triggers", triggers, archive_in);
@@ -177,10 +178,10 @@ AccessControlRateLimit::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading Access control rate limit";
     string in_mode;
-    parseAppsecJSONKey<string>("overrideMode", in_mode, archive_in, "inactive");
+    parseAppsecJSONKey<string>("overrideMode", in_mode, archive_in, "detect");
     if (valid_modes_to_key.find(in_mode) == valid_modes_to_key.end()) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec access control rate limit override mode invalid: " << in_mode;
-        mode = "Inactive";
+        throw PolicyGenException("AppSec access control rate limit override mode invalid: " + in_mode);
     } else {
         mode = valid_modes_to_key.at(in_mode);
     }
@@ -216,7 +217,7 @@ AccessControlPracticeSpec::load(cereal::JSONInputArchive &archive_in)
 
     parseAppsecJSONKey<string>("name", practice_name, archive_in);
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
-    parseAppsecJSONKey<AccessControlRateLimit>("rateLimit", rate_limit, archive_in);
+    parseMandatoryAppsecJSONKey<AccessControlRateLimit>("rateLimit", rate_limit, archive_in);
 }
 
 void

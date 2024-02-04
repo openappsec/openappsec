@@ -17,6 +17,8 @@ target_link_libraries(attachment_registration_manager
         -Wl,--end-group
 )
 
+add_dependencies(attachment_registration_manager ngen_core)
+
 install(TARGETS attachment_registration_manager DESTINATION bin)
 install(TARGETS attachment_registration_manager DESTINATION attachment_registration_manager_service/bin)
 

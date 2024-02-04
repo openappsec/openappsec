@@ -111,19 +111,18 @@ public:
 TEST_F(HealthCheckManagerTest, runPeriodicHealthCheckTest)
 {
     string actual_body;
-    EXPECT_CALL(
-        mock_message,
-        sendMessage(
-            false,
-            _,
-            I_Messaging::Method::PATCH,
-            "/agents",
-            "",
-            _,
-            _,
-            MessageTypeTag::GENERIC
+    EXPECT_CALL(mock_message, sendSyncMessage(
+        HTTPMethod::PATCH,
+        "/agents",
+        _,
+        _,
+        _
+    )).Times(4).WillRepeatedly(
+        DoAll(
+            SaveArg<2>(&actual_body),
+            Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
         )
-    ).Times(4).WillRepeatedly(DoAll(SaveArg<1>(&actual_body), Return(string())));
+    );
 
     try {
         health_check_periodic_routine();

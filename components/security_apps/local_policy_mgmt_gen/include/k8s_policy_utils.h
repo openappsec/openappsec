@@ -111,7 +111,6 @@ private:
     I_EnvDetails* env_details = nullptr;
     I_Messaging* messaging = nullptr;
     EnvType env_type;
-    Flags<MessageConnConfig> conn_flags;
     std::string token;
 };
 

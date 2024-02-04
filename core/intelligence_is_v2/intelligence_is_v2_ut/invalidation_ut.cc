@@ -124,6 +124,9 @@ public:
             getListeningPort()
         ).WillRepeatedly(Return(7000));
 
+        ON_CALL(mock_details, getFogDomain()).WillByDefault(Return(Maybe<string>(string("fog_domain.com"))));
+        ON_CALL(mock_details, getFogPort()).WillByDefault(Return(Maybe<uint16_t>(443)));
+
         conf.preload();
         intelligence.preload();
         intelligence.init();
@@ -175,8 +178,12 @@ TEST_F(IntelligenceInvalidation, sending_public_invalidation)
     string invalidation_json;
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(false, _, I_Messaging::Method::POST, invalidation_uri, _, _, true, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(DoAll(SaveArg<1>(&invalidation_json), Return(string())));
+        sendSyncMessage(HTTPMethod::POST, invalidation_uri, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(DoAll(
+        SaveArg<2>(&invalidation_json),
+        Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
+    ));
+
     EXPECT_TRUE(invalidation.report(i_intelligence));
 
     string expected_json =
@@ -216,8 +223,12 @@ TEST_F(IntelligenceInvalidation, sending_private_invalidation)
     string invalidation_json;
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(false, _, I_Messaging::Method::POST, "127.0.0.1", 9090, _, invalidation_uri, _, _, _)
-    ).WillOnce(DoAll(SaveArg<1>(&invalidation_json), Return(string())));
+        sendSyncMessage(HTTPMethod::POST, invalidation_uri, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(DoAll(
+        SaveArg<2>(&invalidation_json),
+        Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
+    ));
+
     EXPECT_TRUE(invalidation.report(i_intelligence));
 
     string expected_json =
@@ -256,10 +267,10 @@ TEST_F(IntelligenceInvalidation, register_for_invalidation)
     string body;
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(_, _, _, "127.0.0.1", 9090, _, "/api/v2/intelligence/invalidation/register", _, _, _)
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
     ).WillOnce(DoAll(
-        SaveArg<1>(&body),
-        Return(string())
+        SaveArg<2>(&body),
+        Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
     ));
 
     EXPECT_NE(i_intelligence->registerInvalidation(invalidation, callback), 0);
@@ -292,8 +303,8 @@ TEST_F(IntelligenceInvalidation, invalidation_callback)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(_, _, _, "127.0.0.1", 9090, _, "/api/v2/intelligence/invalidation/register", _, _, _)
-    ).WillOnce(Return(string()));
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
 
     EXPECT_NE(i_intelligence->registerInvalidation(invalidation, callback), 0);
 
@@ -336,8 +347,8 @@ TEST_F(IntelligenceInvalidation, delete_invalidation_callback)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(_, _, _, "127.0.0.1", 9090, _, "/api/v2/intelligence/invalidation/register", _, _, _)
-    ).WillOnce(Return(string()));
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
 
     auto callback_id = i_intelligence->registerInvalidation(invalidation, callback);
     i_intelligence->unregisterInvalidation(*callback_id);
@@ -380,8 +391,9 @@ TEST_F(IntelligenceInvalidation, invalidation_short_handling)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(_, _, _, "127.0.0.1", 9090, _, "/api/v2/intelligence/invalidation/register", _, _, _)
-    ).WillOnce(Return(string()));
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
+
     invalidation.startListening(i_intelligence, callback);
 
     invalidation.stopListening(i_intelligence);
@@ -426,18 +438,18 @@ TEST_F(IntelligenceInvalidation, routine_registration)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(_, _, _, "127.0.0.1", 9090, _, "/api/v2/intelligence/invalidation/register", _, _, _)
-    ).WillOnce(Return(string()));
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
 
     i_intelligence->registerInvalidation(invalidation, callback);
 
     string body;
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(_, _, _, "127.0.0.1", 9090, _, "/api/v2/intelligence/invalidation/register", _, _, _)
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
     ).WillOnce(DoAll(
-        SaveArg<1>(&body),
-        Return(string())
+        SaveArg<2>(&body),
+        Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
     ));
 
     routine();

@@ -52,15 +52,14 @@ void
 SettingsRulebase::save(cereal::JSONOutputArchive &out_ar) const
 {
     string profile_type = "Kubernetes";
-    string upgrade_mode = "automatic";
     out_ar(
         cereal::make_nvp("agentSettings",                agentSettings),
         cereal::make_nvp("agentType",                    profile_type),
         cereal::make_nvp("allowOnlyDefinedApplications", false),
         cereal::make_nvp("anyFog",                       true),
-        cereal::make_nvp("maxNumberOfAgents",            10),
-        cereal::make_nvp("upgradeMode",                  upgrade_mode)
+        cereal::make_nvp("maxNumberOfAgents",            10)
     );
+    upgrade_settings.save(out_ar);
 }
 
 SettingsWrapper::SettingsWrapper(SettingsRulebase _agent) : agent(_agent)

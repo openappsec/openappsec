@@ -45,9 +45,9 @@ public:
     }
 
     Maybe<string>
-    downloadAttributeFile(const GetResourceFile &resourse_file)
+    downloadAttributeFile(const GetResourceFile &resourse_file, const string &file_path)
     {
-        return local_communication.downloadAttributeFile(resourse_file);
+        return local_communication.downloadAttributeFile(resourse_file, file_path);
     }
 
     void
@@ -127,7 +127,7 @@ TEST_F(LocalCommunicationTest, downloadManifest)
     string new_manifest_string = "new manifest";
     EXPECT_CALL(mock_orc_tools, readFile("/etc/cp/conf/offline_manifest.json")).WillOnce(Return(new_manifest_string));
     GetResourceFile resourse_file(GetResourceFile::ResourceFileType::MANIFEST);
-    auto downloaded_string =  downloadAttributeFile(resourse_file);
+    auto downloaded_string =  downloadAttributeFile(resourse_file, "/tmp/orch_files");
     EXPECT_TRUE(downloaded_string.ok());
     EXPECT_EQ(downloaded_string.unpack(), new_manifest_string);
 }

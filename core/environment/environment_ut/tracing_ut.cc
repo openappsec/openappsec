@@ -344,8 +344,6 @@ public:
 
 TEST_F(TracingCompRoutinesTest, 2SpansDifFlow)
 {
-    ON_CALL(mock_messaging, mockSendPersistentMessage(_, _, _, _, _, _, _)).WillByDefault(Return(string()));
-
     I_MainLoop::Routine routine = [&] () {
         i_env->startNewTrace(true, "a687b388-1108-4083-9852-07c33b1074e9");
         trace_id = i_env->getCurrentTrace();

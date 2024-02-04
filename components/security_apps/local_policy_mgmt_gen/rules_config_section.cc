@@ -174,8 +174,12 @@ RulesConfigRulebase::RulesConfigRulebase(
             context ="All()";
             return;
         }
-        string host_check = "Any(EqualHost(" + _url + ")),";
-        string uri_check = (_uri.empty() || _uri == "/" ) ? "" : ",BeginWithUri(" + _uri + ")";
+        bool uri_regex = false;
+        if (std::find(_uri.begin(), _uri.end(), '*') != _uri.end()) {
+            uri_regex =  true;
+        }
+        string host_check = (_url.empty() || _url == "/") ? "" : "Any(EqualHost(" + _url + ")),";
+        string uri_check = (_uri.empty() || _uri == "/" || uri_regex ) ? "" : ",BeginWithUri(" + _uri + ")";
         auto ports = _port.empty() ? vector<string>({"80", "443"}) : vector<string>({_port});
         context = "Any(";
         for (auto &port : ports) {

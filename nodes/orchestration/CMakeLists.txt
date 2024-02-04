@@ -33,6 +33,8 @@ target_link_libraries(
     -Wl,--end-group
 )
 
+add_dependencies(orchestration_comp ngen_core)
+
 install(TARGETS orchestration_comp DESTINATION bin)
 install(TARGETS orchestration_comp DESTINATION orchestration/bin)
 

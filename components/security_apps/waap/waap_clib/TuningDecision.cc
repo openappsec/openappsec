@@ -126,7 +126,7 @@ void TuningDecision::updateDecisions()
     }
     dbgTrace(D_WAAP) << "URI prefix: " << m_baseUri;
     bool isSuccessful = sendObject(tuningDecisionFiles,
-        I_Messaging::Method::GET,
+        HTTPMethod::GET,
         m_baseUri + "?list-type=2&prefix=" + m_remotePath);
 
     if (!isSuccessful || tuningDecisionFiles.getFilesList().empty())
@@ -136,7 +136,7 @@ void TuningDecision::updateDecisions()
     }
 
     if (!sendObject(tuningEvents,
-        I_Messaging::Method::GET,
+        HTTPMethod::GET,
         m_baseUri + tuningDecisionFiles.getFilesList()[0]))
     {
         return;

@@ -754,7 +754,13 @@ Debug::startStreams(
 void
 Debug::isCommunicationFlag(const DebugFlags &flag)
 {
-    is_communication |= (flag == D_HTTP_REQUEST || flag == D_COMMUNICATION);
+    is_communication |= (
+        flag == D_MESSAGING ||
+        flag == D_COMMUNICATION ||
+        flag == D_CONNECTION ||
+        flag == D_MESSAGING_BUFFER ||
+        flag == D_HTTP_REQUEST
+    );
 }
 
 Debug::DebugLevel Debug::lowest_global_level = default_level;

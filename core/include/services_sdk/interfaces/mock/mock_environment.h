@@ -29,6 +29,7 @@ public:
     MOCK_CONST_METHOD0(getCurrentTrace,             std::string());
     MOCK_CONST_METHOD0(getCurrentSpan,              std::string());
     MOCK_METHOD0(getCurrentHeaders,                 std::string());
+    MOCK_METHOD0(getCurrentHeadersMap,              std::map<std::string, std::string>());
     MOCK_METHOD2(startNewTrace,                     void(bool, const std::string &));
     MOCK_METHOD3(startNewSpan,                      void(Span::ContextType, const std::string &, const std::string &));
 

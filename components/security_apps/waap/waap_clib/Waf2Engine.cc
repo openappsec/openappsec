@@ -274,7 +274,6 @@ void Waf2Transaction::setCurrentAssetState(IWaapConfig* sitePolicy)
             "couldn't set waapAssetState for asset... using original waapAssetState";
         return;
     }
-
     m_pWaapAssetState = pCurrentWaapAssetState;
 }
 
@@ -314,18 +313,7 @@ Waf2Transaction::Waf2Transaction() :
     m_index(-1),
     m_triggerLog(),
     m_waf2TransactionFlags()
-{
-    is_hybrid_mode =
-        Singleton::exists<I_AgentDetails>() ?
-        Singleton::Consume<I_AgentDetails>::by<Waf2Transaction>()->getOrchestrationMode() == OrchestrationMode::HYBRID
-        : false;
-    if (is_hybrid_mode) {
-        max_grace_logs = getProfileAgentSettingWithDefault<int>(
-            10,
-            "rulebase.initialForcedSecurityLogsToLocalStorage.count"
-        );
-    }
-}
+{}
 
 Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState) :
     TableOpaqueSerialize<Waf2Transaction>(this),
@@ -356,18 +344,7 @@ Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState
     m_index(-1),
     m_triggerLog(),
     m_waf2TransactionFlags()
-{
-    is_hybrid_mode =
-        Singleton::exists<I_AgentDetails>() ?
-        Singleton::Consume<I_AgentDetails>::by<Waf2Transaction>()->getOrchestrationMode() == OrchestrationMode::HYBRID
-        : false;
-    if (is_hybrid_mode) {
-        max_grace_logs = getProfileAgentSettingWithDefault<int>(
-            10,
-            "rulebase.initialForcedSecurityLogsToLocalStorage.count"
-        );
-    }
-}
+{}
 
 Waf2Transaction::~Waf2Transaction() {
     dbgTrace(D_WAAP) << "Waf2Transaction::~Waf2Transaction: deleting m_requestBodyParser";
@@ -470,7 +447,6 @@ HeaderType Waf2Transaction::checkCleanHeader(const char* name, int name_len, con
                 }
             }
         }
-
     }
     return UNKNOWN_HEADER;
 }
@@ -539,6 +515,7 @@ bool Waf2Transaction::checkIsScanningRequired()
         m_siteConfig = &m_ngenAPIConfig;
         auto rateLimitingPolicy = m_siteConfig ? m_siteConfig->get_RateLimitingPolicy() : NULL;
         result |= m_siteConfig->get_WebAttackMitigation();
+
         if(rateLimitingPolicy) {
             result |= m_siteConfig->get_RateLimitingPolicy()->getRateLimitingEnforcementStatus();
         }
@@ -547,15 +524,14 @@ bool Waf2Transaction::checkIsScanningRequired()
         if (userLimitsPolicy) {
             result = true;
         }
-    }
-
-    if (WaapConfigApplication::getWaapSiteConfig(m_ngenSiteConfig)) {
+    } else if (WaapConfigApplication::getWaapSiteConfig(m_ngenSiteConfig)) {
         m_siteConfig = &m_ngenSiteConfig;
         auto rateLimitingPolicy = m_siteConfig ? m_siteConfig->get_RateLimitingPolicy() : NULL;
         auto errorLimitingPolicy = m_siteConfig ? m_siteConfig->get_ErrorLimitingPolicy() : NULL;
         auto csrfPolicy = m_siteConfig ? m_siteConfig->get_CsrfPolicy() : NULL;
         auto userLimitsPolicy = m_siteConfig ? m_siteConfig->get_UserLimitsPolicy() : nullptr;
         result |= m_siteConfig->get_WebAttackMitigation();
+
         if (rateLimitingPolicy) {
             result |= m_siteConfig->get_RateLimitingPolicy()->getRateLimitingEnforcementStatus();
         }
@@ -1592,7 +1568,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     }
 
     // Count of bytes available to send to the log
-    std::string requestBodyToLog = (send_extended_log || triggerLog->webBody) ?
+    std::string requestBodyToLog = (triggerLog->webBody) ?
         m_request_body : std::string();
     std::string responseBodyToLog = m_response_body;
     if (!shouldBlock && responseBodyToLog.empty())
@@ -1671,6 +1647,25 @@ Waf2Transaction::sendLog()
     const auto& autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
         m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
 
+    if (m_methodStr == "POST") {
+        telemetryData.method = POST;
+    } else if (m_methodStr == "GET") {
+        telemetryData.method = GET;
+    } else if (m_methodStr == "PUT") {
+        telemetryData.method = PUT;
+    } else if (m_methodStr == "PATCH") {
+        telemetryData.method = PATCH;
+    } else if (m_methodStr == "DELETE") {
+        telemetryData.method = DELETE;
+    } else {
+        telemetryData.method = OTHER;
+    }
+
+    if (m_responseStatus != 0) {
+        telemetryData.responseCode = m_responseStatus;
+    }
+
+
     telemetryData.source = getSourceIdentifier();
     telemetryData.assetName = m_siteConfig->get_AssetName();
     telemetryData.practiceId = m_siteConfig->get_PracticeId();
@@ -1739,17 +1734,7 @@ Waf2Transaction::sendLog()
         return;
     }
 
-    static int cur_grace_logs = 0;
-    bool grace_period = is_hybrid_mode && cur_grace_logs < max_grace_logs;
     bool send_extended_log = shouldSendExtendedLog(triggerLog);
-    if (grace_period) {
-        dbgTrace(D_WAAP)
-            << "Waf2Transaction::sendLog: current grace log index: "
-            << cur_grace_logs + 1
-            << " out of "
-            << max_grace_logs;
-    }
-
     shouldBlock |= m_waapDecision.getShouldBlockFromHighestPriorityDecision();
     // Do not send Detect log if trigger disallows it
     if (!send_extended_log && shouldBlock == false && !triggerLog->tpDetect &&
@@ -1787,13 +1772,6 @@ Waf2Transaction::sendLog()
     if (decision_type == DecisionType::NO_WAAP_DECISION) {
         if (send_extended_log || autonomousSecurityDecision->getOverridesLog()) {
             sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes);
-            if (grace_period) {
-                dbgTrace(D_WAAP)
-                    << "Waf2Transaction::sendLog: Sending log in grace period. Log "
-                    << ++cur_grace_logs
-                    << "out of "
-                    << max_grace_logs;
-            }
         }
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: decisions marked for block only";
         return;
@@ -1833,13 +1811,6 @@ Waf2Transaction::sendLog()
         appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType);
         waap_log << LogField("waapIncidentDetails", incidentDetails);
         waap_log << LogField("eventConfidence", "High");
-        if (grace_period) {
-            dbgTrace(D_WAAP)
-                << "Waf2Transaction::sendLog: Sending log in grace period. Log "
-                << ++cur_grace_logs
-                << "out of "
-                << max_grace_logs;
-        }
         break;
     }
     case OPEN_REDIRECT_DECISION:
@@ -1872,15 +1843,7 @@ Waf2Transaction::sendLog()
 
         appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType);
 
-
         waap_log << LogField("waapIncidentDetails", incidentDetails);
-        if (grace_period) {
-            dbgTrace(D_WAAP)
-                << "Waf2Transaction::sendLog: Sending log in grace period. Log "
-                << ++cur_grace_logs
-                << "out of "
-                << max_grace_logs;
-        }
         break;
     }
     case CSRF_DECISION: {
@@ -1896,13 +1859,6 @@ Waf2Transaction::sendLog()
         LogGen& waap_log = logGenWrapper.getLogGen();
         appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, "Cross Site Request Forgery");
         waap_log << LogField("waapIncidentDetails", "CSRF Attack discovered.");
-        if (grace_period) {
-            dbgTrace(D_WAAP)
-                << "Waf2Transaction::sendLog: Sending log in grace period. Log "
-                << ++cur_grace_logs
-                << "out of "
-                << max_grace_logs;
-        }
         break;
     }
     case AUTONOMOUS_SECURITY_DECISION: {
@@ -1911,13 +1867,6 @@ Waf2Transaction::sendLog()
             autonomousSecurityDecision->getThreatLevel() != ThreatLevel::NO_THREAT ||
             autonomousSecurityDecision->getOverridesLog()) {
             sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes);
-            if (grace_period) {
-                dbgTrace(D_WAAP)
-                    << "Waf2Transaction::sendLog: Sending log in grace period. Log "
-                    << ++cur_grace_logs
-                    << "out of "
-                    << max_grace_logs;
-            }
         }
         break;
     }
@@ -2204,7 +2153,7 @@ bool
 Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
     if (!exceptions.ok()) {
-        dbgInfo(D_WAAP_OVERRIDE) << "matching exceptions error:" << exceptions.getErr();
+        dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions error:" << exceptions.getErr();
         return false;
     }
     dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions";

@@ -261,13 +261,13 @@ TEST_F(Layer7AccessControlTest, ReturnAcceptVerdict)
 {
     stringstream ss_conf(prevent_settings + policy);
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss_conf);
-    
+
     string intelligence_response_ok = loadIntelligenceResponse("data/ok_intelligence_response.json");
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(intelligence_response_ok));
+        sendSyncMessage(_, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, intelligence_response_ok)));
 
     registerTransactionData();
     ctx.registerValue<string>(HttpTransactionData::source_identifier, "1.2.3.4");
@@ -312,8 +312,8 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictOnMaliciousReputation)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(malicious_intelligence_response));
+        sendSyncMessage(_, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, malicious_intelligence_response)));
 
     EXPECT_CALL(
         mock_ml,
@@ -358,8 +358,8 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictCacheBased)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(malicious_intelligence_response));
+        sendSyncMessage(_, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, malicious_intelligence_response)));
 
     EXPECT_CALL(
         mock_ml,
@@ -410,8 +410,8 @@ TEST_F(Layer7AccessControlTest, AcceptOnDetect)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(malicious_intelligence_response));
+        sendSyncMessage(_, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, malicious_intelligence_response)));
 
     EXPECT_CALL(
         mock_ml,
@@ -456,8 +456,8 @@ TEST_F(Layer7AccessControlTest, FallbackToSourceIPAndDrop)
 
     EXPECT_CALL(
         messaging_mock,
-        sendMessage(true, _, _, _, _, _, _, MessageTypeTag::INTELLIGENCE)
-    ).WillOnce(Return(malicious_intelligence_response));
+        sendSyncMessage(_, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, malicious_intelligence_response)));
 
     EXPECT_CALL(
         mock_ml,

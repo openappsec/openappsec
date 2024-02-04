@@ -215,13 +215,11 @@ private:
 
         LogRest signalHandler_client_rest(message_to_fog);
 
-        Singleton::Consume<I_Messaging>::by<SignalHandler>()->sendObjectWithPersistence(
-            signalHandler_client_rest,
-            I_Messaging::Method::POST,
+        Singleton::Consume<I_Messaging>::by<SignalHandler>()->sendAsyncMessage(
+            HTTPMethod::POST,
             fog_signalHandler_uri,
-            "",
-            true,
-            MessageTypeTag::REPORT
+            signalHandler_client_rest,
+            MessageCategory::LOG
         );
 
         dbgInfo(D_SIGNAL_HANDLER) << "Sent crash log to fog" << endl;

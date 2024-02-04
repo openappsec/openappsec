@@ -255,6 +255,8 @@ void WaapConfigBase::loadOpenRedirectPolicy(cereal::JSONInputArchive& ar)
 }
 
 
+
+
 const std::vector<std::string> &
 WaapConfigBase::get_applicationUrls() const
 {

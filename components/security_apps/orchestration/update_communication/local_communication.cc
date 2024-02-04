@@ -122,9 +122,14 @@ LocalCommunication::getUpdate(CheckUpdateRequest &request)
 }
 
 Maybe<string>
-LocalCommunication::downloadAttributeFile(const GetResourceFile &resource_file)
+LocalCommunication::downloadAttributeFile(const GetResourceFile &resource_file, const string &file_path)
 {
     auto file_name = resource_file.getFileName();
+    dbgTrace(D_ORCHESTRATOR)
+        << "Download "
+        << file_name
+        << " file in local communication, file path is redundant: "
+        << file_path;
 
     I_OrchestrationTools *orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalCommunication>();
     if (file_name.compare("policy") == 0) {

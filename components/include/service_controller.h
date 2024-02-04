@@ -24,6 +24,7 @@
 #include "i_shell_cmd.h"
 #include "i_rest_api.h"
 #include "i_tenant_manager.h"
+#include "i_messaging.h"
 #include "service_details.h"
 #include "i_mainloop.h"
 #include "component.h"

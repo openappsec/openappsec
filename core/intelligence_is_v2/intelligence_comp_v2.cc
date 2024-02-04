@@ -80,7 +80,7 @@ public:
     {
         stringstream res;
 
-        res << "{ \"apiVersion\": \"v2\", \"communicationType\": \"sync\", ";
+        res << "{ \"apiVersion\": \"v2\", \"communicationType\": \"sync\", \"callbackType\": \"invalidation\", ";
         auto details = Singleton::Consume<I_AgentDetails>::by<IntelligenceComponentV2>();
         res << "\"name\": \"" << details->getAgentId() << "\", ";
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
@@ -388,16 +388,14 @@ private:
             << "Invalidation value: "
             << (invalidation.genJson().ok() ? invalidation.genJson().unpack() : invalidation.genJson().getErr());
 
-        return message->sendNoReplyObject(
-            invalidation,
-            I_Messaging::Method::POST,
-            server,
-            *port,
-            Flags<MessageConnConfig>(),
+        MessageMetadata invalidation_req_md(server, *port);
+        invalidation_req_md.insertHeaders(getHTTPHeaders());
+        return message->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
             invalidation_uri,
-            getHTTPHeaders(),
-            nullptr,
-            MessageTypeTag::INTELLIGENCE
+            invalidation,
+            MessageCategory::INTELLIGENCE,
+            invalidation_req_md
         );
     }
 
@@ -409,27 +407,29 @@ private:
         dbgTrace(D_INTELLIGENCE)
             << "Invalidation value: "
             << (invalidation.genJson().ok() ? invalidation.genJson().unpack() : invalidation.genJson().getErr());
-
-        return message->sendNoReplyObject(
-            invalidation,
-            I_Messaging::Method::POST,
+        MessageMetadata global_invalidation_req_md;
+        global_invalidation_req_md.insertHeaders(getHTTPHeaders());
+        return message->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
             invalidation_uri,
-            getHTTPHeaders(),
-            nullptr,
-            true,
-            MessageTypeTag::INTELLIGENCE
+            invalidation,
+            MessageCategory::INTELLIGENCE,
+            global_invalidation_req_md
         );
     }
 
-    string
+    map<string, string>
     getHTTPHeaders() const
     {
+        map<string, string> headers;
         auto details = Singleton::Consume<I_AgentDetails>::by<IntelligenceComponentV2>();
         auto tenant = details->getTenantId();
         if (tenant == "") tenant = "Global";
+        headers["X-Tenant-Id"] = tenant;
         auto agent = details->getAgentId();
+        headers["X-Source-Id"] = agent;
 
-        return "X-Tenant-Id: " + tenant + "\r\nX-Source-Id: " + agent;
+        return headers;
     }
 
     bool
@@ -472,17 +472,13 @@ private:
         }
 
         dbgTrace(D_INTELLIGENCE) << "Invalidation value: " << registration.genJson();
-
-        return message->sendNoReplyObject(
-            registration,
-            I_Messaging::Method::POST,
-            server,
-            *port,
-            Flags<MessageConnConfig>(),
+        MessageMetadata registration_req_md(server, *port);
+        return message->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
             registration_uri,
-            "",
-            nullptr,
-            MessageTypeTag::INTELLIGENCE
+            registration,
+            MessageCategory::INTELLIGENCE,
+            registration_req_md
         );
     }
 
@@ -497,7 +493,7 @@ private:
     OfflineIntelligeceHandler    offline_intelligence;
     bool                         offline_mode_only = false;
     InvalidationCallBack         invalidations;
-    I_Messaging                  *message = nullptr;
+    I_Messaging               *message = nullptr;
     I_TimeGet                    *timer = nullptr;
     I_MainLoop                   *mainloop = nullptr;
 };

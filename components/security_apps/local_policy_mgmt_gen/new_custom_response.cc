@@ -21,7 +21,11 @@ using namespace std;
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
-static const set<string> valid_modes = {"block-page", "response-code-only", "redirect"};
+static const map<string, string> mode_to_appsec_mode_val = {
+    {"block-page", "Redirect"},
+    {"response-code-only", "Response Code"},
+    {"redirect", "Redirect"}
+};
 
 void
 NewAppSecCustomResponse::load(cereal::JSONInputArchive &archive_in)
@@ -32,13 +36,10 @@ NewAppSecCustomResponse::load(cereal::JSONInputArchive &archive_in)
     if (http_response_code < MIN_RESPONSE_CODE || http_response_code > MAX_RESPOMSE_CODE) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec web user response code invalid: " << http_response_code;
     }
-    parseAppsecJSONKey<string>("mode", mode, archive_in, "block-page");
-    if (valid_modes.count(mode) == 0) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec web user response mode invalid: " << mode;
-    }
+    parseMandatoryAppsecJSONKey<string>("mode", mode, archive_in, "response-code-only");
     parseAppsecJSONKey<string>("name", name, archive_in);
     parseAppsecJSONKey<string>("redirectUrl", redirect_url, archive_in);
-    parseAppsecJSONKey<bool>("redirectAddXEventId", redirect_add_x_event_id, archive_in);
+    parseAppsecJSONKey<bool>("redirectAddXEventId", redirect_add_x_event_id, archive_in, false);
     if (mode == "block-page") {
         parseAppsecJSONKey<string>(
             "messageBody",
@@ -52,6 +53,12 @@ NewAppSecCustomResponse::load(cereal::JSONInputArchive &archive_in)
             archive_in,
             "Attack blocked by web application protection"
         );
+    }
+    if (mode_to_appsec_mode_val.find(mode) == mode_to_appsec_mode_val.end()) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec web user response mode invalid: " << mode;
+        mode = "Response Code";
+    } else {
+        mode = mode_to_appsec_mode_val.at(mode);
     }
 }
 

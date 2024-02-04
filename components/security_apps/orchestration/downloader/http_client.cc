@@ -221,7 +221,7 @@ HTTPClient::curlGetFileOverHttp(const URLParser &url, ofstream &out_file, const 
             token,
             proxy_config->getProxyDomain(ProxyProtocol::HTTPS),
             proxy_config->getProxyPort(ProxyProtocol::HTTPS),
-            proxy_config->getProxyCredentials(ProxyProtocol::HTTPS));
+            proxy_config->getProxyAuthentication(ProxyProtocol::HTTPS));
 
         http_curl_client.setCurlOpts();
         bool connection_ok = http_curl_client.connect();
@@ -251,7 +251,7 @@ HTTPClient::getFileHttp(const URLParser &url, ofstream &out_file, const string &
             url,
             proxy_config->getProxyDomain(ProxyProtocol::HTTP),
             proxy_config->getProxyPort(ProxyProtocol::HTTP),
-            proxy_config->getProxyCredentials(ProxyProtocol::HTTP),
+            proxy_config->getProxyAuthentication(ProxyProtocol::HTTP),
             token
         );
         auto handle_connect_res = client_connection.handleConnect();

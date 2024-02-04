@@ -27,7 +27,7 @@ public:
     virtual std::string getAgentVersion() = 0;
     virtual bool isKernelVersion3OrHigher() = 0;
     virtual bool isGwNotVsx() = 0;
-    virtual bool isVersionEqualOrAboveR8110() = 0;
+    virtual bool isVersionAboveR8110() = 0;
     virtual bool isReverseProxy() = 0;
     virtual Maybe<std::tuple<std::string, std::string, std::string>> parseNginxMetadata() = 0;
     virtual std::map<std::string, std::string> getResolvedDetails() = 0;

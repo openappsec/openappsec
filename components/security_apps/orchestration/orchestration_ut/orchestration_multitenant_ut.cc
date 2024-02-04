@@ -110,7 +110,7 @@ public:
         EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillRepeatedly(Return(false));
-        EXPECT_CALL(mock_details_resolver, isVersionEqualOrAboveR8110()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isVersionAboveR8110()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillRepeatedly(Return(no_nginx));
         EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("1.1.1"));
 
@@ -250,7 +250,8 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));

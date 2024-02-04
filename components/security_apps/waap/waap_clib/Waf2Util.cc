@@ -42,7 +42,6 @@ USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_EVASIONS);
 USE_DEBUG_FLAG(D_WAAP_BASE64);
 USE_DEBUG_FLAG(D_WAAP_JSON);
-USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 
 #define MIN_HEX_LENGTH 6
 #define charToDigit(c) (c - '0')
@@ -2054,6 +2053,33 @@ string extractForwardedIp(const string &x_forwarded_hdr_val)
         }
     }
     return forward_ip;
+}
+
+
+bool isUuid(const string& str) {
+    if (str.length() != 36) {
+        return false;
+    }
+
+    static bool err;
+    static const SingleRegex uuid_detector_re(
+        "[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}",
+        err,
+        "uuid_detector"
+    );
+        // Check if the string matches the UUID format
+    return uuid_detector_re.hasMatch(str);
+/*
+    boost::cmatch what;
+    try {
+        static const boost::regex uuidRegex("[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}");
+        // Check if the string matches the UUID format
+        return boost::regex_match(str.c_str(), what, uuidRegex);
+    } catch (std::runtime_error &e) {
+        dbgError(D_WAAP) << e.what();
+    }
+    return false;
+*/
 }
 
 bool isIpAddress(const string &ip_address)

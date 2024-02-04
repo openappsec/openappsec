@@ -40,6 +40,10 @@ public:
         const std::string &service_name
     ) const = 0;
 
+    virtual Maybe<std::string> checkIfFileExists(const Package &package) const = 0;
+
+    virtual void removeDownloadFile(const std::string &file_name) const = 0;
+
     virtual std::string getProfileFromMap(const std::string &tenant_id) const = 0;
 };
 

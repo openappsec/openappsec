@@ -5,14 +5,15 @@
 #include "singleton.h"
 #include "mainloop.h"
 #include "encryptor.h"
-#include "proto_message_comp.h"
+#include "i_messaging.h"
+#include "messaging.h"
 #include "time_proxy.h"
 #include "environment.h"
 #include "config.h"
 #include "config_component.h"
 #include "agent_details.h"
-#include "messaging_buffer.h"
 #include "instance_awareness.h"
+#include "tenant_manager.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -20,6 +21,7 @@
 #include <sstream>
 #include "customized_cereal_map.h"
 #include "customized_cereal_multimap.h"
+#include "mock/mock_agent_details.h"
 
 using namespace std;
 
@@ -419,26 +421,53 @@ public:
 
 TEST(RestSchema, server_schema)
 {
-    AgentDetails agent_details;
+    Debug::setUnitTestFlag(D_MESSAGING, Debug::DebugLevel::TRACE);
+    ::Environment env;
     TimeProxyComponent time_proxy;
     MainloopComponent mainloop_comp;
-    ::Environment env;
     Encryptor encryptor;
-    MessagingBuffer messaging_buffer;
     InstanceAwareness instance_awareness;
     ShellCmd cmd;
-    ProtoMessageComp message;
+    I_Messaging *i_message;
+    Messaging message;
     RestServer server;
     ConfigComponent config;
+    TenantManager tenant_manager;
+    testing::NiceMock<MockAgentDetails> mock_agent_details;
+
 
     env.preload();
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Executable Name", "tmp_test_file");
+
+    config.preload();
+    config.init();
+    EXPECT_CALL(mock_agent_details, getAccessToken()).WillRepeatedly(testing::Return(string("accesstoken")));
+    EXPECT_CALL(mock_agent_details, getFogDomain()).WillRepeatedly(testing::Return(string("127.0.0.1")));
+    EXPECT_CALL(mock_agent_details, getFogPort()).WillRepeatedly(testing::Return(9777));
+
+    string config_json =
+        "{"
+        "   \"agentSettings\": [\n"
+        "   {\n"
+        "       \"id\": \"123\",\n"
+        "       \"key\": \"eventBuffer.maxSizeOnDiskInMB\",\n"
+        "       \"value\": \"1\"\n"
+        "   },\n"
+        "   {\n"
+        "       \"id\": \"123\",\n"
+        "       \"key\": \"eventBuffer.baseFolder\",\n"
+        "       \"value\": \"/test_data/\"\n"
+        "   }]\n"
+        "}";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss);
     setConfiguration(false, string("message"), string("HTTPS connection"));
     setConfiguration(uint(9777), string("connection"), string("Nano service API Port Primary"));
     setConfiguration(uint(9778), string("connection"), string("Nano service API Port Alternative"));
-    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Executable Name", "a/b/");
-
-    messaging_buffer.init();
     message.init();
+
+
     server.init();
     cmd.init();
     time_proxy.init();
@@ -467,14 +496,21 @@ TEST(RestSchema, server_schema)
         true
     );
 
-    auto i_message = Singleton::Consume<I_Messaging>::from(message);
+    i_message = Singleton::Consume<I_Messaging>::from(message);
     I_MainLoop::Routine action = [&stop, i_message] () {
         GetSchema schema;
-        Flags<MessageConnConfig> conn_flags;
-        conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-        EXPECT_TRUE(
-            i_message->sendObject(schema, I_Messaging::Method::GET, "127.0.0.1", 9777, conn_flags, "/add-int")
+        Flags<MessageConnectionConfig> conn_flags;
+        conn_flags.setFlag(MessageConnectionConfig::ONE_TIME_CONN);
+        MessageMetadata message_metadata("127.0.0.1", 9777, conn_flags);
+        message_metadata.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        auto is_message_sent = i_message->sendSyncMessage(
+            HTTPMethod::GET,
+            "/add-int",
+            schema,
+            MessageCategory::GENERIC,
+            message_metadata
         );
+        EXPECT_TRUE(is_message_sent.ok());
         vector<string> expected_req = { "must_int" };
         EXPECT_EQ(schema.required.get(), expected_req);
         ProperitiesSchema properties(schema.properties.get());
@@ -494,7 +530,6 @@ TEST(RestSchema, server_schema)
 TEST(RestSchema, short_connection_server)
 {
     TimeProxyComponent time_proxy;
-    ProtoMessageComp message;
     AgentDetails agent_details;
     MainloopComponent mainloop_comp;
     ::Environment env;

@@ -35,10 +35,11 @@ public:
     const std::string & getName() const { return name; }
     const std::string & getVersion() const { return version; }
     const std::string & getChecksum() const { return checksum_value; }
+    const std::string & getErrorMessage() const { return error_message; }
     const PackageType & getType() const { return package_type; }
     const std::vector<std::string> & getRequire() const { return require_packages; }
     const ChecksumTypes & getChecksumType() const { return checksum_type; }
-    const Maybe<void> & isInstallable() const { return installable; }
+    const bool & isInstallable() const { return installable; }
 
     bool operator==(const Package &other) const;
     bool operator!=(const Package &other) const;
@@ -60,7 +61,8 @@ private:
         return std::string();
     }
 
-    Maybe<void> installable = Maybe<void>();
+    bool installable = true;
+    std::string error_message;
     std::string mirror;
     std::string name;
     std::string version;

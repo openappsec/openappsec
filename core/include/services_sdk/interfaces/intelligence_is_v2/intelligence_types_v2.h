@@ -45,7 +45,8 @@ enum class Condition
     IN,
     NOT_IN,
     GREATER_THAN,
-    LESS_THAN
+    LESS_THAN,
+    RANGE
 };
 
 enum class CursorState {
@@ -60,7 +61,7 @@ enum class ResponseStatus
     IN_PROGRESS
 };
 
-enum class ObjectType { ASSET, ZONE, CONFIGURATION, COUNT };
+enum class ObjectType { ASSET, ZONE, CONFIGURATION, SHORTLIVED, COUNT};
 
 const std::string & convertConditionTypeToString(const Condition &condition_type);
 const std::string & convertOperationTypeToString(const Operator &operation_type);

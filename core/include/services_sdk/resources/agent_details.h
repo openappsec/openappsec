@@ -96,7 +96,7 @@ public:
     void setClusterId(const std::string &_cluster_id);
 
     Maybe<std::string> getProxyDomain(ProxyProtocol protocol)      const;
-    Maybe<std::string> getProxyCredentials(ProxyProtocol protocol) const;
+    Maybe<std::string> getProxyAuthentication(ProxyProtocol protocol) const;
     Maybe<uint16_t> getProxyPort(ProxyProtocol protocol)           const;
     bool getProxyExists(ProxyProtocol protocol)                    const;
     Maybe<std::string> getProxyAddress(ProxyProtocol protocol)     const;

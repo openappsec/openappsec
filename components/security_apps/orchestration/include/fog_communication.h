@@ -40,7 +40,10 @@ class FogCommunication : public FogAuthenticator
 public:
     void init() override;
     Maybe<void> getUpdate(CheckUpdateRequest &request) override;
-    Maybe<std::string> downloadAttributeFile(const GetResourceFile &resourse_file) override;
+    Maybe<std::string> downloadAttributeFile(
+        const GetResourceFile &resourse_file,
+        const std::string &file_path
+    ) override;
     Maybe<void> sendPolicyVersion(
         const std::string &policy_version,
         const std::string &policy_versions

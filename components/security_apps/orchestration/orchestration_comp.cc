@@ -29,7 +29,6 @@
 #include "service_controller.h"
 #include "manifest_controller.h"
 #include "url_parser.h"
-#include "i_messaging.h"
 #include "agent_details_report.h"
 #include "maybe_res.h"
 #include "customized_cereal_map.h"
@@ -227,7 +226,6 @@ private:
         Maybe<OrchestrationPolicy> maybe_policy = genError("Empty policy");
         string policy_version = "";
         auto orchestration_policy_file = getPolicyConfigPath("orchestration", Config::ConfigFileType::Policy);
-
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
         if (orchestration_tools->doesFileExist(orchestration_policy_file)) {
             maybe_policy = loadOrchestrationPolicy();
@@ -296,7 +294,10 @@ private:
             }
         }
 
-	if (declarative) Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
+        if (declarative) {
+            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
+        }
+
         return authentication_res;
     }
 
@@ -769,13 +770,11 @@ private:
 
                 LogRest policy_update_message_client_rest(policy_update_message);
 
-                Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendObjectWithPersistence(
-                    policy_update_message_client_rest,
-                    I_Messaging::Method::POST,
+                Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendAsyncMessage(
+                    HTTPMethod::POST,
                     "/api/v1/agents/events",
-                    "",
-                    true,
-                    MessageTypeTag::REPORT
+                    policy_update_message_client_rest,
+                    MessageCategory::LOG
                 );
             },
             "Send policy update report"
@@ -1471,8 +1470,8 @@ private:
             agent_data_report << AgentReportFieldWithLabel("isGwNotVsx", "true");
         }
 
-        if (i_details_resolver->isVersionEqualOrAboveR8110()) {
-            agent_data_report << AgentReportFieldWithLabel("isVersionEqualOrAboveR8110", "true");
+        if (i_details_resolver->isVersionAboveR8110()) {
+            agent_data_report << AgentReportFieldWithLabel("isVersionAboveR8110", "true");
         }
 
         auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>();
@@ -1528,25 +1527,45 @@ private:
         encryptToFile(data3, data_path + data6_file_name);
     }
 
+    int
+    calcSleepInterval(int sleep_interval)
+    {
+        failure_count++;
+        int failure_multiplier = 1;
+        if (failure_count >= 10) {
+            failure_multiplier = 10;
+        } else if (failure_count >= 3) {
+            failure_multiplier = 2;
+        }
+        return sleep_interval * failure_multiplier;
+    }
+
     void
     run()
     {
         int sleep_interval = policy.getErrorSleepInterval();
         Maybe<void> start_state(genError("Not running yet."));
         while (!(start_state = start()).ok()) {
-            dbgDebug(D_ORCHESTRATOR) << "Orchestration not started yet. Status: " << start_state.getErr();
             health_check_status_listener.setStatus(
                 HealthCheckStatus::UNHEALTHY,
                 OrchestrationStatusFieldType::REGISTRATION,
                 start_state.getErr()
             );
             sleep_interval = getConfigurationWithDefault<int>(
-                20,
+                30,
                 "orchestration",
                 "Default sleep interval"
             );
+            sleep_interval = calcSleepInterval(sleep_interval);
+            dbgWarning(D_ORCHESTRATOR)
+                << "Orchestration not started yet. Status: "
+                << start_state.getErr()
+                << " Next attempt to start the orchestration will be in: "
+                << sleep_interval
+                << " seconds";
             Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(seconds(sleep_interval));
         }
+        failure_count = 0;
 
         Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(chrono::seconds(1));
 
@@ -1589,24 +1608,14 @@ private:
 
         bool is_new_success = false;
         while (true) {
-            static int failure_count = 0;
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->startNewTrace(false);
             if (shouldReportAgentDetailsMetadata()) {
                 reportAgentDetailsMetaData();
             }
             auto check_update_result = checkUpdate();
             if (!check_update_result.ok()) {
-                failure_count++;
                 is_new_success = false;
-                sleep_interval = policy.getErrorSleepInterval();
-                int failure_multiplier = 1;
-                if (failure_count >= 10) {
-                    failure_count = 10;
-                    failure_multiplier = 10;
-                } else if (failure_count >= 3) {
-                    failure_multiplier = 2;
-                }
-                sleep_interval *= failure_multiplier;
+                sleep_interval = calcSleepInterval(policy.getErrorSleepInterval());
                 dbgWarning(D_ORCHESTRATOR)
                     << "Failed during check update from Fog. Error: "
                     << check_update_result.getErr()
@@ -1690,13 +1699,11 @@ private:
         if (email != "") registration_report << LogField("userDefinedId", email);
 
         LogRest registration_report_rest(registration_report);
-        Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendObjectWithPersistence(
-            registration_report_rest,
-            I_Messaging::Method::POST,
+        Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->sendAsyncMessage(
+            HTTPMethod::POST,
             "/api/v1/agents/events",
-            "",
-            true,
-            MessageTypeTag::REPORT
+            registration_report_rest,
+            MessageCategory::LOG
         );
     }
 
@@ -1764,6 +1771,7 @@ private:
     {
         auto agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>();
         return
+            agent_details->getAccessToken().empty() ||
             agent_details->getSSLFlag() != is_secure ||
             !agent_details->getFogPort().ok() || agent_details->getFogPort().unpack() != port ||
             !agent_details->getFogDomain().ok() || agent_details->getFogDomain().unpack() != fog;
@@ -1772,6 +1780,7 @@ private:
     bool
     updateFogAddress(const string &fog_addr)
     {
+        dbgFlow(D_ORCHESTRATOR) << "Setting a fog address: " << fog_addr;
         auto orch_status = Singleton::Consume<I_OrchestrationStatus>::by<OrchestrationComp>();
         auto agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>();
         auto orchestration_mode = getOrchestrationMode();
@@ -1783,7 +1792,7 @@ private:
             if (agent_details->writeAgentDetails()) {
                 dbgDebug(D_ORCHESTRATOR) << "Agent details was successfully saved";
             } else {
-                dbgWarning(D_COMMUNICATION) << "Failed to save agent details to a file";
+                dbgWarning(D_ORCHESTRATOR) << "Failed to save agent details to a file";
             }
             return true;
         }
@@ -1803,16 +1812,12 @@ private:
 
         auto message = Singleton::Consume<I_Messaging>::by<OrchestrationComp>();
 
-        if (!shouldReconnectToFog(
-            fog_domain,
-            fog_port,
-            encrypted_fog_connection
-        )) {
+        if (!shouldReconnectToFog(fog_domain, fog_port, encrypted_fog_connection)) {
             dbgDebug(D_ORCHESTRATOR) << "Skipping reconnection to the Fog - Fog details did not change";
             return true;
         }
 
-        if (message->setActiveFog(fog_domain, fog_port, encrypted_fog_connection, MessageTypeTag::GENERIC)) {
+        if (message->setFogConnection(fog_domain, fog_port, encrypted_fog_connection, MessageCategory::GENERIC)) {
             agent_details->setFogPort(fog_port);
             agent_details->setFogDomain(fog_domain);
             agent_details->setSSLFlag(encrypted_fog_connection);
@@ -1820,7 +1825,7 @@ private:
             if (agent_details->writeAgentDetails()) {
                 dbgDebug(D_ORCHESTRATOR) << "Agent details was successfully saved";
             } else {
-                dbgWarning(D_COMMUNICATION) << "Failed to save agent details to a file";
+                dbgWarning(D_ORCHESTRATOR) << "Failed to save agent details to a file";
             }
 
             auto update_communication = Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>();
@@ -1894,7 +1899,11 @@ private:
         auto result = i_shell_cmd->getExecOutput(openssl_dir_cmd);
         if (result.ok()) {
             string val_openssl_dir = result.unpack();
-            if (val_openssl_dir.empty()) return;
+            if (val_openssl_dir.empty()) {
+                dbgWarning(D_ORCHESTRATOR)
+                    << "Failed to load OpenSSL default certificate authority. Error: no OpenSSL directory found";
+                return;
+            }
             if (val_openssl_dir.back() == '\n') val_openssl_dir.pop_back();
             dbgTrace(D_ORCHESTRATOR)
                 << "Adding OpenSSL default directory to agent details. Directory: "
@@ -1953,6 +1962,7 @@ private:
     };
 
     const uint16_t default_fog_dport = 443;
+    int failure_count = 0;
     OrchestrationPolicy policy;
     HealthCheckStatusListener health_check_status_listener;
     HybridModeMetric hybrid_mode_metric;

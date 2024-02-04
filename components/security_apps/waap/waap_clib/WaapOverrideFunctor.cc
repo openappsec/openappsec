@@ -49,7 +49,7 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
     boost::cmatch what;
     try {
         if (tag == "url") {
-            return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getUriStr().c_str(), what, rx);
+            return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getUri().c_str(), what, rx);
         }
         else if (tag == "hostname") {
             return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getHost().c_str(), what, rx);

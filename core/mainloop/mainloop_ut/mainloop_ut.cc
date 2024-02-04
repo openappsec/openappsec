@@ -34,6 +34,9 @@ public:
 
         Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::DEBUG);
         Debug::setNewDefaultStdout(&capture_debug);
+
+        ON_CALL(mock_agent_details, getFogDomain()).WillByDefault(Return(Maybe<string>(string("fog_domain.com"))));
+        ON_CALL(mock_agent_details, getFogPort()).WillByDefault(Return(Maybe<uint16_t>(443)));
     }
 
     ~MainloopTest()
@@ -48,14 +51,14 @@ public:
     {
         EXPECT_CALL(
             mock_msg,
-            mockSendPersistentMessage(false, _, _, "/api/v1/agents/events", _, _, _)
+            sendAsyncMessage(_, "/api/v1/agents/events", _, _, _)
         ).Times(2).WillRepeatedly(
-            WithArgs<1, 6>(
+            WithArgs<2, 3>(
                 Invoke(
-                    [this](const string &req_body, MessageTypeTag tag)
+                    [this](const string &req_body, MessageCategory tag)
                     {
-                        EXPECT_TRUE(tag == MessageTypeTag::REPORT || tag == MessageTypeTag::METRIC);
-                        if (tag == MessageTypeTag::REPORT) startup_report_body = req_body;
+                        EXPECT_TRUE(tag == MessageCategory::LOG || tag == MessageCategory::METRIC);
+                        if (tag == MessageCategory::LOG) startup_report_body = req_body;
                         static bool should_throw = false;
                         if (should_throw) {
                             should_throw = false;
@@ -64,7 +67,7 @@ public:
                             should_throw = true;
                         }
 
-                        return string();
+                        return;
                     }
                 )
             )

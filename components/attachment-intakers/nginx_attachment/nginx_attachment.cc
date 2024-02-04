@@ -810,7 +810,7 @@ private:
     }
 
     FilterVerdict
-    handleStartTransaction(const Buffer &data)
+    handleStartTransaction(const Buffer &data, NginxAttachmentOpaque &opaque)
     {
         if (data.size() == 0) {
             dbgWarning(D_NGINX_ATTACHMENT)
@@ -819,7 +819,6 @@ private:
             return default_verdict;
         }
 
-        NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
         auto rule_by_ctx = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
         if (rule_by_ctx.ok()) {
             BasicRuleConfig rule = rule_by_ctx.unpack();
@@ -928,13 +927,12 @@ private:
     }
 
     void
-    setResponseContentEncoding(const CompressionType content_encoding)
+    setResponseContentEncoding(const CompressionType content_encoding, NginxAttachmentOpaque &opaque)
     {
         if (content_encoding == HttpTransactionData::default_response_content_encoding) {
             dbgDebug(D_NGINX_ATTACHMENT) << "New content encoding is the default. Skipping change of currect state";
             return;
         }
-        auto &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
         auto &transaction_data = opaque.getTransactionData();
 
         transaction_data.setResponseContentEncoding(content_encoding);
@@ -951,7 +949,7 @@ private:
     }
 
     FilterVerdict
-    handleResponseHeaders(const Buffer &headers_data)
+    handleResponseHeaders(const Buffer &headers_data, NginxAttachmentOpaque &opaque)
     {
         dbgFlow(D_NGINX_ATTACHMENT) << "Handling response headers";
         bool did_fail_on_purpose = false;
@@ -985,16 +983,15 @@ private:
         dbgTrace(D_NGINX_ATTACHMENT) << "Successfully parsed response's content encoding";
 
         auto parsed_content_encoding = parsed_content_encoding_maybe.unpack();
-        setResponseContentEncoding(parsed_content_encoding);
+        setResponseContentEncoding(parsed_content_encoding, opaque);
         updateMetrics(parsed_content_encoding);
 
         return handleMultiModifiableChunks(response_headers, false);
     }
 
     FilterVerdict
-    handleResponseBody(const Buffer &data)
+    handleResponseBody(const Buffer &data, NginxAttachmentOpaque &opaque)
     {
-        auto &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
         auto &transaction_data = opaque.getTransactionData();
 
         CompressionType content_encoding = transaction_data.getResponseContentEncoding();
@@ -1007,13 +1004,18 @@ private:
     }
 
     FilterVerdict
-    handleChunkedData(ChunkType chunk_type, const Buffer &data)
+    handleChunkedData(ChunkType chunk_type, const Buffer &data, NginxAttachmentOpaque &opaque)
     {
         ScopedContext event_type;
         event_type.registerValue<ngx_http_chunk_type_e>("HTTP Chunk type", chunk_type);
 
-        auto rule_by_ctx = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
-        if (!rule_by_ctx.ok() && chunk_type > ChunkType::REQUEST_HEADER) {
+        if (chunk_type > ChunkType::REQUEST_HEADER && opaque.getApplicationState() == ApplicationState::UNKOWN) {
+            auto rule_by_ctx = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+            ApplicationState state = rule_by_ctx.ok() ? ApplicationState::DEFINED : ApplicationState::UNDEFINED;
+            opaque.setApplicationState(state);
+        }
+
+        if (opaque.getApplicationState() == ApplicationState::UNDEFINED) {
             ngx_http_cp_verdict_e verdict_action =
                 getSettingWithDefault<bool>(false, "allowOnlyDefinedApplications") ? DROP : ACCEPT;
 
@@ -1026,7 +1028,7 @@ private:
 
         switch (chunk_type) {
             case ChunkType::REQUEST_START:
-                return handleStartTransaction(data);
+                return handleStartTransaction(data, opaque);
             case ChunkType::REQUEST_HEADER:
                 return handleMultiModifiableChunks(NginxParser::parseRequestHeaders(data), "request header", true);
             case ChunkType::REQUEST_BODY:
@@ -1043,10 +1045,10 @@ private:
                 return handleContentLength(data);
             }
             case ChunkType::RESPONSE_HEADER:
-                return handleResponseHeaders(data);
+                return handleResponseHeaders(data, opaque);
             case ChunkType::RESPONSE_BODY:
                 nginx_attachment_event.addResponseInspectionCounter(1);
-                return handleResponseBody(data);
+                return handleResponseBody(data, opaque);
             case ChunkType::RESPONSE_END:
                 return FilterVerdict(http_manager->inspectEndTransaction());
             case ChunkType::METRIC_DATA_FROM_PLUGIN:
@@ -1456,7 +1458,7 @@ private:
         NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
         opaque.activateContext();
 
-        FilterVerdict verdict = handleChunkedData(*chunked_data_type, inspection_data);
+        FilterVerdict verdict = handleChunkedData(*chunked_data_type, inspection_data, opaque);
 
         bool is_header =
             *chunked_data_type == ChunkType::REQUEST_HEADER  ||

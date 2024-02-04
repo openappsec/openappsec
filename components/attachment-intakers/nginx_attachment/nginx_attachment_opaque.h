@@ -26,6 +26,8 @@
 #include "i_environment.h"
 #include "buffer.h"
 
+enum class ApplicationState { UNDEFINED, DEFINED, UNKOWN };
+
 class NginxAttachmentOpaque : public TableOpaqueSerialize<NginxAttachmentOpaque>, Singleton::Consume<I_Environment>
 {
 public:
@@ -58,6 +60,7 @@ public:
 
     CompressionStream * getResponseCompressionStream() { return response_compression_stream; }
     HttpTransactionData & getTransactionData() { return transaction_data; }
+    const ApplicationState & getApplicationState() const { return application_state; }
 
 // LCOV_EXCL_START - sync functions, can only be tested once the sync module exists
     template <typename T> void serialize(T &, uint) {}
@@ -81,6 +84,7 @@ public:
         const std::string &data,
         EnvKeyAttr::LogSection log_ctx = EnvKeyAttr::LogSection::NONE
     );
+    void setApplicationState(const ApplicationState &app_state) { application_state = app_state; }
 
 private:
     CompressionStream       *response_compression_stream;
@@ -93,6 +97,7 @@ private:
     std::string             source_identifier;
     std::string             identifier_type;
     std::map<std::string, std::string> saved_data;
+    ApplicationState application_state = ApplicationState::UNKOWN;
 };
 
 #endif // __NGINX_ATTACHMENT_OPAQUE_H__

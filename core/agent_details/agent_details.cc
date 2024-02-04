@@ -27,6 +27,7 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
+
 const map<string, I_AgentDetails::MachineType> AgentDetails::machineTypes({
     { "Amazon EC2",            I_AgentDetails::MachineType::AWS },
     { "Xen",                   I_AgentDetails::MachineType::AWS },
@@ -466,6 +467,7 @@ AgentDetails::loadProxyType(const string &proxy_type)
 Maybe<void>
 AgentDetails::loadProxyType(ProxyProtocol protocol)
 {
+    dbgFlow(D_ORCHESTRATOR) << "Loading proxy type: " << convertProxyProtocolToString(protocol);
     dbgAssert(protocol == ProxyProtocol::HTTP || protocol == ProxyProtocol::HTTPS)
         << "Unsupported Proxy Protocol " << static_cast<int>(protocol);
 
@@ -537,7 +539,7 @@ AgentDetails::getProxyDomain(ProxyProtocol protocol) const
 }
 
 Maybe<string>
-AgentDetails::getProxyCredentials(ProxyProtocol protocol) const
+AgentDetails::getProxyAuthentication(ProxyProtocol protocol) const
 {
     if (proxies.find(protocol) == proxies.end()) {
         return genError("Proxy type is not loaded in map, type: " + convertProxyProtocolToString(protocol));

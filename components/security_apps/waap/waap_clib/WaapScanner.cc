@@ -181,7 +181,6 @@ int Waap::Scanner::onKv(const char* k, size_t k_len, const char* v, size_t v_len
     std::string key = std::string(k, k_len);
     std::string value = std::string(v, v_len);
 
-
     res.clear();
     dbgTrace(D_WAAP_SCANNER) << "Waap::Scanner::onKv: k='" << key <<
         "' v='" << value << "'";

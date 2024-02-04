@@ -375,12 +375,12 @@ ReputationFeaturesAgg::Impl::reportReputationFeatures()
         string uri = "/storage/waap/" + tenantId + "/reputation/" +
             to_string(chrono::duration_cast<chrono::hours>(currentTime).count()) +
             "/" + agentId + "/data.data";
-        msg->sendObjectWithPersistence(report,
-            I_Messaging::Method::PUT,
+
+        msg->sendAsyncMessage(
+            HTTPMethod::PUT,
             uri,
-            "",
-            true,
-            MessageTypeTag::WAAP_LEARNING);
+            report
+        );
     }
 }
 

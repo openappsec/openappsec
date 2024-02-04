@@ -36,15 +36,22 @@ public:
         std::map<std::string, Package> &corrupted_packages
     );
 
-    bool
+    Maybe<std::vector<Package>>
     buildInstallationQueue(
-        const Package &updated_package,
+        const std::map<std::string, Package> &current_packages,
+        const std::map<std::string, Package> &new_packages
+    );
+
+
+private:
+    Maybe<void>
+    buildRecInstallationQueue(
+        const Package &package,
         std::vector<Package> &installation_queue,
         const std::map<std::string, Package> &current_packages,
         const std::map<std::string, Package> &new_packages
     );
 
-private:
     std::string corrupted_file_path;
 };
 #endif // __MANIFEST_DIFF_CALCULATOR_H__

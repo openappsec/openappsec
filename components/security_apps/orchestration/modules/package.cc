@@ -59,9 +59,9 @@ Package::serialize(JSONOutputArchive & out_archive) const
         out_archive(make_nvp("require", require_packages));
     }
 
-    if (!installable.ok()) {
-        out_archive(make_nvp("status", installable.ok()));
-        out_archive(make_nvp("message", installable.getErr()));
+    out_archive(make_nvp("status", installable));
+    if (!installable) {
+        out_archive(make_nvp("message", error_message));
     }
 }
 
@@ -89,21 +89,18 @@ Package::serialize(JSONInputArchive & in_archive)
         in_archive.setNextName(nullptr);
     }
 
-    bool is_installable = true;
     try {
-        in_archive(make_nvp("status", is_installable));
+        in_archive(make_nvp("status", installable));
     } catch (...) {
         in_archive.setNextName(nullptr);
     }
 
-    if (!is_installable) {
-        string error_message;
+    if (!installable) {
         try {
             in_archive(make_nvp("message", error_message));
         } catch (...) {
             in_archive.setNextName(nullptr);
         }
-        installable = genError(error_message);
     }
 
     for (auto &character : name) {

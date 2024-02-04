@@ -17,12 +17,13 @@
 #include <algorithm>
 #include <sstream>
 #include <unistd.h>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 #include "config.h"
 #include "debug.h"
 #include "rest.h"
 #include "connkey.h"
-#include "i_messaging.h"
 #include "common.h"
 #include "log_generator.h"
 #include "i_orchestration_tools.h"
@@ -165,7 +166,7 @@ ServiceDetails::isServiceActive() const
     bool is_registered = status.find("not-registered") == string::npos && status.find("registered") != string::npos;
     bool is_running = status.find("not-running") == string::npos && status.find("running") != string::npos;
 
-    dbgInfo(D_ORCHESTRATOR)
+    dbgTrace(D_ORCHESTRATOR)
         << "Successfully set service status. Service name: "
         << service_name
         << ", Status: "
@@ -195,19 +196,25 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
     SendConfigurations new_config(configuration_id, policy_version);
 
     I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ServiceController>();
-    Flags<MessageConnConfig> conn_flags;
-    conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-    bool res = messaging->sendObject(
+
+    MessageMetadata new_config_req_md("127.0.0.1", service_port);
+    new_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+    new_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+    auto res = messaging->sendSyncMessage(
+        HTTPMethod::POST,
+        "/set-new-configuration",
         new_config,
-        I_Messaging::Method::POST,
-        "127.0.0.1",
-        service_port,
-        conn_flags,
-        "/set-new-configuration"
+        MessageCategory::GENERIC,
+        new_config_req_md
     );
 
-    if (!res) {
-        dbgDebug(D_ORCHESTRATOR) << "Service " << service_name << " didn't respond to new configuration request";
+    if (!res.ok()) {
+        auto err = res.getErr();
+        dbgDebug(D_ORCHESTRATOR)
+            << "Service: "
+            << service_name
+            << " didn't get new configuration. Error: "
+            << err.getBody();
         return ReconfStatus::FAILED;
     }
 
@@ -322,7 +329,7 @@ private:
     Maybe<void> updateServiceConfigurationFile(
         const string &configuration_name,
         const string &configuration_file_path,
-        const string &new_configuration_path);
+        const string &new_configuration);
 
     ReconfStatus getUpdatedReconfStatus();
     Maybe<ServiceDetails> getServiceDetails(const string &service_name);
@@ -694,6 +701,26 @@ ServiceController::Impl::createDirectoryForChildTenant(
     return true;
 }
 
+static string
+getChecksum(const string &file_path)
+{
+    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
+    Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
+        Package::ChecksumTypes::MD5,
+        file_path
+    );
+
+    if (file_checksum.ok()) return file_checksum.unpack();
+
+    string checksum = "unknown version";
+    try {
+        checksum = to_string(boost::uuids::random_generator()());
+    } catch (const boost::uuids::entropy_error &e) {
+        dbgDebug(D_ORCHESTRATOR) << "Couldn't generate random checksum";
+    }
+    return checksum;
+}
+
 Maybe<void>
 ServiceController::Impl::updateServiceConfiguration(
     const string &new_policy_path,
@@ -869,7 +896,8 @@ ServiceController::Impl::updateServiceConfiguration(
 
     // In a multi-tenant env, we send the signal to the services only on the last iteration
     if (!is_multi_tenant_env || last_iteration) {
-        auto is_send_signal_for_services = sendSignalForServices(nano_services_to_update, version_value);
+        auto is_send_signal_for_services =
+            sendSignalForServices(nano_services_to_update, version_value + ',' + getChecksum(new_policy_path));
         was_policy_updated &= is_send_signal_for_services.ok();
         if (!is_send_signal_for_services.ok()) send_signal_for_services_err = is_send_signal_for_services.getErr();
     }
@@ -1003,21 +1031,20 @@ Maybe<void>
 ServiceController::Impl::updateServiceConfigurationFile(
     const string &configuration_name,
     const string &configuration_file_path,
-    const string &new_configuration_path)
+    const string &new_configuration)
 {
-
     dbgFlow(D_ORCHESTRATOR) << "Updating configuration. Config Name: " << configuration_name;
 
     if (orchestration_tools->doesFileExist(configuration_file_path)) {
         Maybe<string> old_configuration = orchestration_tools->readFile(configuration_file_path);
         if (old_configuration.ok()) {
-            bool service_changed = old_configuration.unpack().compare(new_configuration_path) != 0;
+            bool service_changed = old_configuration.unpack().compare(new_configuration) != 0;
             if (service_changed == false) {
                 dbgDebug(D_ORCHESTRATOR) << "There is no update for policy file: " << configuration_file_path;
                 return Maybe<void>();
             }
             dbgDebug(D_ORCHESTRATOR)
-                << "Starting to update " << configuration_file_path << " to " << new_configuration_path;
+                << "Starting to update " << configuration_file_path << " to " << new_configuration;
             string old_configuration_backup_path = configuration_file_path + getConfigurationWithDefault<string>(
                 ".bk",
                 "orchestration",
@@ -1045,7 +1072,7 @@ ServiceController::Impl::updateServiceConfigurationFile(
         }
     }
 
-    if (orchestration_tools->writeFile(new_configuration_path, configuration_file_path)) {
+    if (orchestration_tools->writeFile(new_configuration, configuration_file_path)) {
         dbgDebug(D_ORCHESTRATOR) << "New policy file has been saved in: " << configuration_file_path;
     } else {
         dbgWarning(D_ORCHESTRATOR) << "Failed to save new policy file";

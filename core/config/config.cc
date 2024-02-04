@@ -199,27 +199,30 @@ private:
         config_updates.expected_configurations = move(files);
 
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ConfigComponent>();
-        ::Flags<MessageConnConfig> conn_flags;
-        conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-        bool is_success = messaging->sendObject(
+        MessageMetadata service_config_req_md("127.0.0.1", 7777);
+        service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+        service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        auto service_config_status = messaging->sendSyncMessage(
+            HTTPMethod::POST,
+            "/set-nano-service-config",
             config_updates,
-            I_Messaging::Method::POST,
-            "127.0.0.1",
-            7777, // primary Orchestrator's port
-            conn_flags,
-            "/set-nano-service-config"
+            MessageCategory::GENERIC,
+            service_config_req_md
         );
-        if (!is_success) {
-            is_success = messaging->sendObject(
+        if (!service_config_status.ok()) {
+            MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
+            secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+            secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            service_config_status = messaging->sendSyncMessage(
+                HTTPMethod::POST,
+                "/set-nano-service-config",
                 config_updates,
-                I_Messaging::Method::POST,
-                "127.0.0.1",
-                7778, // secondary Orchestrator's port
-                conn_flags,
-                "/set-nano-service-config"
+                MessageCategory::GENERIC,
+                secondary_port_req_md
             );
         }
-        return is_success && config_updates.status.get();
+
+        return service_config_status.ok() && config_updates.status.get();
     }
 
     void
@@ -244,24 +247,26 @@ private:
     sendOrchestatorReloadStatusMsg(const LoadNewConfigurationStatus &status)
     {
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ConfigComponent>();
-        ::Flags<MessageConnConfig> conn_flags;
-        conn_flags.setFlag(MessageConnConfig::ONE_TIME_CONN);
-        bool is_success = messaging->sendNoReplyObject(
+        MessageMetadata service_config_req_md("127.0.0.1", 7777);
+        service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+        service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        bool service_config_status = messaging->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
+            "/set-reconf-status",
             status,
-            I_Messaging::Method::POST,
-            "127.0.0.1",
-            7777, // primary Orchestrator's port
-            conn_flags,
-            "/set-reconf-status"
+            MessageCategory::GENERIC,
+            service_config_req_md
         );
-        if (!is_success) {
-            messaging->sendNoReplyObject(
+        if (!service_config_status) {
+            MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
+            secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+            secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            messaging->sendSyncMessageWithoutResponse(
+                HTTPMethod::POST,
+                "/set-reconf-status",
                 status,
-                I_Messaging::Method::POST,
-                "127.0.0.1",
-                7778, // secondary Orchestrator's port
-                conn_flags,
-                "/set-reconf-status"
+                MessageCategory::GENERIC,
+                secondary_port_req_md
             );
         }
     }

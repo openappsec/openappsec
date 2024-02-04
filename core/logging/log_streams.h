@@ -90,7 +90,6 @@ public:
     void sendLog(const LogBulkRest &logs, bool persistance_only) override;
 
 private:
-    std::string genHeader();
     I_Messaging *i_msg = nullptr;
 };
 

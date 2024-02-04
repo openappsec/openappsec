@@ -198,13 +198,11 @@ MainloopComponent::Impl::reportStartupEvent()
 
     LogRest startup_message_client_rest(startup_message);
 
-    Singleton::Consume<I_Messaging>::by<MainloopComponent>()->sendObjectWithPersistence(
-        startup_message_client_rest,
-        I_Messaging::Method::POST,
+    Singleton::Consume<I_Messaging>::by<MainloopComponent>()->sendAsyncMessage(
+        HTTPMethod::POST,
         fog_event_uri,
-        "",
-        true,
-        MessageTypeTag::REPORT
+        startup_message_client_rest,
+        MessageCategory::LOG
     );
 
     dbgInfo(D_MAINLOOP) << "Startup report was successfully sent to fog";

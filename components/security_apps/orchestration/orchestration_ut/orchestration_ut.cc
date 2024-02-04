@@ -85,15 +85,13 @@ public:
             mockRestCall(RestAction::SET, "agent-uninstall", _)
         ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandlerAgentUninstall)));
 
-        EXPECT_CALL(mock_message, mockSendPersistentMessage(
-            false,
-            _,
-            I_Messaging::Method::POST,
+        EXPECT_CALL(mock_message, sendAsyncMessage(
+            HTTPMethod::POST,
             "/api/v1/agents/events",
             _,
-            _,
-            MessageTypeTag::REPORT
-        )).WillRepeatedly(DoAll(SaveArg<1>(&message_body), Return(Maybe<string>(string("")))));
+            MessageCategory::LOG,
+            _
+        )).WillRepeatedly(SaveArg<2>(&message_body));
 
         doEncrypt();
         EXPECT_CALL(mock_orchestration_tools, loadTenantsFromDir(_)).Times(1);
@@ -137,7 +135,7 @@ public:
         EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillRepeatedly(Return(false));
-        EXPECT_CALL(mock_details_resolver, isVersionEqualOrAboveR8110()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isVersionAboveR8110()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillRepeatedly(Return(no_nginx));
         EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("1.1.1"));
         EXPECT_CALL(mock_details_resolver, getHostname()).WillRepeatedly(Return(string("hostname")));
@@ -505,7 +503,7 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
     EXPECT_CALL(mock_orchestration_tools, readFile(_)).WillOnce(Return(response));
     EXPECT_CALL(mock_service_controller, updateServiceConfiguration(_, _, _, _, _, _))
         .WillOnce(Return(Maybe<void>()));
-    EXPECT_CALL(mock_message, setActiveFog(_, _, _, _)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(_, _, _, _)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, _)).WillRepeatedly(Return(string()));
     EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
     EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string()));
@@ -630,7 +628,7 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdatRollback)
         .WillOnce(Return(policy_response));
     EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
         .WillOnce(Return(true));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC))
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
         .Times(2).WillRepeatedly(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion("")).Times(2);
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
@@ -699,7 +697,7 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdatRollback)
 
     EXPECT_CALL(
         mock_message,
-        setActiveFog(new_host_address, 443, true, MessageTypeTag::GENERIC)
+        setFogConnection(new_host_address, 443, true, MessageCategory::GENERIC)
     ).WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion("/test"));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
@@ -829,7 +827,8 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
         .WillOnce(Return(new_policy_response));
     EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
         .WillOnce(Return(true));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     expectDetailsResolver();
@@ -892,7 +891,7 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
 
     EXPECT_CALL(
         mock_message,
-        setActiveFog(new_host_address, 443, true, MessageTypeTag::GENERIC)
+        setFogConnection(new_host_address, 443, true, MessageCategory::GENERIC)
     ).WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion("/test"));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
@@ -989,7 +988,8 @@ TEST_F(OrchestrationTest, startOrchestrationPoliceWithFailures)
         updateServiceConfiguration(policy_file_path, setting_file_path, expected_data_types, "", "", _)
     ).Times(2).WillRepeatedly(Return(Maybe<void>()));
 
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     expectDetailsResolver();
@@ -1117,7 +1117,8 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
         mock_orchestration_tools,
         copyFile(orchestration_policy_file_path_bk, orchestration_policy_file_path)
     ).WillOnce(Return(true));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     expectDetailsResolver();
@@ -1245,7 +1246,8 @@ TEST_F(OrchestrationTest, manifestUpdate)
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     expectDetailsResolver();
@@ -1381,7 +1383,8 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
     EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_path, policy_file_path + ".last"))
         .WillOnce(Return(true));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
 
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
@@ -1527,7 +1530,8 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
 
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
@@ -1679,7 +1683,7 @@ TEST_P(OrchestrationTest, orchestrationFirstRun)
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path))
         .WillOnce(Return(response));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC)).
         Times(1).
         WillRepeatedly(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
@@ -1929,7 +1933,8 @@ TEST_F(OrchestrationTest, dataUpdate)
 
 
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
-    EXPECT_CALL(mock_message, setActiveFog(host_address, 443, true, MessageTypeTag::GENERIC)).WillOnce(Return(true));
+    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
+        .WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
