@@ -15,12 +15,12 @@
 #define __BULK_QUERY_RESPONSE_V2_H__
 
 #include <sstream>
-#include <vector>
 #include <string>
+#include <vector>
 
+#include "asset_reply.h"
 #include "cereal/archives/json.hpp"
 #include "cereal/types/vector.hpp"
-
 #include "debug.h"
 #include "intelligence_types_v2.h"
 
@@ -29,15 +29,7 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 class BulkResponseError
 {
 public:
-    void
-    serialize(cereal::JSONInputArchive &ar)
-    {
-        ar(
-            cereal::make_nvp("index", index),
-            cereal::make_nvp("statusCode", status_code),
-            cereal::make_nvp("message", message)
-        );
-    }
+    void serialize(cereal::JSONInputArchive &ar);
 
     unsigned int getIndex() const { return index; }
     int getStatusCode() const { return status_code; }
@@ -49,46 +41,69 @@ private:
     std::string message;
 };
 
-template <typename UserSerializableReplyAttr>
 class ValidBulkQueryResponse
+{
+public:
+    void serialize(cereal::JSONInputArchive &ar);
+
+    unsigned int getIndex() const { return index; }
+    const IntelligenceQueryResponse & getResponse() const { return response; }
+
+private:
+    unsigned int index;
+    IntelligenceQueryResponse response;
+};
+
+template <typename UserSerializableReplyAttr>
+class ValidBulkQueryResponseT : public ValidBulkQueryResponse
 {
 public:
     void
     serialize(cereal::JSONInputArchive &ar)
     {
+        try {
+            ValidBulkQueryResponse::serialize(ar);
+        } catch (...) {}
         ar(
-            cereal::make_nvp("index", index),
             cereal::make_nvp("response", response)
         );
     }
 
-    unsigned int getIndex() const { return index; }
-    const IntelligenceQueryResponse<UserSerializableReplyAttr> & getResponse() const { return response; }
+    const IntelligenceQueryResponseT<UserSerializableReplyAttr> & getResponse() const { return response; }
 
 private:
-    unsigned int index;
-    IntelligenceQueryResponse<UserSerializableReplyAttr> response;
+    IntelligenceQueryResponseT<UserSerializableReplyAttr> response;
+};
+
+class IntelligenceQueryBulkResponse
+{
+public:
+    void serialize(cereal::JSONInputArchive &ar);
+
+    const std::vector<ValidBulkQueryResponse> & getValid() { return valid_responses; }
+    const std::vector<BulkResponseError> & getErrors() { return errors; }
+private:
+    std::vector<ValidBulkQueryResponse> valid_responses;
+    std::vector<BulkResponseError> errors;
 };
 
 template <typename UserSerializableReplyAttr>
-class IntelligenceQueryBulkResponse
+class IntelligenceQueryBulkResponseT : public IntelligenceQueryBulkResponse
 {
 public:
     void
     serialize(cereal::JSONInputArchive &ar)
     {
-        ar(cereal::make_nvp("queriesResponse", valid_responses));
         try {
-            ar(cereal::make_nvp("errors", errors));
+            IntelligenceQueryBulkResponse::serialize(ar);
         } catch(...) {}
+        ar(cereal::make_nvp("queriesResponse", valid_responses));
     }
 
-    const std::vector<ValidBulkQueryResponse<UserSerializableReplyAttr>> & getValid() { return valid_responses; }
-    const std::vector<BulkResponseError> & getErrors() { return errors; }
+    const std::vector<ValidBulkQueryResponseT<UserSerializableReplyAttr>> & getValid() { return valid_responses; }
 
 private:
-    std::vector<ValidBulkQueryResponse<UserSerializableReplyAttr>> valid_responses;
-    std::vector<BulkResponseError> errors;
+    std::vector<ValidBulkQueryResponseT<UserSerializableReplyAttr>> valid_responses;
 };
 
 #endif // __BULK_QUERY_RESPONSE_V2_H__

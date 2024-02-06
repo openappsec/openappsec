@@ -15,6 +15,7 @@ target_link_libraries(cp-nano-http-transaction-handler
 	pcre2-posix
 	yajl_s
 	hiredis
+        maxminddb
 
 	-lshmem_ipc
 	-lnginx_attachment_util
@@ -38,6 +39,8 @@ target_link_libraries(cp-nano-http-transaction-handler
         ips
         keywords
 	l7_access_control
+	geo_location
+	http_geo_filter
 	-Wl,--end-group
 )
 

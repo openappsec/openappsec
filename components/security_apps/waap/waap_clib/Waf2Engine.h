@@ -345,6 +345,7 @@ private:
 
     // Cached pointer to const triggerLog (hence mutable)
     mutable std::shared_ptr<Waap::Trigger::Log> m_triggerLog;
+    bool is_schema_validation = false;
     Waf2TransactionFlags m_waf2TransactionFlags;
 };
 

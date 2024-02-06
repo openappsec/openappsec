@@ -22,8 +22,9 @@
 #include "yajl/yajl_parse.h"
 #include "singleton.h"
 #include "i_oa_schema_updater.h"
-
-#define FIRST_JSON_BUFFER_SIZE 4 // must buffer at least 4 first bytes to allow unicode autodetection (BOM).
+// must be at least 4 first bytes to allow unicode autodetection (BOM).
+// BUT... reduced to 1 in order to allow better work of schema validation and API discovery
+#define FIRST_JSON_BUFFER_SIZE 1
 
 typedef size_t yajl_size_t;
 

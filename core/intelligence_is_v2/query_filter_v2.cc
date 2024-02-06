@@ -146,18 +146,6 @@ SerializableQueryFilter::saveOperation(cereal::JSONOutputArchive &ar) const
     }
 }
 
-Maybe<SerializableQueryCondition::ValueVariant>
-SerializableQueryFilter::getConditionValueByKey(const string &key) const
-{
-    for (const SerializableQueryCondition &condition : condition_operands) {
-        if (condition.getConditionType() == Condition::EQUALS && condition.getKey() == key) {
-            return condition.getValue();
-        }
-    }
-
-    return genError("Key not found.");
-}
-
 bool
 SerializableQueryFilter::isOperatorComp(const Operator &oper) const
 {

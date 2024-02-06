@@ -11,17 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __QUERY_RESPONSE_V2_IMPL_H_
-#define __QUERY_RESPONSE_V2_IMPL_H_
+#ifndef __ASSET_REPLAY_IMPL_H__
+#define __ASSET_REPLAY_IMPL_H__
 
-#ifndef __QUERY_RESPONSE_V2_H__
-#error intelligence_query_response_v2_impl.h should not be included directly!
-#endif // __QUERY_RESPONSE_V2_H__
+#ifndef __ASSET_REPLY_H__
+#error asset_replay_impl.h should not be included directly!
+#endif // __ASSET_REPLY_H__
 
-#include "debug.h"
+#include "customized_cereal_multimap.h"
 #include "intelligence_types_v2.h"
-
-USE_DEBUG_FLAG(D_INTELLIGENCE);
 
 template <typename UserSerializableReplyAttr>
 void
@@ -84,87 +82,72 @@ AssetReply<UserSerializableReplyAttr>::getData() const
 }
 
 template <typename UserSerializableReplyAttr>
-void
-IntelligenceQueryResponse<UserSerializableReplyAttr>::loadFromJson(cereal::JSONInputArchive &ar)
+template <typename Values>
+bool
+AssetReply<UserSerializableReplyAttr>::matchValues(const Values &values) const
 {
-    std::string raw_data;
-    ar(
-        cereal::make_nvp("status", raw_data),
-        cereal::make_nvp("totalNumAssets", total_num_assets),
-        cereal::make_nvp("assetCollections", asset_collections)
-    );
-    status = Intelligence_IS_V2::convertStringToResponseStatus(raw_data);
+    for (const SerializableAssetSource<UserSerializableReplyAttr> &source : sources) {
+        if (source.template matchValues<Values>(values)) return true;
+    }
+    return false;
+}
 
-    try {
-        ar(cereal::make_nvp("cursor", cursor));
-    } catch(...) {}
+template <typename UserSerializableReplyAttr>
+UserSerializableReplyAttr
+AssetReply<UserSerializableReplyAttr>::mergeReplyData() const
+{
+    UserSerializableReplyAttr reply_data;
+    for (const SerializableAssetSource<UserSerializableReplyAttr> &source : sources) {
+        UserSerializableReplyAttr data_by_source = source.mergeReplyData();
+        reply_data.insert(data_by_source);
+    }
+    return reply_data;
+}
+
+template<typename UserSerializableReplyAttr>
+void
+IntelligenceQueryResponseT<UserSerializableReplyAttr>::loadFromJson(const std::string &json_response)
+{
+    std::stringstream in;
+    in.str(json_response);
+    cereal::JSONInputArchive in_ar(in);
+    serialize(in_ar);
 }
 
 template<typename UserSerializableReplyAttr>
 template<class Archive>
 void
-IntelligenceQueryResponse<UserSerializableReplyAttr>::serialize(Archive &ar)
+IntelligenceQueryResponseT<UserSerializableReplyAttr>::serialize(Archive &ar)
 {
-    std::string raw_data;
     ar(
-        cereal::make_nvp("status", raw_data),
-        cereal::make_nvp("totalNumAssets", total_num_assets),
         cereal::make_nvp("assetCollections", asset_collections)
     );
-    status = Intelligence_IS_V2::convertStringToResponseStatus(raw_data);
 
     try {
-        ar(cereal::make_nvp("cursor", cursor));
+        IntelligenceQueryResponse::serialize(ar);
     } catch(...) {}
 }
 
-template <typename UserSerializableReplyAttr>
-Intelligence_IS_V2::ResponseStatus
-IntelligenceQueryResponse<UserSerializableReplyAttr>::getResponseStatus() const
-{
-    return status;
-}
 
 template <typename UserSerializableReplyAttr>
 uint
-IntelligenceQueryResponse<UserSerializableReplyAttr>::getAmountOfAssets() const
-{
-    return total_num_assets;
-}
-
-template <typename UserSerializableReplyAttr>
-const std::string &
-IntelligenceQueryResponse<UserSerializableReplyAttr>::getCursor() const
-{
-    return cursor;
-}
-
-template <typename UserSerializableReplyAttr>
-int
-IntelligenceQueryResponse<UserSerializableReplyAttr>::getAssetCollectionsSize() const
+IntelligenceQueryResponseT<UserSerializableReplyAttr>::getAssetCollectionsSize() const
 {
     return asset_collections.size();
 }
 
 template <typename UserSerializableReplyAttr>
 const std::vector<AssetReply<UserSerializableReplyAttr>> &
-IntelligenceQueryResponse<UserSerializableReplyAttr>::getData() const
+IntelligenceQueryResponseT<UserSerializableReplyAttr>::getData() const
 {
     return asset_collections;
 }
 
 template <typename UserSerializableReplyAttr>
 bool
-IntelligenceQueryResponse<UserSerializableReplyAttr>::isValidInBulk() const
+IntelligenceQueryResponseT<UserSerializableReplyAttr>::isLast(uint asset_limit)
 {
-    return !partial_fail_in_bulk;
+    return getResponseStatus() ==  ResponseStatus::DONE && getAssetCollectionsSize() < asset_limit;
 }
 
-template <typename UserSerializableReplyAttr>
-void
-IntelligenceQueryResponse<UserSerializableReplyAttr>::setFailInBulk()
-{
-    partial_fail_in_bulk = true;
-}
-
-#endif // __QUERY_RESPONSE_V2_IMPL_H_
+#endif // __ASSET_REPLAY_IMPL_H__

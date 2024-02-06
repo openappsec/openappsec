@@ -864,10 +864,6 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
     return rc;
 }
 
-static bool err = false;
-static const SingleRegex json_detector_re("\\A[{\\[][^;\",}\\]]*[,:\"].+[\\s\\S]", err, "json_detector");
-static const SingleRegex json_quoteless_detector_re("^[{\\[][[,0-9nul\\]]+", err, "json_quoteless_detector");
-
 //intended to keep and process all types of leftovers detected as separate cases for parsing
 int
 DeepParser::createUrlParserForJson(
@@ -1103,11 +1099,7 @@ DeepParser::createInternalParser(
         } else {
             dbgTrace(D_WAAP_DEEP_PARSER) << "attempt to find JSON by '{' or '['";
             bool percent_encoded_doublequote_detected = cur_val.find("%22") != std::string::npos;
-            if (json_detector_re.hasMatch(cur_val)
-                && (valueStats.hasDoubleQuote
-                    || json_quoteless_detector_re.hasMatch(cur_val)
-                    || percent_encoded_doublequote_detected)) {
-                // JSON value detected
+            if (Waap::Util::isValidJson(cur_val)) {
                 if (percent_encoded_doublequote_detected && !valueStats.hasDoubleQuote) {
                     // We have JSOn but it %-encoded, first start percent decoding for it. Very narrow case
                     dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a JSON file from percent decoding";

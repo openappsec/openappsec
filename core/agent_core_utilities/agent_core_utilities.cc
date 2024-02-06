@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <dirent.h>
+#include <fstream>
 #include <sstream>
 #include <algorithm>
 
@@ -242,6 +243,22 @@ deleteDirectory(const string &path, bool delete_content)
     res &= (rmdir(path.c_str()) == 0);
     dbgTrace(D_INFRA_UTILS) << "Finished attempt to delete directory. Res: " << (res ? "Success" : "Error");
     return res;
+}
+
+bool
+touchFile(const string &path)
+{
+    dbgFlow(D_INFRA_UTILS) << "Trying to touch file, path: " << path;
+
+    ofstream t_file(path);
+    if (!t_file.is_open()) {
+        dbgDebug(D_INFRA_UTILS) << "Failed to touch file. Path: " << path;
+        return false;
+    }
+
+    t_file.close();
+    dbgTrace(D_INFRA_UTILS) << "Successfully touched file, path: " << path;
+    return true;
 }
 
 string

@@ -312,6 +312,7 @@ Waf2Transaction::Waf2Transaction() :
     m_responseInjectReasons(),
     m_index(-1),
     m_triggerLog(),
+    is_schema_validation(false),
     m_waf2TransactionFlags()
 {}
 
@@ -343,6 +344,7 @@ Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState
     m_responseInjectReasons(),
     m_index(-1),
     m_triggerLog(),
+    is_schema_validation(false),
     m_waf2TransactionFlags()
 {}
 
@@ -515,7 +517,6 @@ bool Waf2Transaction::checkIsScanningRequired()
         m_siteConfig = &m_ngenAPIConfig;
         auto rateLimitingPolicy = m_siteConfig ? m_siteConfig->get_RateLimitingPolicy() : NULL;
         result |= m_siteConfig->get_WebAttackMitigation();
-
         if(rateLimitingPolicy) {
             result |= m_siteConfig->get_RateLimitingPolicy()->getRateLimitingEnforcementStatus();
         }

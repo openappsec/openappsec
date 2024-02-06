@@ -59,7 +59,6 @@ public:
 
     Condition getConditionType() const { return condition_type; }
     const std::string & getKey() const { return key; }
-    const ValueVariant & getValue() const { return value; }
 
 private:
     Condition condition_type = Condition::EQUALS;
@@ -84,8 +83,6 @@ public:
     Operator getOperator() const { return operator_type; }
     const std::vector<SerializableQueryCondition> & getConditionOperands() const { return condition_operands; }
     const std::vector<SerializableQueryFilter> & getQueriesOperands() const { return queries_operands; }
-
-    Maybe<SerializableQueryCondition::ValueVariant> getConditionValueByKey(const std::string &key) const;
 
     bool empty() const { return condition_operands.empty() && queries_operands.empty(); }
 

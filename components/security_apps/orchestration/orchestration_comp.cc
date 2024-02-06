@@ -41,6 +41,7 @@
 #include "env_details.h"
 #include "hybrid_communication.h"
 #include "agent_core_utilities.h"
+#include "fog_communication.h"
 
 using namespace std;
 using namespace chrono;
@@ -190,7 +191,8 @@ public:
         );
 
         auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<OrchestrationComp>();
-        orchestration_tools->getClusterId();
+
+        if (getAttribute("no-setting", "IGNORE_CLUSTER_ID") != "TRUE") orchestration_tools->getClusterId();
 
         hybrid_mode_metric.init(
             "Watchdog Metrics",
@@ -1483,6 +1485,8 @@ private:
         } else {
             agent_data_report << AgentReportFieldWithLabel("managedMode", "management");
         }
+
+        agent_data_report << AgentReportFieldWithLabel("userEdition", FogCommunication::getUserEdition());
 
 #if defined(gaia) || defined(smb)
         if (i_details_resolver->compareCheckpointVersion(8100, greater_equal<int>())) {

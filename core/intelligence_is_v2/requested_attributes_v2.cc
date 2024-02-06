@@ -54,7 +54,7 @@ SerializableAttributesMap::getAttributeByKey(const string &key) const
 }
 
 bool
-SerializableAttributesMap::checkMinConfidence(uint upper_confidence_limit)
+SerializableAttributesMap::checkMinConfidence(uint upper_confidence_limit) const
 {
     for (auto const &attribute : requested_attributes) {
         if (attribute.second == 0 || attribute.second > upper_confidence_limit) return false;

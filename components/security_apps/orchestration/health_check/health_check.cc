@@ -18,6 +18,7 @@
 #include <sys/socket.h>
 #include <unordered_map>
 
+#include "reverse_proxy_defaults.h"
 #include "config.h"
 #include "log_generator.h"
 #include "health_check_manager.h"
@@ -28,6 +29,8 @@ using namespace ReportIS;
 
 USE_DEBUG_FLAG(D_HEALTH_CHECK);
 
+static const std::string all_services_running = "/tmp/wd.all_running";
+
 class HealthChecker::Impl
 {
 public:
@@ -36,6 +39,7 @@ public:
     {
         i_mainloop = Singleton::Consume<I_MainLoop>::by<HealthChecker>();
         i_socket = Singleton::Consume<I_Socket>::by<HealthChecker>();
+        i_orchestration_status = Singleton::Consume<I_OrchestrationStatus>::by<HealthChecker>();
         initConfig();
         initServerSocket();
 
@@ -255,35 +259,33 @@ private:
     {
         if (!getenv("DOCKER_RPM_ENABLED")) return HealthCheckStatus::IGNORED;
 
-        static const string standalone_cmd = "/usr/sbin/cpnano -s --docker-rpm; echo $?";
-        static int timeout_tolerance = 1;
-        static HealthCheckStatus health_status = HealthCheckStatus::HEALTHY;
-
-        dbgTrace(D_HEALTH_CHECK) << "Checking the standalone docker health status with command: " << standalone_cmd;
-
-        auto maybe_result = Singleton::Consume<I_ShellCmd>::by<HealthChecker>()->getExecOutput(standalone_cmd, 5000);
-        if (!maybe_result.ok()) {
-            if (maybe_result.getErr().find("Reached timeout") != string::npos) {
-                dbgWarning(D_HEALTH_CHECK)
-                    << "Reached timeout while querying standalone health status, attempt number: "
-                    << timeout_tolerance;
-
-                return health_status == HealthCheckStatus::UNHEALTHY || timeout_tolerance++ > 3 ?
-                    HealthCheckStatus::UNHEALTHY :
-                    health_status;
-            }
-
-            dbgWarning(D_HEALTH_CHECK) << "Unable to get the standalone docker status. Returning unhealthy status.";
+        if (i_orchestration_status->getPolicyVersion().empty()) {
+            dbgTrace(D_HEALTH_CHECK) << "Policy version is empty, returning unhealthy status";
             return HealthCheckStatus::UNHEALTHY;
         }
-        dbgTrace(D_HEALTH_CHECK) << "Got response: " << maybe_result.unpack();
 
-        auto response = NGEN::Strings::removeTrailingWhitespaces(maybe_result.unpack());
+        if (!NGEN::Filesystem::exists(all_services_running)) {
+            dbgTrace(D_HEALTH_CHECK) << all_services_running << " does not exist, returning unhealthy status";
+            return HealthCheckStatus::UNHEALTHY;
+        }
 
-        if (response.back() == '1') return health_status = HealthCheckStatus::UNHEALTHY;
+        if (NGEN::Filesystem::exists(rpm_full_load_path)) {
+            dbgTrace(D_HEALTH_CHECK) << rpm_full_load_path << " exists, returning healthy status";
+            return HealthCheckStatus::HEALTHY;
+        }
 
-        timeout_tolerance = 1;
-        return health_status = (response.back() == '0') ? HealthCheckStatus::HEALTHY : HealthCheckStatus::DEGRADED;
+        if (NGEN::Filesystem::exists(rpm_partial_load_path)) {
+            dbgTrace(D_HEALTH_CHECK) << rpm_partial_load_path << " exists, returning degraded status";
+            return HealthCheckStatus::DEGRADED;
+        }
+
+        if (!NGEN::Filesystem::exists(first_rpm_policy_load_path)) {
+            dbgTrace(D_HEALTH_CHECK) << "Could not load latest RPM policy, returning degraded status";
+            return HealthCheckStatus::DEGRADED;
+        }
+
+        dbgTrace(D_HEALTH_CHECK) << "RPM is not loaded, returning unhealthy status";
+        return HealthCheckStatus::UNHEALTHY;
     }
 
     bool
@@ -390,7 +392,7 @@ private:
 
                     if (standalone_status == HealthCheckStatus::UNHEALTHY) {
                         dbgDebug(D_HEALTH_CHECK)
-                            << "Standalone status in unhealthy, returning the following response: "
+                            << "Standalone status is unhealthy, returning the following response: "
                             << failure_response;
                         i_socket->writeData(curr_client_socket, failure_response_buffer);
                         closeCurrentSocket(curr_client_socket, curr_routine_id);
@@ -439,6 +441,7 @@ private:
     I_MainLoop *i_mainloop                          = nullptr;
     I_Socket *i_socket                              = nullptr;
     I_Health_Check_Manager *i_health_check_manager  = nullptr;
+    I_OrchestrationStatus *i_orchestration_status  = nullptr;
 };
 
 HealthChecker::HealthChecker() : Component("HealthChecker"), pimpl(make_unique<Impl>()) {}

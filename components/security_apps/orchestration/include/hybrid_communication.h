@@ -56,7 +56,9 @@ public:
 
 private:
     Maybe<std::string> getNewVersion();
+    void doLocalFogOperations(const std::string &policy) const;
 
+    std::string tuning_host;
     I_DeclarativePolicy *i_declarative_policy = nullptr;
 };
 

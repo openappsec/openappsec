@@ -97,11 +97,11 @@ public:
     void setObjectType(const ObjectType &obj_type);
 
     void setAssetsLimit(uint _assets_limit);
-    bool checkMinConfidence(uint upper_confidence_limit);
+    bool checkMinConfidence(uint upper_confidence_limit) const;
 
     void activatePaging();
     bool isPagingActivated();
-    Maybe<CursorState> getCursorState();
+    Maybe<CursorState> getCursorState() const;
     bool isPagingFinished();
     void setCursor(CursorState state, const std::string &value);
     bool empty() const { return query.empty(); }
@@ -122,23 +122,6 @@ private:
     SerializableQueryTypes query_types;
     QueryRequest calcQueryRequestOperator(const QueryRequest &other_query, const Operator &operator_type);
     Maybe<std::string> convertObjectTypeToString() const;
-};
-
-class BulkQueryRequest
-{
-public:
-    BulkQueryRequest() {}
-
-    BulkQueryRequest(QueryRequest &request, int index);
-    
-    void saveToJson(cereal::JSONOutputArchive &ar) const;
-    void save(cereal::JSONOutputArchive &ar) const;
-
-    QueryRequest getQueryRequest() const;
-
-private:
-    QueryRequest request;
-    int index;
 };
 
 #endif // __QUERY_REQUEST_V2_H__

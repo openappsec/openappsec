@@ -11,25 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __QUERY_RESPONSE_V2_H__
-#define __QUERY_RESPONSE_V2_H__
+#ifndef __ASSET_REPLY_H__
+#define __ASSET_REPLY_H__
 
-#include <sstream>
-#include <vector>
 #include <map>
+#include <string>
+#include <vector>
 
-#include "cereal/archives/json.hpp"
-#include "cereal/types/vector.hpp"
-#include "cereal/types/map.hpp"
-
-#include "debug.h"
-#include "maybe_res.h"
-#include "customized_cereal_map.h"
-#include "customized_cereal_multimap.h"
+#include "asset_source.h"
+#include "query_request_v2.h"
 #include "intelligence_types_v2.h"
-#include "asset_source_v2.h"
-
-USE_DEBUG_FLAG(D_INTELLIGENCE);
+#include "maybe_res.h"
 
 template <typename UserSerializableReplyAttr>
 class AssetReply
@@ -55,26 +47,10 @@ public:
     const std::string & getAssetOrder() const { return asset_order; }
     const std::string & getAssetKind() const { return asset_kind; }
 
-    UserSerializableReplyAttr
-    mergeReplyData() const
-    {
-        UserSerializableReplyAttr reply_data;
-        for (const SerializableAssetSource<UserSerializableReplyAttr> &source : sources) {
-            UserSerializableReplyAttr data_by_source = source.mergeReplyData();
-            reply_data.insert(data_by_source);
-        }
-        return reply_data;
-    }
+    UserSerializableReplyAttr mergeReplyData() const;
 
     template <typename Values>
-    bool
-    matchValues(const Values &values) const
-    {
-        for (const SerializableAssetSource<UserSerializableReplyAttr> &source : sources) {
-            if (source.template matchValues<Values>(values)) return true;
-        }
-        return false;
-    }
+    bool matchValues(const Values &values) const;
 
 private:
     uint asset_schema_version = 0;
@@ -94,33 +70,48 @@ private:
     std::vector<SerializableAssetSource<UserSerializableReplyAttr>> sources;
 };
 
-template <typename UserSerializableReplyAttr>
 class IntelligenceQueryResponse
 {
 public:
     IntelligenceQueryResponse() {}
 
-    void loadFromJson(cereal::JSONInputArchive &ar);
+    void loadFromJson(const std::string &json_response);
 
     template<class Archive>
     void serialize(Archive &ar);
 
-    Intelligence_IS_V2::ResponseStatus getResponseStatus() const;
-    uint getAmountOfAssets() const;
-    const std::string & getCursor() const;
-    int getAssetCollectionsSize() const;
-    const std::vector<AssetReply<UserSerializableReplyAttr>> & getData() const;
-    bool isValidInBulk() const;
-    void setFailInBulk();
+    Intelligence_IS_V2::ResponseStatus getResponseStatus() const { return status; }
+    const std::string & getCursor() const { return cursor; }
+    uint getAmountOfAssets() const { return total_num_assets; }
+    bool isValidInBulk() const { return !partial_fail_in_bulk; }
+    void setFailInBulk() { partial_fail_in_bulk = true; }
 
 private:
     Intelligence_IS_V2::ResponseStatus status = Intelligence_IS_V2::ResponseStatus::IN_PROGRESS;
     uint total_num_assets = 0;
     std::string cursor = "";
-    std::vector<AssetReply<UserSerializableReplyAttr>> asset_collections;
     bool partial_fail_in_bulk = false;
 };
 
-#include "query_response_v2_impl.h"
+template <typename UserSerializableReplyAttr>
+class IntelligenceQueryResponseT : public IntelligenceQueryResponse
+{
+public:
+    void loadFromJson(const std::string &json_response);
 
-#endif // __QUERY_RESPONSE_V2_H__
+    template<class Archive>
+    void serialize(Archive &ar);
+
+    uint getAssetCollectionsSize() const;
+
+    bool isLast(uint asset_limit);
+
+    const std::vector<AssetReply<UserSerializableReplyAttr>> & getData() const;
+
+private:
+    std::vector<AssetReply<UserSerializableReplyAttr>> asset_collections;
+};
+
+#include "asset_replay_impl.h"
+
+#endif // __ASSET_REPLY_H__

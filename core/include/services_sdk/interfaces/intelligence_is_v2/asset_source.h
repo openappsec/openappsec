@@ -11,14 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __ASSET_SOURCE_V2_H__
-#define __ASSET_SOURCE_V2_H__
+#ifndef __ASSET_SOURCE_H__
+#define __ASSET_SOURCE_H__
 
-#include "debug.h"
-#include "intelligence_types_v2.h"
+#include <chrono>
+#include <string>
+#include <vector>
+
 #include "cereal/archives/json.hpp"
-#include "cereal/types/vector.hpp"
-#include "customized_cereal_map.h"
+#include "intelligence_types_v2.h"
 
 template <typename UserSerializableReplyAttr>
 class SerializableAssetSource
@@ -26,7 +27,26 @@ class SerializableAssetSource
 public:
     SerializableAssetSource() {}
 
-    void load(cereal::JSONInputArchive &ar);
+    void load(cereal::JSONInputArchive &ar)
+    {
+        uint raw_seconds;
+        ar(
+            cereal::make_nvp("tenantId", tenant_id),
+            cereal::make_nvp("sourceId", source_id),
+            cereal::make_nvp("assetId", asset_id),
+            cereal::make_nvp("ttl", raw_seconds),
+            cereal::make_nvp("expirationTime", expiration_time),
+            cereal::make_nvp("confidence", confidence)
+        );
+        ttl = std::chrono::seconds(raw_seconds);
+
+        UserSerializableReplyAttr raw_attribute;
+        try {
+            ar(cereal::make_nvp("attributes", raw_attribute));
+            attributes.clear();
+            attributes.push_back(raw_attribute);
+        } catch(const std::exception &e) {}
+    }
 
     const std::string & getTenantId() const { return tenant_id; }
     const std::string & getSourceId() const { return source_id; }
@@ -66,6 +86,4 @@ private:
     std::vector<UserSerializableReplyAttr> attributes;
 };
 
-#include "asset_source_v2_impl.h"
-
-#endif //__ASSET_SOURCE_V2_H__
+#endif // __ASSET_SOURCE_H__

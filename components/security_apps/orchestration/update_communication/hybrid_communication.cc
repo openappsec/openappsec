@@ -27,15 +27,19 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
-#define TUNING_HOST_ENV_NAME "TUNING_HOST"
-static const string defaultTuningHost = "appsec-tuning-svc";
+static const string agent_resource_api = "/api/v2/agents/resources";
 
 void
 HybridCommunication::init()
 {
+    dbgTrace(D_ORCHESTRATOR) << "Initializing the Hybrid Communication Component";
+
     FogAuthenticator::init();
     i_declarative_policy = Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>();
-    dbgTrace(D_ORCHESTRATOR) << "Initializing the Hybrid Communication Component";
+
+    auto env_tuning_host = getenv("TUNING_HOST");
+    tuning_host = env_tuning_host != nullptr ? env_tuning_host : "appsec-tuning-svc";
+
     if (getConfigurationFlag("otp") != "") {
         otp = getConfigurationFlag("otp");
     } else {
@@ -49,10 +53,9 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
     string manifest_checksum = "";
     dbgTrace(D_ORCHESTRATOR) << "Getting updates in Hybrid Communication";
     if (access_token.ok()) {
-        static const string check_update_str = "/api/v2/agents/resources";
         auto request_status = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->sendSyncMessage(
             HTTPMethod::POST,
-            check_update_str,
+            agent_resource_api,
             request
         );
 
@@ -78,45 +81,7 @@ HybridCommunication::getUpdate(CheckUpdateRequest &request)
 
     string policy_response = i_declarative_policy->getUpdate(request);
 
-    auto env = Singleton::Consume<I_EnvDetails>::by<HybridCommunication>()->getEnvType();
-    if (env == EnvType::K8S && !policy_response.empty()) {
-        dbgDebug(D_ORCHESTRATOR) << "Policy has changes, sending notification to tuning host";
-        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<HybridCommunication>();
-
-        auto get_tuning_host = []()
-            {
-                static string tuning_host;
-                if (tuning_host != "") return tuning_host;
-
-                char* tuning_host_env = getenv(TUNING_HOST_ENV_NAME);
-                if (tuning_host_env != NULL) {
-                    tuning_host = string(tuning_host_env);
-                    return tuning_host;
-                }
-                dbgWarning(D_ORCHESTRATOR) << "tuning host is not set. using default";
-                tuning_host = defaultTuningHost;
-
-                return tuning_host;
-            };
-
-        MessageMetadata update_policy_crd_md(get_tuning_host(), 80);
-        update_policy_crd_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
-        UpdatePolicyCrdObject policy_change_object(policy_response);
-
-        auto i_messaging = Singleton::Consume<I_Messaging>::by<HybridCommunication>();
-        bool tuning_req_status = i_messaging->sendSyncMessageWithoutResponse(
-            HTTPMethod::POST,
-            "/api/update-policy-crd",
-            policy_change_object,
-            MessageCategory::GENERIC,
-            update_policy_crd_md
-        );
-        if (!tuning_req_status) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to send tuning notification";
-        } else {
-            dbgDebug(D_ORCHESTRATOR) << "Successfully sent tuning policy update notification";
-        }
-    }
+    doLocalFogOperations(policy_response);
 
     request = CheckUpdateRequest(manifest_checksum, policy_response, "", "", "", "");
 
@@ -141,10 +106,9 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file,
 
         auto unpacked_access_token = access_token.unpack().getToken();
 
-        static const string file_attribute_str = "/api/v2/agents/resources/";
         auto attribute_file = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->downloadFile(
             resourse_file.getRequestMethod(),
-            file_attribute_str + resourse_file.getFileName(),
+            agent_resource_api + '/' + resourse_file.getFileName(),
             file_path
         );
         if (!attribute_file.ok()) {
@@ -163,4 +127,34 @@ HybridCommunication::sendPolicyVersion(const string &policy_version, const strin
     dbgFlow(D_ORCHESTRATOR);
     policy_version.empty();
     return Maybe<void>();
+}
+
+void
+HybridCommunication::doLocalFogOperations(const string &policy) const
+{
+    if (policy.empty()) return;
+    if (Singleton::Consume<I_EnvDetails>::by<HybridCommunication>()->getEnvType() != EnvType::K8S) return;
+
+    dbgDebug(D_ORCHESTRATOR) << "Policy has changes, sending notification to tuning host";
+
+    MessageMetadata update_policy_crd_md(tuning_host, 80);
+    const auto &tenant_id = Singleton::Consume<I_AgentDetails>::by<HybridCommunication>()->getTenantId();
+    update_policy_crd_md.insertHeader("X-Tenant-Id", tenant_id);
+
+    UpdatePolicyCrdObject policy_change_object(policy);
+    auto i_messaging = Singleton::Consume<I_Messaging>::by<HybridCommunication>();
+    bool tuning_req_status = i_messaging->sendSyncMessageWithoutResponse(
+        HTTPMethod::POST,
+        "/api/update-policy-crd",
+        policy_change_object,
+        MessageCategory::GENERIC,
+        update_policy_crd_md
+    );
+
+    if (!tuning_req_status) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to send tuning notification";
+    } else {
+        dbgDebug(D_ORCHESTRATOR) << "Successfully sent tuning policy update notification";
+    }
+
 }
