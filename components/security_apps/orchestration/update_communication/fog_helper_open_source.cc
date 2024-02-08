@@ -3,7 +3,7 @@
 #include <string>
 
 std::string
-FogAuthenticator::getUserEdition() const
+FogAuthenticator::getUserEdition()
 {
     return "community";
 }

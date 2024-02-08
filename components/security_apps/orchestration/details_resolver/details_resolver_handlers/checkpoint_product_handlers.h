@@ -69,19 +69,11 @@ checkIDP(shared_ptr<istream> file_stream)
 #if defined(gaia) || defined(smb)
 
 Maybe<string>
-checkIsCpviewRunning(const string &command_output)
+checkIsInstallHorizonTelemetrySucceeded(const string &command_output)
 {
-    if (command_output == "true" || command_output == "false") return command_output;
+    if (command_output == "" ) return string("false");
 
-    return genError("cpview is not running");
-}
-
-Maybe<string>
-checkIsCPotelcolGRET64(const string &command_output)
-{
-    if (command_output == "true" || command_output == "false") return command_output;
-
-    return genError("CPotelcol is not installed or its take is below T64");
+    return command_output;
 }
 
 Maybe<string>
@@ -103,6 +95,10 @@ checkCanUpdateSDWanData(const string &command_output)
 Maybe<string>
 getMgmtObjType(const string &command_output)
 {
+    if (getenv("WAAP_DIR")) {
+        return string("CloudGuard WAF Gateway");
+    }
+
     if (!command_output.empty()) {
         if (command_output[0] == '1') return string("management");
         if (command_output[0] == '0') return string("gateway");

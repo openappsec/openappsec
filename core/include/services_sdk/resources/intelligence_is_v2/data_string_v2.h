@@ -14,6 +14,9 @@
 #ifndef __DATA_STRING_V2_H__
 #define __DATA_STRING_V2_H__
 
+#include <string>
+#include "cereal/archives/json.hpp"
+
 class DataString
 {
 public:

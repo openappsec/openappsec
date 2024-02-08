@@ -19,7 +19,8 @@ USE_DEBUG_FLAG(D_WAAP_PARSER);
 
 // Max size for key and value that can be stored in memory (per thread)
 #define MAX_KEY_SIZE 64*1024
-#define MAX_VALUE_SIZE 64*1024
+#define MAX_VALUE_SIZE 16*1024
+#define MAX_PROCESSING_BUFFER_SIZE 64*1024
 
 BufferedReceiver::BufferedReceiver(IParserReceiver &receiver, size_t parser_depth) :
     m_receiver(receiver),
@@ -69,14 +70,14 @@ int BufferedReceiver::onValue(const char *v, size_t v_len)
         << m_parser_depth;
     while (v_len > 0) {
         // Move data from buffer v to accumulated m_value string in an attempt to fill m_value to its max size
-        size_t bytesToFill = std::min(v_len, MAX_VALUE_SIZE - m_value.size());
+        size_t bytesToFill = std::min(v_len, MAX_PROCESSING_BUFFER_SIZE - m_value.size());
         m_value += std::string(v, bytesToFill);
         // Update v and v_len (input buffer) to reflect that we already consumed part (or all) of it
         v += bytesToFill;
         v_len -= bytesToFill;
 
         // Only push full buffers to the m_receiver
-        if (m_value.size() == MAX_VALUE_SIZE) {
+        if (m_value.size() >= MAX_VALUE_SIZE) {
             // The first full-size buffer will be pushed with BUFFERED_RECEIVER_F_FIRST flag
             dbgTrace(D_WAAP_PARSER)
                 << " The first full-size buffer will be pushed with BUFFERED_RECEIVER_F_FIRST flag"

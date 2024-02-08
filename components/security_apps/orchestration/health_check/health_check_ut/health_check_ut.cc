@@ -7,6 +7,7 @@
 #include "mock/mock_socket_is.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_shell_cmd.h"
+#include "mock/mock_orchestration_status.h"
 #include "health_check_manager.h"
 
 #include "config.h"
@@ -65,6 +66,7 @@ public:
     AgentDetails                        agent_details;
     StrictMock<MockSocketIS>            mock_socket;
     NiceMock<MockShellCmd>              mock_shell_cmd;
+    NiceMock<MockOrchestrationStatus>   mock_orchestration_status;
     I_Socket::socketFd                  server_socket = -1;
     Context                             ctx;
     ConfigComponent                     config;
@@ -72,7 +74,6 @@ public:
     I_MainLoop::Routine                 connection_handler_routine;
     I_MainLoop::Routine                 client_connection_handler_routine;
     I_MainLoop::Routine                 handle_probe_routine;
-    //StrictMock<MockHealthCheckManager>  mock_health_check_manager;
     HealthCheckManager                  health_check_manager;
     I_Health_Check_Manager              *i_health_check_manager;
 };

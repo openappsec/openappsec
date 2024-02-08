@@ -106,12 +106,13 @@ Before compiling the services, you'll need to ensure the latest development vers
 * cURL
 * Redis
 * Hiredis
+* MaxmindDB
 
 An example of installing the packages on Alpine:
 
 ```bash
  $ apk update
- $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis
+ $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis libmaxminddb-dev
 ```
 
 ## Compiling and packaging the agent code

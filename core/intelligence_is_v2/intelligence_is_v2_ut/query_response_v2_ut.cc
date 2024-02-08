@@ -1,5 +1,3 @@
-#include "intelligence_is_v2/query_response_v2.h"
-#include "intelligence_is_v2/asset_source_v2.h"
 #include "intelligence_is_v2/intelligence_types_v2.h"
 #include "intelligence_is_v2/data_string_v2.h"
 
@@ -31,12 +29,12 @@ public:
         try{
             ReadAttribute<DataString>("color", data).serialize(ar);
         } catch (exception &e) {
-            dbgError(D_INTELLIGENCE) << "Requested attribute was not found: color";
+            dbgError(D_INTELLIGENCE) << "Requested attribute was not found: color. Error:" + string(e.what());
         }
         try {
             ReadAttribute<DataString>("user", data1).serialize(ar);
         } catch (const exception &e) {
-            dbgError(D_INTELLIGENCE) << "Requested attribute was not found: user";
+            dbgError(D_INTELLIGENCE) << "Requested attribute was not found: user. Error:" + string(e.what());
         }
     }
 
@@ -47,9 +45,6 @@ private:
 
 TEST(QueryResponseTestV2, ReadAttributeTest)
 {
-    StrictMock<MockMainLoop> mock_ml;
-    NiceMock<MockTimeGet> time_get;
-    IntelligenceComponentV2 new_intelligence;
     DataString data;
     ReadAttribute<DataString> obj("user", data);
 
@@ -70,9 +65,6 @@ TEST(QueryResponseTestV2, ReadAttributeTest)
 
 TEST(QueryResponseTestV2, stringData1Test)
 {
-    StrictMock<MockMainLoop> mock_ml;
-    NiceMock<MockTimeGet> time_get;
-    IntelligenceComponentV2 new_intelligence;
     DataString data;
     stringData1 obj;
     string data_str(
@@ -95,11 +87,9 @@ TEST(QueryResponseTestV2, stringData1Test)
 
 TEST(QueryResponseTestV2, QueryResponseTestV2)
 {
-    StrictMock<MockMainLoop> mock_ml;
-    NiceMock<MockTimeGet> time_get;
-    IntelligenceComponentV2 new_intelligence;
     DataString data;
-    IntelligenceQueryResponse<stringData1> obj;
+    IntelligenceQueryResponseT<stringData1> obj;
+    IntelligenceQueryResponse obj2;
     string data_str(
         "{\n"
         "  \"assetCollections\": [\n"
@@ -161,12 +151,14 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
 
     stringstream ss(data_str);
     {
-        cereal::JSONInputArchive ar(ss);
-        obj.loadFromJson(ar);
+        obj.loadFromJson(ss.str());
+        obj2.loadFromJson(ss.str());
     }
 
     EXPECT_EQ(obj.getAmountOfAssets(), 2);
+    EXPECT_EQ(obj2.getAmountOfAssets(), 2);
     EXPECT_EQ(obj.getResponseStatus(), ResponseStatus::DONE);
+    EXPECT_EQ(obj2.getResponseStatus(), ResponseStatus::DONE);
     EXPECT_EQ(obj.getData().begin()->getAssetSchemaVersion(), 1);
     EXPECT_EQ(obj.getData().begin()->getAssetType(), "workload-cloud-ip");
     EXPECT_EQ(obj.getData().begin()->getAssetTypeSchemaVersion(), 1);
@@ -227,11 +219,8 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
 
 TEST(QueryResponseTestV2, MainAttributesTestV2)
 {
-    StrictMock<MockMainLoop> mock_ml;
-    NiceMock<MockTimeGet> time_get;
-    IntelligenceComponentV2 new_intelligence;
     DataString data;
-    IntelligenceQueryResponse<stringData1> obj;
+    IntelligenceQueryResponseT<stringData1> obj;
     string string_attribute(
         "{\n"
         "  \"assetCollections\": [\n"
@@ -277,7 +266,7 @@ TEST(QueryResponseTestV2, MainAttributesTestV2)
     stringstream ss(string_attribute);
     {
         cereal::JSONInputArchive ar(ss);
-        obj.loadFromJson(ar);
+        obj.serialize(ar);
     }
 
     map<string, vector<string>> attributes_map = obj.getData().begin()->getMainAttributes();
@@ -331,7 +320,7 @@ TEST(QueryResponseTestV2, MainAttributesTestV2)
     stringstream ss2(many_strings_attribute);
     {
         cereal::JSONInputArchive ar(ss2);
-        obj.loadFromJson(ar);
+        obj.serialize(ar);
     }
 
     map<string, vector<string>> attributes_map2 = obj.getData().begin()->getMainAttributes();
@@ -390,7 +379,7 @@ TEST(QueryResponseTestV2, MainAttributesTestV2)
     stringstream ss3(strings_vector_attribute);
     {
         cereal::JSONInputArchive ar(ss3);
-        obj.loadFromJson(ar);
+        obj.serialize(ar);
     }
 
     map<string, vector<string>> attributes_map3 = obj.getData().begin()->getMainAttributes();
@@ -403,11 +392,8 @@ TEST(QueryResponseTestV2, MainAttributesTestV2)
 
 TEST(QueryResponseTestV2, IntelligenceFailTest)
 {
-    StrictMock<MockMainLoop> mock_ml;
-    NiceMock<MockTimeGet> time_get;
-    IntelligenceComponentV2 new_intelligence;
     DataString data;
-    IntelligenceQueryResponse<stringData1> obj;
+    IntelligenceQueryResponseT<stringData1> obj;
     string status_fail_data_str(
         "{\n"
         "  \"assetCollections\": [\n"
@@ -456,7 +442,7 @@ TEST(QueryResponseTestV2, IntelligenceFailTest)
     {
         cereal::JSONInputArchive ar(ss);
         try {
-            obj.loadFromJson(ar);
+            obj.serialize(ar);
         } catch (exception &e) {
             EXPECT_EQ(e.what(), error_str);
         }

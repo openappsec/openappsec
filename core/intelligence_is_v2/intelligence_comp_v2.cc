@@ -17,9 +17,10 @@
 
 #include "cache.h"
 #include "config.h"
-#include "table.h"
-#include "intelligence_is_v2/query_response_v2.h"
 #include "intelligence_invalidation.h"
+#include "intelligence_is_v2/intelligence_response.h"
+#include "intelligence_request.h"
+#include "intelligence_server.h"
 
 using namespace std;
 using namespace chrono;
@@ -221,50 +222,10 @@ class IntelligenceComponentV2::Impl
     Singleton::Provide<I_Intelligence_IS_V2>::From<IntelligenceComponentV2>
 {
 public:
-    class OfflineIntelligeceHandler
-    {
-    public:
-        void
-        init()
-        {
-            filesystem_prefix = getFilesystemPathConfig();
-            dbgTrace(D_INTELLIGENCE) << "OfflineIntelligeceHandler init. file systen prefix: " << filesystem_prefix;
-            offline_intelligence_path = getConfigurationWithDefault<string>(
-                filesystem_prefix + "/conf/offline/intelligence",
-                "intelligence",
-                "offline intelligence path"
-            );
-        }
-
-        Maybe<string>
-        getValueByIdentifier(const string &identifier) const
-        {
-            string asset_file_path = offline_intelligence_path + "/" + identifier;
-            ifstream asset_info(asset_file_path);
-            if (!asset_info.is_open()) {
-                return genError("Could not open file: " + asset_file_path);
-            }
-
-            stringstream info_txt;
-            info_txt << asset_info.rdbuf();
-            asset_info.close();
-            return info_txt.str();
-        }
-
-    private:
-        string filesystem_prefix = "";
-        string offline_intelligence_path = "";
-    };
 
     void
     init()
     {
-        offline_mode_only = getConfigurationWithDefault<bool>(false, "intelligence", "offline intelligence only");
-        registerConfigLoadCb([&]() {
-            offline_mode_only = getConfigurationWithDefault<bool>(false, "intelligence", "offline intelligence only");
-        });
-        offline_intelligence.init();
-
         message = Singleton::Consume<I_Messaging>::by<IntelligenceComponentV2>();
         timer = Singleton::Consume<I_TimeGet>::by<IntelligenceComponentV2>();
         mainloop = Singleton::Consume<I_MainLoop>::by<IntelligenceComponentV2>();
@@ -283,7 +244,6 @@ public:
     bool
     sendInvalidation(const Invalidation &invalidation) const override
     {
-        if (offline_mode_only) return false;
         return hasLocalIntelligence() ? sendLocalInvalidation(invalidation) : sendGlobalInvalidation(invalidation);
     }
 
@@ -301,48 +261,28 @@ public:
         invalidations.erase(id);
     }
 
-    I_Messaging *
-    getMessaging() const override
+    Maybe<Response>
+    getResponse(const vector<QueryRequest> &query_requests, bool is_pretty, bool is_bulk) const override
     {
-        return message != NULL ? message : Singleton::Consume<I_Messaging>::by<IntelligenceComponentV2>();
-    }
-
-    I_TimeGet *
-    getTimer() const override
-    {
-        return timer != NULL ? timer : Singleton::Consume<I_TimeGet>::by<IntelligenceComponentV2>();
-    }
-
-    I_MainLoop *
-    getMainloop() const override
-    {
-        return mainloop != NULL ? mainloop : Singleton::Consume<I_MainLoop>::by<IntelligenceComponentV2>();
-    }
-
-    Maybe<string>
-    getOfflineInfoString(const SerializableQueryFilter &query) const override
-    {
-        string ip_attr_key = "mainAttributes.ip";
-        auto valueVariant = query.getConditionValueByKey(ip_attr_key);
-
-        if (!valueVariant.ok()) {
-            return genError("could not find IP main attribute in the given query.");
-        }
-        const SerializableQueryCondition::ValueVariant& value = valueVariant.unpack();
-        if (const string* identifier_value = boost::get<string>(&value)) {
-            if (*identifier_value == "") {
-                return genError("Could not find IP main attribute in the given query.");
+        IntelligenceRequest intelligence_req(query_requests, is_pretty, is_bulk);
+        if (!intelligence_req.checkAssetsLimit().ok()) return intelligence_req.checkAssetsLimit().passErr();
+        if (!intelligence_req.checkMinConfidence().ok()) return intelligence_req.checkMinConfidence().passErr();
+        if (intelligence_req.isPagingActivated()) {
+            auto is_paging_finished = intelligence_req.isPagingFinished();
+            if (is_paging_finished.ok() && *is_paging_finished) {
+                return genError("Paging is activated and already finished. No need for more queries.");
             }
-            return offline_intelligence.getValueByIdentifier(*identifier_value);
         }
-
-        return genError("Value is not of type string.");
+        Sender intelligence_server(intelligence_req);
+        auto response = intelligence_server.sendIntelligenceRequest();
+        return response;
     }
 
-    bool
-    getIsOfflineOnly() const override
+    Maybe<Intelligence::Response>
+    getResponse(const QueryRequest &query_request, bool is_pretty) const override
     {
-        return offline_mode_only;
+        vector<QueryRequest> queries = {query_request};
+        return getResponse(queries, is_pretty, false);
     }
 
 private:
@@ -362,7 +302,7 @@ private:
     bool
     sendLocalInvalidationImpl(const Invalidation &invalidation) const
     {
-        auto server = getSetting<std::string>("intelligence", "local intelligence server ip");
+        auto server = getSetting<string>("intelligence", "local intelligence server ip");
         if (!server.ok()) {
             dbgWarning(D_INTELLIGENCE) << "Local intelligence server not configured";
             return false;
@@ -435,8 +375,6 @@ private:
     bool
     sendRegistration(const Invalidation &invalidation) const
     {
-        if (offline_mode_only) return false;
-
         InvalidationRegistration registration;
         registration.addInvalidation(invalidation);
 
@@ -446,7 +384,7 @@ private:
     bool
     sendLocalRegistrationImpl(const InvalidationRegistration::RestCall &registration) const
     {
-        auto server = getSetting<std::string>("intelligence", "local intelligence server ip");
+        auto server = getSetting<string>("intelligence", "local intelligence server ip");
         if (!server.ok()) {
             dbgWarning(D_INTELLIGENCE) << "Local intelligence server not configured";
             return false;
@@ -485,13 +423,11 @@ private:
     void
     sendReccurringInvalidationRegistration() const
     {
-        if (offline_mode_only || !hasLocalIntelligence() || invalidations.empty()) return;
+        if (!hasLocalIntelligence() || invalidations.empty()) return;
 
         sendLocalRegistrationImpl(invalidations.getRegistration());
     }
 
-    OfflineIntelligeceHandler    offline_intelligence;
-    bool                         offline_mode_only = false;
     InvalidationCallBack         invalidations;
     I_Messaging               *message = nullptr;
     I_TimeGet                    *timer = nullptr;
@@ -511,8 +447,6 @@ void IntelligenceComponentV2::init() { pimpl->init(); }
 void
 IntelligenceComponentV2::preload()
 {
-    registerExpectedConfiguration<string>("intelligence", "offline intelligence path");
-    registerExpectedConfiguration<bool>("intelligence", "offline intelligence only");
     registerExpectedConfiguration<uint>("intelligence", "maximum request overall time");
     registerExpectedConfiguration<uint>("intelligence", "maximum request lap time");
     registerExpectedSetting<string>("intelligence", "local intelligence server ip");

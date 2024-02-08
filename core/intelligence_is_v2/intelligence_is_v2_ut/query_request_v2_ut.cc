@@ -172,6 +172,15 @@ TEST(QueryRequestTestV2, AttributesTest)
     EXPECT_EQ(out.str(), output_json);
 }
 
+TEST(QueryRequestTestV2, AttributeConditionExceptionTest)
+{
+    try {
+        Intelligence_IS_V2::createAttributeString("jey", (Intelligence_IS_V2::AttributeKeyType)5);
+    } catch (const IntelligenceException &e) {
+        EXPECT_THAT(string(e.what()), HasSubstr("Received illegal Attribute Type."));
+    }
+}
+
 TEST(QueryRequestTestV2, AndQueryTest)
 {
     QueryRequest request1(Condition::EQUALS, "phase", "testing1", true);

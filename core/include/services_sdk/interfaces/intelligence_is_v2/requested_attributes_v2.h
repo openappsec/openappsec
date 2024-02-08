@@ -51,7 +51,7 @@ public:
     uint getSize() const { return requested_attributes.size(); }
     bool isRequestedAttributesMapEmpty() const { return requested_attributes.empty(); }
 
-    bool checkMinConfidence(uint upper_confidence_limit);
+    bool checkMinConfidence(uint upper_confidence_limit) const;
 
 private:
     std::unordered_map<std::string, uint> requested_attributes;

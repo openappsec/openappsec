@@ -1,15 +1,15 @@
 #include "intelligence_comp_v2.h"
 
-#include "intelligence_is_v2/intelligence_query_v2.h"
-#include "read_attribute_v2.h"
-#include "cptest.h"
-#include "singleton.h"
 #include "config.h"
 #include "config_component.h"
-#include "mock/mock_messaging.h"
+#include "cptest.h"
+#include "mock/mock_intelligence.h"
 #include "mock/mock_mainloop.h"
-#include "mock/mock_time_get.h"
+#include "mock/mock_messaging.h"
 #include "mock/mock_rest_api.h"
+#include "mock/mock_time_get.h"
+#include "read_attribute_v2.h"
+#include "singleton.h"
 
 using namespace std;
 using namespace testing;
@@ -49,9 +49,7 @@ public:
             mockRestCall(_, "new-invalidation/source/invalidation", _)
         ).WillRepeatedly(Return(true));
 
-        string offline_intel_path = cptestFnameInExeDir("offline_intelligence_files_v2");
-        setConfiguration<string>(offline_intel_path, string("intelligence"), string("offline intelligence path"));
-
+        conf.preload();
         intelligence.preload();
         intelligence.init();
     }
@@ -70,6 +68,31 @@ public:
     StrictMock<MockMessaging> messaging_mock;
     IntelligenceComponentV2 intelligence;
     I_MainLoop::Routine routine;
+};
+
+class IntelligenceComponentMockTest : public Test, Singleton::Consume<I_Intelligence_IS_V2>
+{
+public:
+    IntelligenceComponentMockTest()
+    {
+        debug_output.clear();
+        Debug::setNewDefaultStdout(&debug_output);
+        Debug::setUnitTestFlag(D_METRICS, Debug::DebugLevel::TRACE);
+        Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
+        setConfiguration<bool>(false, string("metric"), string("fogMetricSendEnable"));
+
+        conf.preload();
+    }
+
+    ~IntelligenceComponentMockTest()
+    {
+        Debug::setNewDefaultStdout(&cout);
+    }
+
+    ::Environment env;
+    ConfigComponent conf;
+    stringstream debug_output;
+    StrictMock<MockIntelligence> intelligence_mock;
 };
 
 class Profile
@@ -96,6 +119,252 @@ private:
     DataString user;
     DataString phase;
 };
+
+TEST_F(IntelligenceComponentMockTest, getResponseErrorTest)
+{
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true);
+
+    Maybe<Intelligence::Response> res_error = genError("Test error");
+    EXPECT_CALL(intelligence_mock, getResponse(_, _)
+    ).WillOnce(Return(res_error));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(request);
+    EXPECT_FALSE(maybe_ans.ok());
+}
+
+TEST_F(IntelligenceComponentMockTest, getResponseTest)
+{
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true);
+
+    string response_str(
+        "{\n"
+        "  \"assetCollections\": [\n"
+        "    {\n"
+        "      \"schemaVersion\": 1,\n"
+        "      \"assetType\": \"workload-cloud-fake-online-test\",\n"
+        "      \"assetTypeSchemaVersion\": 1,\n"
+        "      \"permissionType\": \"tenant\",\n"
+        "      \"permissionGroupId\": \"fake-online-test-group\",\n"
+        "      \"name\": \"fake-online-test-asset\",\n"
+        "      \"class\": \"workload\",\n"
+        "      \"category\": \"cloud\",\n"
+        "      \"family\": \"fake-online-test\",\n"
+        "      \"mainAttributes\": {\n"
+        "          \"ipv4Addresses\": \"1.1.1.1\",\n"
+        "          \"phase\": \"testing\"\n"
+        "      },\n"
+        "      \"sources\": [\n"
+        "        {\n"
+        "          \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+        "          \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "          \"ttl\": 120,\n"
+        "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "          \"confidence\": 500,\n"
+        "          \"attributes\": {\n"
+        "            \"phase\": \"testing\",\n"
+        "            \"user\": \"Omry\",\n"
+        "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "          }\n"
+        "        }\n"
+        "      ]\n"
+        "    }\n"
+        "  ],\n"
+        "  \"status\": \"done\",\n"
+        "  \"totalNumAssets\": 2,\n"
+        "  \"cursor\": \"start\"\n"
+        "}\n"
+    );
+
+    Intelligence::Response response(response_str, 1, false);
+
+    EXPECT_CALL(intelligence_mock, getResponse(_, _)
+    ).WillOnce(Return(response));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(request);
+    EXPECT_TRUE(maybe_ans.ok());
+    auto vec = maybe_ans.unpack();
+    EXPECT_EQ(vec.size(), 1u);
+    auto iter = vec.begin();
+    EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry");
+    EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing");
+}
+
+TEST_F(IntelligenceComponentMockTest, bulkOnlineIntelligenceMockTest)
+{
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentMockTest>();
+    vector<QueryRequest> requests;
+    requests.emplace_back(Condition::EQUALS, "category", "whatever", true);
+    requests.emplace_back(Condition::EQUALS, "category", "cloud", true);
+    requests.emplace_back(Condition::EQUALS, "category", "nothing", true);
+    requests.emplace_back(Condition::EQUALS, "category", "iot", true);
+
+    string response_str(
+        "{\n"
+        "  \"errors\": [\n"
+        "    {\n"
+        "      \"index\": 0,\n"
+        "      \"statusCode\": 400,\n"
+        "      \"message\": \"Bad request. Error: Invalid cursor\"\n"
+        "    },"
+        "    {\n"
+        "      \"index\": 2,\n"
+        "      \"statusCode\": 405,\n"
+        "      \"message\": \"Bad request. Error: Something else\"\n"
+        "    }"
+        "  ],\n" // errors
+        "  \"queriesResponse\": [\n"
+        "    {\n"
+        "      \"index\": 1,\n"
+        "      \"response\": {\n"
+        "        \"assetCollections\": [\n"
+        "          {\n"
+        "            \"schemaVersion\": 1,\n"
+        "            \"assetType\": \"workload-cloud-ip\",\n"
+        "            \"assetTypeSchemaVersion\": 1,\n"
+        "            \"permissionType\": \"tenant\",\n"
+        "            \"permissionGroupId\": \"some-group-id\",\n"
+        "            \"name\": \"[1.1.1.1]\",\n"
+        "            \"class\": \"workload\",\n"
+        "            \"category\": \"cloud\",\n"
+        "            \"family\": \"ip\",\n"
+        "            \"group\": \"\",\n"
+        "            \"order\": \"\",\n"
+        "            \"kind\": \"\",\n"
+        "            \"mainAttributes\": {\n"
+        "               \"ipv4Addresses\": [\n"
+        "                   \"1.1.1.1\",\n"
+        "                   \"2.2.2.2\"\n"
+        "               ],\n"
+        "               \"phase\": \"testing\"\n"
+        "            },\n"  // mainAttributes
+        "            \"sources\": [\n"
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "                 \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 500,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"red\",\n"
+        "                   \"user\": \"Omry\",\n"
+        "                   \"phase\": \"testing\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                 }\n"
+        "               },\n" // source 1
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229bb11\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7bbb11\",\n"
+        "                 \"assetId\": \"cb068860528cb6bfb000cc35e79f11aeefed2\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 600,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"white\",\n"
+        "                   \"user\": \"Max\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                  }\n"
+        "               }\n" // source 2
+        "            ]\n" // sources
+        "          }\n" // asset 1
+        "        ],\n" // asset collection
+        "        \"status\": \"done\",\n"
+        "        \"totalNumAssets\": 2,\n"
+        "        \"cursor\": \"start\"\n"
+        "      }\n" // response
+        "    },\n" // queryresponse 1
+        "    {\n"
+        "      \"index\": 3,\n"
+        "      \"response\": {\n"
+        "        \"assetCollections\": [\n"
+        "          {\n"
+        "            \"schemaVersion\": 1,\n"
+        "            \"assetType\": \"workload-cloud-ip\",\n"
+        "            \"assetTypeSchemaVersion\": 1,\n"
+        "            \"permissionType\": \"tenant\",\n"
+        "            \"permissionGroupId\": \"some-group-id\",\n"
+        "            \"name\": \"[2.2.2.2]\",\n"
+        "            \"class\": \"workload\",\n"
+        "            \"category\": \"iot\",\n"
+        "            \"family\": \"ip\",\n"
+        "            \"group\": \"\",\n"
+        "            \"order\": \"\",\n"
+        "            \"kind\": \"\",\n"
+        "            \"mainAttributes\": {\n"
+        "               \"ipv4Addresses\": [\n"
+        "                   \"1.1.1.1\",\n"
+        "                   \"2.2.2.2\"\n"
+        "               ],\n"
+        "               \"phase\": \"testing\"\n"
+        "            },\n"  // mainAttributes
+        "            \"sources\": [\n"
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "                 \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 500,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"red\",\n"
+        "                   \"user\": \"Omry2\",\n"
+        "                   \"phase\": \"testing2\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                 }\n"
+        "               },\n" // source 1
+        "               {\n"
+        "                 \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229bb11\",\n"
+        "                 \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7bbb11\",\n"
+        "                 \"assetId\": \"cb068860528cb6bfb000cc35e79f11aeefed2\",\n"
+        "                 \"ttl\": 120,\n"
+        "                 \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "                 \"confidence\": 600,\n"
+        "                 \"attributes\": {\n"
+        "                   \"color\": \"white\",\n"
+        "                   \"user\": \"Max\",\n"
+        "                   \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "                  }\n"
+        "               }\n" // source 2
+        "            ]\n" // sources
+        "          }\n" // asset 1
+        "        ],\n" // asset collection
+        "        \"status\": \"done\",\n"
+        "        \"totalNumAssets\": 2,\n"
+        "        \"cursor\": \"start\"\n"
+        "      }\n" // response
+        "    }\n" // queryresponse 1
+        "  ]\n" // queryresponses
+        "}\n"
+    );
+    Intelligence::Response response(response_str, 4, true);
+
+    EXPECT_CALL(intelligence_mock, getResponse(_, _, _)
+    ).WillOnce(Return(response));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(requests);
+    EXPECT_TRUE(maybe_ans.ok());
+    auto vec = maybe_ans.unpack();
+    EXPECT_EQ(vec.size(), 4u);
+    EXPECT_FALSE(vec[0].ok());
+    EXPECT_TRUE(vec[1].ok());
+    EXPECT_FALSE(vec[2].ok());
+    EXPECT_TRUE(vec[3].ok());
+
+    auto assets1_vec = vec[1].unpack();
+    EXPECT_EQ(assets1_vec.size(), 1u);
+    auto iter = assets1_vec.begin();
+    EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry");
+    EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing");
+
+    auto assets3_vec = vec[3].unpack();
+    EXPECT_EQ(assets1_vec.size(), 1u);
+    iter = assets3_vec.begin();
+    EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry2");
+    EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing2");
+}
 
 TEST_F(IntelligenceComponentTestV2, fakeOnlineIntelligenceTest)
 {
@@ -152,6 +421,75 @@ TEST_F(IntelligenceComponentTestV2, fakeOnlineIntelligenceTest)
     auto iter = vec.begin();
     EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry");
     EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing");
+}
+
+TEST_F(IntelligenceComponentTestV2, fakeLocalIntelligenceTest)
+{
+    stringstream configuration;
+    configuration << "{";
+    configuration << "  \"agentSettings\":[";
+    configuration << "    {\"key\":\"agent.config.useLocalIntelligence\",\"id\":\"id1\",\"value\":\"true\"}";
+    configuration << "  ],";
+    configuration << "  \"intelligence\":{";
+    configuration << "    \"local intelligence server ip\":\"127.0.0.1\",";
+    configuration << "    \"local intelligence server primary port\":9090";
+    configuration << "  }";
+    configuration << "}";
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
+
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true);
+
+
+    string response_str(
+    "{\n"
+    "  \"assetCollections\": [\n"
+    "    {\n"
+    "      \"schemaVersion\": 1,\n"
+    "      \"assetType\": \"workload-cloud-fake-online-test\",\n"
+    "      \"assetTypeSchemaVersion\": 1,\n"
+    "      \"permissionType\": \"tenant\",\n"
+    "      \"permissionGroupId\": \"fake-online-test-group\",\n"
+    "      \"name\": \"fake-online-test-asset\",\n"
+    "      \"class\": \"workload\",\n"
+    "      \"category\": \"cloud\",\n"
+    "      \"family\": \"fake-online-test\",\n"
+    "      \"mainAttributes\": {\n"
+    "          \"ipv4Addresses\": \"1.1.1.1\",\n"
+    "          \"phase\": \"testing\"\n"
+    "      },\n"
+    "      \"sources\": [\n"
+    "        {\n"
+    "          \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+    "          \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+    "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+    "          \"ttl\": 120,\n"
+    "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+    "          \"confidence\": 500,\n"
+    "          \"attributes\": {\n"
+    "            \"phase\": \"testing\",\n"
+    "            \"user\": \"Omry\",\n"
+    "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+    "          }\n"
+    "        }\n"
+    "      ]\n"
+    "    }\n"
+    "  ],\n"
+    "  \"status\": \"done\",\n"
+    "  \"totalNumAssets\": 2,\n"
+    "  \"cursor\": \"start\"\n"
+    "}\n"
+    );
+
+    MessageMetadata md;
+
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(DoAll(SaveArg<4>(&md), Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str))));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(request);
+    EXPECT_TRUE(maybe_ans.ok());
+
+    EXPECT_EQ(md.getHostName(), "127.0.0.1");
 }
 
 TEST_F(IntelligenceComponentTestV2, multiAssetsIntelligenceTest)
@@ -626,6 +964,7 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_done_response_str)));
 
     auto maybe_ans3 = intell->queryIntelligence<Profile>(request);
+    if (!maybe_ans3.ok()) cout << maybe_ans3.getErr() + "\n";
     EXPECT_TRUE(maybe_ans3.ok());
     auto vec3 = maybe_ans3.unpack();
     EXPECT_EQ(vec3.size(), 1);
@@ -634,54 +973,6 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     vector<AssetReply<Profile>>::iterator assets_iter = vec3.begin();
     vector<SerializableAssetSource<Profile>>::const_iterator sources_iter = assets_iter->getSources().begin();
     EXPECT_EQ(sources_iter->getAttributes().begin()->getUser().toString(), "Omry");
-}
-
-TEST_F(IntelligenceComponentTestV2, offlineIntelligenceTest)
-{
-    setConfiguration<bool>(true, string("intelligence"), string("offline intelligence only"));
-    intelligence.init();
-
-    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
-    QueryRequest request(Condition::EQUALS, "ip", "1.2.3.4", true);
-    auto maybe_ans = intell->queryIntelligence<Profile>(request);
-
-    ASSERT_TRUE(maybe_ans.ok());
-    vector<AssetReply<Profile>> vec = maybe_ans.unpack();
-    vector<AssetReply<Profile>>::iterator assets_iter = vec.begin();
-    EXPECT_EQ(assets_iter->getAssetSchemaVersion(), 1);
-    EXPECT_EQ(assets_iter->getAssetType(), "workload-cloud-ip");
-    EXPECT_EQ(assets_iter->getAssetTypeSchemaVersion(), 1);
-    EXPECT_EQ(assets_iter->getAssetPermissionGroupId(), "offline-group-id");
-    EXPECT_EQ(assets_iter->getAssetName(), "offline-asset");
-    EXPECT_EQ(assets_iter->getAssetClass(), "workload");
-    EXPECT_EQ(assets_iter->getAssetCategory(), "cloud");
-    EXPECT_EQ(assets_iter->getAssetFamily(), "offline family");
-    EXPECT_EQ(assets_iter->getAssetGroup(), "offline testing");
-    EXPECT_EQ(assets_iter->getAssetOrder(), "");
-    EXPECT_EQ(assets_iter->getAssetKind(), "");
-
-    map<string, vector<string>> attributes_map = assets_iter->getMainAttributes();
-    EXPECT_EQ(attributes_map["ip"].front(), "1.2.3.4");
-
-    vector<SerializableAssetSource<Profile>>::const_iterator sources_iter = assets_iter->getSources().begin();
-    EXPECT_EQ(sources_iter->getTenantId(), "175bb55c-e36f-4ac5-a7b1-7afa1229aa00");
-    EXPECT_EQ(sources_iter->getSourceId(), "54d7de10-7b2e-4505-955b-cc2c2c7aaa00");
-    EXPECT_EQ(sources_iter->getAssetId(), "50255c3172b4fb7fda93025f0bfaa7abefd1");
-    EXPECT_EQ(sources_iter->getTTL(), chrono::seconds(120));
-    EXPECT_EQ(sources_iter->getExpirationTime(), "2010-05-15T21:50:12.253Z");
-    EXPECT_EQ(sources_iter->getConfidence(), 700);
-    EXPECT_EQ(sources_iter->getAttributes().begin()->getUser().toString(), "Omry");
-    EXPECT_EQ(sources_iter->getAttributes().begin()->getPhase().toString(), "offline test");
-
-    sources_iter++;
-    EXPECT_EQ(sources_iter->getTenantId(), "175bb55c-e36f-4ac5-a7b1-7afa1229bb11");
-    EXPECT_EQ(sources_iter->getSourceId(), "54d7de10-7b2e-4505-955b-cc2c2c7bbb11");
-    EXPECT_EQ(sources_iter->getAssetId(), "cb068860528cb6bfb000cc35e79f11aeefed2");
-    EXPECT_EQ(sources_iter->getTTL(), chrono::seconds(120));
-    EXPECT_EQ(sources_iter->getExpirationTime(), "2010-05-15T21:50:12.253Z");
-    EXPECT_EQ(sources_iter->getConfidence(), 600);
-    EXPECT_EQ(sources_iter->getAttributes().begin()->getUser().toString(), "Max");
-    EXPECT_EQ(sources_iter->getAttributes().begin()->getPhase().toString(), "offline test");
 }
 
 TEST_F(IntelligenceComponentTestV2, bulkOnlineIntelligenceTest)

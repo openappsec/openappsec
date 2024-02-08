@@ -39,14 +39,10 @@ SHELL_PRE_CMD("read sdwan data",
 #ifdef SHELL_CMD_HANDLER
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
-SHELL_CMD_HANDLER("isCpviewRunning",
-    "pidof cpview_api_service > /dev/null 2>&1 && [ -f $CPDIR/conf/cpview_api_service.version ] "
-    "&& echo 'true' || echo 'false'",
-    checkIsCpviewRunning)
-SHELL_CMD_HANDLER("isCPotelcolGRET64",
-    "grep -A 10 '(BUNDLE_CPOTELCOL_AUTOUPDATE' ${CPDIR}/registry/HKLM_registry.data | "
-    "awk '/SU_Build_Take/{val = substr($2, 2, length($2)-2); if (val >=64) print \"true\"; else print \"false\" }'",
-    checkIsCPotelcolGRET64)
+SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
+    "[ -f /var/log/nano_agent/cp-nano-horizon-telemetry-prerequisites.log ] "
+    "&& head -1 /var/log/nano_agent/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
+    checkIsInstallHorizonTelemetrySucceeded)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",

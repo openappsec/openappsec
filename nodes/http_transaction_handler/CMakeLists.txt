@@ -15,6 +15,7 @@ target_link_libraries(cp-nano-http-transaction-handler
 	pcre2-posix
 	yajl_s
 	hiredis
+        maxminddb
 
 	-lshmem_ipc
 	-lnginx_attachment_util
@@ -38,6 +39,8 @@ target_link_libraries(cp-nano-http-transaction-handler
         ips
         keywords
 	l7_access_control
+	geo_location
+	http_geo_filter
 	-Wl,--end-group
 )
 
@@ -69,6 +72,12 @@ execute_process (
 	OUTPUT_VARIABLE xml2
 )
 install(FILES ${xml2} DESTINATION http_transaction_handler_service/lib)
+
+execute_process (
+        COMMAND sh -c "find /usr/lib* -name \"libmaxminddb.so*\" | awk '{printf \$0\";\"}'"
+        OUTPUT_VARIABLE maxminddb
+)
+install(FILES ${maxminddb} DESTINATION http_transaction_handler_service/lib)
 
 gen_help(
 	"--certs-dir <trusted ca directory>" "Path to the hosts trusted ca directory"

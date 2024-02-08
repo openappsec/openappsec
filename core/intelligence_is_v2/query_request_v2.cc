@@ -25,27 +25,6 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 
 static const EnumArray<ObjectType, string> object_type_to_string_array{"asset", "zone", "configuration", "shortLived"};
 
-BulkQueryRequest::BulkQueryRequest(QueryRequest &_request, int _index)
-        :
-    request(_request),
-    index(_index)
-{}
-
-QueryRequest
-BulkQueryRequest::getQueryRequest() const
-{
-    return request;
-}
-
-void
-BulkQueryRequest::save(cereal::JSONOutputArchive &ar) const
-{
-    ar(
-        cereal::make_nvp("query", getQueryRequest()),
-        cereal::make_nvp("index",  index)
-    );
-}
-
 QueryRequest::QueryRequest(
     Condition condition_type,
     const string &key,
@@ -96,22 +75,7 @@ QueryRequest::convertObjectTypeToString() const
 void
 QueryRequest::saveToJson(cereal::JSONOutputArchive &ar) const
 {
-    ar(
-        cereal::make_nvp("limit", assets_limit),
-        cereal::make_nvp("fullResponse", full_response),
-        cereal::make_nvp("query", query)
-    );
-
-    auto objTypeString = convertObjectTypeToString();
-    if (objTypeString.ok()) {
-        ar(cereal::make_nvp("objectType", *objTypeString));
-    } else {
-        dbgTrace(D_INTELLIGENCE) << objTypeString.getErr();
-    }
-
-    if (cursor.ok()) ar(cereal::make_nvp("cursor", cursor.unpack().second));
-    requested_attributes.save(ar);
-    query_types.save(ar);
+    save(ar);
 }
 
 void
@@ -214,7 +178,7 @@ QueryRequest::setAssetsLimit(uint _assets_limit)
 }
 
 bool
-QueryRequest::checkMinConfidence(uint upper_confidence_limit)
+QueryRequest::checkMinConfidence(uint upper_confidence_limit) const
 {
     return requested_attributes.checkMinConfidence(upper_confidence_limit);
 }
@@ -232,7 +196,7 @@ QueryRequest::isPagingActivated()
 }
 
 Maybe<CursorState>
-QueryRequest::getCursorState()
+QueryRequest::getCursorState() const
 {
     if (!cursor.ok()) return genError("Paging not activated");
     return cursor.unpack().first;

@@ -32,6 +32,7 @@ Maybe<std::vector<std::string>> getDirectoryFiles(const std::string &path);
 bool makeDir(const std::string &path, mode_t permission = S_IRWXU);
 bool makeDirRecursive(const std::string &path, mode_t permission = S_IRWXU);
 bool deleteDirectory(const std::string &path, bool delete_content = false);
+bool touchFile(const std::string &path);
 
 bool
 copyFile(

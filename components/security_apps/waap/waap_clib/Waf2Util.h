@@ -876,6 +876,8 @@ namespace Util {
         std::string::const_iterator e,
         std::string &repl);
 
+    bool isValidJson(const std::string &input);
+
     bool detectJSONasParameter(const std::string &s,
             std::string &key,
             std::string &value);

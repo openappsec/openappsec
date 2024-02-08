@@ -11,7 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intelligence_is_v2/intelligence_query_v2.h"
+#include "intelligence_request.h"
+#include "intelligence_is_v2/query_request_v2.h"
 
 #include "cptest.h"
 
@@ -22,7 +23,8 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 
 TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
-    IntelligenceQuery<int> query(request, true);
+    vector<QueryRequest> requests = {request};
+    Intelligence::IntelligenceRequest query(requests, true, false);
 
     std::string expected = "{\n"
         "    \"limit\": 20,\n"
@@ -39,7 +41,9 @@ TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequest) {
 
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
-    IntelligenceQuery<int> query(request, false);
+    vector<QueryRequest> requests = {request};
+    Intelligence::IntelligenceRequest query(requests, false, false);
+
     std::string expected = "{"
         "\"limit\":20,"
         "\"fullResponse\":true,"
@@ -54,7 +58,8 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
 
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequestSpaces) {
     QueryRequest request(Condition::EQUALS, "ph ase", "te sti\" n g\\", true);
-    IntelligenceQuery<int> query(request, false);
+    vector<QueryRequest> requests = {request};
+    Intelligence::IntelligenceRequest query(requests, false, false);
     std::string expected = "{"
         "\"limit\":20,"
         "\"fullResponse\":true,"
@@ -71,7 +76,7 @@ TEST(IntelligenceQueryTestV2, genJsonPrettyBulkRequests) {
     QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
     QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
     std::vector<QueryRequest> requests = {request1, request2};
-    IntelligenceQuery<int> query(requests, true);
+    Intelligence::IntelligenceRequest query(requests, true, true);
 
     std::string expected = "{\n"
         "    \"queries\": [\n"
@@ -109,30 +114,30 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettyBulkRequest) {
     QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
     QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
     std::vector<QueryRequest> requests = {request1, request2};
-    IntelligenceQuery<int> query(requests, false);
+    Intelligence::IntelligenceRequest query(requests, false, true);
 
-std::string expected = "{"
-        "\"queries\":[{"
-        "\"query\":{"
-        "\"limit\":20,"
-        "\"fullResponse\":true,"
-        "\"query\":{"
-        "\"operator\":\"equals\","
-        "\"key\":\"mainAttributes.phase\","
-        "\"value\":\"testing\""
-        "}},"
-        "\"index\":0"
-        "},{"
-        "\"query\":{"
-        "\"limit\":20,"
-        "\"fullResponse\":true,"
-        "\"query\":{"
-        "\"operator\":\"equals\","
-        "\"key\":\"mainAttributes.height\","
-        "\"value\":\"testing\""
-        "}},"
-        "\"index\":1"
-        "}]}";
+    std::string expected = "{"
+            "\"queries\":[{"
+            "\"query\":{"
+            "\"limit\":20,"
+            "\"fullResponse\":true,"
+            "\"query\":{"
+            "\"operator\":\"equals\","
+            "\"key\":\"mainAttributes.phase\","
+            "\"value\":\"testing\""
+            "}},"
+            "\"index\":0"
+            "},{"
+            "\"query\":{"
+            "\"limit\":20,"
+            "\"fullResponse\":true,"
+            "\"query\":{"
+            "\"operator\":\"equals\","
+            "\"key\":\"mainAttributes.height\","
+            "\"value\":\"testing\""
+            "}},"
+            "\"index\":1"
+            "}]}";
 
     EXPECT_EQ(*query.genJson(), expected);
 }

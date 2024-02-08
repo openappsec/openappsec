@@ -21,6 +21,8 @@
 #include "waap.h"
 #include "ips_comp.h"
 #include "keyword_comp.h"
+#include "http_geo_filter.h"
+#include "geo_location.h"
 
 int
 main(int argc, char **argv)
@@ -34,7 +36,9 @@ main(int argc, char **argv)
         RateLimit,
         WaapComponent,
         IPSComp,
-        KeywordComp
+        KeywordComp,
+        GeoLocation,
+        HttpGeoFilter
     > comps;
 
     comps.registerGlobalValue<bool>("Is Rest primary routine", true);
