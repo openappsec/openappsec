@@ -74,6 +74,7 @@ spec:
         {{ toYaml .Values.containerSecurityContext | nindent 10 }}
         env:
         {{- include "kong.no_daemon_env" . | nindent 8 }}
+        {{- include "kong.envFrom" .Values.envFrom | nindent 8 }}
         args: [ "kong", "migrations", "up" ]
         volumeMounts:
         {{- include "kong.volumeMounts" . | nindent 8 }}

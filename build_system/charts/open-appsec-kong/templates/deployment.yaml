@@ -101,6 +101,7 @@ spec:
         - "$KONG_PREFIX/pids"
         env:
         {{- include "kong.env" . | nindent 8 }}
+        {{- include "kong.envFrom" .Values.envFrom | nindent 8 }}
         volumeMounts:
         {{- include "kong.volumeMounts" . | nindent 8 }}
         {{- if .Values.deployment.initContainers }}
@@ -136,6 +137,7 @@ spec:
         {{ toYaml .Values.containerSecurityContext | nindent 10 }}
         env:
         {{- include "kong.no_daemon_env" . | nindent 8 }}
+        {{- include "kong.envFrom" .Values.envFrom | nindent 8 }}
         lifecycle:
           {{- toYaml .Values.lifecycle | nindent 10 }}
         ports:

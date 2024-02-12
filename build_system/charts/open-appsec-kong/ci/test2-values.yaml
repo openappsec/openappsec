@@ -11,6 +11,9 @@ ingressController:
     timeoutSeconds: 5
   env:
     anonymous_reports: "false"
+  envFrom:
+  - configMapRef:
+      name: env-config
   customEnv:
     TZ: "Europe/Berlin"
   watchNamespaces:
@@ -23,6 +26,9 @@ postgresql:
 env:
   anonymous_reports: "off"
   database: "postgres"
+envFrom:
+- configMapRef:
+    name: env-config
 # - ingress resources are created without hosts
 admin:
   ingress:
@@ -63,3 +69,11 @@ deployment:
         requests:
           cpu: "100m"
           memory: "64Mi"
+
+extraObjects:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: env-config
+  data:
+    test-env: test

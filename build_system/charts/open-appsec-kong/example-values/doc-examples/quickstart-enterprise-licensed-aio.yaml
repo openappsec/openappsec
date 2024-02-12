@@ -1,3 +1,4 @@
+demo: true
 admin:
   annotations:
     konghq.com/protocol: https

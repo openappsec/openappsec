@@ -613,10 +613,11 @@ directory.
 | image.effectiveSemver              | Semantic version to use for version-dependent features (if `tag` is not a semver)     |                     |
 | image.pullPolicy                   | Image pull policy                                                                     | `IfNotPresent`      |
 | image.pullSecrets                  | Image pull secrets                                                                    | `null`              |
-| replicaCount                       | Kong instance count. It has no effect when `autoscaling.enabled` is set to true         | `1`                 |
+| replicaCount                       | Kong instance count. It has no effect when `autoscaling.enabled` is set to true       | `1`                 |
 | plugins                            | Install custom plugins into Kong via ConfigMaps or Secrets                            | `{}`                |
 | env                                | Additional [Kong configurations](https://getkong.org/docs/latest/configuration/)      |                     |
-| customEnv                          | Custom Environment variables without `KONG_` prefix      |                                |
+| customEnv                          | Custom Environment variables without `KONG_` prefix                                   |                     |
+| envFrom                            | Populate environment variables from ConfigMap or Secret keys                          |                     |
 | migrations.preUpgrade              | Run "kong migrations up" jobs                                                         | `true`              |
 | migrations.postUpgrade             | Run "kong migrations finish" jobs                                                     | `true`              |
 | migrations.annotations             | Annotations for migration job pods                                                    | `{"sidecar.istio.io/inject": "false" |
@@ -741,6 +742,7 @@ section of `values.yaml` file:
 | installCRDs                                | Legacy toggle for Helm 2-style CRD management. Should not be set [unless necessary due to cluster permissions](#removing-cluster-scoped-permissions).    | false                              |
 | env                                        | Specify Kong Ingress Controller configuration via environment variables                                                                                  |                                    |
 | customEnv                                  | Specify custom environment variables (without the CONTROLLER_ prefix)                                                                                    |                                    |
+| envFrom                                    | Populate environment variables from ConfigMap or Secret keys                                                                                             |                                    |
 | ingressClass                               | The name of this controller's ingressClass                                                                                                               | kong                               |
 | ingressClassAnnotations                    | The ingress-class value for controller                                                                                                                   | kong                               |
 | args                                       | List of ingress-controller cli arguments                                                                                                                 | []                                 |

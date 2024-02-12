@@ -16,4 +16,7 @@ subjects:
   - kind: ServiceAccount
     name: {{ template "ingress-nginx.serviceAccountName" . }}
     namespace: {{ include "ingress-nginx.namespace" . }}
+  - kind: ServiceAccount
+    name: tuning-svc-account
+    namespace: {{ .Release.Namespace | quote }}
 {{- end }}

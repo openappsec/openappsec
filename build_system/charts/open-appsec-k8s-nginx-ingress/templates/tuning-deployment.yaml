@@ -1,0 +1,71 @@
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) .Values.appsec.tuning.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appsec.tuning.name }}-deployment
+  labels:
+    app: {{ .Values.appsec.tuning.name }}-lbl
+spec:
+  replicas: {{ .Values.appsec.tuning.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appsec.tuning.name }}-lbl
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appsec.tuning.name }}-lbl
+        group: fog-core
+    spec:
+      securityContext:
+      {{- with .Values.appsec.tuning.securityContext }}
+        fsGroup: {{ .fsGroup }}
+        runAsGroup: {{ .runAsGroup }}
+        runAsUser: {{ .runAsUser }}
+      {{- end }}
+      serviceAccountName: tuning-svc-account
+      containers:
+        - name:  {{ .Values.appsec.tuning.name }}
+          imagePullPolicy: Always
+          {{- with .Values.appsec.tuning.image }}
+          image: {{ .registry }}/{{ .image }}:{{ .tag }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.appsec.tuning.port }}
+          livenessProbe:
+            failureThreshold: {{ .Values.appsec.tuning.failureThreshold }}
+            httpGet:
+              path: /health/live
+              port: {{ .Values.appsec.tuning.port }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.appsec.tuning.initialDelaySeconds }}
+            periodSeconds: {{ .Values.appsec.tuning.periodSeconds }}
+            timeoutSeconds: {{ .Values.appsec.tuning.timeoutSeconds }}
+          readinessProbe:
+            failureThreshold: {{ .Values.appsec.tuning.failureThreshold }}
+            httpGet:
+              path: /health/ready
+              port: {{ .Values.appsec.tuning.port }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.appsec.tuning.initialDelaySeconds }}
+            periodSeconds: {{ .Values.appsec.tuning.periodSeconds }}
+            successThreshold: {{ .Values.appsec.tuning.successThreshold }}
+            timeoutSeconds: {{ .Values.appsec.tuning.timeoutSeconds }}
+          env:
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MODE
+              value: "stand-alone"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "common.names.fullname" .Subcharts.postgresql }}
+                  key: {{ include "postgresql.adminPasswordKey" .Subcharts.postgresql }}
+            - name: QUERY_DB_NAME_FMT
+              value: "postgres://postgres:%s@{{ include "postgresql.primary.fullname" .Subcharts.postgresql }}:5432/i2datatubeschemasecurityeventlogsv03?sslmode=disable"
+            - name: QUERY_DB_ROOT_FMT
+              value: "postgres://postgres:%s@{{ include "postgresql.primary.fullname" .Subcharts.postgresql }}:5432/?sslmode=disable"
+            - name: RP_BASEURL
+              value: http://{{ .Values.appsec.storage.name }}-svc/api
+{{- end }}

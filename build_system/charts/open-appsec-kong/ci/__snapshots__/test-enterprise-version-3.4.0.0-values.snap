@@ -1,0 +1,311 @@
+['test-enterprise-version-3.4.0.0-values']
+SnapShot = """
+- object:
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+        labels:
+            app.kubernetes.io/component: app
+            app.kubernetes.io/instance: chartsnap
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: kong
+            app.kubernetes.io/version: \"3.5\"
+            helm.sh/chart: kong-2.35.1
+        name: chartsnap-kong
+        namespace: default
+    spec:
+        replicas: 1
+        selector:
+            matchLabels:
+                app.kubernetes.io/component: app
+                app.kubernetes.io/instance: chartsnap
+                app.kubernetes.io/name: kong
+        template:
+            metadata:
+                annotations:
+                    kuma.io/gateway: enabled
+                    kuma.io/service-account-token-volume: chartsnap-kong-token
+                    traffic.sidecar.istio.io/includeInboundPorts: \"\"
+                labels:
+                    app: chartsnap-kong
+                    app.kubernetes.io/component: app
+                    app.kubernetes.io/instance: chartsnap
+                    app.kubernetes.io/managed-by: Helm
+                    app.kubernetes.io/name: kong
+                    app.kubernetes.io/version: \"3.5\"
+                    helm.sh/chart: kong-2.35.1
+                    version: \"3.5\"
+            spec:
+                automountServiceAccountToken: false
+                containers:
+                    - env:
+                        - name: KONG_ADMIN_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_ADMIN_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_ADMIN_GUI_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_ADMIN_GUI_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_ADMIN_LISTEN
+                          value: 127.0.0.1:8444 http2 ssl, [::1]:8444 http2 ssl
+                        - name: KONG_CLUSTER_LISTEN
+                          value: \"off\"
+                        - name: KONG_DATABASE
+                          value: \"off\"
+                        - name: KONG_LUA_PACKAGE_PATH
+                          value: /opt/?.lua;/opt/?/init.lua;;
+                        - name: KONG_NGINX_WORKER_PROCESSES
+                          value: \"2\"
+                        - name: KONG_PORTAL_API_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_PORTAL_API_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_PORT_MAPS
+                          value: 80:8000, 443:8443
+                        - name: KONG_PREFIX
+                          value: /kong_prefix/
+                        - name: KONG_PROXY_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_PROXY_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_PROXY_LISTEN
+                          value: 0.0.0.0:8000, [::]:8000, 0.0.0.0:8443 http2 ssl, [::]:8443 http2 ssl
+                        - name: KONG_PROXY_STREAM_ACCESS_LOG
+                          value: /dev/stdout basic
+                        - name: KONG_PROXY_STREAM_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_ROUTER_FLAVOR
+                          value: traditional
+                        - name: KONG_STATUS_ACCESS_LOG
+                          value: \"off\"
+                        - name: KONG_STATUS_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_STATUS_LISTEN
+                          value: 0.0.0.0:8100, [::]:8100
+                        - name: KONG_STREAM_LISTEN
+                          value: \"off\"
+                        - name: KONG_NGINX_DAEMON
+                          value: \"off\"
+                      image: kong/kong-gateway:3.4.0.0
+                      imagePullPolicy: IfNotPresent
+                      lifecycle:
+                        preStop:
+                            exec:
+                                command:
+                                    - kong
+                                    - quit
+                                    - --wait=15
+                      livenessProbe:
+                        failureThreshold: 3
+                        httpGet:
+                            path: /status
+                            port: status
+                            scheme: HTTP
+                        initialDelaySeconds: 5
+                        periodSeconds: 10
+                        successThreshold: 1
+                        timeoutSeconds: 5
+                      name: proxy
+                      ports:
+                        - containerPort: 8000
+                          name: proxy
+                          protocol: TCP
+                        - containerPort: 8443
+                          name: proxy-tls
+                          protocol: TCP
+                        - containerPort: 8100
+                          name: status
+                          protocol: TCP
+                      readinessProbe:
+                        failureThreshold: 3
+                        httpGet:
+                            path: /status
+                            port: status
+                            scheme: HTTP
+                        initialDelaySeconds: 1
+                        periodSeconds: 1
+                        successThreshold: 1
+                        timeoutSeconds: 5
+                      resources: {}
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities:
+                            drop:
+                                - ALL
+                        readOnlyRootFilesystem: true
+                        runAsNonRoot: true
+                        runAsUser: 1000
+                        seccompProfile:
+                            type: RuntimeDefault
+                      volumeMounts:
+                        - mountPath: /kong_prefix/
+                          name: chartsnap-kong-prefix-dir
+                        - mountPath: /tmp
+                          name: chartsnap-kong-tmp
+                initContainers:
+                    - command:
+                        - rm
+                        - -vrf
+                        - $KONG_PREFIX/pids
+                      env:
+                        - name: KONG_ADMIN_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_ADMIN_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_ADMIN_GUI_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_ADMIN_GUI_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_ADMIN_LISTEN
+                          value: 127.0.0.1:8444 http2 ssl, [::1]:8444 http2 ssl
+                        - name: KONG_CLUSTER_LISTEN
+                          value: \"off\"
+                        - name: KONG_DATABASE
+                          value: \"off\"
+                        - name: KONG_LUA_PACKAGE_PATH
+                          value: /opt/?.lua;/opt/?/init.lua;;
+                        - name: KONG_NGINX_WORKER_PROCESSES
+                          value: \"2\"
+                        - name: KONG_PORTAL_API_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_PORTAL_API_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_PORT_MAPS
+                          value: 80:8000, 443:8443
+                        - name: KONG_PREFIX
+                          value: /kong_prefix/
+                        - name: KONG_PROXY_ACCESS_LOG
+                          value: /dev/stdout
+                        - name: KONG_PROXY_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_PROXY_LISTEN
+                          value: 0.0.0.0:8000, [::]:8000, 0.0.0.0:8443 http2 ssl, [::]:8443 http2 ssl
+                        - name: KONG_PROXY_STREAM_ACCESS_LOG
+                          value: /dev/stdout basic
+                        - name: KONG_PROXY_STREAM_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_ROUTER_FLAVOR
+                          value: traditional
+                        - name: KONG_STATUS_ACCESS_LOG
+                          value: \"off\"
+                        - name: KONG_STATUS_ERROR_LOG
+                          value: /dev/stderr
+                        - name: KONG_STATUS_LISTEN
+                          value: 0.0.0.0:8100, [::]:8100
+                        - name: KONG_STREAM_LISTEN
+                          value: \"off\"
+                      image: kong/kong-gateway:3.4.0.0
+                      imagePullPolicy: IfNotPresent
+                      name: clear-stale-pid
+                      resources: {}
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities:
+                            drop:
+                                - ALL
+                        readOnlyRootFilesystem: true
+                        runAsNonRoot: true
+                        runAsUser: 1000
+                        seccompProfile:
+                            type: RuntimeDefault
+                      volumeMounts:
+                        - mountPath: /kong_prefix/
+                          name: chartsnap-kong-prefix-dir
+                        - mountPath: /tmp
+                          name: chartsnap-kong-tmp
+                securityContext: {}
+                serviceAccountName: chartsnap-kong
+                terminationGracePeriodSeconds: 30
+                volumes:
+                    - emptyDir:
+                        sizeLimit: 256Mi
+                      name: chartsnap-kong-prefix-dir
+                    - emptyDir:
+                        sizeLimit: 1Gi
+                      name: chartsnap-kong-tmp
+                    - name: chartsnap-kong-token
+                      projected:
+                        sources:
+                            - serviceAccountToken:
+                                expirationSeconds: 3607
+                                path: token
+                            - configMap:
+                                items:
+                                    - key: ca.crt
+                                      path: ca.crt
+                                name: kube-root-ca.crt
+                            - downwardAPI:
+                                items:
+                                    - fieldRef:
+                                        apiVersion: v1
+                                        fieldPath: metadata.namespace
+                                      path: namespace
+- object:
+    apiVersion: v1
+    kind: Service
+    metadata:
+        labels:
+            app.kubernetes.io/instance: chartsnap
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: kong
+            app.kubernetes.io/version: \"3.5\"
+            helm.sh/chart: kong-2.35.1
+        name: chartsnap-kong-manager
+        namespace: default
+    spec:
+        ports:
+            - name: kong-manager
+              port: 8002
+              protocol: TCP
+              targetPort: 8002
+            - name: kong-manager-tls
+              port: 8445
+              protocol: TCP
+              targetPort: 8445
+        selector:
+            app.kubernetes.io/component: app
+            app.kubernetes.io/instance: chartsnap
+            app.kubernetes.io/name: kong
+        type: NodePort
+- object:
+    apiVersion: v1
+    kind: Service
+    metadata:
+        labels:
+            app.kubernetes.io/instance: chartsnap
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: kong
+            app.kubernetes.io/version: \"3.5\"
+            enable-metrics: \"true\"
+            helm.sh/chart: kong-2.35.1
+        name: chartsnap-kong-proxy
+        namespace: default
+    spec:
+        ports:
+            - name: kong-proxy
+              port: 80
+              protocol: TCP
+              targetPort: 8000
+            - name: kong-proxy-tls
+              port: 443
+              protocol: TCP
+              targetPort: 8443
+        selector:
+            app.kubernetes.io/component: app
+            app.kubernetes.io/instance: chartsnap
+            app.kubernetes.io/name: kong
+        type: LoadBalancer
+- object:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+        labels:
+            app.kubernetes.io/instance: chartsnap
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: kong
+            app.kubernetes.io/version: \"3.5\"
+            helm.sh/chart: kong-2.35.1
+        name: chartsnap-kong
+        namespace: default
+"""

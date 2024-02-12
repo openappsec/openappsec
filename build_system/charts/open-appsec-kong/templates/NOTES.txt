@@ -26,3 +26,17 @@ Kong: https://docs.konghq.com/kubernetes-ingress-controller/latest/guides/gettin
 {{- end -}}
 
 {{- include "kong.deprecation-warnings" $warnings -}}
+
+{{- if .Values.demo -}}
+
+#############################################################################################
+##### WARNING: DEMO VALUES USED
+#############################################################################################
+
+The values file used has been marked as a demo configuration.
+It should NOT be used in production without comprehensive review of all settings provided.
+
+#############################################################################################
+##### WARNING: DEMO VALUES USED
+#############################################################################################
+{{- end -}}

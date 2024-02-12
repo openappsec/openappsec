@@ -1,0 +1,26 @@
+# It's a configuration file used by helm-chartsnap to ignore dynamically generated fields
+# when comparing the chart's snapshot with the rendered chart.
+# See https://github.com/jlandowner/helm-chartsnap?tab=readme-ov-file#handling-dynamic-values-.
+dynamicFields:
+  - apiVersion: v1
+    kind: Secret
+    name: chartsnap-postgresql
+    jsonPath:
+      - /data/postgres-password
+  - apiVersion: v1
+    kind: Secret
+    name: chartsnap-kong-validation-webhook-keypair
+    jsonPath:
+      - /data/tls.crt
+      - /data/tls.key
+  - apiVersion: v1
+    kind: Secret
+    name: chartsnap-kong-validation-webhook-ca-keypair
+    jsonPath:
+      - /data/tls.crt
+      - /data/tls.key
+  - apiVersion: admissionregistration.k8s.io/v1
+    kind: ValidatingWebhookConfiguration
+    name: chartsnap-kong-validations
+    jsonPath:
+      - /webhooks/0/clientConfig/caBundle

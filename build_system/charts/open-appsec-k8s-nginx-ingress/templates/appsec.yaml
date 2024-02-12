@@ -142,6 +142,8 @@ spec:
               value: {{ .Values.appsec.storage.name }}-svc
             - name: LEARNING_HOST
               value: {{ .Values.appsec.learning.name }}-svc
+            - name: TUNING_HOST
+              value: {{ .Values.appsec.tuning.name }}-svc
         {{- else }}
             - name: PLAYGROUND
               value: "true"

@@ -120,6 +120,10 @@ env:
 #         name: api_key
 #   client_name: testClient
 
+# Load all ConfigMap or Secret keys as environment variables:
+# https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+envFrom: []
+
 # This section can be used to configure some extra labels that will be added to each Kubernetes object generated.
 extraLabels: {}
 
@@ -564,6 +568,10 @@ ingressController:
   # Example as below, uncomment if required and add additional attributes as required.
   # customEnv:
   #   TZ: "Europe/Berlin"
+
+  # Load all ConfigMap or Secret keys as environment variables:
+  # https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+  envFrom: []
 
   admissionWebhook:
     enabled: true
@@ -1247,7 +1255,7 @@ appsec:
     #registry:
     repository: ghcr.io/openappsec
     image: "agent"
-    tag: "1.1.3"
+    tag: "1.1.5"
     pullPolicy: Always
 
     securityContext:
@@ -1261,7 +1269,7 @@ appsec:
   kong:
     image:
       repository: "ghcr.io/openappsec/kong-attachment"
-      tag: "1.1.3"
+      tag: "1.1.5"
   configMapName: appsec-settings-configmap
   configMapContent:
     crowdsec:

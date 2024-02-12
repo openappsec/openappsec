@@ -267,6 +267,7 @@ Generic tool for creating KONG_PROXY_LISTEN, KONG_ADMIN_LISTEN, etc.
 */}}
 {{- define "kong.listen" -}}
   {{- $unifiedListen := list -}}
+  {{- $defaultAddrs := (list "0.0.0.0" "[::]") -}}
 
   {{/* Some services do not support these blocks at all, so these checks are a
        two-stage "is it safe to evaluate this?" and then "should we evaluate
@@ -276,9 +277,12 @@ Generic tool for creating KONG_PROXY_LISTEN, KONG_ADMIN_LISTEN, etc.
     {{- if .http.enabled -}}
       {{- $listenConfig := dict -}}
       {{- $listenConfig := merge $listenConfig .http -}}
-      {{- $_ := set $listenConfig "address" (default "0.0.0.0" .address) -}}
-      {{- $httpListen := (include "kong.singleListen" $listenConfig) -}}
-      {{- $unifiedListen = append $unifiedListen $httpListen -}}
+      {{- $addresses := (default $defaultAddrs .addresses) -}}
+      {{- range $addresses -}}
+        {{- $_ := set $listenConfig "address" . -}}
+        {{- $httpListen := (include "kong.singleListen" $listenConfig) -}}
+        {{- $unifiedListen = append $unifiedListen $httpListen -}}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
 
@@ -295,9 +299,12 @@ Generic tool for creating KONG_PROXY_LISTEN, KONG_ADMIN_LISTEN, etc.
       {{- $listenConfig := merge $listenConfig .tls -}}
       {{- $parameters := append .tls.parameters "ssl" -}}
       {{- $_ := set $listenConfig "parameters" $parameters -}}
-      {{- $_ := set $listenConfig "address" (default "0.0.0.0" .address) -}}
-      {{- $tlsListen := (include "kong.singleListen" $listenConfig) -}}
-      {{- $unifiedListen = append $unifiedListen $tlsListen -}}
+      {{- $addresses := (default $defaultAddrs .addresses) -}}
+      {{- range $addresses -}}
+        {{- $_ := set $listenConfig "address" . -}}
+        {{- $tlsListen := (include "kong.singleListen" $listenConfig) -}}
+        {{- $unifiedListen = append $unifiedListen $tlsListen -}}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
 
@@ -332,19 +339,22 @@ Create KONG_STREAM_LISTEN string
 */}}
 {{- define "kong.streamListen" -}}
   {{- $unifiedListen := list -}}
-  {{- $address := (default "0.0.0.0" .address) -}}
+  {{- $defaultAddrs := (list "0.0.0.0" "[::]") -}}
   {{- range .stream -}}
     {{- $listenConfig := dict -}}
     {{- $listenConfig := merge $listenConfig . -}}
-    {{- $_ := set $listenConfig "address" $address -}}
-    {{/* You set NGINX stream listens to UDP using a parameter due to historical reasons.
-         Our configuration is dual-purpose, for both the Service and listen string, so we
-         forcibly inject this parameter if that's the Service protocol. The default handles
-         configs that predate the addition of the protocol field, where we only supported TCP. */}}
-    {{- if (eq (default "TCP" .protocol) "UDP") -}}
-      {{- $_ := set $listenConfig "parameters" (append (default (list) .parameters) "udp") -}}
+    {{- $addresses := (default $defaultAddrs .addresses) -}}
+    {{- range $addresses -}}
+      {{- $_ := set $listenConfig "address" . -}}
+      {{/* You set NGINX stream listens to UDP using a parameter due to historical reasons.
+           Our configuration is dual-purpose, for both the Service and listen string, so we
+           forcibly inject this parameter if that's the Service protocol. The default handles
+           configs that predate the addition of the protocol field, where we only supported TCP. */}}
+      {{- if (eq (default "TCP" $listenConfig.protocol) "UDP") -}}
+        {{- $_ := set $listenConfig "parameters" (append (default (list) $listenConfig.parameters) "udp") -}}
+      {{- end -}}
+      {{- $unifiedListen = append $unifiedListen (include "kong.singleListen" $listenConfig ) -}}
     {{- end -}}
-    {{- $unifiedListen = append $unifiedListen (include "kong.singleListen" $listenConfig ) -}}
   {{- end -}}
 
   {{- $listenString := ($unifiedListen | join ", ") -}}
@@ -827,6 +837,7 @@ The name of the Service which will be used by the controller to update the Ingre
   {{ toYaml .Values.containerSecurityContext | nindent 4 }}
   env:
   {{- include "kong.env" . | nindent 2 }}
+  {{- include "kong.envFrom" .Values.envFrom | nindent 2 }}
 {{/* TODO the prefix override is to work around https://github.com/Kong/charts/issues/295
      Note that we use args instead of command here to /not/ override the standard image entrypoint. */}}
   args: [ "/bin/bash", "-c", "export KONG_NGINX_DAEMON=on KONG_PREFIX=`mktemp -d` KONG_KEYRING_ENABLED=off; until kong start; do echo 'waiting for db'; sleep 1; done; kong stop"]
@@ -879,6 +890,9 @@ The name of the Service which will be used by the controller to update the Ingre
     containerPort: 10255
     protocol: TCP
   {{- end }}
+  - name: status
+    containerPort: 10254
+    protocol: TCP
   env:
   - name: POD_NAME
     valueFrom:
@@ -891,6 +905,7 @@ The name of the Service which will be used by the controller to update the Ingre
         apiVersion: v1
         fieldPath: metadata.namespace
 {{- include "kong.ingressController.env" .  | indent 2 }}
+{{ include "kong.envFrom" .Values.ingressController.envFrom | indent 2 }}
   image: {{ include "kong.getRepoTag" .Values.ingressController.image }}
   imagePullPolicy: {{ .Values.image.pullPolicy }}
 {{/* disableReadiness is a hidden setting to drop this block entirely for use with a debugger
@@ -967,13 +982,11 @@ the template that it itself is using form the above sections.
 {{- end -}}
 
 {{- with .Values.admin -}}
-  {{- $address := "0.0.0.0" -}}
-  {{- if (not .enabled) -}}
-    {{- $address = "127.0.0.1" -}}
-  {{- end -}}
   {{- $listenConfig := dict -}}
   {{- $listenConfig := merge $listenConfig . -}}
-  {{- $_ := set $listenConfig "address" (default $address .address) -}}
+  {{- if (and (not (hasKey . "addresses")) (not .enabled)) -}}
+    {{- $_ := set $listenConfig "addresses" (list "127.0.0.1" "[::1]") -}}
+  {{- end -}}
   {{- $_ := set $autoEnv "KONG_ADMIN_LISTEN" (include "kong.listen" $listenConfig) -}}
 
   {{- if or .tls.client.secretName .tls.client.caBundle -}}
@@ -1145,7 +1158,9 @@ the template that it itself is using form the above sections.
 {{- end }}
 {{- end }}
 
+{{- if (.Values.plugins) }}
 {{- $_ := set $autoEnv "KONG_PLUGINS" (include "kong.plugins" .) -}}
+{{- end }}
 
 {{/*
     ====== USER-SET ENVIRONMENT VARIABLES ======
@@ -1222,6 +1237,7 @@ Environment variables are sorted alphabetically
   imagePullPolicy: {{ .Values.waitImage.pullPolicy }}
   env:
   {{- include "kong.no_daemon_env" . | nindent 2 }}
+  {{- include "kong.envFrom" .Values.envFrom | nindent 2 }}
   command: [ "bash", "/wait_postgres/wait.sh" ]
   volumeMounts:
   - name: {{ template "kong.fullname" . }}-bash-wait-for-postgres
@@ -1255,7 +1271,6 @@ Kubernetes namespace-scoped resources it uses to build Kong configuration.
 
 Collectively, these are built from:
 kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac?ref=main
-kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac/knative?ref=main
 kubectl kustomize github.com/kong/kubernetes-ingress-controller/config/rbac/gateway?ref=main
 
 However, there is no way to generate the split between cluster and namespaced
@@ -1648,6 +1663,24 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   - get
   - list
   - watch
+{{- if (semverCompare ">= 3.1.0" (include "kong.effectiveVersion" .Values.ingressController.image)) }}
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongvaults
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - configuration.konghq.com
+  resources:
+  - kongvaults/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end }}
 - apiGroups:
   - configuration.konghq.com
   resources:
@@ -1689,6 +1722,14 @@ Kubernetes Cluster-scoped resources it uses to build Kong configuration.
   verbs:
   - get
   - update
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 - apiGroups:
   - networking.k8s.io
@@ -1744,6 +1785,14 @@ extensions/v1beta1
     {{- end -}}
 {{- end -}}
 {{- (toYaml $proxyReadiness) -}}
+{{- end -}}
+
+{{- define "kong.envFrom" -}}
+  {{- if (gt (len .) 0) -}}
+envFrom:
+{{- toYaml . | nindent 2 -}}
+  {{- else -}}
+  {{- end -}}
 {{- end -}}
 {{/*
 appsec labels

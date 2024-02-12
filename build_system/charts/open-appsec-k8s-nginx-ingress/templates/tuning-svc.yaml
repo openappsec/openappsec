@@ -1,0 +1,13 @@
+{{- if and (eq "standalone" .Values.appsec.mode) (eq .Values.appsec.playground false) .Values.appsec.tuning.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appsec.tuning.name }}-svc
+spec:
+  ports:
+    - name: "http"
+      port: 80
+      targetPort: {{ .Values.appsec.tuning.port }}
+  selector:
+    app: {{ .Values.appsec.tuning.name }}-lbl
+{{- end }}
