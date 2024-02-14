@@ -166,8 +166,6 @@ gen_help(
 	"-ia" "Ignore access control package"
 )
 
-set_package_params("--platform x86")
-
 gen_package(
 	install-cp-nano-agent.sh
 	orchestration
