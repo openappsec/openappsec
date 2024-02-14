@@ -1417,6 +1417,10 @@ TEST_F(FogCommunicationTest, downloadFileDeclarativeMode)
         mock_ot,
         writeFile(encrypted_access_token, data_path + session_token_file_name, false)).WillOnce(Return(true)
     );
+    EXPECT_CALL(
+        mock_ot,
+        writeFile(_, "/tmp/orch_files/", false)).WillOnce(Return(true)
+    );
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>())).WillOnce(
         Invoke(
             [] (chrono::microseconds microseconds)

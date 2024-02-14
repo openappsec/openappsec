@@ -100,8 +100,11 @@ FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file, co
 
     string policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
     if (policy_mgmt_mode == "declarative" && resourse_file.getFileName() =="policy") {
-        dbgDebug(D_ORCHESTRATOR) << "Download policy on declarative mode - returnig the local policy";
-        return i_declarative_policy->getCurrPolicy();
+        dbgDebug(D_ORCHESTRATOR) << "Download policy on declarative mode - returning the local policy";
+        string policy = i_declarative_policy->getCurrPolicy();
+        auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogCommunication>();
+        if (orchestration_tools->writeFile(policy, file_path)) return policy;
+        return genError("Failed to write policy to file: " + file_path);
     }
     static const string file_attribute_str = "/api/v2/agents/resources/";
 
