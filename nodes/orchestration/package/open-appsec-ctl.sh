@@ -1028,7 +1028,7 @@ run_status() # Initials - rs
         print_single_service_status "$service"
     done
 
-    if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
+    if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" != "Disabled" ]; then
         echo "SELinux has been detected, which could potentially disrupt the agent's normal operation."
     fi
 }
