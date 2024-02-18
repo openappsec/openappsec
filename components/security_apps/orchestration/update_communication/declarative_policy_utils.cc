@@ -168,6 +168,10 @@ DeclarativePolicyUtils::getUpdate(CheckUpdateRequest &request)
 
     auto maybe_new_version = getLocalPolicyChecksum();
     if (!maybe_new_version.ok() || maybe_new_version == curr_version) {
+        if (!policy_checksum.ok() || getPolicyChecksum() != policy_checksum.unpack()) {
+            dbgTrace(D_ORCHESTRATOR) << "Update policy checksum";
+            return getPolicyChecksum();
+        }
         dbgDebug(D_ORCHESTRATOR) << "No new version is currently available";
         return "";
     }

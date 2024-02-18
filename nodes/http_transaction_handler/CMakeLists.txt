@@ -83,8 +83,6 @@ gen_help(
 	"--certs-dir <trusted ca directory>" "Path to the hosts trusted ca directory"
 )
 
-set_package_params("--platform x86")
-
 gen_package(
 	install-cp-nano-service-http-transaction-handler.sh
 	http_transaction_handler_service
