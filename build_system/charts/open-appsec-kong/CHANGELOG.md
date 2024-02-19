@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## 2.36.0
 
-Nothing yet.
+### Fixed
+
+* Add `KongLicense` RBAC rules.
+  [#1006](https://github.com/Kong/charts/pull/1006)
 
 ## 2.35.1
 
@@ -13,7 +16,7 @@ Nothing yet.
 
 ## 2.35.0
 
-### Added 
+### Added
 
 * Added controller's RBAC rules for `KongVault` CRD (installed only when KIC
   version >= 3.1.0).

@@ -10,7 +10,7 @@ SnapShot = """
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
             app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.35.1
+            helm.sh/chart: kong-2.36.0
         name: chartsnap-kong
         namespace: default
     spec:
@@ -34,7 +34,7 @@ SnapShot = """
                     app.kubernetes.io/managed-by: Helm
                     app.kubernetes.io/name: kong
                     app.kubernetes.io/version: \"3.5\"
-                    helm.sh/chart: kong-2.35.1
+                    helm.sh/chart: kong-2.36.0
                     version: \"3.5\"
             spec:
                 automountServiceAccountToken: false
@@ -275,7 +275,7 @@ SnapShot = """
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
             app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.35.1
+            helm.sh/chart: kong-2.36.0
         name: chartsnap-kong-custom-dbless-config
         namespace: default
 - object:
@@ -287,7 +287,7 @@ SnapShot = """
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
             app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.35.1
+            helm.sh/chart: kong-2.36.0
         name: chartsnap-kong-admin
         namespace: default
     spec:
@@ -310,7 +310,7 @@ SnapShot = """
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
             app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.35.1
+            helm.sh/chart: kong-2.36.0
         name: chartsnap-kong-manager
         namespace: default
     spec:
@@ -338,7 +338,7 @@ SnapShot = """
             app.kubernetes.io/name: kong
             app.kubernetes.io/version: \"3.5\"
             enable-metrics: \"true\"
-            helm.sh/chart: kong-2.35.1
+            helm.sh/chart: kong-2.36.0
         name: chartsnap-kong-proxy
         namespace: default
     spec:
@@ -365,7 +365,7 @@ SnapShot = """
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
             app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.35.1
+            helm.sh/chart: kong-2.36.0
         name: chartsnap-kong
         namespace: default
 """

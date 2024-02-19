@@ -1,11 +1,10 @@
-[custom-labels-values]
+['kong-ingress-5-3.1-rbac-values']
 SnapShot = """
 - object:
     apiVersion: admissionregistration.k8s.io/v1
     kind: ValidatingWebhookConfiguration
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -79,7 +78,6 @@ SnapShot = """
     kind: Deployment
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/component: app
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
@@ -102,7 +100,6 @@ SnapShot = """
                     kuma.io/service-account-token-volume: chartsnap-kong-token
                     traffic.sidecar.istio.io/includeInboundPorts: \"\"
                 labels:
-                    acme.com/some-key: some-value
                     app: chartsnap-kong
                     app.kubernetes.io/component: app
                     app.kubernetes.io/instance: chartsnap
@@ -128,6 +125,8 @@ SnapShot = """
                                 fieldPath: metadata.namespace
                         - name: CONTROLLER_ADMISSION_WEBHOOK_LISTEN
                           value: 0.0.0.0:8080
+                        - name: CONTROLLER_ANONYMOUS_REPORTS
+                          value: \"false\"
                         - name: CONTROLLER_ELECTION_ID
                           value: kong-ingress-controller-leader-kong
                         - name: CONTROLLER_INGRESS_CLASS
@@ -138,7 +137,7 @@ SnapShot = """
                           value: https://localhost:8444
                         - name: CONTROLLER_PUBLISH_SERVICE
                           value: default/chartsnap-kong-proxy
-                      image: kong/kubernetes-ingress-controller:3.0
+                      image: kong/kubernetes-ingress-controller:3.1.0
                       imagePullPolicy: IfNotPresent
                       livenessProbe:
                         failureThreshold: 3
@@ -200,6 +199,8 @@ SnapShot = """
                           value: /dev/stderr
                         - name: KONG_ADMIN_LISTEN
                           value: 127.0.0.1:8444 http2 ssl, [::1]:8444 http2 ssl
+                        - name: KONG_ANONYMOUS_REPORTS
+                          value: \"off\"
                         - name: KONG_CLUSTER_LISTEN
                           value: \"off\"
                         - name: KONG_DATABASE
@@ -312,6 +313,8 @@ SnapShot = """
                           value: /dev/stderr
                         - name: KONG_ADMIN_LISTEN
                           value: 127.0.0.1:8444 http2 ssl, [::1]:8444 http2 ssl
+                        - name: KONG_ANONYMOUS_REPORTS
+                          value: \"off\"
                         - name: KONG_CLUSTER_LISTEN
                           value: \"off\"
                         - name: KONG_DATABASE
@@ -404,7 +407,6 @@ SnapShot = """
     kind: ClusterRole
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -620,6 +622,38 @@ SnapShot = """
         - apiGroups:
             - configuration.konghq.com
           resources:
+            - konglicenses
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
+            - konglicenses/status
+          verbs:
+            - get
+            - patch
+            - update
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
+            - kongvaults
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
+            - kongvaults/status
+          verbs:
+            - get
+            - patch
+            - update
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
             - kongclusterplugins
           verbs:
             - get
@@ -653,7 +687,6 @@ SnapShot = """
     kind: ClusterRoleBinding
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -673,7 +706,6 @@ SnapShot = """
     kind: Role
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -738,7 +770,6 @@ SnapShot = """
     kind: RoleBinding
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -762,7 +793,6 @@ SnapShot = """
     kind: Secret
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -779,7 +809,6 @@ SnapShot = """
     kind: Secret
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -793,7 +822,6 @@ SnapShot = """
     kind: Service
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -821,7 +849,6 @@ SnapShot = """
     kind: Service
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -850,7 +877,6 @@ SnapShot = """
     kind: Service
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
@@ -865,7 +891,6 @@ SnapShot = """
               protocol: TCP
               targetPort: webhook
         selector:
-            acme.com/some-key: some-value
             app.kubernetes.io/component: app
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
@@ -877,7 +902,6 @@ SnapShot = """
     kind: ServiceAccount
     metadata:
         labels:
-            acme.com/some-key: some-value
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong

@@ -1255,7 +1255,7 @@ appsec:
     #registry:
     repository: ghcr.io/openappsec
     image: "agent"
-    tag: "1.1.5"
+    tag: "1.1.6"
     pullPolicy: Always
 
     securityContext:
@@ -1269,7 +1269,7 @@ appsec:
   kong:
     image:
       repository: "ghcr.io/openappsec/kong-attachment"
-      tag: "1.1.5"
+      tag: "1.1.6"
   configMapName: appsec-settings-configmap
   configMapContent:
     crowdsec:
