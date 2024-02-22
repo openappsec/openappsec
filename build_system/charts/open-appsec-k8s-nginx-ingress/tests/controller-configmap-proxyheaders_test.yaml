@@ -21,7 +21,7 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-ingress-nginx-custom-proxy-headers
+          value: RELEASE-NAME-open-appsec-k8s-nginx-ingress-custom-proxy-headers
       - equal:
           path: data.X-Custom-Header
           value: Value
