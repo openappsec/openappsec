@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright open-appsec Software Technologies LTD
+# Copyright Check Point Software Technologies LTD
 FILESYSTEM_PATH="/etc/cp"
 LOG_FILE_PATH="/var/log"
 SMB_LOG_FILE_PATH="/storage"
