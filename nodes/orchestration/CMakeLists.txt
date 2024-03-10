@@ -152,6 +152,13 @@ execute_process (
 )
 install(FILES ${z} DESTINATION orchestration/lib)
 
+execute_process (
+	COMMAND sh -c "which yq"
+	OUTPUT_VARIABLE yq
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+install(FILES ${yq} DESTINATION orchestration/scripts RENAME yq PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+
 install(DIRECTORY scripts DESTINATION orchestration USE_SOURCE_PERMISSIONS)
 
 gen_help(

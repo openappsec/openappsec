@@ -58,7 +58,7 @@ Maybe<T>
 PolicyMakerUtils::openFileAsJson(const string &path)
 {
     auto maybe_file_as_json = Singleton::Consume<I_ShellCmd>::by<LocalPolicyMgmtGenerator>()->getExecOutput(
-        getFilesystemPathConfig() + "/bin/yq " + path + " -o json"
+        getFilesystemPathConfig() + "/bin/yq eval " + path + " -o json"
     );
 
     if (!maybe_file_as_json.ok()) {

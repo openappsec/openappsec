@@ -96,7 +96,7 @@ open-appsec GitHub includes four main repositories:
 
 ## Installing external dependencies
 
-Before compiling the services, you'll need to ensure the latest development versions of the following libraries:
+Before compiling the services, you'll need to ensure the latest development versions of the following libraries and tools:
 * Boost
 * OpenSSL
 * PCRE2
@@ -107,12 +107,13 @@ Before compiling the services, you'll need to ensure the latest development vers
 * Redis
 * Hiredis
 * MaxmindDB
+* yq
 
 An example of installing the packages on Alpine:
 
 ```bash
  $ apk update
- $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis libmaxminddb-dev
+ $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis libmaxminddb-dev yq
 ```
 
 ## Compiling and packaging the agent code

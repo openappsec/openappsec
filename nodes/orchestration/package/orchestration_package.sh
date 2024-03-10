@@ -256,7 +256,7 @@ while true; do
         var_fog_address=$1
     elif [ "$1" = "--max-log-size-kb" ]; then
         shift
-        WATCHDOG_MAX_FILE_SIZE=$1
+        WATCHDOG_MAX_FILE_SIZE=$(($1 * 1024))
     elif [ "$1" = "--max-log-rotation" ]; then
         shift
         WATCHDOG_MAX_ROTATIONS=$1
@@ -307,7 +307,7 @@ while true; do
         echo "Log files path: ${LOG_FILE_PATH}"
     elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--smb_sve_v2" ] || [ "$1" = "--smb_thx_v3" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
         shift
-		continue
+                continue
     elif [ "$1" = "--skip_registration" ]; then
         var_skip_registration=true
     elif echo "$1" | grep -q ${FORCE_CLEAN_FLAG}; then
@@ -536,7 +536,7 @@ install_watchdog()
             cp_copy service/x86/ubuntu16/nano_agent.service /etc/systemd/system/nano_agent.service
             echo "ExecStart=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/nano_agent.service
             echo "ExecStartPost=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh" >> /etc/systemd/system/nano_agent.service
-			echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/nano_agent.service
+                        echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/nano_agent.service
 
             cp_exec "systemctl daemon-reload"
             cp_exec "systemctl enable nano_agent"
@@ -673,7 +673,7 @@ upgrade_conf_if_needed()
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
 
         previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
- 		if ! [ -z "$previous_mode" ]; then
+                if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
         fi
 
@@ -716,12 +716,10 @@ copy_orchestration_executable()
     cp_copy open-appsec-cloud-mgmt-k8s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-cloud-mgmt-k8s
     cp_copy open-appsec-ctl.sh ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/open-appsec-ctl.sh
 
-    if [ $var_hybrid_mode = true ]; then
-        if [ -f /ext/appsec/local_policy.yaml ]; then
-            cp_exec "ln -s /ext/appsec/local_policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml"
-        else
-            cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
-        fi
+    if [ -f /ext/appsec/local_policy.yaml ]; then
+        cp_exec "ln -s /ext/appsec/local_policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml"
+    else
+        cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
     fi
 }
 
@@ -729,9 +727,9 @@ copy_k8s_executable()
 {
     if [ "$IS_K8S_ENV" = "true" ]; then
         cp -f k8s-check-update-listener.sh ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh
-	    chmod +x ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh
-	    cp -f k8s-check-update-trigger.sh ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-trigger.sh
-	    chmod +x ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-trigger.sh
+            chmod +x ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh
+            cp -f k8s-check-update-trigger.sh ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-trigger.sh
+            chmod +x ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-trigger.sh
     fi
 }
 
@@ -950,18 +948,18 @@ install_orchestration()
         echo "MAX_FILE_SIZE=${WATCHDOG_MAX_FILE_SIZE}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
         echo "MAX_ROTATION=${WATCHDOG_MAX_ROTATIONS}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
 
-		if [ -n "${FILESYSTEM_PATH}" ]; then
-			echo "CP_ENV_FILESYSTEM=${FILESYSTEM_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
-		fi
-		if [ -n "${LOG_FILE_PATH}" ]; then
-			echo "CP_ENV_LOG_FILE=${LOG_FILE_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
-		fi
-		if [ -n "${USR_LIB_PATH}" ]; then
-			echo "CP_USR_LIB_PATH=${USR_LIB_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
-		fi
-		if [ -n "${INIT_D_PATH}" ]; then
-			echo "CP_INIT_D_PATH=${INIT_D_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
-		fi
+                if [ -n "${FILESYSTEM_PATH}" ]; then
+                        echo "CP_ENV_FILESYSTEM=${FILESYSTEM_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+                fi
+                if [ -n "${LOG_FILE_PATH}" ]; then
+                        echo "CP_ENV_LOG_FILE=${LOG_FILE_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+                fi
+                if [ -n "${USR_LIB_PATH}" ]; then
+                        echo "CP_USR_LIB_PATH=${USR_LIB_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+                fi
+                if [ -n "${INIT_D_PATH}" ]; then
+                        echo "CP_INIT_D_PATH=${INIT_D_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+                fi
     fi
 
     if [ -z "${var_token}" ] && [ ${var_hybrid_mode} = false ] && [ ${var_offline_mode} = false ] && [ -z ${EGG_MODE} ] && [ ${var_no_otp} = false ]; then

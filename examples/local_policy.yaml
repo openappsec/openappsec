@@ -52,7 +52,7 @@ log-triggers:
       url-path: false
       url-query: false
     log-destination:
-      cloud: false
+      cloud: true
       stdout:
         format: json
 
