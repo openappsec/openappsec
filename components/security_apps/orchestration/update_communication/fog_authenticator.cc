@@ -473,10 +473,11 @@ FogAuthenticator::authenticateAgent()
         auto orc_status = Singleton::Consume<I_OrchestrationStatus>::by<FogAuthenticator>();
         credentials = getCredentials();
         if (!credentials.ok()) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to authenticate the agent: " << credentials.getErr();
             orc_status->setFieldStatus(
                 OrchestrationStatusFieldType::REGISTRATION,
                 OrchestrationStatusResult::FAILED,
-                credentials.getErr()
+                "Warning: Agent/Gateway failed the authentication. Contact Check Point support."
             );
             return genError(credentials.getErr());
         }
@@ -516,7 +517,7 @@ FogAuthenticator::authenticateAgent()
                         orc_status->setFieldStatus(
                             OrchestrationStatusFieldType::REGISTRATION,
                             OrchestrationStatusResult::FAILED,
-                            access_token.getErr()
+                            "Warning: Agent/Gateway failed to receive access token. Contact Check Point support."
                         );
                     }
                     int next_session_req = max(

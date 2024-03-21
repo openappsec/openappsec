@@ -99,7 +99,7 @@ V1beta2AppsecLinuxPolicy::serialize(cereal::JSONInputArchive &archive_in)
         archive_in
     );
     parseAppsecJSONKey<vector<NewAppsecLogTrigger>>("logTriggers", log_triggers, archive_in);
-    parseAppsecJSONKey<vector<NewAppSecCustomResponse>>("customResponse", custom_responses, archive_in);
+    parseAppsecJSONKey<vector<NewAppSecCustomResponse>>("customResponses", custom_responses, archive_in);
     parseAppsecJSONKey<vector<NewAppsecException>>("exceptions", exceptions, archive_in);
     parseAppsecJSONKey<vector<NewTrustedSourcesSpec>>("trustedSources", trusted_sources, archive_in);
     parseAppsecJSONKey<vector<NewSourcesIdentifiers>>("sourcesIdentifiers", sources_identifiers, archive_in);

@@ -165,7 +165,7 @@ public:
     void load(cereal::JSONInputArchive &archive_in);
 
     const std::vector<AccessControlRateLimiteRules> & getRules() const;
-    const std::string & getMode() const;
+    const std::string & getMode(const std::string &default_mode = "inactive") const;
     std::vector<RateLimitRulesSection> createRateLimitRulesSection(const RateLimitRulesTriggerSection &trigger) const;
 
 private:
@@ -178,7 +178,7 @@ class AccessControlPracticeSpec
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    const AccessControlRateLimit & geRateLimit() const;
+    const AccessControlRateLimit &getRateLimit() const;
     const std::string & getAppSecClassName() const;
     const std::string & getName() const;
     void setName(const std::string &_name);

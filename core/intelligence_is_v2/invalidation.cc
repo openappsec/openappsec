@@ -37,16 +37,16 @@ Invalidation::setClassifier(ClassifierType type, const string &val)
 }
 
 Invalidation &
-Invalidation::setStringAttr(const string &attr, const string &val)
+Invalidation::setStringAttr(const string &attr, const string &val, bool is_main)
 {
-    string_main_attr[attr] = val;
+    is_main ? string_main_attr[attr] = val : string_attr[attr] = val;
     return *this;
 }
 
 Invalidation &
-Invalidation::setStringSetAttr(const string &attr, const set<string> &val)
+Invalidation::setStringSetAttr(const string &attr, const set<string> &val, bool is_main)
 {
-    set_string_main_attr[attr] = val;
+    is_main ? set_string_main_attr[attr] = val : set_string_attr[attr] = val;
     return *this;
 }
 
@@ -64,8 +64,15 @@ Invalidation::setObjectType(ObjectType type)
     return *this;
 }
 
+Invalidation &
+Invalidation::setInvalidationType(InvalidationType type)
+{
+    invalidation_type = type;
+    return *this;
+}
+
 Maybe<string, void>
-Invalidation::getStringAttr(const string &attr) const
+Invalidation::getStringMainAttr(const string &attr) const
 {
     auto val_ref = string_main_attr.find(attr);
     if (val_ref == string_main_attr.end()) return genError<void>();
@@ -73,10 +80,26 @@ Invalidation::getStringAttr(const string &attr) const
 }
 
 Maybe<set<string>, void>
-Invalidation::getStringSetAttr(const string &attr) const
+Invalidation::getStringSetMainAttr(const string &attr) const
 {
     auto val_ref = set_string_main_attr.find(attr);
     if (val_ref == set_string_main_attr.end()) return genError<void>();
+    return val_ref->second;
+}
+
+Maybe<string, void>
+Invalidation::getStringAttr(const string &attr) const
+{
+    auto val_ref = string_attr.find(attr);
+    if (val_ref == string_attr.end()) return genError<void>();
+    return val_ref->second;
+}
+
+Maybe<set<string>, void>
+Invalidation::getStringSetAttr(const string &attr) const
+{
+    auto val_ref = set_string_attr.find(attr);
+    if (val_ref == set_string_attr.end()) return genError<void>();
     return val_ref->second;
 }
 
@@ -108,6 +131,12 @@ static const map<Intelligence::ObjectType, string> convertObjectType = {
     { Intelligence::ObjectType::CONFIGURATION, "configuration" },
     { Intelligence::ObjectType::SESSION, "session" },
     { Intelligence::ObjectType::SHORTLIVED, "shortLived" }
+};
+
+static const map<Intelligence::InvalidationType, string> convertInvalidationType = {
+    { Intelligence::InvalidationType::ADD, "add" },
+    { Intelligence::InvalidationType::DELETE, "delete" },
+    { Intelligence::InvalidationType::UPDATE, "update" }
 };
 
 Maybe<string>
@@ -145,6 +174,7 @@ Invalidation::genObject() const
     }
 
     if (object_type.ok()) invalidation <<", \"objectType\": \"" << convertObjectType.at(*object_type) << '"';
+    invalidation << ", \"invalidationType\": \"" << convertInvalidationType.at(invalidation_type) << '"';
     if (source_id.ok()) invalidation <<", \"sourceId\": \"" << *source_id << '"';
 
     if (!string_main_attr.empty() || !set_string_main_attr.empty()) {
@@ -161,9 +191,35 @@ Invalidation::genObject() const
             auto val = makeSeparatedStr(attr.second, ", ");
             invalidation << "{ \"" << attr.first << "\": [ ";
             bool internal_first = true;
-            for (auto &val : attr.second) {
+            for (auto &value : attr.second) {
                 if (!internal_first) invalidation << ", ";
-                invalidation << "\"" << val << "\"";
+                invalidation << "\"" << value << "\"";
+                internal_first = false;
+            }
+            invalidation << " ] }";
+            first = false;
+        }
+
+        invalidation << " ]";
+    }
+
+    if (!string_attr.empty() || !set_string_attr.empty()) {
+        invalidation << ", \"attributes\": [ ";
+        bool first = true;
+        for (auto &attr : string_attr) {
+            if (!first) invalidation << ", ";
+            invalidation << "{ \"" << attr.first << "\": \"" << attr.second << "\" }";
+            first = false;
+        }
+
+        for (auto &attr : set_string_attr) {
+            if (!first) invalidation << ", ";
+            auto val = makeSeparatedStr(attr.second, ", ");
+            invalidation << "{ \"" << attr.first << "\": [ ";
+            bool internal_first = true;
+            for (auto &value : attr.second) {
+                if (!internal_first) invalidation << ", ";
+                invalidation << "\"" << value << "\"";
                 internal_first = false;
             }
             invalidation << " ] }";
@@ -208,16 +264,29 @@ Invalidation::matches(const Invalidation &other) const
         if (!other.object_type.ok() || *object_type != *other.object_type) return false;
     }
 
+    if (invalidation_type != other.invalidation_type) return false;
+
     if (source_id.ok()) {
         if (!other.source_id.ok() || *source_id != *other.source_id) return false;
     }
 
     for (auto &key_value : string_main_attr) {
-        if (!other.hasAttr(key_value.first, key_value.second)) return false;
+        if (!other.hasMainAttr(key_value.first, key_value.second)) return false;
     }
 
 
     for (auto &key_values : set_string_main_attr) {
+        for (auto &value : key_values.second) {
+            if (!other.hasMainAttr(key_values.first, value)) return false;
+        }
+    }
+
+    for (auto &key_value : string_attr) {
+        if (!other.hasAttr(key_value.first, key_value.second)) return false;
+    }
+
+
+    for (auto &key_values : set_string_attr) {
         for (auto &value : key_values.second) {
             if (!other.hasAttr(key_values.first, value)) return false;
         }
@@ -227,13 +296,27 @@ Invalidation::matches(const Invalidation &other) const
 }
 
 bool
-Invalidation::hasAttr(const string &key, const string &value) const
+Invalidation::hasMainAttr(const string &key, const string &value) const
 {
     auto string_elem = string_main_attr.find(key);
     if (string_elem != string_main_attr.end()) return string_elem->second == value;
 
     auto set_string_elem = set_string_main_attr.find(key);
     if (set_string_elem != set_string_main_attr.end()) {
+        return set_string_elem->second.find(value) != set_string_elem->second.end();
+    }
+
+    return false;
+}
+
+bool
+Invalidation::hasAttr(const string &key, const string &value) const
+{
+    auto string_elem = string_attr.find(key);
+    if (string_elem != string_attr.end()) return string_elem->second == value;
+
+    auto set_string_elem = set_string_attr.find(key);
+    if (set_string_elem != set_string_attr.end()) {
         return set_string_elem->second.find(value) != set_string_elem->second.end();
     }
 

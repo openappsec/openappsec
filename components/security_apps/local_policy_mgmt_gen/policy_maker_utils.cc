@@ -996,13 +996,15 @@ PolicyMakerUtils::createIpsSections(
     const string &source_identifier,
     const string & context,
     const V1beta2AppsecLinuxPolicy &policy,
-    map<AnnotationTypes, string> &rule_annotations)
+    map<AnnotationTypes, string> &rule_annotations,
+    const string &default_mode)
 {
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
         policy);
 
-    if (apssec_practice.getIntrusionPrevention().getMode().empty()) return;
+    const string &override_mode = apssec_practice.getIntrusionPrevention().getMode(default_mode);
+    if (override_mode == "Inactive" || override_mode == "Disabled") return;
 
     IpsProtectionsSection ips_section = IpsProtectionsSection(
         context,
@@ -1011,8 +1013,8 @@ PolicyMakerUtils::createIpsSections(
         practice_name,
         practice_id,
         source_identifier,
-        apssec_practice.getIntrusionPrevention().getMode(),
-        apssec_practice.getIntrusionPrevention().createIpsRules()
+        override_mode,
+        apssec_practice.getIntrusionPrevention().createIpsRules(override_mode)
     );
 
     ips[asset_name] = ips_section;
@@ -1068,13 +1070,16 @@ PolicyMakerUtils::createSnortSections(
     const string &practice_id,
     const string &source_identifier,
     const V1beta2AppsecLinuxPolicy &policy,
-    map<AnnotationTypes, string> &rule_annotations)
+    map<AnnotationTypes, string> &rule_annotations,
+    const string &default_mode)
 {
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
         policy);
 
-    if (apssec_practice.getSnortSignatures().getOverrideMode() == "inactive" ||
+    const string &override_mode = apssec_practice.getSnortSignatures().getOverrideMode(default_mode);
+    if (override_mode == "Inactive" ||
+        override_mode == "Disabled" ||
         apssec_practice.getSnortSignatures().getFiles().size() == 0) {
         return;
     }
@@ -1094,7 +1099,7 @@ PolicyMakerUtils::createSnortSections(
         practice_name,
         practice_id,
         source_identifier,
-        apssec_practice.getSnortSignatures().getOverrideMode(),
+        override_mode,
         apssec_practice.getSnortSignatures().getFiles()
     );
 
@@ -1109,7 +1114,8 @@ PolicyMakerUtils::createFileSecuritySections(
     const string &practice_name,
     const string &context,
     const V1beta2AppsecLinuxPolicy &policy,
-    map<AnnotationTypes, string> &rule_annotations)
+    map<AnnotationTypes, string> &rule_annotations,
+    const string &default_mode)
 {
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
@@ -1122,7 +1128,8 @@ PolicyMakerUtils::createFileSecuritySections(
         asset_name,
         asset_id,
         practice_name,
-        practice_id
+        practice_id,
+        default_mode
     );
 
     file_security[asset_name] = file_security_section;
@@ -1134,6 +1141,7 @@ PolicyMakerUtils::createRateLimitSection(
     const string &url,
     const string &uri,
     const string &trigger_id,
+    const std::string &default_mode,
     const V1beta2AppsecLinuxPolicy &policy,
     map<AnnotationTypes, string> &rule_annotations)
 {
@@ -1157,13 +1165,13 @@ PolicyMakerUtils::createRateLimitSection(
         trigger = RateLimitRulesTriggerSection(trigger_id, trigger_name, "Trigger");
     }
 
-    auto rules = access_control_practice.geRateLimit().createRateLimitRulesSection(trigger);
+    auto rules = access_control_practice.getRateLimit().createRateLimitRulesSection(trigger);
 
     rate_limit[rule_annotations[AnnotationTypes::ACCESS_CONTROL_PRACTICE]] = RateLimitSection(
         asset_name,
         url,
         uri,
-        access_control_practice.geRateLimit().getMode(),
+        access_control_practice.getRateLimit().getMode(default_mode),
         practice_id,
         rule_annotations[AnnotationTypes::ACCESS_CONTROL_PRACTICE],
         rules
@@ -1198,12 +1206,13 @@ PolicyMakerUtils::createWebAppSection(
         practice_id,
         rule_annotations[AnnotationTypes::PRACTICE],
         rule_config.getContext(),
-        apssec_practice.getWebAttacks().getMinimumConfidence(),
+        apssec_practice.getWebAttacks().getMinimumConfidence(default_mode),
         apssec_practice.getWebAttacks().getMode(default_mode),
         practice_advance_config,
         apssec_practice.getAntiBot(),
         log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],
-        trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]]
+        trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]],
+        apssec_practice.getWebAttacks().getProtections()
     );
     web_apps[rule_config.getAssetName()] = web_app;
 }
@@ -1271,7 +1280,8 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         current_identifier,
         rule_config.getContext(),
         policy,
-        rule_annotations
+        rule_annotations,
+        default_mode
     );
 
     createSnortSections(
@@ -1282,7 +1292,8 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         practice_id,
         current_identifier,
         policy,
-        rule_annotations
+        rule_annotations,
+        default_mode
     );
 
     createFileSecuritySections(
@@ -1292,11 +1303,18 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         rule_annotations[AnnotationTypes::PRACTICE],
         "assetId(" + rule_config.getAssetId() + ")",
         policy,
-        rule_annotations
+        rule_annotations,
+        default_mode
     );
 
     if (!web_apps.count(rule_config.getAssetName())) {
-        createWebAppSection(policy, rule_config, practice_id, asset_name, default_mode, rule_annotations);
+        createWebAppSection(
+            policy,
+            rule_config,
+            practice_id,
+            asset_name,
+            default_mode,
+            rule_annotations);
     }
 
 }
@@ -1568,6 +1586,7 @@ PolicyMakerUtils::createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsed
         std::get<0>(splited_host_name),
         std::get<2>(splited_host_name),
         log_triggers[rule_annotations[AnnotationTypes::TRIGGER]].getTriggerId(),
+        rule.getMode(),
         policy,
         rule_annotations
     );

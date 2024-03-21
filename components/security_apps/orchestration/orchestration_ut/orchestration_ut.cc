@@ -90,6 +90,7 @@ public:
             "/api/v1/agents/events",
             _,
             MessageCategory::LOG,
+            _,
             _
         )).WillRepeatedly(SaveArg<2>(&message_body));
 

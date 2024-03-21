@@ -215,6 +215,7 @@ TEST_F(MetricTest, basicMetricTest)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -283,6 +284,7 @@ TEST_F(MetricTest, basicMetricTest)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -353,6 +355,7 @@ TEST_F(MetricTest, basicMetricTest)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -433,6 +436,7 @@ TEST_F(MetricTest, printMetricsTest)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).Times(AnyNumber());
 
@@ -504,6 +508,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -571,6 +576,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -638,6 +644,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -727,6 +734,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -801,6 +809,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -869,6 +878,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -1018,6 +1028,7 @@ TEST_F(MetricTest, testMapMetric)
         "/api/v1/agents/events",
         _,
         MessageCategory::METRIC,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
     routine();

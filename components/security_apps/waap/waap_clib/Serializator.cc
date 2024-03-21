@@ -706,6 +706,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
 
         MessageMetadata req_md(getLearningHost(), 80);
         req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+        req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         bool ok = messaging->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             "/api/sync",

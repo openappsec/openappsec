@@ -141,9 +141,12 @@ public:
 
     ReportMessaging & operator<<(const LogField &field);
 
+    void setForceBuffering(bool _force_buffering);
+
 private:
     Report report;
     bool is_async_message;
+    bool force_buffering = false;
     MessageCategory message_type_tag;
 };
 

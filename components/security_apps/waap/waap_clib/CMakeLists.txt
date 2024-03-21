@@ -86,6 +86,7 @@ add_library(waap_clib
     ParserPercentEncode.cc
     ParserPairs.cc
     Waf2Util2.cc
+    ParserPDF.cc
 )
 
 add_definitions("-Wno-unused-function")

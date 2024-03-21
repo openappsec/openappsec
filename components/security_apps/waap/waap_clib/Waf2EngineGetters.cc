@@ -551,6 +551,11 @@ const std::set<std::string> Waf2Transaction::getFoundPatterns() const
     return m_found_patterns;
 }
 
+bool Waf2Transaction::checkIsHeaderOverrideScanRequired()
+{
+    return m_isHeaderOverrideScanRequired;
+}
+
 Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
 {
     Waap::Override::State overrideState;
@@ -566,6 +571,7 @@ Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
     if (overridePolicy) { // later we will run response overrides
         overrideStateResponse.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, false);
     }
+    m_isHeaderOverrideScanRequired = false;
     return overrideStateResponse;
 }
 
@@ -590,6 +596,23 @@ const std::shared_ptr<Waap::Trigger::Log> Waf2Transaction::getTriggerLog(const s
     }
 
     return m_triggerLog;
+}
+
+bool Waf2Transaction::isTriggerReportExists(const std::shared_ptr<
+    Waap::Trigger::Policy> &triggerPolicy)
+{
+    if (!triggerPolicy) {
+        return false;
+    }
+    if (m_triggerReport) {
+        return m_triggerReport;
+    }
+    for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
+        if (trigger.triggerType == "report") {
+            return m_triggerReport = true;
+        }
+    }
+    return m_triggerReport;
 }
 
 ReportIS::Severity Waf2Transaction::computeEventSeverityFromDecision() const

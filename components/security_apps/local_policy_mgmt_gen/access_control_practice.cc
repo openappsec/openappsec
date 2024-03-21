@@ -12,20 +12,34 @@
 // limitations under the License.
 
 #include "access_control_practice.h"
+#include "new_practice.h"
 
 using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
-static const map<string, string> valid_modes_to_key = {
+static const set<string> valid_modes = {
+    "prevent",
+    "detect",
+    "inactive",
+    "prevent-learn",
+    "detect-learn",
+    "as-top-level",
+    "inherited"
+};
+
+static const unordered_map<string, string> valid_modes_to_key = {
     {"prevent", "Active"},
+    {"prevent-learn", "Active"},
     {"detect", "Detect"},
+    {"detect-learn", "Detect"},
     {"inactive", "Inactive"}
 };
+
 static const set<string> valid_units    = {"minute", "second"};
 
-static const std::unordered_map<std::string, std::string> key_to_units_val = {
+static const unordered_map<std::string, std::string> key_to_units_val = {
     { "second", "Second"},
     { "minute", "Minute"}
 };
@@ -177,13 +191,10 @@ void
 AccessControlRateLimit::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading Access control rate limit";
-    string in_mode;
-    parseAppsecJSONKey<string>("overrideMode", in_mode, archive_in, "detect");
-    if (valid_modes_to_key.find(in_mode) == valid_modes_to_key.end()) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec access control rate limit override mode invalid: " << in_mode;
-        throw PolicyGenException("AppSec access control rate limit override mode invalid: " + in_mode);
-    } else {
-        mode = valid_modes_to_key.at(in_mode);
+    parseMandatoryAppsecJSONKey<string>("overrideMode", mode, archive_in, "inactive");
+    if (valid_modes.find(mode) == valid_modes.end()) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec access control rate limit override mode invalid: " << mode;
+        throw PolicyGenException("AppSec access control rate limit override mode invalid: " + mode);
     }
     parseAppsecJSONKey<std::vector<AccessControlRateLimiteRules>>("rules", rules, archive_in);
 }
@@ -205,9 +216,10 @@ AccessControlRateLimit::getRules() const
 }
 
 const string &
-AccessControlRateLimit::getMode() const
+AccessControlRateLimit::getMode(const std::string &default_mode) const
 {
-    return mode;
+    const string &res = getModeWithDefault(mode, default_mode, valid_modes_to_key);
+    return res;
 }
 
 void
@@ -227,7 +239,7 @@ AccessControlPracticeSpec::setName(const string &_name)
 }
 
 const AccessControlRateLimit &
-AccessControlPracticeSpec::geRateLimit() const
+AccessControlPracticeSpec::getRateLimit() const
 {
     return rate_limit;
 }

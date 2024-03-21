@@ -158,7 +158,8 @@ private:
         const std::string &source_identifier,
         const std::string & context,
         const V1beta2AppsecLinuxPolicy &policy,
-        std::map<AnnotationTypes, std::string> &rule_annotations
+        std::map<AnnotationTypes, std::string> &rule_annotations,
+        const std::string &default_mode
     );
 
     void createSnortProtecionsSection(const std::string &file_name, bool is_temporary);
@@ -172,7 +173,8 @@ private:
         const std::string &practice_id,
         const std::string &source_identifier,
         const V1beta2AppsecLinuxPolicy &policy,
-        std::map<AnnotationTypes, std::string> &rule_annotations
+        std::map<AnnotationTypes, std::string> &rule_annotations,
+        const std::string &default_mode
     );
 
     void
@@ -183,7 +185,8 @@ private:
         const std::string &practice_name,
         const std::string & context,
         const V1beta2AppsecLinuxPolicy &policy,
-        std::map<AnnotationTypes, std::string> &rule_annotations
+        std::map<AnnotationTypes, std::string> &rule_annotations,
+        const std::string &default_mode
     );
 
     void
@@ -192,6 +195,7 @@ private:
         const std::string &url,
         const std::string &uri,
         const std::string &trigger_id,
+        const std::string &default_mode,
         const V1beta2AppsecLinuxPolicy &policy,
         std::map<AnnotationTypes, std::string> &rule_annotations
     );

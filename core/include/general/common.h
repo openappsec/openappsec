@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 #include <sstream>
 #include <iomanip>
 #include <sys/types.h>
@@ -129,6 +130,18 @@ ostream&
 operator<<(ostream &os, const pair<const First, Second> &printable_pair)
 {
     os << "{" << printable_pair.first << "," << printable_pair.second << "}";
+    return os;
+}
+
+template <typename Printable>
+ostream &
+operator<<(ostream &os, const vector<Printable> &obj)
+{
+    bool first = true;
+    for (const auto &val : obj) {
+        os << (first ? "" : ", ") << val;
+        first = false;
+    }
     return os;
 }
 

@@ -1,3 +1,4 @@
+add_subdirectory(generic_rulebase)
 add_subdirectory(geo_location)
 add_subdirectory(http_transaction_data)
 add_subdirectory(ip_utilities)

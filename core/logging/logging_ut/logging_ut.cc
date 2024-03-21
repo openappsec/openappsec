@@ -171,6 +171,7 @@ public:
             _,
             _,
             MessageCategory::LOG,
+            _,
             _
         )).WillRepeatedly(SaveArg<2>(&body));
     }
@@ -745,6 +746,7 @@ TEST_F(LogTest, FogBulkLogs)
         _,
         _,
         MessageCategory::LOG,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&local_body));
 
@@ -1143,6 +1145,7 @@ TEST(LogTestInstanceAwareness, LogGenInstanceAwareness)
         _,
         _,
         MessageCategory::LOG,
+        _,
         _
     )).Times(AnyNumber());
 
@@ -1248,6 +1251,7 @@ TEST(LogTestWithoutComponent, RegisterBasicConfig)
         _,
         _,
         MessageCategory::LOG,
+        _,
         _
     )).Times(AnyNumber());
 
@@ -1295,6 +1299,7 @@ TEST(LogTestWithoutComponent, RegisterAdvancedConfig)
         _,
         _,
         MessageCategory::LOG,
+        _,
         _
     )).Times(AnyNumber());
 
@@ -1366,6 +1371,7 @@ TEST_F(LogTest, BulkModification)
         _,
         _,
         MessageCategory::LOG,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&local_body));
 

@@ -25,6 +25,7 @@ public:
     void setErrorLimiter(bool flag);
     void setCollectResponseForLog(bool flag);
     void setApplyOverride(bool flag);
+    void setTriggerReport(bool flag);
 
     bool getApplyOverride(void);
 private:
@@ -34,6 +35,7 @@ private:
     bool rateLimiting;
     bool collectResponseForLog;
     bool applyOverride;
+    bool triggerReport;
 };
 
 }

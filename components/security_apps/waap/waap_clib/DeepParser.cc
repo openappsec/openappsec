@@ -26,6 +26,7 @@
 #include "ParserPercentEncode.h"
 #include "ParserPairs.h"
 #include "ParserDelimiter.h"
+#include "ParserPDF.h"
 #include "WaapAssetState.h"
 #include "Waf2Regex.h"
 #include "Waf2Util.h"
@@ -1146,9 +1147,15 @@ DeepParser::createInternalParser(
             ));
             offset = 0;
         } else if (isTopData && (isBinaryType || m_pWaapAssetState->isBinarySampleType(cur_val))) {
-            dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a binary file";
-            m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserBinary>>(*this, parser_depth + 1));
-            offset = 0;
+            if (isPDFDetected(cur_val)) {
+                dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a PDF file";
+                m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserPDF>>(*this, parser_depth + 1));
+                offset = 0;
+            } else {
+                dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a binary file";
+                m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserBinary>>(*this, parser_depth + 1));
+                offset = 0;
+            }
         }
     }
     if (offset < 0) {
@@ -1472,4 +1479,13 @@ DeepParser::shouldEnforceDepthLimit(const std::shared_ptr<ParserBase> &parser) c
         return true;
     }
     return false;
+}
+
+bool
+DeepParser::isPDFDetected(const std::string &cur_val) const
+{
+    static const std::string PDF_header("%PDF-");
+    if (cur_val.size() < 10)
+        return false;
+    return cur_val.substr(0, cur_val.size() > 64 ? 64 : cur_val.size()).find(PDF_header) != std::string::npos;
 }

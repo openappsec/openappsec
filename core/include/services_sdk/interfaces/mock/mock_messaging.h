@@ -18,14 +18,15 @@ public:
             MessageMetadata
         )
     );
-    MOCK_METHOD5(
+    MOCK_METHOD6(
         sendAsyncMessage,
         void (
             HTTPMethod,
             const string &,
             const string &,
             MessageCategory,
-            MessageMetadata
+            const MessageMetadata &,
+            bool
         )
     );
 

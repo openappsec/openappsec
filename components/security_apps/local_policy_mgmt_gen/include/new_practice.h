@@ -24,6 +24,14 @@
 #include "debug.h"
 #include "local_policy_common.h"
 
+bool isModeInherited(const std::string &mode);
+
+const std::string &getModeWithDefault(
+    const std::string &mode,
+    const std::string &default_mode,
+    const std::unordered_map<std::string, std::string> &key_to_val
+);
+
 class IpsProtectionsRulesSection
 {
 public:
@@ -126,8 +134,8 @@ class NewIntrusionPrevention
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    std::vector<IpsProtectionsRulesSection> createIpsRules() const;
-    const std::string & getMode() const;
+    std::vector<IpsProtectionsRulesSection> createIpsRules(const std::string &default_mode) const;
+    const std::string & getMode(const std::string &default_mode = "inactive") const;
 
 private:
     std::string override_mode;
@@ -273,7 +281,8 @@ public:
         const std::string &asset_name,
         const std::string &asset_id,
         const std::string &practice_name,
-        const std::string &practice_id
+        const std::string &practice_id,
+        const std::string &default_mode
     ) const;
 
 private:
@@ -486,7 +495,7 @@ public:
     void load(cereal::JSONInputArchive &archive_in);
 
     void addFile(const std::string &file_name);
-    const std::string & getOverrideMode() const;
+    const std::string & getOverrideMode(const std::string &default_mode = "inactive") const;
     const std::vector<std::string> & getConfigMap() const;
     const std::vector<std::string> & getFiles() const;
     bool isTemporary() const;
@@ -530,10 +539,10 @@ class NewAppSecWebAttackProtections
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    const std::string getCsrfProtectionMode() const;
-    const std::string & getErrorDisclosureMode() const;
+    const std::string & getCsrfProtectionMode(const std::string &default_mode = "inactive") const;
+    const std::string & getErrorDisclosureMode(const std::string &default_mode = "inactive") const;
+    const std::string & getOpenRedirectMode(const std::string &default_mode = "inactive") const;
     bool getNonValidHttpMethods() const;
-    const std::string getOpenRedirectMode() const;
 
 private:
     std::string csrf_protection;
@@ -551,9 +560,9 @@ public:
     int getMaxHeaderSizeBytes() const;
     int getMaxObjectDepth() const;
     int getMaxUrlSizeBytes() const;
-    const std::string & getMinimumConfidence() const;
-    const NewAppSecWebAttackProtections & getprotections() const;
-    const std::string & getMode(const std::string &default_mode = "Inactive") const;
+    const std::string & getMinimumConfidence(const std::string &default_mode = "inactive") const;
+    const NewAppSecWebAttackProtections & getProtections() const;
+    const std::string & getMode(const std::string &default_mode = "inactive") const;
 
 private:
     int                             max_body_size_kb;

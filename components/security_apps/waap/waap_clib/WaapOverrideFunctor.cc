@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include <string>
+#include <cctype>
 #include <boost/regex.hpp>
 #include "WaapOverrideFunctor.h"
 #include "Waf2Engine.h"
@@ -47,14 +48,16 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const Waap::Util::C
 bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex& rx)
 {
     boost::cmatch what;
+    std::string tagLower = tag;
+    std::transform(tagLower.begin(), tagLower.end(), tagLower.begin(), ::tolower);
     try {
-        if (tag == "url") {
-            return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getUri().c_str(), what, rx);
+        if (tagLower == "url") {
+            return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getUriStr().c_str(), what, rx);
         }
-        else if (tag == "hostname") {
+        else if (tagLower == "hostname") {
             return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getHost().c_str(), what, rx);
         }
-        else if (tag == "sourceidentifier") {
+        else if (tagLower == "sourceidentifier") {
             return NGEN::Regex::regexMatch(
                 __FILE__,
                 __LINE__,
@@ -63,7 +66,7 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
                 rx
             );
         }
-        else if (tag == "keyword") {
+        else if (tagLower == "keyword") {
             for (const std::string& keywordStr : waf2Transaction.getKeywordMatches()) {
                 if (NGEN::Regex::regexMatch(__FILE__, __LINE__, keywordStr.c_str(), what, rx)) {
                     return true;
@@ -71,7 +74,7 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
             }
             return false;
         }
-        else if (tag == "paramname" || tag == "paramName") {
+        else if (tagLower == "paramname") {
             for (const DeepParser::KeywordInfo& keywordInfo : waf2Transaction.getKeywordInfo()) {
                 if (NGEN::Regex::regexMatch(__FILE__, __LINE__, keywordInfo.getName().c_str(), what, rx)) {
                     return true;
@@ -85,7 +88,7 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
             }
             return false;
         }
-        else if (tag == "paramvalue" || tag == "paramValue") {
+        else if (tagLower == "paramvalue") {
             for (const DeepParser::KeywordInfo& keywordInfo : waf2Transaction.getKeywordInfo()) {
                 if (NGEN::Regex::regexMatch(__FILE__, __LINE__, keywordInfo.getValue().c_str(), what, rx)) {
                     return true;
@@ -96,10 +99,10 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
             }
             return false;
         }
-        else if (tag == "paramlocation" || tag == "paramLocation") {
+        else if (tagLower == "paramlocation") {
             return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getLocation().c_str(), what, rx);
         }
-        else if (tag == "responsebody" || tag == "responseBody") {
+        else if (tagLower == "responsebody") {
             waf2Transaction.getResponseInspectReasons().setApplyOverride(true);
             if (!waf2Transaction.getResponseBody().empty()) {
                 boost::smatch matcher;
@@ -108,6 +111,32 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
             } else {
                 return false;
             }
+        } else if (tagLower == "headername") {
+            if (!waf2Transaction.checkIsHeaderOverrideScanRequired()) {
+                dbgDebug(D_WAAP_OVERRIDE) << "Header name override scan is not required";
+                return false;
+            }
+            for (auto& hdr_pair : waf2Transaction.getHdrPairs()) {
+                std::string value = hdr_pair.first;
+                std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+                if(NGEN::Regex::regexMatch(__FILE__, __LINE__, value.c_str(), what, rx)) {
+                    return true;
+                }
+            }
+            return false;
+        } else if (tagLower == "headervalue") {
+            if (!waf2Transaction.checkIsHeaderOverrideScanRequired()) {
+                dbgDebug(D_WAAP_OVERRIDE) << "Header value override scan is not required";
+                return false;
+            }
+            for (auto& hdr_pair : waf2Transaction.getHdrPairs()) {
+                std::string value = hdr_pair.second;
+                std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+                if (NGEN::Regex::regexMatch(__FILE__, __LINE__, value.c_str(), what, rx)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
     catch (std::runtime_error & e) {
@@ -116,6 +145,6 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
     }
 
     // Unknown tag: should not occur
-    dbgWarning(D_WAAP) << "Invalid override tag:" << tag;
+    dbgWarning(D_WAAP) << "Invalid override tag: " << tag;
     return false;
 }

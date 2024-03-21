@@ -20,6 +20,7 @@
 #include "../waap_clib/WaapOpenRedirect.h"
 #include "../waap_clib/FpMitigation.h"
 #include "../waap_clib/DeepParser.h"
+#include "../waap_clib/OASchemaUpdaterConfConstant.h"
 #include "http_inspection_events.h"
 
 enum HeaderType {
@@ -29,6 +30,7 @@ enum HeaderType {
     COOKIE_HEADER,
     REFERER_HEADER,
     CONTENT_TYPE_HEADER,
+    AUTHORIZATION_HEADER,
     CLEAN_HEADER,
     OTHER_KNOWN_HEADERS
 };
@@ -135,6 +137,7 @@ public:
     virtual void add_response_body_chunk(const char* data, int data_len) = 0;
     virtual void end_response_body() = 0;
     virtual void end_response() = 0;
+    virtual const std::string& getResponseBody() = 0;
 
     virtual void collectFoundPatterns() = 0;
     virtual ReportIS::Severity computeEventSeverityFromDecision() const = 0;

@@ -1,6 +1,5 @@
 add_subdirectory(report_messaging)
 add_subdirectory(http_manager)
-add_subdirectory(generic_rulebase)
 add_subdirectory(signal_handler)
 add_subdirectory(gradual_deployment)
 add_subdirectory(packet)

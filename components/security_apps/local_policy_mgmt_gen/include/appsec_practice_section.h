@@ -278,6 +278,7 @@ public:
         const std::vector<InnerException> &parsed_exceptions
     );
 
+    // used for V1beta2
     WebAppSection(
         const std::string &_application_urls,
         const std::string &_asset_id,
@@ -292,7 +293,8 @@ public:
         const PracticeAdvancedConfig &_practice_advanced_config,
         const AppsecPracticeAntiBotSection &_anti_bots,
         const LogTriggerSection &parsed_log_trigger,
-        const AppSecTrustedSources &parsed_trusted_sources);
+        const AppSecTrustedSources &parsed_trusted_sources,
+        const NewAppSecWebAttackProtections &protections);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -310,6 +312,9 @@ private:
     std::string web_attack_mitigation_action;
     std::string web_attack_mitigation_severity;
     std::string web_attack_mitigation_mode;
+    std::string csrf_protection_mode;
+    std::string open_redirect_mode;
+    std::string error_disclosure_mode;
     bool web_attack_mitigation;
     std::vector<TriggersInWaapSection> triggers;
     PracticeAdvancedConfig practice_advanced_config;

@@ -136,10 +136,13 @@ MessagingComp::sendAsyncMessage(
     const string &uri,
     const string &body,
     MessageCategory category,
-    const MessageMetadata &message_metadata
+    const MessageMetadata &message_metadata,
+    bool force_buffering
 )
 {
-    i_messaging_buffer->pushNewBufferedMessage(body, method, uri, category, message_metadata, false);
+    MessageMetadata new_message_metadata = message_metadata;
+    new_message_metadata.setShouldBufferMessage(force_buffering);
+    i_messaging_buffer->pushNewBufferedMessage(body, method, uri, category, new_message_metadata, false);
 }
 
 Maybe<HTTPStatusCode, HTTPResponse>

@@ -55,10 +55,11 @@ public:
         const std::string &uri,
         const std::string &body,
         const MessageCategory category,
-        MessageMetadata message_metadata
+        const MessageMetadata &message_metadata,
+        bool force_buffering
     ) override
     {
-        return messaging_comp.sendAsyncMessage(method, uri, body, category, message_metadata);
+        return messaging_comp.sendAsyncMessage(method, uri, body, category, message_metadata, force_buffering);
     }
 
     Maybe<HTTPStatusCode, HTTPResponse>

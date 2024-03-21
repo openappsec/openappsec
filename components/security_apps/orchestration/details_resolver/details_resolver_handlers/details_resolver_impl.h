@@ -33,7 +33,10 @@
 SHELL_PRE_CMD("read sdwan data",
     "(cpsdwan get_data > /tmp/cpsdwan_getdata_orch.json~) "
     "&& (mv /tmp/cpsdwan_getdata_orch.json~ /tmp/cpsdwan_getdata_orch.json)")
-#endif
+#endif //gaia || smb
+#if defined(smb)
+SHELL_PRE_CMD("gunzip local.cfg", "gunzip -c $FWDIR/state/local/FW1/local.cfg.gz > /tmp/local.cfg")
+#endif  //smb
 #endif
 
 #ifdef SHELL_CMD_HANDLER
@@ -115,6 +118,22 @@ SHELL_CMD_HANDLER(
     "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:VPN_1/ {print $3}' | head -n 1",
     getGWIPSecVPNBlade
 )
+SHELL_CMD_HANDLER(
+    "SMCBasedMgmtId",
+    "domain_uuid=$(jq -r .domain_uuid /tmp/cpsdwan_getdata_orch.json);"
+    "[ \"$domain_uuid\" != \"null\" ] && echo \"$domain_uuid\" ||"
+    "cat $FWDIR/database/myself_objects.C "
+    "| awk -F'[{}]' '/:masters/ { found=1; next } found && /:Uid/ { uid=tolower($2); print uid; exit }'",
+    getSMCBasedMgmtId
+)
+SHELL_CMD_HANDLER(
+    "SMCBasedMgmtName",
+    "domain_name=$(jq -r .domain_name /tmp/cpsdwan_getdata_orch.json);"
+    "[ \"$domain_name\" != \"null\" ] && echo \"$domain_name\" ||"
+    "cat $FWDIR/database/myself_objects.C "
+    "| awk -F '[:()]' '/:masters/ {found=1; next} found && /:Name/ {print $3; exit}'",
+    getSMCBasedMgmtName
+)
 #endif //gaia
 
 #if defined(smb)
@@ -147,6 +166,23 @@ SHELL_CMD_HANDLER(
     "IPSec VPN",
     "cat $FWDIR/conf/active_blades.txt | grep -o 'IPS [01]' | cut -d ' ' -f2",
     getSmbGWIPSecVPNBlade
+)
+SHELL_CMD_HANDLER(
+    "SMCBasedMgmtId",
+    "domain_uuid=$(jq -r .domain_uuid /tmp/cpsdwan_getdata_orch.json);"
+    "[ \"$domain_uuid\" != \"null\" ] && echo \"$domain_uuid\" ||"
+    "cat /tmp/local.cfg "
+    "| awk -F'[{}]' '/:masters/ { found=1; next } found && /:Uid/ { uid=tolower($2); print uid; exit }'",
+    getSMCBasedMgmtId
+)
+
+SHELL_CMD_HANDLER(
+    "SMCBasedMgmtName",
+    "domain_name=$(jq -r .domain_name /tmp/cpsdwan_getdata_orch.json);"
+    "[ \"$domain_name\" != \"null\" ] && echo \"$domain_name\" ||"
+    "cat /tmp/local.cfg "
+    "| awk -F '[:()]' '/:masters/ {found=1; next} found && /:Name/ {print $3; exit}'",
+    getSMCBasedMgmtName
 )
 #endif//smb
 
@@ -190,3 +226,9 @@ FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 FILE_CONTENT_HANDLER("AppSecModelVersion", "/etc/cp/conf/waap/waap.data", getWaapModelVersion)
 
 #endif // FILE_CONTENT_HANDLER
+
+#ifdef SHELL_POST_CMD
+#if defined(smb)
+SHELL_POST_CMD("remove local.cfg", "rm -rf /tmp/local.cfg")
+#endif  //smb
+#endif

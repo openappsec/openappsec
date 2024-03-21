@@ -156,6 +156,7 @@ void
 WaapTrafficTelemetrics::updateMetrics(const string &asset_id, const DecisionTelemetryData &data)
 {
     initMetrics();
+    average_latency.report(data.elapsedTime);
     switch (data.method)
     {
         case POST:

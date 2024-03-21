@@ -95,6 +95,7 @@ TEST_F(AgentReporterTest, dataReport)
         "    }"
         "\n}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
     AgentDataReport() << AgentReportField(custom_data);;
@@ -112,6 +113,7 @@ TEST_F(AgentReporterTest, labeledDataReport)
         "    }"
         "\n}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
     AgentDataReport() << AgentReportFieldWithLabel("this_is_custom_label", data);
@@ -131,6 +133,7 @@ TEST_F(AgentReporterTest, multiDataReport)
         "    }"
         "\n}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -158,6 +161,7 @@ TEST_F(AgentReporterTest, multiDataReportWithRegistrationData)
         "    \"architecture\": \"aaa\"\n"
         "}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -181,6 +185,7 @@ TEST_F(AgentReporterTest, basicAttrTest)
         "    \"additionalMetaData\": {}\n"
         "}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -200,6 +205,7 @@ TEST_F(AgentReporterTest, basicAttrTest)
         "    }\n"
         "}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -219,6 +225,7 @@ TEST_F(AgentReporterTest, basicAttrTest)
         "    \"additionalMetaData\": {}\n"
         "}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -247,6 +254,7 @@ TEST_F(AgentReporterTest, advancedAttrTest)
         "    }\n"
         "}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -272,6 +280,7 @@ TEST_F(AgentReporterTest, advancedAttrTest)
         "    }\n"
         "}",
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -297,6 +306,7 @@ TEST_F(AgentReporterTest, RestDetailsTest)
         "/agents",
         rest_call_parameters.str(),
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
 
@@ -366,6 +376,7 @@ TEST_F(AgentReporterTest, PersistenceAttrTest)
         "/agents",
         expected_attributes,
         MessageCategory::GENERIC,
+        _,
         _
     )).Times(1);
     EXPECT_TRUE(report->sendAttributes());

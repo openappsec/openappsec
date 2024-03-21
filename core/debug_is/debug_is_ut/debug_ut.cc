@@ -824,6 +824,7 @@ TEST(DebugFogTest, fog_stream)
         "/api/v1/agents/events/bulk",
         _,
         _,
+        _,
         _
     )).WillRepeatedly(SaveArg<2>(&message_body));
 
@@ -980,7 +981,7 @@ TEST(DebugFogTest, fog_stream)
         .WillOnce(DoAll(InvokeMainLoopCB(), Return(0)));
 
     string message_body_1, message_body_2;
-    EXPECT_CALL(messaging_mock, sendAsyncMessage(_, "/api/v1/agents/events", _, MessageCategory::DEBUG, _))
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(_, "/api/v1/agents/events", _, MessageCategory::DEBUG, _, _))
         .WillOnce(SaveArg<2>(&message_body_1))
         .WillOnce(SaveArg<2>(&message_body_2));
 
