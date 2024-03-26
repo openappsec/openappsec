@@ -18,6 +18,10 @@ if [ ! -f /nano-service-installers/$ORCHESTRATION_INSTALLATION_SCRIPT ]; then
     exit 1
 fi
 
+if [ -z $1 ]; then
+    var_mode="--hybrid_mode"
+fi
+
 while true; do
     if [ -z "$1" ]; then
         break
@@ -27,24 +31,24 @@ while true; do
     elif [ "$1" == "--proxy" ]; then
         shift
         var_proxy="$1"
-    elif [ "$1" == "--hybrid-mode" ]; then
+    elif [ "$1" == "--hybrid-mode" ] || [ "$1" == "--standalone" ]; then
         var_mode="--hybrid_mode"
     elif [ "$1" == "--token" ]; then
         shift
         var_token="$1"
-    elif [ "$1" == "--standalone" ]; then
-        var_mode="--hybrid_mode"
-        var_token="cp-3fb5c718-5e39-47e6-8d5e-99b4bc5660b74b4b7fc8-5312-451d-a763-aaf7872703c0"
     fi
     shift
 done
 
-if [ -z $var_token ]; then
+if [ -z $var_token ] && [ $var_mode != "--hybrid_mode" ]; then
     echo "Error: Token was not provided as input argument."
     exit 1
 fi
 
-orchestration_service_installation_flags="--token $var_token --container_mode --skip_registration"
+orchestration_service_installation_flags="--container_mode --skip_registration"
+if [ ! -z $var_token ]; then
+    orchestration_service_installation_flags="$orchestration_service_installation_flags --token $var_token"
+fi
 if [ ! -z $var_fog_address ]; then
     orchestration_service_installation_flags="$orchestration_service_installation_flags --fog $var_fog_address"
 fi
