@@ -67,7 +67,7 @@ fi
 /nano-service-installers/$CACHE_INSTALLATION_SCRIPT --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
 
-if [ ! -z $CROWDSEC_ENABLED ]; then
+if [ "$CROWDSEC_ENABLED" == "true" ]; then
     /nano-service-installers/$INTELLIGENCE_INSTALLATION_SCRIPT --install
     /nano-service-installers/$CROWDSEC_INSTALLATION_SCRIPT --install
 fi

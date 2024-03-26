@@ -411,8 +411,9 @@ TEST_F(IntelligenceComponentTestV2, fakeOnlineIntelligenceTest)
     "}\n"
     );
 
+    MessageMetadata md;
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
-    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str)));
+    ).WillOnce(DoAll(SaveArg<4>(&md), Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str))));
 
     auto maybe_ans = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans.ok());
@@ -421,6 +422,7 @@ TEST_F(IntelligenceComponentTestV2, fakeOnlineIntelligenceTest)
     auto iter = vec.begin();
     EXPECT_EQ(iter->getData().begin()->getUser().toString(), "Omry");
     EXPECT_EQ(iter->getData().begin()->getPhase().toString(), "testing");
+    EXPECT_FALSE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
 }
 
 TEST_F(IntelligenceComponentTestV2, fakeLocalIntelligenceTest)
@@ -490,6 +492,7 @@ TEST_F(IntelligenceComponentTestV2, fakeLocalIntelligenceTest)
     EXPECT_TRUE(maybe_ans.ok());
 
     EXPECT_EQ(md.getHostName(), "127.0.0.1");
+    EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
 }
 
 TEST_F(IntelligenceComponentTestV2, multiAssetsIntelligenceTest)

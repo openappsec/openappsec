@@ -25,59 +25,106 @@ TEST(InvalidationBasic, SettersAndGetters)
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::GROUP), "");
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::ORDER), "");
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::KIND), "");
+    EXPECT_EQ(invalidation.getInvalidationType(), InvalidationType::ADD);
 
+    EXPECT_FALSE(invalidation.getStringMainAttr("main_attr1").ok());
+    EXPECT_FALSE(invalidation.getStringSetMainAttr("main_attr2").ok());
     EXPECT_FALSE(invalidation.getStringAttr("attr1").ok());
     EXPECT_FALSE(invalidation.getStringSetAttr("attr2").ok());
     EXPECT_FALSE(invalidation.getSourceId().ok());
     EXPECT_FALSE(invalidation.getObjectType().ok());
 
-    set<string> vals = { "2", "3" };
+    set<string> main_vals = { "2", "3" };
+    set<string> vals = { "5", "6" };
 
     invalidation
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setClassifier(ClassifierType::FAMILY, "ccc")
-        .setStringAttr("attr1", "1")
-        .setStringSetAttr("attr2", vals)
+        .setStringAttr("main_attr1", "1")
+        .setStringSetAttr("main_attr2", main_vals)
+        .setStringAttr("attr1", "4", false)
+        .setStringSetAttr("attr2", vals, false)
         .setSourceId("id")
-        .setObjectType(Intelligence::ObjectType::ASSET);
+        .setObjectType(Intelligence::ObjectType::ASSET)
+        .setInvalidationType(InvalidationType::DELETE);
 
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::CATEGORY), "bbb");
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::FAMILY), "ccc");
-    EXPECT_EQ(invalidation.getStringAttr("attr1").unpack(), "1");
+    EXPECT_EQ(invalidation.getStringMainAttr("main_attr1").unpack(), "1");
+    EXPECT_EQ(invalidation.getStringSetMainAttr("main_attr2").unpack(), main_vals);
+    EXPECT_EQ(invalidation.getStringAttr("attr1").unpack(), "4");
     EXPECT_EQ(invalidation.getStringSetAttr("attr2").unpack(), vals);
     EXPECT_EQ(invalidation.getSourceId().unpack(), "id");
     EXPECT_EQ(invalidation.getObjectType().unpack(), Intelligence::ObjectType::ASSET);
+    EXPECT_EQ(invalidation.getInvalidationType(), InvalidationType::DELETE);
 }
 
 TEST(InvalidationBasic, Matching)
 {
-    set<string> vals = { "2", "3" };
+    set<string> main_vals = { "2", "3" };
+    set<string> vals = { "5", "6" };
     auto base_invalidation = Invalidation("aaa")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setClassifier(ClassifierType::FAMILY, "ccc")
-        .setStringAttr("attr1", "1")
-        .setStringSetAttr("attr2", vals);
+        .setStringAttr("main_attr1", "1")
+        .setStringSetAttr("main_attr2", main_vals)
+        .setStringAttr("attr1", "4", false)
+        .setStringSetAttr("attr2", vals, false);
 
 
     auto matching_invalidation = Invalidation("aaa")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::GROUP, "ddd")
-        .setStringAttr("attr1", "1")
-        .setStringSetAttr("attr2", vals)
-        .setStringAttr("attr3", "6")
+        .setStringAttr("main_attr1", "1")
+        .setStringSetAttr("main_attr2", main_vals)
+        .setStringAttr("attr1", "4", false)
+        .setStringSetAttr("attr2", vals, false)
+        .setStringAttr("main_attr3", "6")
+        .setStringAttr("attr3", "7", false)
+        .setSourceId("id")
+        .setObjectType(Intelligence::ObjectType::ASSET)
+        .setInvalidationType(InvalidationType::ADD);
+
+    EXPECT_TRUE(base_invalidation.matches(matching_invalidation));
+
+    auto not_matching_invalidation_type = Invalidation("aaa")
+        .setClassifier(ClassifierType::CATEGORY, "bbb")
+        .setClassifier(ClassifierType::FAMILY, "ccc")
+        .setClassifier(ClassifierType::GROUP, "ddd")
+        .setStringAttr("main_attr1", "1")
+        .setStringSetAttr("main_attr2", main_vals)
+        .setSourceId("id")
+        .setObjectType(Intelligence::ObjectType::ASSET)
+        .setInvalidationType(InvalidationType::DELETE);
+
+    EXPECT_FALSE(base_invalidation.matches(not_matching_invalidation_type));
+
+    auto missing_attr_invalidation_main = Invalidation("aaa")
+        .setClassifier(ClassifierType::CATEGORY, "bbb")
+        .setClassifier(ClassifierType::FAMILY, "ccc")
+        .setClassifier(ClassifierType::GROUP, "ddd")
+        .setStringAttr("main_attr1", "1")
+        .setStringAttr("main_attr2", "2")
+        .setStringAttr("main_attr3", "6")
+        .setStringAttr("attr1", "4", false)
+        .setStringSetAttr("attr2", vals, false)
+        .setStringAttr("attr3", "7", false)
         .setSourceId("id")
         .setObjectType(Intelligence::ObjectType::ASSET);
 
-    EXPECT_TRUE(base_invalidation.matches(matching_invalidation));
+    EXPECT_FALSE(base_invalidation.matches(missing_attr_invalidation_main));
 
     auto missing_attr_invalidation = Invalidation("aaa")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::GROUP, "ddd")
-        .setStringAttr("attr1", "1")
-        .setStringAttr("attr2", "2")
-        .setStringAttr("attr3", "6")
+        .setStringAttr("main_attr1", "1")
+        .setStringSetAttr("main_attr2", main_vals)
+        .setStringAttr("main_attr3", "6")
+        .setStringAttr("attr1", "4", false)
+        .setStringAttr("attr2", "2", false)
+        .setStringAttr("attr3", "7", false)
         .setSourceId("id")
         .setObjectType(Intelligence::ObjectType::ASSET);
 
@@ -88,9 +135,12 @@ TEST(InvalidationBasic, Matching)
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::GROUP, "ddd")
-        .setStringSetAttr("attr1", vals2)
-        .setStringSetAttr("attr2", vals)
-        .setStringAttr("attr3", "6")
+        .setStringSetAttr("main_attr1", vals2)
+        .setStringSetAttr("main_attr2", main_vals)
+        .setStringAttr("main_attr3", "6")
+        .setStringAttr("attr1", "4", false)
+        .setStringSetAttr("attr2", vals, false)
+        .setStringAttr("attr3", "7", false)
         .setSourceId("id")
         .setObjectType(Intelligence::ObjectType::ASSET);
 
@@ -170,17 +220,20 @@ TEST_F(IntelligenceInvalidation, sending_public_invalidation)
 {
     auto invalidation = Invalidation("aaa")
         .setStringAttr("attr2", "2")
+        .setStringAttr("attr3", "3", false)
         .setSourceId("id")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     string invalidation_json;
+    MessageMetadata md;
     EXPECT_CALL(
         messaging_mock,
         sendSyncMessage(HTTPMethod::POST, invalidation_uri, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(DoAll(
         SaveArg<2>(&invalidation_json),
+        SaveArg<4>(&md),
         Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
     ));
 
@@ -192,16 +245,20 @@ TEST_F(IntelligenceInvalidation, sending_public_invalidation)
         "\"category\": \"bbb\", "
         "\"family\": \"ccc\", "
         "\"objectType\": \"asset\", "
+        "\"invalidationType\": \"add\", "
         "\"sourceId\": \"id\", "
-        "\"mainAttributes\": [ { \"attr2\": \"2\" } ]"
+        "\"mainAttributes\": [ { \"attr2\": \"2\" } ], "
+        "\"attributes\": [ { \"attr3\": \"3\" } ]"
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
+    EXPECT_FALSE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
 }
 
 TEST_F(IntelligenceInvalidation, sending_private_invalidation)
 {
     auto invalidation = Invalidation("aaa")
         .setStringAttr("attr2", "2")
+        .setStringAttr("attr3", "3", false)
         .setSourceId("id")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -221,11 +278,13 @@ TEST_F(IntelligenceInvalidation, sending_private_invalidation)
     Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
 
     string invalidation_json;
+    MessageMetadata md;
     EXPECT_CALL(
         messaging_mock,
         sendSyncMessage(HTTPMethod::POST, invalidation_uri, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(DoAll(
         SaveArg<2>(&invalidation_json),
+        SaveArg<4>(&md),
         Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
     ));
 
@@ -237,10 +296,13 @@ TEST_F(IntelligenceInvalidation, sending_private_invalidation)
         "\"category\": \"bbb\", "
         "\"family\": \"ccc\", "
         "\"objectType\": \"asset\", "
+        "\"invalidationType\": \"add\", "
         "\"sourceId\": \"id\", "
-        "\"mainAttributes\": [ { \"attr2\": \"2\" } ]"
+        "\"mainAttributes\": [ { \"attr2\": \"2\" } ], "
+        "\"attributes\": [ { \"attr3\": \"3\" } ]"
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
+    EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
 }
 
 TEST_F(IntelligenceInvalidation, register_for_invalidation)
@@ -257,19 +319,23 @@ TEST_F(IntelligenceInvalidation, register_for_invalidation)
     configuration << "}";
     Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
 
+    set<string> vals = { "11", "55", "22" };
     auto invalidation = Invalidation("aaa")
         .setStringAttr("attr2", "2")
+        .setStringSetAttr("attr3", vals, false)
         .setSourceId("id")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     string body;
+    MessageMetadata md;
     EXPECT_CALL(
         messaging_mock,
         sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
     ).WillOnce(DoAll(
         SaveArg<2>(&body),
+        SaveArg<4>(&md),
         Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
     ));
 
@@ -278,6 +344,8 @@ TEST_F(IntelligenceInvalidation, register_for_invalidation)
     EXPECT_THAT(body, HasSubstr("\"url\": \"http://127.0.0.1:7000/set-new-invalidation\""));
     EXPECT_THAT(body, HasSubstr("\"apiVersion\": \"v2\", \"communicationType\": \"sync\""));
     EXPECT_THAT(body, HasSubstr("\"mainAttributes\": [ { \"attr2\": \"2\" } ]"));
+    EXPECT_THAT(body, HasSubstr("\"attributes\": [ { \"attr3\": [ \"11\", \"22\", \"55\" ] } ]"));
+    EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
 }
 
 TEST_F(IntelligenceInvalidation, invalidation_callback)
@@ -321,7 +389,7 @@ TEST_F(IntelligenceInvalidation, invalidation_callback)
     mock_invalidation->performRestCall(json);
 
     EXPECT_EQ(recieved_invalidations.size(), 1);
-    EXPECT_EQ(recieved_invalidations[0].getStringSetAttr("attr2").unpack(), vals);
+    EXPECT_EQ(recieved_invalidations[0].getStringSetMainAttr("attr2").unpack(), vals);
 }
 
 TEST_F(IntelligenceInvalidation, delete_invalidation_callback)

@@ -91,6 +91,7 @@ private:
     MetricCalculations::Counter response_2xx{this, "reservedNgenG"};
     MetricCalculations::Counter response_4xx{this, "reservedNgenH"};
     MetricCalculations::Counter response_5xx{this, "reservedNgenI"};
+    MetricCalculations::Average<uint64_t> average_latency{this, "reservedNgenJ"};
 };
 
 class WaapAttackTypesMetrics : public WaapTelemetryBase

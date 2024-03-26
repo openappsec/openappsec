@@ -65,7 +65,8 @@ GenericMetric::init(
     const ReportIS::IssuingEngine &_issuing_engine,
     chrono::seconds _report_interval,
     bool _reset,
-    Audience _audience
+    Audience _audience,
+    bool _force_buffering
 )
 {
     i_mainloop = Singleton::Consume<I_MainLoop>::by<GenericMetric>();
@@ -76,6 +77,7 @@ GenericMetric::init(
     team = _team;
     issuing_engine = _issuing_engine;
     audience = _audience;
+    force_buffering = _force_buffering;
 
     i_mainloop->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
@@ -233,7 +235,9 @@ GenericMetric::sendLog(const LogRest &metric_client_rest) const
         HTTPMethod::POST,
         fog_metric_uri,
         metric_client_rest,
-        MessageCategory::METRIC
+        MessageCategory::METRIC,
+        MessageMetadata(),
+        force_buffering
     );
 }
 

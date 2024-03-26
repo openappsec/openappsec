@@ -217,6 +217,18 @@ getFecApplicable(const string &command_output)
 }
 
 Maybe<string>
+getSMCBasedMgmtId(const string &command_output)
+{
+    return getAttr(command_output, "Mgmt object UUID was not found");
+}
+
+Maybe<string>
+getSMCBasedMgmtName(const string &command_output)
+{
+    return getAttr(command_output, "Mgmt object Name was not found");
+}
+
+Maybe<string>
 getSmbObjectName(const string &command_output)
 {
     static const char centrally_managed_comd_output = '0';

@@ -49,6 +49,9 @@ NO_COLOR='\033[0m'
 pidof_cmd="pidof -x"
 is_alpine_release=
 
+CURL_ERRORS="Operation timed out
+Connection refused"
+
 var_last_policy_modification_time=0
 
 ls -l /etc/ | grep release > /dev/null 2>&1
@@ -333,22 +336,41 @@ get_profile_setting() # Initials - gps
 curl_func() # Initials - cf
 {
     cf_port=$1
-    cf_data=$2
+    cf_uri=$2
+    cf_data=$3
     if [ -z "$cf_data" ]; then
         cf_data="{}"
     fi
 
     if [ "${remove_curl_ld_path}" = "true" ]; then
-        echo "$(LD_LIBRARY_PATH="" ${curl_cmd} -sS --noproxy "*" --header "Content-Type: application/json" --request POST --data "$cf_data" http://127.0.0.1:"$cf_port" 2>&1)"
+        cf_response=$(LD_LIBRARY_PATH="" ${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data "$cf_data" http://127.0.0.1:"$cf_port/$cf_uri" 2>&1)
     else
-        echo "$(${curl_cmd} -sS --noproxy "*" --header "Content-Type: application/json" --request POST --data "$cf_data" http://127.0.0.1:"$cf_port" 2>&1)"
+        cf_response=$(${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data "$cf_data" http://127.0.0.1:"$cf_port/$cf_uri" 2>&1)
     fi
+    echo "$cf_response"
+}
+
+curl_to_orchestration() # Initials - cto
+{
+    cto_uri=$1
+    cto_data=$2
+    if [ -z "$cto_data" ]; then
+        cto_data="{}"
+    fi
+
+    cto_orchestration_port=$(extract_api_port orchestration)
+    cto_response=$(curl_func ${cto_orchestration_port} ${cto_uri} "${cto_data}")
+    cto_curl_error=$(echo "$cto_response" | grep -F -e "$CURL_ERRORS")
+    if [ -n "$cto_curl_error" ]; then
+        cto_secondary_orchestration_port=$(extract_default_api_port secondary_orchestration)
+        cto_response=$(curl_func ${cto_secondary_orchestration_port} ${cto_uri} "${cto_data}")
+    fi
+    echo "$cto_response"
 }
 
 get_registered_services_ports() # Initails - grsp
 {
-    grsp_orchestration_port=$1
-    grsp_ports_and_services=$(curl_func "${grsp_orchestration_port}"/show-all-service-ports)
+    grsp_ports_and_services=$(curl_to_orchestration "show-all-service-ports")
     if echo "$grsp_ports_and_services" | grep -q "Connection refused"; then
         echo "Failed to reach orchestration" >&2
         echo ""
@@ -387,7 +409,7 @@ extract_api_port() # Initials - eap
         return
     fi
 
-    for pair in $(get_registered_services_ports "$eap_orchestration_port" | tr "," " "); do
+    for pair in $(get_registered_services_ports | tr "," " "); do
         eap_service="$(echo "$pair" | cut -d ':' -f1)"
         if [ "$(is_requested_service "$eap_service_name" "$eap_service")" = true ]; then
             echo "$pair" | cut -d ':' -f2
@@ -616,7 +638,7 @@ run_update_gradual_policy() # Initials - rugp
     rugp_service_api_port=$(extract_api_port "$rugp_service_name")
 
     # Load gradual policy configuration
-    rugp_errors=$(curl_func "${rugp_service_api_port}/set-gradual-deployment-policy" "${rugp_data}")
+    rugp_errors=$(curl_func "${rugp_service_api_port}" "set-gradual-deployment-policy" "${rugp_data}")
     sleep 1
     if [ -n "$(echo "$rugp_errors" | sed "s/$(printf '\r')//g")" ]; then
         echo "Failed to set gradual policy. Error: $rugp_errors"
@@ -624,7 +646,7 @@ run_update_gradual_policy() # Initials - rugp
     fi
     if [ "$rugp_service_name" = "access-control" ]; then
         # Load policy to kernel
-        rugp_errors=$(curl_func "${rugp_service_api_port}"/set-gradual-policy-to-kernel)
+        rugp_errors=$(curl_func "${rugp_service_api_port}" "set-gradual-policy-to-kernel")
         if [ -n "$(echo "$rugp_errors" | sed "s/$(printf '\r')//g")" ]; then
             echo "Failed to set gradual policy. Error: $rugp_errors"
         else
@@ -760,7 +782,12 @@ print_metrics() # Initials - pm
     pm_service_name=$1
     pm_port=$2
 
-    pm_errors=$(curl_func "${pm_port}"/show-metrics)
+    if [ $pm_service_name = "Orchestration" ]; then
+        pm_errors=$(curl_to_orchestration "show-metrics")
+    else
+        pm_errors=$(curl_func "${pm_port}" "show-metrics")
+    fi
+
     if [ -n "$(echo "$pm_errors" | sed "s/$(printf '\r')//g")" ]; then
         return
     fi
@@ -780,17 +807,15 @@ run_print_metrics() # Initials - rpm
         fi
     fi
 
-    rpm_orchestration_port=$(extract_default_api_port orchestration)
-
     if [ -z "$rpm_service_name" ]; then
-        print_metrics "Orchestration" "$rpm_orchestration_port"
-        rpm_list=$(get_registered_services_ports "$rpm_orchestration_port" | tr "," " ")
+        print_metrics "Orchestration"
+        rpm_list=$(get_registered_services_ports | tr "," " ")
         for pair in ${rpm_list}; do
             rpm_service=$(echo "$pair" | cut -d ':' -f1)
             print_metrics "$rpm_service" "$(echo "$pair" | cut -d ':' -f2)"
         done
     elif [ "$rpm_service_name" = "orchestration" ]; then
-        print_metrics "Orchestration" "$rpm_orchestration_port"
+        print_metrics "Orchestration"
     else
         rpm_port=$(extract_api_port "$rpm_service_name")
         print_metrics "$rpm_service_name" "$rpm_port"
@@ -801,7 +826,7 @@ run_health_check() # Initials - rhc
 {
     rhc_orchestration_port=$(extract_default_api_port orchestration)
 
-    rhc_errors=$(curl_func "${rhc_orchestration_port}"/show-health-check-on-demand)
+    rhc_errors=$(curl_to_orchestration "show-health-check-on-demand")
     if [ -n "$(echo "$rhc_errors" | sed "s/$(printf '\r')//g")" ]; then
         return
     fi
@@ -863,6 +888,8 @@ print_single_service_status() # Initials - psss
     psss_maybe_version=$(LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$USR_LIB_PATH/cpnano"$LD_LIBRARY_PATH_ADD" $psss_service_full_path --version 2>&1)
     if echo "$psss_maybe_version" | grep -q "error"; then
         echo "Version: Temporarily unavailable"
+        format_colored_status_line "Status: Not Available"
+        echo ""
         return
     fi
     echo "$psss_maybe_version"
@@ -959,11 +986,7 @@ run_status() # Initials - rs
         format_colored_status_line "Status: Not running"
     fi
 
-    if [ "${remove_curl_ld_path}" = "true" ]; then
-        rs_orch_status=$(LD_LIBRARY_PATH="" ${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/show-orchestration-status 2>&1)
-    else
-        rs_orch_status=$(${curl_cmd} -sS -m 1 --noproxy "*" --header "Content-Type: application/json" --request POST --data {} http://127.0.0.1:"$(extract_api_port 'orchestration')"/show-orchestration-status 2>&1)
-    fi
+    rs_orch_status=$(curl_to_orchestration "show-orchestration-status")
 
     if echo "$rs_orch_status" | grep -q "update status"; then
         rs_line_count=$(echo "$rs_orch_status" | grep -c '^')
@@ -1065,17 +1088,12 @@ set_proxy() # Initials - sp
         exit 1
     fi
 
-    if [ "${remove_curl_ld_path}" = "true" ]; then
-        sp_curl_output=$(LD_LIBRARY_PATH="" ${curl_cmd} -w "%{http_code}\n" -sS -m 60 --noproxy "*" --header "Content-Type: application/json" --request POST --data '{"proxy":"'"$sp_proxy"'"}' http://127.0.0.1:"$(extract_api_port 'orchestration')"/add-proxy)
-    else
-    sp_curl_output=$(${curl_cmd} -w "%{http_code}\n" -sS -m 60 --noproxy "*" --header "Content-Type: application/json" --request POST --data '{"proxy":"'"$sp_proxy"'"}' http://127.0.0.1:"$(extract_api_port 'orchestration')"/add-proxy)
-    fi
-    if echo "$sp_curl_output" | grep -q "200"; then
-        echo "Proxy successfully changed to $sp_proxy"
-    else
-        echo "Failed to set proxy: Error code ${sp_curl_output}"
+    sp_curl_output=$(curl_to_orchestration "add-proxy" '{"proxy":"'"$sp_proxy"'"}')
+    if [ -n "$(echo "$sp_curl_output" | sed "s/$(printf '\r')//g")" ]; then
+        echo "Failed to set proxy. Error: ${sp_curl_output}"
         exit 1
     fi
+    echo "Proxy successfully changed to $sp_proxy"
 }
 
 run_display_single_service_settings() # Initials - rdsss
@@ -1277,7 +1295,7 @@ run_ai() # Initials - ra
         ra_tenant_id=$(printf "%s" "$ra_agent_details" | grep "Tenant ID" | cut -d '"' -f4)
         ra_agent_id=$(printf "%s" "$ra_agent_details" | grep "Agent ID" | cut -d '"' -f4)
     else
-        ra_orch_status=$(curl_func "$(extract_api_port orchestration)"/show-orchestration-status)
+        ra_orch_status=$(curl_to_orchestration "show-orchestration-status")
         if ! echo "$ra_orch_status" | grep -q "update status"; then
             [ -f ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestrations_status.json ] && ra_orch_status=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/orchestration_status.json)
         fi
@@ -1302,7 +1320,7 @@ run_ai() # Initials - ra
         exit 1
     fi
     if [ "$ra_upload_to_fog" = "true" ]; then
-        ra_token_data="$(curl_func "$(extract_api_port orchestration)"/show-access-token)"
+        ra_token_data=$(curl_to_orchestration "show-access-token")
         ra_token_hex=$(echo "$ra_token_data" | grep "token" | cut -d '"' -f4 | base64 -d | od -t x1 -An)
         ra_token_hex_formatted=$(echo $ra_token_hex | tr -d ' ')
         ra_token="$(xor_decrypt "${ra_token_hex_formatted}")"
@@ -1543,7 +1561,7 @@ set_mode()
     # set mode
     sed -i "s/$cp_nano_mode/$mode/" ${FILESYSTEM_PATH}/orchestration/cp-nano-orchestration.cfg
 
-    ret=$(curl_func "$(extract_api_port orchestration)"/set-orchestration-mode)
+    ret=$(curl_to_orchestration "set-orchestration-mode")
 
     if [ "$mode" = "online_mode" ]; then
         time_sleep=2

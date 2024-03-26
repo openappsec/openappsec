@@ -41,6 +41,8 @@ K8sSvcStream::sendLog(const Report &log)
 
     MessageMetadata rest_req_md(svc_host, 80);
     rest_req_md.insertHeader("X-Tenant-Id", Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getTenantId());
+    rest_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+
     bool ok = i_msg->sendSyncMessageWithoutResponse(
         HTTPMethod::POST,
         K8sSvc_log_uri,
@@ -69,6 +71,7 @@ K8sSvcStream::sendLog(const LogBulkRest &logs, bool persistence_only)
 
     MessageMetadata rest_req_md(svc_host, 80);
     rest_req_md.insertHeader("X-Tenant-Id", Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getTenantId());
+    rest_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     bool ok = i_msg->sendSyncMessageWithoutResponse(
         HTTPMethod::POST,
         K8sSvc_log_uri,

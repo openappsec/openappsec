@@ -37,6 +37,7 @@ public:
             if (!ipv4_addresses.empty()) ipv4_address = ipv4_addresses.front();
         } catch (const cereal::Exception &e) {
             dbgWarning(D_L7_ACCESS_CONTROL) << "Failed to load IP reputation data JSON. Error: " << e.what();
+            ar.setNextName(nullptr);
         }
     }
 

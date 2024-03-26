@@ -128,7 +128,8 @@ I_Messaging::sendAsyncMessage(
     const std::string &uri,
     serializableObject &req_obj,
     const MessageCategory category,
-    MessageMetadata message_metadata)
+    MessageMetadata message_metadata,
+    bool force_buffering)
 {
     Maybe<std::string> req_body = req_obj.genJson();
     if (!req_body.ok()) {
@@ -141,7 +142,8 @@ I_Messaging::sendAsyncMessage(
         uri,
         req_body.unpack(),
         category,
-        message_metadata
+        message_metadata,
+        force_buffering
     );
 }
 

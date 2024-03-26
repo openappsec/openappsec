@@ -56,8 +56,10 @@ USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
 USE_DEBUG_FLAG(D_WAAP_BOT_PROTECTION);
 USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
+USE_DEBUG_FLAG(D_WAAP_HEADERS);
 
 using namespace ReportIS;
+using namespace std;
 
 #define MAX_REQUEST_BODY_SIZE (2*1024)
 #define MAX_RESPONSE_BODY_SIZE (2*1024)
@@ -89,6 +91,9 @@ void Waf2Transaction::start_response(int response_status, int http_version)
     dbgTrace(D_WAAP) << "[transaction:" << this << "] start_response(response_status=" << response_status
         << "," << " http_version=" << http_version << ")";
     m_responseStatus = response_status;
+    if (m_triggerReport) {
+        m_responseInspectReasons.setTriggerReport(false);
+    }
 
     if(m_responseStatus == 404)
     {
@@ -233,6 +238,12 @@ void Waf2Transaction::end_response_body()
     dbgTrace(D_WAAP) << "[transaction:" << this << "] end_response_body";
 }
 
+const std::string &
+Waf2Transaction::getResponseBody()
+{
+    return m_response_body;
+}
+
 void Waf2Transaction::scanErrDisclosureBuffer()
 {
     if (m_responseStatus >= 400 && m_responseStatus <= 599) {
@@ -302,19 +313,25 @@ Waf2Transaction::Waf2Transaction() :
     m_deepParser(m_pWaapAssetState, m_scanner, this),
     m_deepParserReceiver(m_deepParser),
     m_scanResult(NULL),
+    m_response_body(),
     m_request_body_bytes_received(0),
     m_response_body_bytes_received(0),
     m_processedUri(false),
     m_processedHeaders(false),
+    m_isHeaderOverrideScanRequired(false),
     m_isScanningRequired(false),
     m_responseStatus(0),
     m_responseInspectReasons(),
     m_responseInjectReasons(),
     m_index(-1),
     m_triggerLog(),
+    m_triggerReport(false),
     is_schema_validation(false),
     m_waf2TransactionFlags()
-{}
+{
+    I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
+    m_entry_time = chrono::duration_cast<chrono::milliseconds>(timeGet->getMonotonicTime());
+}
 
 Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState) :
     TableOpaqueSerialize<Waf2Transaction>(this),
@@ -334,19 +351,25 @@ Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState
     m_deepParser(m_pWaapAssetState, m_scanner, this),
     m_deepParserReceiver(m_deepParser),
     m_scanResult(NULL),
+    m_response_body(),
     m_request_body_bytes_received(0),
     m_response_body_bytes_received(0),
     m_processedUri(false),
     m_processedHeaders(false),
+    m_isHeaderOverrideScanRequired(false),
     m_isScanningRequired(false),
     m_responseStatus(0),
     m_responseInspectReasons(),
     m_responseInjectReasons(),
     m_index(-1),
     m_triggerLog(),
+    m_triggerReport(false),
     is_schema_validation(false),
     m_waf2TransactionFlags()
-{}
+{
+    I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
+    m_entry_time = chrono::duration_cast<chrono::milliseconds>(timeGet->getMonotonicTime());
+}
 
 Waf2Transaction::~Waf2Transaction() {
     dbgTrace(D_WAAP) << "Waf2Transaction::~Waf2Transaction: deleting m_requestBodyParser";
@@ -362,6 +385,8 @@ HeaderType Waf2Transaction::detectHeaderType(const char* name, int name_len) {
     static const char content_type[] = "content-Type";
     static const char cookie[] = "cookie";
     static const char referer[] = "referer";
+    static const char authorization[] = "authorization";
+    dbgTrace(D_WAAP_HEADERS) << "Detecting header type for header >>>" << std::string(name, name_len) << "<<<";
 
     if (memcaseinsensitivecmp(name, name_len, host, sizeof(host) - 1)) {
         return HeaderType::HOST_HEADER;
@@ -377,6 +402,9 @@ HeaderType Waf2Transaction::detectHeaderType(const char* name, int name_len) {
     }
     if (memcaseinsensitivecmp(name, name_len, referer, sizeof(referer) - 1)) {
         return HeaderType::REFERER_HEADER;
+    }
+    if (memcaseinsensitivecmp(name, name_len, authorization, sizeof(authorization) - 1)) {
+        return HeaderType::AUTHORIZATION_HEADER;
     }
     return UNKNOWN_HEADER;
 }
@@ -422,35 +450,98 @@ HeaderType Waf2Transaction::checkCleanHeader(const char* name, int name_len, con
                 return CLEAN_HEADER;
             }
         }
-
-        static const std::string authorization("authorization");
-        if (memcaseinsensitivecmp(name, name_len, authorization.data(), authorization.size())) {
-            dbgTrace(D_WAAP) << "[transaction:" << this << "] special header '" << std::string(name, name_len) <<
-                "' - detect base64 to determine cleanliness ...";
-
-            std::string result;
-            int decodedCount = 0;
-            int deletedCount = 0;
-
-            std::string v(value, value_len);
-            boost::algorithm::to_lower(v);
-            const std::string negotiate("negotiate ");
-
-            if (boost::algorithm::starts_with(v, negotiate)) {
-                v = v.substr(negotiate.size(), v.size() - negotiate.size());
-
-                // Detect potential base64 match after the "Negotiate " prefix
-                Waap::Util::b64Decode(v, b64DecodeChunk, decodedCount, deletedCount, result);
-                if (result.empty() && (deletedCount + decodedCount == 1)) {
-                    // Decoded 1 base64 chunk and nothing left behind it
-                    dbgTrace(D_WAAP) << "[transaction:" << this << "] special header '" <<
-                        std::string(name, name_len) << " is clean";
-                    return CLEAN_HEADER;
-                }
-            }
-        }
     }
     return UNKNOWN_HEADER;
+}
+
+void Waf2Transaction::parseAuthorization(const char* value, int value_len, const std::string &header_name)
+{
+#ifdef NO_HEADERS_SCAN
+    return;
+#endif
+    static const std::string authorization("authorization");
+
+    dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this
+        << "] special header '" << header_name;
+
+    std::string result;
+    std::string v(value, value_len);
+    int decodedCount;
+    int deletedCount;
+    static const char *bearer = "bearer ";
+    static const std::string bearer_str(bearer);
+    if (memcaseinsensitivecmp(value, sizeof(bearer) - 1, bearer, sizeof(bearer) - 1)) {
+        dbgTrace(D_WAAP_HEADERS) << "Checking JWT chunk for alg = none" << v;
+        // parse buffer v till first dot,
+        // convert this chunk from base 64 to json string and get value for "alg" key
+        // if alg == "none" then this is JWT with no signature  and we should block it
+        // if alg != "none" then this is JWT with signature and we should not block it
+        char* p = (char*)v.c_str() + bearer_str.size();
+        char* p1 = strchr(p, '.');
+        if (p1 != NULL) {
+            *p1 = '\0';
+            std::string header(p);
+            alignBase64Chunk(header);
+            Waap::Util::b64Decode(header, b64DecodeChunk, decodedCount, deletedCount, result);
+            if (!result.empty()) {
+                dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] special header '" << header_name
+                    << " base64 encoded for JWT alg testing";
+                // parse JSON string and get value for "alg" key and check its value to be equal to "none"
+                // if alg == "none" then this is JWT with no signature  and we should block it
+                boost::algorithm::to_lower(result);
+                static bool err = false;
+                static const SingleRegex invalid_jwt_alg_re(
+                    "\"alg\"\\s*:\\s*\"none\"",
+                    err,
+                    "invalid_jwt_alg_"
+                );
+                if  (invalid_jwt_alg_re.hasMatch(result)) {
+                    dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] special header '" << header_name
+                        << " bad JWT algotitm detected, blocking";
+                    Waf2ScanResult new_res = Waf2ScanResult();
+                    new_res.location = "header";
+                    new_res.param_name = header_name;
+                    new_res.unescaped_line = header_name + ": " + result;
+                    new_res.score = 9.0;
+                    new_res.keyword_matches.push_back("alg:none");
+                    new_res.scoreArray.push_back(9.0);
+                    new_res.attack_types.insert("JWT");
+                    if (m_scanResult != NULL) {
+                        dbgTrace(D_WAAP_HEADERS) << "LastScanResult = " << m_scanResult;
+                        m_scanResult->mergeFrom(new_res);
+                    } else {
+                        dbgTrace(D_WAAP_HEADERS) << "LastScanResult is NULL";
+                        m_scanResult = new Waf2ScanResult(new_res);
+                    }
+                    return;
+                }
+                dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] special header '" << header_name
+                    << " clean JWT algotitm detected";
+                return;
+            } else {
+                parseGenericHeaderValue(header_name, value, value_len);
+            }
+        }
+        return;
+    }
+
+    static const char *negotiate = "negotiate ";
+    static const std::string negotiate_str(negotiate);
+    if (memcaseinsensitivecmp(value, sizeof(negotiate) - 1, negotiate, sizeof(negotiate) - 1)) {
+        v = v.substr(negotiate_str.size(), v.size() - negotiate_str.size());
+
+        // Detect potential base64 match after the "Negotiate " prefix
+        alignBase64Chunk(v);
+        Waap::Util::b64Decode(v, b64DecodeChunk, decodedCount, deletedCount, result);
+        if (result.empty() && (deletedCount + decodedCount == 1)) {
+            // Decoded 1 base64 chunk and nothing left behind it
+            dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] special header '" << header_name
+                << " is clean - clean base64 for negotiate";
+            return;
+        } else {
+            parseGenericHeaderValue(header_name, value, value_len);
+        }
+    }
 }
 
 // Methods below are callbacks that are called during HTTP transaction processing by the front-end server/proxy
@@ -744,14 +835,14 @@ void Waf2Transaction::parseContentType(const char* value, int value_len)
     ctp.push(value, value_len);
     ctp.finish();
 
-    dbgTrace(D_WAAP) << "[transaction:" << this << "] ctp detected content type: '" <<
+    dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] ctp detected content type: '" <<
         ctp.contentTypeDetected.c_str() << "'";
     // The above fills m_contentTypeDetected
     m_contentType = Waap::Util::detectContentType(ctp.contentTypeDetected.c_str());
 
     // extract boundary string required for parsing multipart-form-data stream
     if (m_contentType == Waap::Util::CONTENT_TYPE_MULTIPART_FORM) {
-        dbgTrace(D_WAAP) << "content_type detected: " << Waap::Util::getContentTypeStr(m_contentType) <<
+        dbgTrace(D_WAAP_HEADERS) << "content_type detected: " << Waap::Util::getContentTypeStr(m_contentType) <<
             "; boundary='" << ctp.boundaryFound.c_str() << "'";
         m_deepParser.setMultipartBoundary(ctp.boundaryFound);
     }
@@ -773,7 +864,7 @@ void Waf2Transaction::parseCookie(const char* value, int value_len)
 #endif
 
     if (value_len > 0) {
-        dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the cookie value";
+        dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] scanning the cookie value";
         m_deepParser.m_key.push("cookie", 6);
         ParserUrlEncode cookieValueParser(m_deepParserReceiver, 0, ';');
         cookieValueParser.push(value, value_len);
@@ -788,7 +879,7 @@ void Waf2Transaction::parseReferer(const char* value, int value_len)
 #ifdef NO_HEADERS_SCAN
     return;
 #endif
-    dbgTrace(D_WAAP) << "Parsed Referer. Referer URI: " << m_uriReferer;
+    dbgTrace(D_WAAP_HEADERS) << "Parsed Referer. Referer URI: " << m_uriReferer;
 
     std::string referer(value, value_len);
     std::vector<RegexMatch> regex_matches;
@@ -815,7 +906,7 @@ void Waf2Transaction::parseUnknownHeaderName(const char* name, int name_len)
     // Apply signatures on all other, header names, unless they are considered "good" ones to skip scanning them.
     if (name_len &&
         !m_pWaapAssetState->getSignatures()->good_header_name_re.hasMatch(std::string(name, name_len))) {
-        dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the header name";
+        dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] scanning the header name";
         m_deepParser.m_key.push("header", 6);
         ParserRaw headerNameParser(m_deepParserReceiver, 0, std::string(name,  name_len));
         headerNameParser.push(name, name_len);
@@ -834,7 +925,7 @@ void Waf2Transaction::parseGenericHeaderValue(const std::string &headerName, con
         return;
     }
 
-    dbgTrace(D_WAAP) << "[transaction:" << this << "] scanning the header value";
+    dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] scanning the header value";
     m_deepParser.m_key.push("header", 6);
     ParserRaw headerValueParser(m_deepParserReceiver, 0, headerName);
     headerValueParser.push(value, value_len);
@@ -844,11 +935,11 @@ void Waf2Transaction::parseGenericHeaderValue(const std::string &headerName, con
 };
 
 // Scan relevant headers to detect attacks inside them
-void Waf2Transaction::scanSpecificHeder(const char* name, int name_len, const char* value, int value_len)
+void Waf2Transaction::scanSpecificHeader(const char* name, int name_len, const char* value, int value_len)
 {
     HeaderType header_t = detectHeaderType(name, name_len);
     std::string headerName = std::string(name, name_len);
-
+    dbgTrace(D_WAAP_HEADERS) << "Processing the header " << headerName;
     switch (header_t)
     {
     case HeaderType::COOKIE_HEADER:
@@ -856,6 +947,9 @@ void Waf2Transaction::scanSpecificHeder(const char* name, int name_len, const ch
         break;
     case HeaderType::REFERER_HEADER:
         parseReferer(value, value_len);
+        break;
+    case HeaderType::AUTHORIZATION_HEADER:
+        parseAuthorization(value, value_len, headerName);
         break;
     case HeaderType::UNKNOWN_HEADER: {
         HeaderType headerType = checkCleanHeader(name, name_len, value, value_len);
@@ -954,7 +1048,7 @@ void Waf2Transaction::scanHeaders()
     // Scan relevant headers for attacks
     for (auto it = hdrs_map.begin(); it != hdrs_map.end(); ++it)
     {
-        scanSpecificHeder(it->first.c_str(), it->first.size(),
+        scanSpecificHeader(it->first.c_str(), it->first.size(),
             it->second.c_str(), it->second.size());
     }
 }
@@ -1171,6 +1265,12 @@ void Waf2Transaction::end_request() {
     // Enable response headers processing if response scanning is enabled in policy
     auto errorDisclosurePolicy = m_siteConfig ? m_siteConfig->get_ErrorDisclosurePolicy() : NULL;
     m_responseInspectReasons.setErrorDisclosure(errorDisclosurePolicy && errorDisclosurePolicy->enable);
+
+    auto triggerPolicy = m_siteConfig ? m_siteConfig->get_TriggerPolicy() : NULL;
+    if (isTriggerReportExists(triggerPolicy)) {
+        m_responseInspectReasons.setTriggerReport(true);
+        dbgTrace(D_WAAP) << "setTriggerReport(true)";
+    }
 }
 
 void Waf2Transaction::extractEnvSourceIdentifier()
@@ -1393,6 +1493,7 @@ Waf2Transaction::decideAfterHeaders()
         return false;
     }
 
+    m_isHeaderOverrideScanRequired = true;
     m_overrideState = getOverrideState(sitePolicy);
 
     // Select scores pool by location (but use forced pool when forced)
@@ -1647,6 +1748,12 @@ Waf2Transaction::sendLog()
     std::string assetId = m_siteConfig->get_AssetId();
     const auto& autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
         m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
+
+    I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
+    auto finish = timeGet->getMonotonicTime();
+    auto diff = chrono::duration_cast<chrono::milliseconds>(finish) - m_entry_time;
+    telemetryData.elapsedTime = diff.count();
+    dbgTrace(D_WAAP) << "latency updated, time: " << diff.count() << "ms";
 
     if (m_methodStr == "POST") {
         telemetryData.method = POST;

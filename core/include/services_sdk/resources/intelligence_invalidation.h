@@ -29,6 +29,7 @@ namespace Intelligence
 
 enum class ClassifierType { CLASS, CATEGORY, FAMILY, GROUP, ORDER, KIND };
 enum class ObjectType { ASSET, ZONE, POLICY_PACKAGE, CONFIGURATION, SESSION, SHORTLIVED };
+enum class InvalidationType { ADD, DELETE, UPDATE };
 
 class Invalidation
 {
@@ -36,16 +37,20 @@ public:
     Invalidation(const std::string &class_value);
 
     Invalidation & setClassifier(ClassifierType type, const std::string &val);
-    Invalidation & setStringAttr(const std::string &attr, const std::string &val);
-    Invalidation & setStringSetAttr(const std::string &attr, const std::set<std::string> &val);
+    Invalidation & setStringAttr(const std::string &attr, const std::string &val, bool is_main = true);
+    Invalidation & setStringSetAttr(const std::string &attr, const std::set<std::string> &val, bool is_main = true);
     Invalidation & setSourceId(const std::string &id);
     Invalidation & setObjectType(ObjectType type);
+    Invalidation & setInvalidationType(InvalidationType type);
 
     std::string getClassifier(ClassifierType type) const { return classifiers[type]; }
+    Maybe<std::string, void> getStringMainAttr(const std::string &attr) const;
+    Maybe<std::set<std::string>, void> getStringSetMainAttr(const std::string &attr) const;
     Maybe<std::string, void> getStringAttr(const std::string &attr) const;
     Maybe<std::set<std::string>, void> getStringSetAttr(const std::string &attr) const;
     const Maybe<std::string, void> & getSourceId() const { return source_id; }
     const Maybe<ObjectType, void> & getObjectType() const { return object_type; }
+    InvalidationType getInvalidationType() const { return invalidation_type; }
 
     bool report(I_Intelligence_IS_V2 *interface) const;
 
@@ -59,13 +64,17 @@ public:
     bool matches(const Invalidation &other) const;
 
 private:
+    bool hasMainAttr(const std::string &key, const std::string &value) const;
     bool hasAttr(const std::string &key, const std::string &value) const;
 
     EnumArray<ClassifierType, std::string, 6> classifiers;
     std::map<std::string, std::string> string_main_attr;
     std::map<std::string, std::set<std::string>> set_string_main_attr;
+    std::map<std::string, std::string> string_attr;
+    std::map<std::string, std::set<std::string>> set_string_attr;
     Maybe<std::string, void> source_id;
     Maybe<ObjectType, void> object_type;
+    InvalidationType invalidation_type = InvalidationType::ADD;
     Maybe<uint, void> listening_id;
 };
 

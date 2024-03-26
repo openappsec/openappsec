@@ -56,14 +56,16 @@ public:
         const std::string &uri,
         serializableObject &req_obj,
         const MessageCategory category = MessageCategory::GENERIC,
-        MessageMetadata message_metadata = MessageMetadata());
+        MessageMetadata message_metadata = MessageMetadata(),
+        bool force_buffering = true);
 
     virtual void sendAsyncMessage(
         const HTTPMethod method,
         const std::string &uri,
         const std::string &body,
         const MessageCategory category,
-        MessageMetadata message_metadata
+        const MessageMetadata &message_metadata = MessageMetadata(),
+        bool force_buffering = true
     ) = 0;
 
     virtual Maybe<HTTPResponse, HTTPResponse> sendSyncMessage(

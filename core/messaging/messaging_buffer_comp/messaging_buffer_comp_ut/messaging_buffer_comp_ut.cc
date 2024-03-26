@@ -233,17 +233,36 @@ TEST_F(TestMessagingBuffer, testRoutinInMemory)
     string body_1 = "body1";
     string body_2 = "body2";
     string body_3 = "body3";
+    string body_4 = "body4";
     string uri_1 = "uri_1";
     string uri_2 = "uri_2";
     string uri_3 = "uri_3";
+    string uri_4 = "uri_4";
 
     MessageCategory category = MessageCategory::GENERIC;
     MessageMetadata message_metadata = MessageMetadata();
+    MessageMetadata msg_2_message_metadata = MessageMetadata();
+    msg_2_message_metadata.setShouldBufferMessage(true);
     HTTPMethod method = HTTPMethod::POST;
 
     buffer_provider->pushNewBufferedMessage(body_1, method, uri_1, category, message_metadata, false);
-    buffer_provider->pushNewBufferedMessage(body_2, method, uri_2, category, message_metadata, false);
+    buffer_provider->pushNewBufferedMessage(
+        body_2,
+        method,
+        uri_2,
+        category,
+        msg_2_message_metadata,
+        false
+    ); // should be buffered
     buffer_provider->pushNewBufferedMessage(body_3, method, uri_3, category, message_metadata, false);
+    buffer_provider->pushNewBufferedMessage(
+        body_4,
+        method,
+        uri_4,
+        category,
+        message_metadata,
+        false
+    ); // shouldn't be buffered
 
     HTTPResponse res(HTTPStatusCode::HTTP_OK, "");
     Maybe<HTTPResponse, HTTPResponse> err = genError(res);
@@ -251,6 +270,7 @@ TEST_F(TestMessagingBuffer, testRoutinInMemory)
     EXPECT_CALL(mock_messaging, sendSyncMessage(method, uri_1, body_1, _, _)).WillOnce(Return(res));
     EXPECT_CALL(mock_messaging, sendSyncMessage(method, uri_2, body_2, _, _)).WillOnce(Return(err));
     EXPECT_CALL(mock_messaging, sendSyncMessage(method, uri_3, body_3, _, _)).WillOnce(Return(res));
+    EXPECT_CALL(mock_messaging, sendSyncMessage(method, uri_4, body_4, _, _)).WillOnce(Return(err));
 
     memory_routine();
 

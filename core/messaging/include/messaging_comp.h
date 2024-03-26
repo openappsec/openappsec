@@ -50,7 +50,8 @@ public:
         const std::string &uri,
         const std::string &body,
         MessageCategory category,
-        const MessageMetadata &message_metadata
+        const MessageMetadata &message_metadata,
+        bool force_buffering = true
     );
 
     Maybe<HTTPStatusCode, HTTPResponse> downloadFile(

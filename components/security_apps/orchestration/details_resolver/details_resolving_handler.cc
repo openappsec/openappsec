@@ -64,6 +64,12 @@ private:
 #undef FILE_CONTENT_HANDLER
 };
 
+#define SHELL_POST_CMD(NAME, COMMAND) {NAME, COMMAND},
+    map<string, string> shell_post_commands = {
+        #include "details_resolver_impl.h"
+    };
+#undef SHELL_POST_CMD
+
 map<string, string>
 DetailsResolvingHanlder::Impl::getResolvedDetails() const
 {
@@ -112,6 +118,18 @@ DetailsResolvingHanlder::Impl::getResolvedDetails() const
             if (handler_ret.ok()) resolved_details[attr] = *handler_ret;
         }
         in_file->close();
+    }
+
+    for (auto &shell_post_command : shell_post_commands) {
+        const string &name = shell_post_command.first;
+        const string &command = shell_post_command.second;
+        Maybe<int> command_ret = shell->getExecReturnCode(command, timeout);
+
+        if (!command_ret.ok()) {
+            dbgWarning(D_AGENT_DETAILS) << "Failed to run post-command " << name;
+        } else if (*command_ret) {
+            dbgWarning(D_AGENT_DETAILS) << "Post-command " << name << " failed (rc: " << *command_ret << ")";
+        }
     }
 
     I_AgentDetailsReporter *reporter = Singleton::Consume<I_AgentDetailsReporter>::by<DetailsResolvingHanlder>();

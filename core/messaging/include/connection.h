@@ -63,6 +63,7 @@ public:
     bool isOverProxy() const;
     bool isUnsecure() const;
     bool isSuspended();
+    bool shouldCloseConnection() const;
 
     Maybe<void> establishConnection();
     Maybe<HTTPResponse, HTTPResponse> sendRequest(const std::string &request);

@@ -58,7 +58,8 @@ public:
         const ReportIS::IssuingEngine &_issuing_engine,
         std::chrono::seconds _report_interval,
         bool _reset,
-        ReportIS::Audience _audience = ReportIS::Audience::INTERNAL
+        ReportIS::Audience _audience = ReportIS::Audience::INTERNAL,
+        bool _force_buffering = false
     );
 
     template <typename Value>
@@ -107,6 +108,7 @@ private:
     std::chrono::seconds report_interval;
     std::vector<MetricCalc *> calcs;
     bool reset;
+    bool force_buffering = false;
     Context ctx;
 };
 

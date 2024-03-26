@@ -38,6 +38,10 @@ USE_DEBUG_FLAG(D_CONNECTION);
 static const HTTPResponse sending_timeout(HTTPStatusCode::HTTP_UNKNOWN, "Failed to send all data in time");
 static const HTTPResponse receving_timeout(HTTPStatusCode::HTTP_UNKNOWN, "Failed to receive all data in time");
 static const HTTPResponse parsing_error(HTTPStatusCode::HTTP_UNKNOWN, "Failed to parse the HTTP response");
+static const HTTPResponse close_error(
+    HTTPStatusCode::HTTP_UNKNOWN,
+    "The previous request failed to receive a response. Closing the connection"
+);
 
 const string &
 MessageConnectionKey::getHostName() const
@@ -126,6 +130,12 @@ public:
     }
 
     bool
+    shouldCloseConnection() const
+    {
+        return should_close_connection;
+    }
+
+    bool
     isOverProxy() const
     {
         return flags.isSet(ConnectionFlags::PROXY);
@@ -152,12 +162,12 @@ public:
 
         if (establishConnection().ok()) {
             dbgDebug(D_MESSAGING) << "Reestablish connection";
-            return true;
+            return false;
         }
 
         dbgWarning(D_MESSAGING) << "Reestablish connection failed";
         active = genError(curr_time + chrono::seconds(300));
-        return false;
+        return true;
     }
 
     Maybe<void>
@@ -200,6 +210,7 @@ public:
             << key.getPort()
             << (isOverProxy() ? ", Over proxy: " + settings.getProxyHost() + ":" + to_string(key.getPort()) : "");
         active = Maybe<void, chrono::seconds>();
+        should_close_connection = false;
         return Maybe<void>();
     }
 
@@ -443,25 +454,40 @@ private:
 
         I_MainLoop *i_mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
         I_TimeGet *i_time = Singleton::Consume<I_TimeGet>::by<Messaging>();
-        auto conn_end_time = i_time->getMonotonicTime() + getConnectionTimeout();
 
+        auto bio_connect = BIO_do_connect(bio.get());
         uint attempts_count = 0;
-        while (i_time->getMonotonicTime() < conn_end_time) {
-            attempts_count++;
-            if (BIO_do_connect(bio.get()) > 0) {
-                if (isUnsecure() || isOverProxy()) return Maybe<void>();
-                return performHandshakeAndVerifyCert(i_time, i_mainloop);
-            }
-
+        auto conn_end_time = i_time->getMonotonicTime() + getConnectionTimeout();
+        while (i_time->getMonotonicTime() < conn_end_time && bio_connect <= 0) {
             if (!BIO_should_retry(bio.get())) {
+                auto curr_time = chrono::duration_cast<chrono::seconds>(i_time->getMonotonicTime());
+                active = genError(curr_time + chrono::seconds(60));
                 string bio_error = ERR_error_string(ERR_get_error(), nullptr);
-                return genError("Failed to connect (BIO won't retry!): " + bio_error);
+                return genError(
+                    "Failed to connect to: " +
+                    full_address +
+                    ", error: " +
+                    bio_error +
+                    ". Connection suspended for 60 seconds");
             }
-
-            if ((attempts_count % 10) == 0) i_mainloop->yield(true);
+            attempts_count++;
+            if (!isBioSocketReady()) {
+                i_mainloop->yield((attempts_count % 10) == 0);
+                continue;
+            }
+            bio_connect = BIO_do_connect(bio.get());
         }
-
-        return genError("Failed to establish new connection to " + full_address + " after reaching timeout.");
+        if (bio_connect > 0) {
+            if (isUnsecure() || isOverProxy()) return Maybe<void>();
+            return performHandshakeAndVerifyCert(i_time, i_mainloop);
+        }
+        auto curr_time = chrono::duration_cast<chrono::seconds>(i_time->getMonotonicTime());
+        active = genError(curr_time + chrono::seconds(60));
+        return genError(
+            "Failed to establish new connection to: " +
+            full_address +
+            " after reaching timeout." +
+            " Connection suspended for 60 seconds");
     }
 
     Maybe<uint, HTTPResponse>
@@ -544,12 +570,18 @@ private:
     Maybe<HTTPResponse, HTTPResponse>
     sendAndReceiveData(const string &request, bool is_connect)
     {
+        dbgFlow(D_CONNECTION) << "Sending and receiving data";
         I_MainLoop *i_mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
         while (lock) {
             i_mainloop->yield(true);
         }
         lock = true;
         auto unlock = make_scope_exit([&] () { lock = false; });
+
+        if (should_close_connection) {
+            dbgWarning(D_CONNECTION) << close_error.getBody();
+            return genError(close_error);
+        }
 
         I_TimeGet *i_time = Singleton::Consume<I_TimeGet>::by<Messaging>();
         auto sending_end_time = i_time->getMonotonicTime() + getConnectionTimeout();
@@ -567,9 +599,15 @@ private:
         HTTPResponseParser http_parser;
         dbgTrace(D_CONNECTION) << "Sent the message, now waiting for response";
         while (!http_parser.hasReachedError()) {
-            if (i_time->getMonotonicTime() > receiving_end_time) return genError(receving_timeout);
+            if (i_time->getMonotonicTime() > receiving_end_time) {
+                should_close_connection = true;
+                return genError(receving_timeout);
+            };
             auto receieved = receiveData();
-            if (!receieved.ok()) return receieved.passErr();
+            if (!receieved.ok()) {
+                should_close_connection = true;
+                return receieved.passErr();
+            }
             auto response = http_parser.parseData(*receieved, is_connect);
             if (response.ok()) {
                 dbgTrace(D_MESSAGING) << printOut(response.unpack().toString());
@@ -611,6 +649,7 @@ private:
     uint failed_attempts = 0;
 
     bool lock = false;
+    bool should_close_connection = false;
 };
 
 Connection::Connection(const MessageConnectionKey &key, const MessageMetadata &metadata)
@@ -661,6 +700,12 @@ const MessageConnectionKey &
 Connection::getConnKey() const
 {
     return pimpl->getConnKey();
+}
+
+bool
+Connection::shouldCloseConnection() const
+{
+    return pimpl->shouldCloseConnection();
 }
 
 bool

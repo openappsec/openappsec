@@ -28,6 +28,7 @@ AssetReply<UserSerializableReplyAttr>::load(cereal::JSONInputArchive &ar)
     SerializableMultiMap<std::string, std::vector<std::string>> tmp_multimap;
     ar(
         cereal::make_nvp("schemaVersion", asset_schema_version),
+        cereal::make_nvp("assetType", asset_type),
         cereal::make_nvp("assetTypeSchemaVersion", asset_type_schema_version),
         cereal::make_nvp("class", asset_class),
         cereal::make_nvp("category", asset_category),
@@ -65,7 +66,6 @@ AssetReply<UserSerializableReplyAttr>::load(cereal::JSONInputArchive &ar)
     } catch(...) {}
 
     ar(cereal::make_nvp("sources", sources));
-    ar(cereal::make_nvp("assetType", asset_type));
 }
 
 template <typename UserSerializableReplyAttr>

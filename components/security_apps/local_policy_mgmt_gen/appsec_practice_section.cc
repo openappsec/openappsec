@@ -133,7 +133,7 @@ AppSecPracticeWebAttacks::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec practice spec";
     parseAppsecJSONKey<AppSecWebAttackProtections>("protections", protections, archive_in);
-    parseAppsecJSONKey<string>("override-mode", mode, archive_in, "Unset");
+    parseAppsecJSONKey<string>("override-mode", mode, archive_in, "as-top-level");
     if (valid_modes.count(mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec practice override mode invalid: " << mode;
     }
@@ -187,7 +187,7 @@ AppSecPracticeWebAttacks::getMinimumConfidence() const
 const string &
 AppSecPracticeWebAttacks::getMode(const string &default_mode) const
 {
-    if (mode == "Unset" || (key_to_practices_val2.find(mode) == key_to_practices_val2.end())) {
+    if (isModeInherited(mode) || (key_to_practices_val2.find(mode) == key_to_practices_val2.end())) {
         dbgError(D_LOCAL_POLICY) << "Couldn't find a value for key: " << mode << ". Returning " << default_mode;
         return default_mode;
     }
@@ -429,6 +429,9 @@ WebAppSection::WebAppSection(
     context(_context),
     web_attack_mitigation_severity(parsed_appsec_spec.getWebAttacks().getMinimumConfidence()),
     web_attack_mitigation_mode(parsed_appsec_spec.getWebAttacks().getMode(default_mode)),
+    csrf_protection_mode("Disabled"),
+    open_redirect_mode("Disabled"),
+    error_disclosure_mode("Disabled"),
     practice_advanced_config(parsed_appsec_spec),
     anti_bots(parsed_appsec_spec.getAntiBot()),
     trusted_sources({ parsed_trusted_sources })
@@ -451,6 +454,7 @@ WebAppSection::WebAppSection(
     }
 }
 
+// Used for V1Beta2
 WebAppSection::WebAppSection(
     const string &_application_urls,
     const string &_asset_id,
@@ -465,7 +469,8 @@ WebAppSection::WebAppSection(
     const PracticeAdvancedConfig &_practice_advanced_config,
     const AppsecPracticeAntiBotSection &_anti_bots,
     const LogTriggerSection &parsed_log_trigger,
-    const AppSecTrustedSources &parsed_trusted_sources)
+    const AppSecTrustedSources &parsed_trusted_sources,
+    const NewAppSecWebAttackProtections &protections)
     :
     application_urls(_application_urls),
     asset_id(_asset_id),
@@ -489,6 +494,10 @@ WebAppSection::WebAppSection(
         web_attack_mitigation_severity == "medium" ? "high" :
         "Error";
 
+    csrf_protection_mode = protections.getCsrfProtectionMode(_web_attack_mitigation_mode);
+    open_redirect_mode = protections.getOpenRedirectMode(_web_attack_mitigation_mode);
+    error_disclosure_mode = protections.getErrorDisclosureMode(_web_attack_mitigation_mode);
+
     triggers.push_back(TriggersInWaapSection(parsed_log_trigger));
     for (const SourcesIdentifiers &source_ident : parsed_trusted_sources.getSourcesIdentifiers()) {
         overrides.push_back(AppSecOverride(source_ident));
@@ -510,9 +519,9 @@ WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("webAttackMitigationAction",   web_attack_mitigation_action),
         cereal::make_nvp("webAttackMitigationMode",     web_attack_mitigation_mode),
         cereal::make_nvp("practiceAdvancedConfig",      practice_advanced_config),
-        cereal::make_nvp("csrfProtection",              disabled_str),
-        cereal::make_nvp("openRedirect",                disabled_str),
-        cereal::make_nvp("errorDisclosure",             disabled_str),
+        cereal::make_nvp("csrfProtection",              csrf_protection_mode),
+        cereal::make_nvp("openRedirect",                open_redirect_mode),
+        cereal::make_nvp("errorDisclosure",             error_disclosure_mode),
         cereal::make_nvp("practiceId",                  practice_id),
         cereal::make_nvp("practiceName",                practice_name),
         cereal::make_nvp("assetId",                     asset_id),

@@ -170,11 +170,15 @@ WaapComponent::Impl::respond(const NewHttpTransactionEvent &event)
 
     waf2Transaction.start();
 
-    char sourceIpStr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(event.getSourceIP()), sourceIpStr, INET_ADDRSTRLEN);
-
-    char listeningIpStr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(event.getListeningIP()), listeningIpStr, INET_ADDRSTRLEN);
+    char sourceIpStr[INET6_ADDRSTRLEN];
+    char listeningIpStr[INET6_ADDRSTRLEN];
+    if (event.getSourceIP().getType() == IPType::V4) {
+        inet_ntop(AF_INET, &(event.getSourceIP()), sourceIpStr, INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET, &(event.getListeningIP()), listeningIpStr, INET6_ADDRSTRLEN);
+    } else {
+        inet_ntop(AF_INET6, &(event.getSourceIP()), sourceIpStr, INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, &(event.getListeningIP()), listeningIpStr, INET6_ADDRSTRLEN);
+    }
 
     // Set envelope data
     waf2Transaction.set_transaction_remote(sourceIpStr, event.getSourcePort());
@@ -514,7 +518,6 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
     }
 
     dbgTrace(D_WAAP) << "HttpBodyResponse";
-
 
     // Push the response data chunk to the waf2 engine
     const char *dataBuf = (const char*)event.getData().data();

@@ -173,6 +173,7 @@ private:
     bool shouldEnforceDepthLimit(const std::shared_ptr<ParserBase>& parser) const;
     void setLocalMaxObjectDepth(size_t depth) { m_localMaxObjectDepth = depth; }
     void setGlobalMaxObjectDepthReached() { m_globalMaxObjectDepthReached = true; }
+    bool isPDFDetected(const std::string &cur_val) const;
     bool m_deepParserFlag;
     std::stack<std::tuple<size_t, size_t, std::string>> m_splitTypesStack; // depth, splitIndex, splitType
     std::deque<std::shared_ptr<ParserBase>> m_parsersDeque;

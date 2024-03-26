@@ -43,7 +43,7 @@ Sender::Sender(IntelligenceRequest request) : request(request)
     }
 
     auto setting_server_ip = getSetting<string>("intelligence", "local intelligence server ip");
-    if (setting_server_ip.ok()) server_ip = *setting_server_ip;
+    if (setting_server_ip.ok() && is_local_intelligence) server_ip = *setting_server_ip;
 }
 
 Maybe<Response>
@@ -80,6 +80,7 @@ Sender::sendQueryObjectToLocalServer(bool is_primary_port)
 
     server_port = *local_port;
     conn_flags.reset();
+    conn_flags.setFlag(MessageConnectionConfig::UNSECURE_CONN);
 
     auto res = sendQueryMessage();
 
@@ -173,7 +174,7 @@ Sender::sendMessage()
     MessageMetadata req_md(*server_ip, *server_port, conn_flags);
     auto req_status = i_message->sendSyncMessage(
         HTTPMethod::POST,
-        query_uri,
+        request.isBulk() ? queries_uri : query_uri,
         request,
         MessageCategory::INTELLIGENCE,
         req_md

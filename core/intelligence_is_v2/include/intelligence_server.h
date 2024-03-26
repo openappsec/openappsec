@@ -37,7 +37,7 @@ private:
 
     IntelligenceRequest request;
     Flags<MessageConnectionConfig> conn_flags;
-    bool is_local_intelligence;
+    bool is_local_intelligence = false;
     Maybe<std::string> server_ip = genError("No server ip set");
     Maybe<unsigned int> server_port = genError("No port is set");
     I_Messaging * i_message = nullptr;

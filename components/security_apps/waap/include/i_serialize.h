@@ -154,6 +154,7 @@ protected:
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
             req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             auto req_status = messaging->sendSyncMessage(
                 method,
                 uri,
@@ -161,6 +162,10 @@ protected:
                 MessageCategory::GENERIC,
                 req_md
             );
+            if (!req_status.ok()) {
+                dbgWarning(D_WAAP) << "failed to send request to uri: " << uri
+                    << ", error: " << req_status.getErr().toString();
+            }
             return req_status.ok();
         }
         auto req_status = messaging->sendSyncMessage(
@@ -169,6 +174,10 @@ protected:
             obj,
             MessageCategory::GENERIC
         );
+        if (!req_status.ok()) {
+            dbgWarning(D_WAAP) << "failed to send request to uri: " << uri
+                << ", error: " << req_status.getErr().toString();
+        }
         return req_status.ok();
     }
 
@@ -204,6 +213,7 @@ protected:
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
             req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             return messaging->sendSyncMessageWithoutResponse(
                 method,
                 uri,

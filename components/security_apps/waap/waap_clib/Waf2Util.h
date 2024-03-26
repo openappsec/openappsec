@@ -732,6 +732,13 @@ inline void replaceAll(std::string& str, const std::string& from, const std::str
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
 }
+inline void alignBase64Chunk (std::string &chunk)
+{
+    size_t len = chunk.length() % 4;
+    if (len >= 2) {
+        chunk.append(4-len, '=');
+    }
+}
 
 // Count items in v that are not in ignored_set
 inline size_t countNotInSet(const std::vector<std::string> &v, const std::set<std::string> &ignored_set) {

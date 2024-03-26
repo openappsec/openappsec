@@ -33,7 +33,9 @@ ReportMessaging::~ReportMessaging()
             HTTPMethod::POST,
             url,
             log_rest,
-            message_type_tag
+            message_type_tag,
+            MessageMetadata(),
+            force_buffering
         );
     } catch (...) {}
 }
@@ -43,4 +45,10 @@ ReportMessaging::operator<<(const LogField &field)
 {
     report << field;
     return *this;
+}
+
+void
+ReportMessaging::setForceBuffering(bool _force_buffering)
+{
+    force_buffering = _force_buffering;
 }

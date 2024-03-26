@@ -38,6 +38,7 @@
 #include "i_transaction.h"
 #include "i_waap_telemetry.h"
 #include "i_deepAnalyzer.h"
+#include "i_time_get.h"
 #include "table_opaque.h"
 #include "WaapResponseInspectReasons.h"
 #include "WaapResponseInjectReasons.h"
@@ -45,6 +46,7 @@
 #include "WaapOpenRedirectPolicy.h"
 #include "WaapScanner.h"
 #include "singleton.h"
+#include "OASchemaUpdaterConfConstant.h"
 
 struct DecisionTelemetryData;
 class Waf2Transaction;
@@ -60,6 +62,7 @@ class Waf2Transaction :
     public  Singleton::Consume<I_Table>,
     private boost::noncopyable,
     Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_Environment>
 {
 public:
@@ -76,6 +79,7 @@ public:
     void set_host(const char *host);
 
     // getters
+    uint64_t getElapsedTime() const;
     const std::string& getRemoteAddr() const;
     virtual const std::string getUri() const;
     const std::string getUriStr() const;
@@ -143,6 +147,7 @@ public:
     void start_response_body();
     void add_response_body_chunk(const char* data, int data_len);
     void end_response_body();
+    const std::string & getResponseBody();
     void end_response();
     void extractEnvSourceIdentifier();
     void finish();
@@ -212,19 +217,21 @@ public:
     }
 
     // LCOV_EXCL_STOP
-
     bool reportScanResult(const Waf2ScanResult &res);
     bool shouldIgnoreOverride(const Waf2ScanResult &res);
     Waap::OpenRedirect::State &getOpenRedirectState() { return m_openRedirectState; }
     IWaapConfig* getSiteConfig() { return m_siteConfig; }
     void addNote(const std::string &note) { m_notes.push_back(note); }
-    const std::string &getResponseBody(void) const { return m_response_body; }
     Waap::ResponseInspectReasons &getResponseInspectReasons(void) { return m_responseInspectReasons; }
+    // LCOV_EXCL_START Reason: This function is tested in system tests
+    bool checkIsHeaderOverrideScanRequired();
+    // LCOV_EXCL_STOP
 
 private:
     int finalizeDecision(IWaapConfig *sitePolicy, bool shouldBlock);
     const std::shared_ptr<Waap::Trigger::Log> getTriggerLog(const std::shared_ptr<Waap::Trigger::Policy>&
         triggerPolicy) const;
+    bool isTriggerReportExists(const std::shared_ptr<Waap::Trigger::Policy> &triggerPolicy);
     void sendAutonomousSecurityLog(
         const std::shared_ptr<Waap::Trigger::Log>& triggerLog,
         bool shouldBlock,
@@ -261,15 +268,17 @@ private:
     void parseContentType(const char* value, int value_len);
     void parseCookie(const char* value, int value_len);
     void parseReferer(const char* value, int value_len);
+    void parseAuthorization(const char* value, int value_len, const std::string &header_name);
     void parseUnknownHeaderName(const char* name, int name_len);
     void parseGenericHeaderValue(const std::string &headerName, const char* value, int value_len);
-    void scanSpecificHeder(const char* name, int name_len, const char* value, int value_len);
+    void scanSpecificHeader(const char* name, int name_len, const char* value, int value_len);
     void detectSpecificHeader(const char* name, int name_len, const char* value, int value_len);
     void detectHeaders();
     void scanHeaders();
     void clearRequestParserState();
     void scanErrDisclosureBuffer();
 
+    std::chrono::milliseconds m_entry_time;
     std::shared_ptr<WaapAssetState> m_pWaapAssetState;
     bool m_ignoreScore; // override the scoring filter and (effectively) take the last suspicious parameter,
                         // instead of the one with highest score that is > SCORE_THRESHOLD
@@ -334,6 +343,7 @@ private:
 
     bool m_processedUri;
     bool m_processedHeaders;
+    bool m_isHeaderOverrideScanRequired;
     bool m_isScanningRequired;
     int m_responseStatus;
     Waap::ResponseInspectReasons m_responseInspectReasons;
@@ -345,6 +355,7 @@ private:
 
     // Cached pointer to const triggerLog (hence mutable)
     mutable std::shared_ptr<Waap::Trigger::Log> m_triggerLog;
+    bool m_triggerReport;
     bool is_schema_validation = false;
     Waf2TransactionFlags m_waf2TransactionFlags;
 };

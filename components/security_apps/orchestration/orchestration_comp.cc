@@ -1012,10 +1012,11 @@ private:
         HybridModeMetricEvent().notify();
 
         if (!response.ok()) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to get the update. Error: " << response.getErr();
             orch_status->setFieldStatus(
                 OrchestrationStatusFieldType::LAST_UPDATE,
                 OrchestrationStatusResult::FAILED,
-                response.getErr()
+                "Warning: Agent/Gateway failed during the update process. Contact Check Point support."
             );
 
             return genError(response.getErr());

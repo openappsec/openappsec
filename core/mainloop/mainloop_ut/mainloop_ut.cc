@@ -51,7 +51,7 @@ public:
     {
         EXPECT_CALL(
             mock_msg,
-            sendAsyncMessage(_, "/api/v1/agents/events", _, _, _)
+            sendAsyncMessage(_, "/api/v1/agents/events", _, _, _, _)
         ).Times(2).WillRepeatedly(
             WithArgs<2, 3>(
                 Invoke(

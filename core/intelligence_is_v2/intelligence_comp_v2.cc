@@ -244,7 +244,12 @@ public:
     bool
     sendInvalidation(const Invalidation &invalidation) const override
     {
-        return hasLocalIntelligence() ? sendLocalInvalidation(invalidation) : sendGlobalInvalidation(invalidation);
+        if (hasLocalInvalidationSupport()) {
+            return sendLocalInvalidation(invalidation);
+        }
+        else {
+            return sendGlobalInvalidation(invalidation);
+        }
     }
 
     Maybe<uint>
@@ -287,9 +292,14 @@ public:
 
 private:
     bool
-    hasLocalIntelligence() const
+    hasLocalInvalidationSupport() const
     {
-        return getProfileAgentSettingWithDefault<bool>(false, "agent.config.useLocalIntelligence");
+        auto is_supported = getProfileAgentSettingWithDefault<bool>(false, "agent.config.useLocalIntelligence");
+
+        if (!is_supported) {
+            is_supported = getProfileAgentSettingWithDefault<bool>(false, "agent.config.supportInvalidation");
+        }
+        return is_supported;
     }
 
     bool
@@ -330,6 +340,7 @@ private:
 
         MessageMetadata invalidation_req_md(server, *port);
         invalidation_req_md.insertHeaders(getHTTPHeaders());
+        invalidation_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         return message->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             invalidation_uri,
@@ -411,6 +422,7 @@ private:
 
         dbgTrace(D_INTELLIGENCE) << "Invalidation value: " << registration.genJson();
         MessageMetadata registration_req_md(server, *port);
+        registration_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         return message->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             registration_uri,
@@ -423,7 +435,7 @@ private:
     void
     sendReccurringInvalidationRegistration() const
     {
-        if (!hasLocalIntelligence() || invalidations.empty()) return;
+        if (!hasLocalInvalidationSupport() || invalidations.empty()) return;
 
         sendLocalRegistrationImpl(invalidations.getRegistration());
     }

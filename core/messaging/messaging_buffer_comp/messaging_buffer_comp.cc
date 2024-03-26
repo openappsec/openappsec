@@ -153,8 +153,6 @@ MessagingBufferComponent::Impl::pushNewBufferedMessage(
 {
     dbgTrace(D_MESSAGING_BUFFER) << "Pushing new message to buffer";
 
-    message_metadata.setShouldBufferMessage(false);
-
     if (!force_immediate_writing) {
         dbgDebug(D_MESSAGING_BUFFER) << "Holding message temporarily in memory";
         memory_messages.emplace_back(body, method, uri, category, message_metadata);
@@ -296,12 +294,14 @@ MessagingBufferComponent::Impl::sendMessage()
 HTTPStatusCode
 MessagingBufferComponent::Impl::sendMessage(const BufferedMessage &message) const
 {
+    MessageMetadata message_metadata = message.getMessageMetadata();
+    message_metadata.setShouldBufferMessage(false);
     auto res = messaging->sendSyncMessage(
         message.getMethod(),
         message.getURI(),
         message.getBody(),
         message.getCategory(),
-        message.getMessageMetadata()
+        message_metadata
     );
 
     if (res.ok()) return HTTPStatusCode::HTTP_OK;
@@ -316,7 +316,9 @@ MessagingBufferComponent::Impl::handleInMemoryMessages()
     memory_messages.reserve(32);
 
     for (const auto &message : messages) {
-        if (sendMessage(message) != HTTPStatusCode::HTTP_OK) writeToDisk(message);
+        if (sendMessage(message) != HTTPStatusCode::HTTP_OK) {
+            if (message.getMessageMetadata().shouldBufferMessage()) writeToDisk(message);
+        }
         mainloop->yield();
     }
 }

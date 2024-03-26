@@ -99,10 +99,53 @@ TEST_F(ReportMessagingTest, title_only)
             "    }\n"
             "}",
             _,
+            _,
             _
         )
     ).Times(1);
     ReportMessaging("test", ReportIS::AudienceTeam::AGENT_CORE, 1, true, ReportIS::Tags::ACCESS_CONTROL);
+}
+
+TEST_F(ReportMessagingTest, with_buffering)
+{
+    EXPECT_CALL(
+        mock_messaging,
+        sendAsyncMessage(
+            _,
+            _,
+            "{\n"
+            "    \"log\": {\n"
+            "        \"eventTime\": \"Best Time ever\",\n"
+            "        \"eventName\": \"test\",\n"
+            "        \"eventSeverity\": \"Info\",\n"
+            "        \"eventPriority\": \"Low\",\n"
+            "        \"eventType\": \"Event Driven\",\n"
+            "        \"eventLevel\": \"Log\",\n"
+            "        \"eventLogLevel\": \"info\",\n"
+            "        \"eventAudience\": \"Internal\",\n"
+            "        \"eventAudienceTeam\": \"Agent Core\",\n"
+            "        \"eventFrequency\": 0,\n"
+            "        \"eventTags\": [\n"
+            "            \"Access Control\"\n"
+            "        ],\n"
+            "        \"eventSource\": {\n"
+            "            \"eventTraceId\": \"\",\n"
+            "            \"eventSpanId\": \"\",\n"
+            "            \"issuingEngineVersion\": \"\",\n"
+            "            \"serviceName\": \"Unnamed Nano Service\"\n"
+            "        },\n"
+            "        \"eventData\": {\n"
+            "            \"eventObject\": 1\n"
+            "        }\n"
+            "    }\n"
+            "}",
+            _,
+            _,
+            true
+        )
+    ).Times(1);
+    ReportMessaging report("test", ReportIS::AudienceTeam::AGENT_CORE, 1, true, ReportIS::Tags::ACCESS_CONTROL);
+    report.setForceBuffering(true);
 }
 
 TEST_F(ReportMessagingTest, with_dynamic_fields)
@@ -139,6 +182,7 @@ TEST_F(ReportMessagingTest, with_dynamic_fields)
             "        }\n"
             "    }\n"
             "}",
+            _,
             _,
             _
         )
@@ -188,6 +232,7 @@ TEST_F(ReportMessagingTest, custom_event_object)
             "        }\n"
             "    }\n"
             "}",
+            _,
             _,
             _
         )
@@ -242,6 +287,7 @@ TEST_F(ReportMessagingTest, custom_priority)
             "        }\n"
             "    }\n"
             "}",
+            _,
             _,
             _
         )
@@ -308,6 +354,7 @@ TEST_F(ReportMessagingTest, with_env_details)
             "        }\n"
             "    }\n"
             "}",
+            _,
             _,
             _
         )

@@ -414,7 +414,7 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
 
     vector<AccessControlPracticeSpec> access_control_practices =
         extractV1Beta2ElementsFromCluster<AccessControlPracticeSpec>(
-            "accesscontrolpractice",
+            "accesscontrolpractices",
             policy_elements_names[AnnotationTypes::ACCESS_CONTROL_PRACTICE]
         );
 
@@ -489,6 +489,8 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
         !doesVersionExist(maybe_appsec_policy_spec.unpack().getMetaData().getAnnotations(), "v1beta1")
     ) {
         try {
+            std::string v1beta1_error =
+                maybe_appsec_policy_spec.ok() ? "There is no v1beta1 policy" : maybe_appsec_policy_spec.getErr();
             dbgWarning(D_LOCAL_POLICY
             ) << "Failed to retrieve Appsec policy with crds version: v1beta1, Trying version: v1beta2";
             auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
@@ -498,7 +500,7 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
                 dbgWarning(D_LOCAL_POLICY)
                     << "Failed to retrieve AppSec policy. Error: " << maybe_v1beta2_appsec_policy_spec.getErr();
                 return std::make_tuple(
-                    genError("Failed to retrieve AppSec v1beta1 policy. Error: " + maybe_appsec_policy_spec.getErr()),
+                    genError("Failed to retrieve AppSec v1beta1 policy. Error: " + v1beta1_error),
                     genError(
                         "Failed to retrieve AppSec v1beta2 policy. Error: " + maybe_v1beta2_appsec_policy_spec.getErr()
                     )
@@ -584,7 +586,9 @@ K8sPolicyUtils::createAppsecPoliciesFromIngresses()
         );
         if (!std::get<0>(maybe_appsec_policy).ok() && !std::get<1>(maybe_appsec_policy).ok()) {
             dbgWarning(D_LOCAL_POLICY)
-                << "Failed to create appsec policy. Error: "
+                << "Failed to create appsec policy. v1beta1 Error: "
+                << std::get<0>(maybe_appsec_policy).getErr()
+                << ". v1beta2 Error: "
                 << std::get<1>(maybe_appsec_policy).getErr();
             continue;
         }

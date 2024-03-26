@@ -25,6 +25,7 @@ struct DecisionTelemetryData
     std::string source;
     TrafficMethod method;
     int responseCode;
+    uint64_t elapsedTime;
     std::set<std::string> attackTypes;
 
     DecisionTelemetryData() :
@@ -36,6 +37,7 @@ struct DecisionTelemetryData
         source(),
         method(POST),
         responseCode(0),
+        elapsedTime(0),
         attackTypes()
     {
     }

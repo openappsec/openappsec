@@ -97,8 +97,7 @@ parseAppsecJSONKey(
         value = default_value;
         if (!mandatory) {
             dbgDebug(D_LOCAL_POLICY)
-                << "Could not parse the required key. Key: \""<< key_name
-                << "\", Error: " << e.what();
+                << "Could not parse a non-mandatory key: \""<< key_name << "\", Error: " << e.what();
         } else {
             throw PolicyGenException(
                 "Could not parse a mandatory key: \"" + key_name + "\", Error: " + std::string(e.what())
