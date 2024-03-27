@@ -8,8 +8,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-validations
         namespace: default
     webhooks:
@@ -82,8 +82,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
     spec:
@@ -104,10 +104,10 @@ SnapShot = """
                     app.kubernetes.io/instance: chartsnap
                     app.kubernetes.io/managed-by: Helm
                     app.kubernetes.io/name: kong
-                    app.kubernetes.io/version: \"3.5\"
+                    app.kubernetes.io/version: \"3.6\"
                     environment: test
-                    helm.sh/chart: kong-2.36.0
-                    version: \"3.5\"
+                    helm.sh/chart: kong-2.38.0
+                    version: \"3.6\"
             spec:
                 automountServiceAccountToken: false
                 containers:
@@ -139,7 +139,7 @@ SnapShot = """
                           value: https://localhost:8444
                         - name: CONTROLLER_PUBLISH_SERVICE
                           value: default/chartsnap-kong-proxy
-                      image: kong/kubernetes-ingress-controller:3.0
+                      image: kong/kubernetes-ingress-controller:3.1
                       imagePullPolicy: IfNotPresent
                       livenessProbe:
                         failureThreshold: 3
@@ -160,7 +160,7 @@ SnapShot = """
                           name: cmetrics
                           protocol: TCP
                         - containerPort: 10254
-                          name: status
+                          name: cstatus
                           protocol: TCP
                       readinessProbe:
                         failureThreshold: 3
@@ -252,7 +252,7 @@ SnapShot = """
                           value: \"off\"
                         - name: KONG_NGINX_DAEMON
                           value: \"off\"
-                      image: kong:3.5
+                      image: kong:3.6
                       imagePullPolicy: IfNotPresent
                       lifecycle:
                         preStop:
@@ -370,7 +370,7 @@ SnapShot = """
                           value: 0.0.0.0:8100, [::]:8100
                         - name: KONG_STREAM_LISTEN
                           value: \"off\"
-                      image: kong:3.5
+                      image: kong:3.6
                       imagePullPolicy: IfNotPresent
                       name: clear-stale-pid
                       resources: {}
@@ -447,8 +447,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
     spec:
@@ -473,8 +473,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-proxy
         namespace: default
     spec:
@@ -497,8 +497,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
     rules:
         - apiGroups:
@@ -709,6 +709,38 @@ SnapShot = """
         - apiGroups:
             - configuration.konghq.com
           resources:
+            - konglicenses
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
+            - konglicenses/status
+          verbs:
+            - get
+            - patch
+            - update
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
+            - kongvaults
+          verbs:
+            - get
+            - list
+            - watch
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
+            - kongvaults/status
+          verbs:
+            - get
+            - patch
+            - update
+        - apiGroups:
+            - configuration.konghq.com
+          resources:
             - kongclusterplugins
           verbs:
             - get
@@ -745,8 +777,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
     roleRef:
         apiGroup: rbac.authorization.k8s.io
@@ -764,8 +796,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
     rules:
@@ -828,8 +860,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
     roleRef:
@@ -851,8 +883,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-validation-webhook-ca-keypair
         namespace: default
     type: kubernetes.io/tls
@@ -867,8 +899,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-validation-webhook-keypair
         namespace: default
     type: kubernetes.io/tls
@@ -880,8 +912,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-manager
         namespace: default
     spec:
@@ -907,9 +939,9 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
+            app.kubernetes.io/version: \"3.6\"
             enable-metrics: \"true\"
-            helm.sh/chart: kong-2.36.0
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-proxy
         namespace: default
     spec:
@@ -935,8 +967,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-validation-webhook
         namespace: default
     spec:
@@ -950,8 +982,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
 - object:
     apiVersion: v1
     kind: ServiceAccount
@@ -960,8 +992,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
 """

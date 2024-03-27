@@ -9,8 +9,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
     spec:
@@ -32,9 +32,9 @@ SnapShot = """
                     app.kubernetes.io/instance: chartsnap
                     app.kubernetes.io/managed-by: Helm
                     app.kubernetes.io/name: kong
-                    app.kubernetes.io/version: \"3.5\"
-                    helm.sh/chart: kong-2.36.0
-                    version: \"3.5\"
+                    app.kubernetes.io/version: \"3.6\"
+                    helm.sh/chart: kong-2.38.0
+                    version: \"3.6\"
             spec:
                 automountServiceAccountToken: false
                 containers:
@@ -249,8 +249,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-manager
         namespace: default
     spec:
@@ -276,9 +276,9 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
+            app.kubernetes.io/version: \"3.6\"
             enable-metrics: \"true\"
-            helm.sh/chart: kong-2.36.0
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong-proxy
         namespace: default
     spec:
@@ -304,8 +304,8 @@ SnapShot = """
             app.kubernetes.io/instance: chartsnap
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: kong
-            app.kubernetes.io/version: \"3.5\"
-            helm.sh/chart: kong-2.36.0
+            app.kubernetes.io/version: \"3.6\"
+            helm.sh/chart: kong-2.38.0
         name: chartsnap-kong
         namespace: default
 """

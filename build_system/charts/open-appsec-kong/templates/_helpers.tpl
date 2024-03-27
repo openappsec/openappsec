@@ -213,6 +213,9 @@ spec:
   - name: kong-{{ .serviceName }}
     port: {{ .http.servicePort }}
     targetPort: {{ .http.containerPort }}
+  {{- if .http.appProtocol }}
+    appProtocol: {{ .http.appProtocol }}
+  {{- end }}
   {{- if (and (or (eq .type "LoadBalancer") (eq .type "NodePort")) (not (empty .http.nodePort))) }}
     nodePort: {{ .http.nodePort }}
   {{- end }}
@@ -223,6 +226,9 @@ spec:
   - name: kong-{{ .serviceName }}-tls
     port: {{ .tls.servicePort }}
     targetPort: {{ .tls.overrideServiceTargetPort | default .tls.containerPort }}
+  {{- if .tls.appProtocol }}
+    appProtocol: {{ .tls.appProtocol }}
+  {{- end }}
   {{- if (and (or (eq .type "LoadBalancer") (eq .type "NodePort")) (not (empty .tls.nodePort))) }}
     nodePort: {{ .tls.nodePort }}
   {{- end }}
@@ -890,7 +896,7 @@ The name of the Service which will be used by the controller to update the Ingre
     containerPort: 10255
     protocol: TCP
   {{- end }}
-  - name: status
+  - name: cstatus
     containerPort: 10254
     protocol: TCP
   env:

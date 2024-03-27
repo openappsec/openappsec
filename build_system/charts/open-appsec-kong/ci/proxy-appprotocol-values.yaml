@@ -1,0 +1,7 @@
+# This values test that the `proxy.*.appProtocol` can be set to a custom value.
+
+proxy:
+  http:
+    appProtocol: "http"
+  tls:
+    appProtocol: "https"

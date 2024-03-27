@@ -34,7 +34,7 @@ spec:
     http-headers: false
     request-body: false
   log-destination:
-    cloud: false
+    cloud: true
     stdout:
       format: json-formatted
 ---

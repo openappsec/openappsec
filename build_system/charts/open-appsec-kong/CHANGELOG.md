@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.38.0
+
+### Changes
+
+* Added support for setting `SVC.tls.appProtocol` and `SVC.http.appProtocol` values to configure the appProtocol fields
+  for Kubernetes Service HTTP and TLS ports. It might be useful for integration with external load balancers like GCP.
+  [#1018](https://github.com/Kong/charts/pull/1018)
+
+## 2.37.1
+
+* Rename the controller status port. This fixes a collision with the proxy status port in the Prometheus ServiceMonitor.
+  [#1008](https://github.com/Kong/charts/pull/1008)
+
+## 2.37.0
+
+### Changes
+
+* Bumped default `kong/kubernetes-ingress-controller` image tag and updated CRDs to 3.1.
+  [#1011](https://github.com/Kong/charts/pull/1011)
+* Bumped default `kong` image tag to 3.6.
+  [#1011](https://github.com/Kong/charts/pull/1011)
+
 ## 2.36.0
 
 ### Fixed

@@ -130,7 +130,7 @@ extraLabels: {}
 # Specify Kong's Docker image and repository details here
 image:
   repository: kong
-  tag: "3.5"
+  tag: "3.6"
   # Kong Enterprise
   # repository: kong/kong-gateway
   # tag: "3.5"
@@ -316,6 +316,10 @@ proxy:
     # Additional listen parameters, e.g. "reuseport", "backlog=16384"
     parameters:
     - http2
+
+    # Specify the Service's TLS port's appProtocol. This can be useful when integrating with
+    # external load balancers that require the `appProtocol` field to be set (e.g. GCP).
+    appProtocol: ""
 
   # Define stream (TCP) listen
   # To enable, remove "[]", uncomment the section below, and select your desired
@@ -525,7 +529,7 @@ ingressController:
   enabled: true
   image:
     repository: kong/kubernetes-ingress-controller
-    tag: "3.0"
+    tag: "3.1"
     # Optionally set a semantic version for version-gated features. This can normally
     # be left unset. You only need to set this if your tag is not a semver string,
     # such as when you are using a "next" tag. Set this to the effective semantic
@@ -1255,7 +1259,7 @@ appsec:
     #registry:
     repository: ghcr.io/openappsec
     image: "agent"
-    tag: "1.1.6"
+    tag: "1.1.8"
     pullPolicy: Always
 
     securityContext:
@@ -1269,7 +1273,7 @@ appsec:
   kong:
     image:
       repository: "ghcr.io/openappsec/kong-attachment"
-      tag: "1.1.6"
+      tag: "1.1.8"
   configMapName: appsec-settings-configmap
   configMapContent:
     crowdsec:

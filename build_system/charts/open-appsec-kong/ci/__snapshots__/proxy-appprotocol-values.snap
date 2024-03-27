@@ -1,4 +1,4 @@
-[default-values]
+[proxy-appprotocol-values]
 SnapShot = """
 - object:
     apiVersion: admissionregistration.k8s.io/v1
@@ -125,8 +125,6 @@ SnapShot = """
                                 fieldPath: metadata.namespace
                         - name: CONTROLLER_ADMISSION_WEBHOOK_LISTEN
                           value: 0.0.0.0:8080
-                        - name: CONTROLLER_ANONYMOUS_REPORTS
-                          value: \"false\"
                         - name: CONTROLLER_ELECTION_ID
                           value: kong-ingress-controller-leader-kong
                         - name: CONTROLLER_INGRESS_CLASS
@@ -199,8 +197,6 @@ SnapShot = """
                           value: /dev/stderr
                         - name: KONG_ADMIN_LISTEN
                           value: 127.0.0.1:8444 http2 ssl, [::1]:8444 http2 ssl
-                        - name: KONG_ANONYMOUS_REPORTS
-                          value: \"off\"
                         - name: KONG_CLUSTER_LISTEN
                           value: \"off\"
                         - name: KONG_DATABASE
@@ -313,8 +309,6 @@ SnapShot = """
                           value: /dev/stderr
                         - name: KONG_ADMIN_LISTEN
                           value: 127.0.0.1:8444 http2 ssl, [::1]:8444 http2 ssl
-                        - name: KONG_ANONYMOUS_REPORTS
-                          value: \"off\"
                         - name: KONG_CLUSTER_LISTEN
                           value: \"off\"
                         - name: KONG_DATABASE
@@ -859,11 +853,13 @@ SnapShot = """
         namespace: default
     spec:
         ports:
-            - name: kong-proxy
+            - appProtocol: http
+              name: kong-proxy
               port: 80
               protocol: TCP
               targetPort: 8000
-            - name: kong-proxy-tls
+            - appProtocol: https
+              name: kong-proxy-tls
               port: 443
               protocol: TCP
               targetPort: 8443
