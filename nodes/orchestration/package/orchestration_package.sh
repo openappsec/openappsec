@@ -719,7 +719,9 @@ copy_orchestration_executable()
     if [ -f /ext/appsec/local_policy.yaml ]; then
         cp_exec "ln -s /ext/appsec/local_policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml"
     else
-        cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+        if [ ! -f ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml ]; then
+            cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+        fi
     fi
 }
 
