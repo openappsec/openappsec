@@ -243,7 +243,7 @@ private:
         dbgTrace(D_CONFIG) << "File system path reloaded: " << config_directory_path;
     }
 
-    void
+    bool
     sendOrchestatorReloadStatusMsg(const LoadNewConfigurationStatus &status)
     {
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ConfigComponent>();
@@ -261,7 +261,7 @@ private:
             MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
-            messaging->sendSyncMessageWithoutResponse(
+            service_config_status = messaging->sendSyncMessageWithoutResponse(
                 HTTPMethod::POST,
                 "/set-reconf-status",
                 status,
@@ -269,6 +269,11 @@ private:
                 secondary_port_req_md
             );
         }
+        if (!service_config_status) {
+            dbgWarning(D_CONFIG) << "Unsuccessful attempt to send configuration reload status";
+            return false;
+        }
+        return true;
     }
 
     unordered_map<TenantProfilePair, map<vector<string>, PerContextValue>> configuration_nodes;
@@ -932,7 +937,15 @@ ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version
     mainloop->stop(routine_id);
     LoadNewConfigurationStatus finished(id, service_name, !res, true);
     if (!res) finished.setError("Failed to reload configuration");
-    sendOrchestatorReloadStatusMsg(finished);
+    I_TimeGet *time = Singleton::Consume<I_TimeGet>::by<ConfigComponent>();
+    auto send_status_time_out = time->getMonotonicTime() + chrono::seconds(180);
+    while (time->getMonotonicTime() < send_status_time_out) {
+        if (sendOrchestatorReloadStatusMsg(finished)) break;
+        mainloop->yield(chrono::seconds(1));
+    }
+    if (time->getMonotonicTime() >= send_status_time_out) {
+        dbgWarning(D_CONFIG) << "Failed to send configuration reload status(finish) to the orchestrator";
+    }
 
     is_continuous_report = false;
 }
