@@ -25,6 +25,10 @@ K8S_TOKEN_PATH="/var/run/secrets/kubernetes.io/serviceaccount/token"
 if [ -f $K8S_TOKEN_PATH ]; then
     IS_K8S_ENV=true
 fi
+IS_DOCKER_ENV=false
+if [ -f /.dockerenv ]; then
+    IS_DOCKER_ENV=true
+fi
 
 mkdir -p /var/log/nano_agent
 cp_print()
@@ -156,7 +160,7 @@ install_policy()
 unregister_from_watchdog()
 {
     cp_exec "/etc/cp/watchdog/cp-nano-watchdog --un-register $HTTP_TRANSACTION_HANDLER_PATH/$HTTP_TRANSACTION_HANDLER_FILE --all"
-    if [ "$IS_K8S_ENV" = "true" ]; then
+    if [ "$IS_K8S_ENV" = "true" ] || [ "$IS_DOCKER_ENV" = "true" ]; then
         cp_exec "/etc/cp/watchdog/cp-nano-watchdog --un-register $HTTP_TRANSACTION_HANDLER_PATH/k8s-log-file-handler.sh"
     fi
 }
@@ -170,7 +174,7 @@ restart_service()
         cp_exec "nginx -s reload"
     fi
 
-    if [ "$IS_K8S_ENV" = "true" ]; then
+    if [ "$IS_K8S_ENV" = "true" ] || [ "$IS_DOCKER_ENV" = "true" ]; then
         cp_exec "/etc/cp/watchdog/cp-nano-watchdog --un-register $HTTP_TRANSACTION_HANDLER_PATH/k8s-log-file-handler.sh"
         cp_exec "/etc/cp/watchdog/cp-nano-watchdog --register $HTTP_TRANSACTION_HANDLER_PATH/k8s-log-file-handler.sh"
     fi
@@ -200,7 +204,7 @@ run_installation()
     cp_exec "mkdir -p $HTTP_TRANSACTION_HANDLER_PATH"
     cp_exec "install bin/cp-nano-http-transaction-handler $HTTP_TRANSACTION_HANDLER_PATH/$HTTP_TRANSACTION_HANDLER_FILE"
 
-    if [ "$IS_K8S_ENV" = "true" ]; then
+    if [ "$IS_K8S_ENV" = "true" ] || [ "$IS_DOCKER_ENV" = "true" ]; then
         cp_exec "cp -f bin/k8s-log-file-handler.sh $HTTP_TRANSACTION_HANDLER_PATH/k8s-log-file-handler.sh"
         cp_exec "chmod +x $HTTP_TRANSACTION_HANDLER_PATH/k8s-log-file-handler.sh"
     fi
