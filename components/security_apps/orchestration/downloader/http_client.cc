@@ -189,14 +189,12 @@ HTTPClient::getFile(const URLParser &url, ofstream &out_file, bool auth_required
     }
 
     if (url.isOverSSL()) {
-        auto get_file_over_ssl_res = getFileSSL(url, out_file, token);
-        if (!get_file_over_ssl_res.ok())
-        {
-            //CURL fallback
-            dbgWarning(D_ORCHESTRATOR) << "Failed to get file over SSL. Trying via CURL (SSL).";
-            return curlGetFileOverSSL(url, out_file, token);
-        }
-        return get_file_over_ssl_res;
+        if (getFileSSLDirect(url, out_file, token).ok()) return Maybe<void>();
+        dbgWarning(D_ORCHESTRATOR) << "Failed to get file over SSL directly. Trying indirectly.";
+        if (getFileSSL(url, out_file, token).ok()) return Maybe<void>();
+        //CURL fallback
+        dbgWarning(D_ORCHESTRATOR) << "Failed to get file over SSL. Trying via CURL (SSL).";
+        return curlGetFileOverSSL(url, out_file, token);
     }
     auto get_file_http_res = getFileHttp(url, out_file, token);
     if (!get_file_http_res.ok())

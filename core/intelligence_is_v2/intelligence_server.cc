@@ -140,64 +140,49 @@ Sender::sendQueryMessage()
 Maybe<Response>
 Sender::sendMessage()
 {
-        if (server_ip.ok() || server_port.ok()) {
-        if (!server_ip.ok()) return genError("Can't send intelligence request. Server ip wasn't set");
-        if (!server_port.ok()) return genError("Can't send intelligence request. Server port wasn't set");
-    } else if (!server_ip.ok() && !server_port.ok()) {
-        auto req_status = i_message->sendSyncMessage(
-            HTTPMethod::POST,
-            request.isBulk() ? queries_uri : query_uri,
-            request,
-            MessageCategory::INTELLIGENCE
-        );
-        if (req_status.ok()) {
-            return createResponse();
-        };
-        auto response_error = req_status.getErr().toString();
-        dbgWarning(D_INTELLIGENCE) << "Failed to send intelligence request. Error:" << response_error;
-        return genError(
-            "Failed to send intelligence request. "
-            + req_status.getErr().getBody()
-            + " "
-            + req_status.getErr().toString()
-        );
+    if (server_port.ok() && !server_ip.ok()) return genError("Can't send intelligence request. Server ip invalid");
+    if (server_ip.ok() && !server_port.ok()) return genError("Can't send intelligence request. Server port invalid");
+    auto req_md = server_ip.ok() ? MessageMetadata(*server_ip, *server_port, conn_flags) : MessageMetadata();
+
+    if (server_ip.ok()) {
+        dbgTrace(D_INTELLIGENCE)
+            << "Sending intelligence request with IP: "
+            << *server_ip
+            << " port: "
+            << *server_port
+            << " query_uri: "
+            << (request.isBulk() ? queries_uri : query_uri);
     }
 
-    dbgTrace(D_INTELLIGENCE)
-        << "Sending intelligence request with IP: "
-        << *server_ip
-        << " port: "
-        << *server_port
-        << " query_uri: "
-        << (request.isBulk() ? queries_uri : query_uri);
-
-    MessageMetadata req_md(*server_ip, *server_port, conn_flags);
-    auto req_status = i_message->sendSyncMessage(
+    auto json_body = request.genJson();
+    if (!json_body.ok()) return json_body.passErr();
+    auto req_data = i_message->sendSyncMessage(
         HTTPMethod::POST,
         request.isBulk() ? queries_uri : query_uri,
-        request,
+        *json_body,
         MessageCategory::INTELLIGENCE,
         req_md
     );
-    if (!req_status.ok()) {
-        auto response_error = req_status.getErr().toString();
+    if (!req_data.ok()) {
+        auto response_error = req_data.getErr().toString();
         dbgWarning(D_INTELLIGENCE) << "Failed to send intelligence request. Error:" << response_error;
         return genError(
             "Failed to send intelligence request. "
-            + req_status.getErr().getBody()
+            + req_data.getErr().getBody()
             + " "
-            + req_status.getErr().toString()
+            + req_data.getErr().toString()
         );
-    };
-    return createResponse();
+    } else if (req_data->getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+        return genError("Intelligence response is invalid. " + req_data->toString());
+    }
+
+    return createResponse(req_data->getBody());
 }
 
 Maybe<Response>
-Sender::createResponse()
+Sender::createResponse(const std::string &response_body)
 {
-    auto mb_json_body = request.getResponseFromFog();
-    if (!mb_json_body.ok()) return mb_json_body.passErr();
-    Response response(*mb_json_body, request.getSize(), request.isBulk());
+    Response response(response_body, request.getSize(), request.isBulk());
     auto load_status = response.load();
     if (!load_status.ok()) return load_status.passErr();
     return response;

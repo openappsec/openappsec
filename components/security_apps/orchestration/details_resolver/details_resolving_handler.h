@@ -31,6 +31,7 @@ public:
     DetailsResolvingHanlder();
     ~DetailsResolvingHanlder();
 
+    void init();
     std::map<std::string, std::string> getResolvedDetails() const;
 
     static Maybe<std::string> getCommandOutput(const std::string &cmd);

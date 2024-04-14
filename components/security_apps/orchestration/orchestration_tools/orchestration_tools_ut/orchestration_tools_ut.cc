@@ -77,30 +77,23 @@ TEST_F(OrchestrationToolsTest, doNothing)
 {
 }
 
-TEST_F(OrchestrationToolsTest, getClusterId)
+TEST_F(OrchestrationToolsTest, setClusterId)
 {
     EXPECT_CALL(mock_env_details, getToken()).WillOnce(Return("123"));
     EXPECT_CALL(mock_env_details, getEnvType()).WillOnce(Return(EnvType::K8S));
-    I_MainLoop::Routine routine;
-    EXPECT_CALL(
-        mock_mainloop,
-        addOneTimeRoutine(I_MainLoop::RoutineType::Offline, _, "Get k8s cluster ID", _)
-    ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
 
     string namespaces = getResource("k8s_namespaces.json");
     EXPECT_CALL(
-        mock_messaging,
-        sendSyncMessage(
-            HTTPMethod::GET,
-            "/api/v1/namespaces/",
-            _,
-            _,
-            _
+        mock_shell_cmd,
+        getExecOutput(
+            "curl -s -k -H \"Authorization: Bearer 123\" -H \"Connection: close\" "
+            "https://kubernetes.default.svc:443/api/v1/namespaces/ | /etc/cp/bin/cpnano_json",
+            200,
+            false
         )
-    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, namespaces)));
+    ).WillOnce(Return(namespaces));
 
-    i_orchestration_tools->getClusterId();
-    routine();
+    i_orchestration_tools->setClusterId();
 }
 
 TEST_F(OrchestrationToolsTest, writeReadTextToFile)

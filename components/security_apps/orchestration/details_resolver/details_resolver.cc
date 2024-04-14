@@ -32,6 +32,7 @@ class DetailsResolver::Impl
     Singleton::Provide<I_DetailsResolver>::From<DetailsResolver>
 {
 public:
+    void init() { handler.init(); }
     Maybe<string> getHostname() override;
     Maybe<string> getPlatform() override;
     Maybe<string> getArch() override;
@@ -289,6 +290,12 @@ DetailsResolver::Impl::parseNginxMetadata()
 DetailsResolver::DetailsResolver() : Component("DetailsResolver"), pimpl(make_unique<Impl>()) {}
 
 DetailsResolver::~DetailsResolver() {}
+
+void
+DetailsResolver::init()
+{
+    pimpl->init();
+}
 
 void
 DetailsResolver::preload()

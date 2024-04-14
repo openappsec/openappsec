@@ -54,7 +54,7 @@ public:
     bool removeFile(const string &path) const override;
     bool copyFile(const string &src_path, const string &dst_path) const override;
     bool doesFileExist(const string &file_path) const override;
-    void getClusterId() const override;
+    void setClusterId() const override;
     void fillKeyInJson(const string &filename, const string &_key, const string &_val) const override;
     bool createDirectory(const string &directory_path) const override;
     bool doesDirectoryExist(const string &dir_path) const override;
@@ -143,83 +143,55 @@ isPlaygroundEnv()
 }
 
 Maybe<NamespaceData, string>
-getNamespaceDataFromCluster(const string &path)
+getNamespaceDataFromCluster()
 {
-    NamespaceData name_space;
     string token = Singleton::Consume<I_EnvDetails>::by<OrchestrationTools>()->getToken();
-    auto messaging = Singleton::Consume<I_Messaging>::by<OrchestrationTools>();
+    string auth_header = "Authorization: Bearer " + token;
+    string connection_header = "Connection: close";
+    string host = "https://kubernetes.default.svc:443/api/v1/namespaces/";
+    string culr_cmd = "curl -s -k -H \"" + auth_header + "\" -H \"" + connection_header + "\" " + host +
+        " | /etc/cp/bin/cpnano_json";
 
-    MessageMetadata get_ns_md("kubernetes.default.svc", 443);
-    get_ns_md.insertHeader("Authorization", "Bearer " + token);
-    get_ns_md.insertHeader("Connection", "close");
-    get_ns_md.setConnectioFlag(MessageConnectionConfig::IGNORE_SSL_VALIDATION);
-    auto res = messaging->sendSyncMessage(
-        HTTPMethod::GET,
-        path,
-        name_space,
-        MessageCategory::GENERIC,
-        get_ns_md
-    );
+    auto output_res = Singleton::Consume<I_ShellCmd>::by<OrchestrationTools>()->getExecOutput(culr_cmd);
+    if (!output_res.ok()) {
+        return genError("Failed to get namespace data from the cluster: " + output_res.getErr());
+    }
 
-    if (res.ok()) return name_space;
-
-    return genError(string("Was not able to get object form k8s cluser in path: " + path));
+    dbgTrace(D_ORCHESTRATOR) << "Got the repsonse from the cluster: " << output_res.unpack();
+    NamespaceData name_space;
+    if (name_space.loadJson(output_res.unpack())) return name_space;
+    return genError("Was not able to parse the object form k8s cluser");
 }
 
-bool
-doesClusterIdExists()
+void
+OrchestrationTools::Impl::setClusterId() const
 {
+    auto env_type = Singleton::Consume<I_EnvDetails>::by<OrchestrationTools>()->getEnvType();
+    if (env_type != EnvType::K8S) return;
+
+    dbgTrace(D_ORCHESTRATOR) << "Setting cluster UID";
+
+    Maybe<NamespaceData> namespaces_data = getNamespaceDataFromCluster();
+    if (!namespaces_data.ok()) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to retrieve namespace data. Error: " << namespaces_data.getErr();
+        return;
+    }
+
+    auto ns_uid = (*namespaces_data).getNamespaceUidByName("kube-system");
+    if (!ns_uid.ok()) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to retrieve namespace UID. Error: " << ns_uid.getErr();
+        return;
+    }
+
     string playground_uid = isPlaygroundEnv() ? "playground-" : "";
-
-    dbgTrace(D_ORCHESTRATOR) << "Getting cluster UID";
-
-    auto maybe_namespaces_data = getNamespaceDataFromCluster("/api/v1/namespaces/");
-
-    if (!maybe_namespaces_data.ok()) {
-        dbgWarning(D_ORCHESTRATOR)
-            << "Failed to retrieve K8S namespace data. Error: "
-            << maybe_namespaces_data.getErr();
-        return false;
-    }
-
-    NamespaceData namespaces_data = maybe_namespaces_data.unpack();
-
-    Maybe<string> maybe_ns_uid = namespaces_data.getNamespaceUidByName("kube-system");
-    if (!maybe_ns_uid.ok()) {
-        dbgWarning(D_ORCHESTRATOR) << maybe_ns_uid.getErr();
-        return false;
-    }
-    string uid = playground_uid + maybe_ns_uid.unpack();
+    string uid = playground_uid + ns_uid.unpack();
     dbgTrace(D_ORCHESTRATOR) << "Found k8s cluster UID: " << uid;
-    I_Environment *env = Singleton::Consume<I_Environment>::by<OrchestrationTools>();
-    env->getConfigurationContext().registerValue<string>(
+    Singleton::Consume<I_Environment>::by<OrchestrationTools>()->getConfigurationContext().registerValue<string>(
         "k8sClusterId",
         uid,
         EnvKeyAttr::LogSection::SOURCE
     );
-    I_AgentDetails *i_agent_details = Singleton::Consume<I_AgentDetails>::by<OrchestrationTools>();
-    i_agent_details->setClusterId(uid);
-    return true;
-}
-
-void
-OrchestrationTools::Impl::getClusterId() const
-{
-    auto env_type = Singleton::Consume<I_EnvDetails>::by<OrchestrationTools>()->getEnvType();
-
-    if (env_type == EnvType::K8S) {
-        Singleton::Consume<I_MainLoop>::by<OrchestrationTools>()->addOneTimeRoutine(
-            I_MainLoop::RoutineType::Offline,
-            [this] ()
-            {
-                while(!doesClusterIdExists()) {
-                    Singleton::Consume<I_MainLoop>::by<OrchestrationTools>()->yield(chrono::seconds(1));
-                }
-                return;
-            },
-            "Get k8s cluster ID"
-        );
-    }
+    Singleton::Consume<I_AgentDetails>::by<OrchestrationTools>()->setClusterId(uid);
 }
 
 bool

@@ -34,6 +34,7 @@ public:
     ~DetailsResolver();
 
     void preload() override;
+    void init() override;
 
 private:
     class Impl;

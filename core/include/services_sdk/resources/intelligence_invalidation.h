@@ -18,6 +18,7 @@
 #include <map>
 #include <string>
 #include <set>
+#include <cereal/archives/json.hpp>
 
 #include "maybe_res.h"
 #include "enum_array.h"
@@ -31,26 +32,46 @@ enum class ClassifierType { CLASS, CATEGORY, FAMILY, GROUP, ORDER, KIND };
 enum class ObjectType { ASSET, ZONE, POLICY_PACKAGE, CONFIGURATION, SESSION, SHORTLIVED };
 enum class InvalidationType { ADD, DELETE, UPDATE };
 
+class StrAttributes
+{
+public:
+    StrAttributes() = default;
+    StrAttributes & addStringAttr(const std::string &attr, const std::string &val);
+    StrAttributes & addStringSetAttr(const std::string &attr, const std::set<std::string> &val);
+    Maybe<std::string, void> getStringAttr(const std::string &attr) const;
+    Maybe<std::set<std::string>, void> getStringSetAttr(const std::string &attr) const;
+    Maybe<std::string, void> genObject() const;
+    bool isEmpty() const;
+    bool matches(const StrAttributes &other) const;
+    void serialize(cereal::JSONInputArchive &ar);
+    void performOutputingSchema(std::ostream &, int);
+
+private:
+    bool hasAttr(const std::string &key, const std::string &value) const;
+
+    std::map<std::string, std::string> string_attr;
+    std::map<std::string, std::set<std::string>> set_string_attr;
+};
+
 class Invalidation
 {
 public:
     Invalidation(const std::string &class_value);
 
     Invalidation & setClassifier(ClassifierType type, const std::string &val);
-    Invalidation & setStringAttr(const std::string &attr, const std::string &val, bool is_main = true);
-    Invalidation & setStringSetAttr(const std::string &attr, const std::set<std::string> &val, bool is_main = true);
+    Invalidation & addMainAttr(const StrAttributes &attr);
+    Invalidation & addAttr(const StrAttributes &attr);
     Invalidation & setSourceId(const std::string &id);
     Invalidation & setObjectType(ObjectType type);
     Invalidation & setInvalidationType(InvalidationType type);
 
     std::string getClassifier(ClassifierType type) const { return classifiers[type]; }
-    Maybe<std::string, void> getStringMainAttr(const std::string &attr) const;
-    Maybe<std::set<std::string>, void> getStringSetMainAttr(const std::string &attr) const;
-    Maybe<std::string, void> getStringAttr(const std::string &attr) const;
-    Maybe<std::set<std::string>, void> getStringSetAttr(const std::string &attr) const;
+    std::vector<StrAttributes> getMainAttributes() const { return main_attributes; }
+    std::vector<StrAttributes> getAttributes() const { return attributes; }
     const Maybe<std::string, void> & getSourceId() const { return source_id; }
     const Maybe<ObjectType, void> & getObjectType() const { return object_type; }
     InvalidationType getInvalidationType() const { return invalidation_type; }
+    Maybe<std::string, void> getRegistrationID() const;
 
     bool report(I_Intelligence_IS_V2 *interface) const;
 
@@ -64,18 +85,16 @@ public:
     bool matches(const Invalidation &other) const;
 
 private:
-    bool hasMainAttr(const std::string &key, const std::string &value) const;
-    bool hasAttr(const std::string &key, const std::string &value) const;
+    bool attr_matches(const std::vector<StrAttributes> &current, const std::vector<StrAttributes> &other) const;
 
     EnumArray<ClassifierType, std::string, 6> classifiers;
-    std::map<std::string, std::string> string_main_attr;
-    std::map<std::string, std::set<std::string>> set_string_main_attr;
-    std::map<std::string, std::string> string_attr;
-    std::map<std::string, std::set<std::string>> set_string_attr;
+    std::vector<StrAttributes> main_attributes;
+    std::vector<StrAttributes> attributes;
     Maybe<std::string, void> source_id;
     Maybe<ObjectType, void> object_type;
     InvalidationType invalidation_type = InvalidationType::ADD;
     Maybe<uint, void> listening_id;
+    Maybe<std::string, void> registration_id;
 };
 
 } // namespace Intelligence

@@ -113,16 +113,3 @@ IntelligenceRequest::genJson() const
 
     return str_stream.str();
 }
-
-bool
-IntelligenceRequest::loadJson(const string &json)
-{
-    response_from_fog = json;
-    return true;
-}
-
-Maybe<string>
-IntelligenceRequest::getResponseFromFog() const
-{
-    return response_from_fog;
-}

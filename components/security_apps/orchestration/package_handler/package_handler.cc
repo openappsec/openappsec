@@ -109,6 +109,10 @@ packageHandlerActionsToString(PackageHandlerActions action)
                 installation_mode += " --certs-dir ";
                 installation_mode += trusted_ca_directory.unpack();
             }
+
+            auto maybe_vs_id = Singleton::Consume<I_Environment>::by<PackageHandler>()->get<string>("VS ID");
+            if (maybe_vs_id.ok()) installation_mode += " --vs_id " + *maybe_vs_id;
+
             AdditionalFlagsConfiguration additional_flags = getConfigurationWithDefault<AdditionalFlagsConfiguration>(
                 AdditionalFlagsConfiguration(),
                 "orchestration",

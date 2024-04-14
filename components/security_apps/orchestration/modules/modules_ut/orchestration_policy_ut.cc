@@ -43,8 +43,8 @@ TEST_F(PolicyTest, serialization)
         ASSERT_TRUE(false) << "Cereal threw an exception: " << e.what();
     }
 
-    EXPECT_EQ(15u, orchestration_policy.getErrorSleepInterval());
-    EXPECT_EQ(20u, orchestration_policy.getSleepInterval());
+    EXPECT_EQ(15, orchestration_policy.getErrorSleepInterval());
+    EXPECT_EQ(20, orchestration_policy.getSleepInterval());
     EXPECT_EQ("http://10.0.0.18:81/control/", orchestration_policy.getFogAddress());
 }
 
@@ -63,8 +63,8 @@ TEST_F(PolicyTest, noAgentType)
         ASSERT_TRUE(false) << "Cereal threw an exception: " << e.what();
     }
 
-    EXPECT_EQ(15u, orchestration_policy.getErrorSleepInterval());
-    EXPECT_EQ(20u, orchestration_policy.getSleepInterval());
+    EXPECT_EQ(15, orchestration_policy.getErrorSleepInterval());
+    EXPECT_EQ(20, orchestration_policy.getSleepInterval());
     EXPECT_EQ("http://10.0.0.18:81/control/", orchestration_policy.getFogAddress());
 }
 
@@ -83,8 +83,8 @@ TEST_F(PolicyTest, zeroSleepIntervels)
         ASSERT_TRUE(false) << "Cereal threw an exception: " << e.what();
     }
 
-    EXPECT_EQ(0u, orchestration_policy.getErrorSleepInterval());
-    EXPECT_EQ(0u, orchestration_policy.getSleepInterval());
+    EXPECT_EQ(0, orchestration_policy.getErrorSleepInterval());
+    EXPECT_EQ(0, orchestration_policy.getSleepInterval());
     EXPECT_EQ("http://10.0.0.18:81/control/", orchestration_policy.getFogAddress());
 }
 
@@ -152,7 +152,7 @@ TEST_F(PolicyTest, newOptionalFields)
         ASSERT_TRUE(false) << "Cereal threw an exception: " << e.what();
     }
 
-    EXPECT_EQ(10u, orchestration_policy.getErrorSleepInterval());
-    EXPECT_EQ(30u, orchestration_policy.getSleepInterval());
+    EXPECT_EQ(10, orchestration_policy.getErrorSleepInterval());
+    EXPECT_EQ(30, orchestration_policy.getSleepInterval());
     EXPECT_EQ("https://fog-api-gw-agents.cloud.ngen.checkpoint.com", orchestration_policy.getFogAddress());
 }

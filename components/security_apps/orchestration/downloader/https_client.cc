@@ -90,7 +90,7 @@ public:
         ostream request_stream(&request_);
         stringstream http_request;
         http_request << "GET " << url.getQuery() << " HTTP/1.1\r\n";
-        string host = url.getBaseURL().unpack();
+        string host = url.getHost();
         string port = url.getPort();
         int port_int;
         try {

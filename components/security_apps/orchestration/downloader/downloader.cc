@@ -121,6 +121,11 @@ Downloader::Impl::init()
         "Default file download path"
     );
 
+    auto maybe_vs_id = Singleton::Consume<I_Environment>::by<Downloader>()->get<string>("VS ID");
+    if (maybe_vs_id.ok()) {
+        dir_path = dir_path + "/vs" + maybe_vs_id.unpack();
+    }
+
     Singleton::Consume<I_OrchestrationTools>::by<Downloader>()->createDirectory(dir_path);
 }
 

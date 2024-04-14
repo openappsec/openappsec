@@ -21,15 +21,13 @@
 using namespace testing;
 using namespace std;
 
+USE_DEBUG_FLAG(D_SERVICE_CONTROLLER);
+
 class ServiceControllerTest : public Test
 {
 public:
     ServiceControllerTest()
     {
-        Debug::setUnitTestFlag(D_ORCHESTRATOR, Debug::DebugLevel::NOISE);
-        Debug::setNewDefaultStdout(&capture_debug);
-
-        CPTestTempfile status_file;
         registered_services_file_path = status_file.fname;
         setConfiguration(registered_services_file_path, "orchestration", "Orchestration registered services");
 
@@ -116,28 +114,6 @@ public:
         Debug::setNewDefaultStdout(&cout);
     }
 
-    void
-    registerNewService()
-    {
-        stringstream new_service_registration;
-        new_service_registration
-            << "{"
-            << "    \"service_name\": \"mock access control\","
-            << "    \"service_listening_port\":" + to_string(l4_firewall_service_port) + ","
-            << "    \"expected_configurations\": [\"l4_firewall\", \"non updated capability\"],"
-            << "    \"service_id\": \"family1_id2\","
-            << "    \"general_settings\": \"path_to_settings\","
-            << "    \"debug_settings\": \"path_to_debug\""
-            << "}";
-
-        auto registration_res = set_nano_service_config->performRestCall(new_service_registration);
-        ASSERT_TRUE(registration_res.ok());
-
-        i_service_controller = Singleton::Consume<I_ServiceController>::from(service_controller);
-        EXPECT_TRUE(i_service_controller->isServiceInstalled("family1_id2"));
-        EXPECT_FALSE(i_service_controller->isServiceInstalled("I am not installed"));
-    }
-
     string
     orchestrationRegisteredServicesFileToString(const string &file_name)
     {
@@ -160,6 +136,43 @@ public:
     }
 
     void
+    registerNewService()
+    {
+        stringstream new_service_registration;
+        new_service_registration
+            << "{"
+            << "    \"service_name\": \"mock access control\","
+            << "    \"service_listening_port\":" + to_string(l4_firewall_service_port) + ","
+            << "    \"expected_configurations\": [\"l4_firewall\", \"non updated capability\"],"
+            << "    \"service_id\": \"family1_id2\","
+            << "    \"general_settings\": \"path_to_settings\","
+            << "    \"debug_settings\": \"path_to_debug\""
+            << "}";
+
+        auto registration_res = set_nano_service_config->performRestCall(new_service_registration);
+        ASSERT_TRUE(registration_res.ok());
+
+        i_service_controller = Singleton::Consume<I_ServiceController>::from(service_controller);
+        EXPECT_TRUE(i_service_controller->isServiceInstalled("family1_id2"));
+        EXPECT_FALSE(i_service_controller->isServiceInstalled("I am not installed"));
+
+        string expected_json =  "{\n"
+                                "    \"Registered Services\": {\n"
+                                "        \"family1_id2\": {\n"
+                                "            \"Service name\": \"mock access control\",\n"
+                                "            \"Service ID\": \"family1_id2\",\n"
+                                "            \"Service port\": " + to_string(l4_firewall_service_port) + ",\n"
+                                "            \"Relevant configs\": [\n"
+                                "                \"non updated capability\",\n"
+                                "                \"l4_firewall\"\n"
+                                "            ]\n"
+                                "        }\n"
+                                "    }\n"
+                                "}";
+        EXPECT_EQ(orchestrationRegisteredServicesFileToString(registered_services_file_path), expected_json);
+    }
+
+    void
     expectNewConfigRequest(const string &req_body, const string &response)
     {
         EXPECT_CALL(
@@ -174,6 +187,7 @@ public:
         ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response)));
     }
 
+    CPTestTempfile                      status_file;
     const uint16_t                      l4_firewall_service_port = 8888;
     const uint16_t                      waap_service_port = 7777;
     ::Environment                       env;
@@ -193,7 +207,7 @@ public:
     string                              services_port;
     StrictMock<MockTimeGet>             time;
     StrictMock<MockRestApi>             mock_rest_api;
-    StrictMock<MockMessaging>         mock_message;
+    StrictMock<MockMessaging>           mock_message;
     StrictMock<MockMainLoop>            mock_ml;
     StrictMock<MockShellCmd>            mock_shell_cmd;
     StrictMock<MockOrchestrationStatus> mock_orchestration_status;
@@ -206,11 +220,10 @@ public:
     unique_ptr<ServerRest>              get_services_ports;
     unique_ptr<ServerRest>              set_reconf_status;
     unique_ptr<ServerRest>              set_new_configuration;
-
-    I_MainLoop::Routine v_tenants_cleanup;
+    I_MainLoop::Routine                 v_tenants_cleanup;
     ostringstream                       capture_debug;
-    string version_value = "1.0.2";
-    string old_version = "1.0.1";
+    string                              version_value = "1.0.2";
+    string                              old_version = "1.0.1";
 };
 
 TEST_F(ServiceControllerTest, doNothing)
@@ -492,103 +505,6 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
-}
-
-TEST_F(ServiceControllerTest, writeRegisteredServicesFromFile)
-{
-    EXPECT_EQ(orchestrationRegisteredServicesFileToString(registered_services_file_path), string(""));
-
-    string new_configuration =  "{"
-                                "   \"version\": \"" + version_value + "\""
-                                "   \"l4_firewall\":"
-                                "       {"
-                                "           \"app\": \"netfilter\","
-                                "           \"l4_firewall_rules\": ["
-                                "               {"
-                                "                   \"name\": \"allow_statefull_conns\","
-                                "                   \"flags\": [\"established\"],"
-                                "                   \"action\": \"accept\""
-                                "               },"
-                                "               {"
-                                "                   \"name\": \"icmp drop\","
-                                "                   \"flags\": [\"log\"],"
-                                "                   \"services\": [{\"name\":\"icmp\"}],"
-                                "                   \"action\": \"drop\""
-                                "               }"
-                                "           ]"
-                                "       }"
-                                "}";
-
-    string l4_firewall =        "{"
-                                "    \"app\": \"netfilter\","
-                                "    \"l4_firewall_rules\": ["
-                                "        {"
-                                "            \"name\": \"allow_statefull_conns\","
-                                "            \"flags\": [\"established\"],"
-                                "            \"action\": \"accept\""
-                                "        },"
-                                "        {"
-                                "            \"name\": \"icmp drop\","
-                                "            \"flags\": [\"log\"],"
-                                "            \"services\": [{\"name\":\"icmp\"}],"
-                                "            \"action\": \"drop\""
-                                "        }"
-                                "    ]"
-                                "}";
-    string expected_json =      "{\n"
-                                "    \"Registered Services\": {\n"
-                                "        \"family1_id2\": {\n"
-                                "            \"Service name\": \"mock access control\",\n"
-                                "            \"Service ID\": \"family1_id2\",\n"
-                                "            \"Service port\": 8888,\n"
-                                "            \"Relevant configs\": [\n"
-                                "                \"non updated capability\",\n"
-                                "                \"l4_firewall\"\n"
-                                "            ]\n"
-                                "        }\n"
-                                "    }\n"
-                                "}";
-
-    Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
-    EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
-    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
-        .WillOnce(Return(json_parser_return));
-    EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
-    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
-        .WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_status,
-        setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
-
-    EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
-
-    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
-        .WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
-
-    string general_settings_path = "/my/settings/path";
-    string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
-
-    EXPECT_CALL(
-        mock_shell_cmd,
-        getExecOutput(
-            "/etc/cp/watchdog/cp-nano-watchdog --status --verbose --service mock access control"
-            " --family family1 --id id2",
-            _,
-            _
-        )
-    ).WillRepeatedly(Return(string("registered and running")));
-
-    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
-    EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
-    EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
-    EXPECT_EQ(orchestrationRegisteredServicesFileToString(registered_services_file_path), expected_json);
 }
 
 TEST_F(ServiceControllerTest, readRegisteredServicesFromFile)
@@ -1409,6 +1325,8 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
 
 TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
 {
+    Debug::setUnitTestFlag(D_SERVICE_CONTROLLER, Debug::DebugLevel::NOISE);
+    Debug::setNewDefaultStdout(&capture_debug);
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
                                 "   \"l4_firewall\":"

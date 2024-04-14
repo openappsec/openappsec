@@ -17,11 +17,11 @@
 #include <dirent.h>
 #include <algorithm>
 #include <fstream>
-#include <boost/regex.hpp>
+#include <iostream>
+#include <cctype>
+
 #include "agent_core_utilities.h"
-
 #include "cereal/archives/json.hpp"
-
 #include "debug.h"
 #include "cereal/external/rapidjson/error/en.h"
 #include "include/profile_settings.h"
@@ -158,6 +158,7 @@ private:
     vector<string> fillMultiTenantConfigFiles(const map<string, set<string>> &tenants);
     vector<string> fillMultiTenantExpectedConfigFiles(const map<string, set<string>> &tenants);
     map<string, string> getProfileAgentSetting() const;
+    void resolveVsId() const;
 
     string
     getActiveTenant() const
@@ -243,7 +244,7 @@ private:
         dbgTrace(D_CONFIG) << "File system path reloaded: " << config_directory_path;
     }
 
-    bool
+    void
     sendOrchestatorReloadStatusMsg(const LoadNewConfigurationStatus &status)
     {
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ConfigComponent>();
@@ -261,7 +262,7 @@ private:
             MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
-            service_config_status = messaging->sendSyncMessageWithoutResponse(
+            messaging->sendSyncMessageWithoutResponse(
                 HTTPMethod::POST,
                 "/set-reconf-status",
                 status,
@@ -269,11 +270,6 @@ private:
                 secondary_port_req_md
             );
         }
-        if (!service_config_status) {
-            dbgWarning(D_CONFIG) << "Unsuccessful attempt to send configuration reload status";
-            return false;
-        }
-        return true;
     }
 
     unordered_map<TenantProfilePair, map<vector<string>, PerContextValue>> configuration_nodes;
@@ -339,6 +335,9 @@ void
 ConfigComponent::Impl::init()
 {
     reloadFileSystemPaths();
+
+    resolveVsId();
+
     tenant_manager = Singleton::Consume<I_TenantManager>::by<ConfigComponent>();
 
     if (!Singleton::exists<I_MainLoop>()) return;
@@ -354,8 +353,7 @@ ConfigComponent::Impl::init()
     }
 }
 
-static
-bool
+static bool
 checkContext(const shared_ptr<EnvironmentEvaluator<bool>> &ctx)
 {
     if (ctx == nullptr) return true;
@@ -937,17 +935,29 @@ ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version
     mainloop->stop(routine_id);
     LoadNewConfigurationStatus finished(id, service_name, !res, true);
     if (!res) finished.setError("Failed to reload configuration");
-    I_TimeGet *time = Singleton::Consume<I_TimeGet>::by<ConfigComponent>();
-    auto send_status_time_out = time->getMonotonicTime() + chrono::seconds(180);
-    while (time->getMonotonicTime() < send_status_time_out) {
-        if (sendOrchestatorReloadStatusMsg(finished)) break;
-        mainloop->yield(chrono::seconds(1));
-    }
-    if (time->getMonotonicTime() >= send_status_time_out) {
-        dbgWarning(D_CONFIG) << "Failed to send configuration reload status(finish) to the orchestrator";
-    }
+    sendOrchestatorReloadStatusMsg(finished);
 
     is_continuous_report = false;
+}
+
+void
+ConfigComponent::Impl::resolveVsId() const
+{
+    const string &path = getConfigurationFlag("filesystem_path");
+
+    size_t vs_pos = path.rfind("/vs");
+    if (vs_pos == string::npos) return;
+
+    string vs_id = path.substr(vs_pos + 3);
+
+    if (!vs_id.empty() && all_of(vs_id.begin(), vs_id.end(), ::isdigit) && vs_id.size() < 6) {
+        dbgDebug(D_CONFIG) << "Identified VSX installation, VS ID: " << vs_id;
+        Singleton::Consume<I_Environment>::by<ConfigComponent>()->registerValue("VS ID", vs_id);
+        return;
+    }
+
+    dbgWarning(D_CONFIG) << "Possible VSX installation but VS ID is invalid, VS ID: " << vs_id;
+    return;
 }
 
 ConfigComponent::ConfigComponent() : Component("ConfigComponent"), pimpl(make_unique<Impl>()) {}

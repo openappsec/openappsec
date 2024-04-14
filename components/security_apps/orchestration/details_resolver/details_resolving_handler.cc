@@ -36,9 +36,12 @@ using FileContentHandler = function<Maybe<string>(shared_ptr<istream> file_otput
 
 #include "checkpoint_product_handlers.h"
 
+static const string filesystem_place_holder = "<FILESYSTEM-PREFIX>";
+
 class DetailsResolvingHanlder::Impl
 {
 public:
+    void init();
     map<string, string> getResolvedDetails() const;
     static Maybe<string> getCommandOutput(const string &cmd);
 
@@ -69,6 +72,20 @@ private:
         #include "details_resolver_impl.h"
     };
 #undef SHELL_POST_CMD
+
+void
+DetailsResolvingHanlder::Impl::init()
+{
+    string actual_filesystem_prefix = getFilesystemPathConfig();
+
+    for (auto &file_handler : file_content_handlers) {
+        string &path = file_handler.second.first;
+        size_t place_holder_size = filesystem_place_holder.size();
+        if (path.substr(0, place_holder_size) == filesystem_place_holder) {
+            path = actual_filesystem_prefix + path.substr(place_holder_size);
+        }
+    }
+}
 
 map<string, string>
 DetailsResolvingHanlder::Impl::getResolvedDetails() const
@@ -154,6 +171,12 @@ DetailsResolvingHanlder::Impl::getCommandOutput(const string &cmd)
 
 DetailsResolvingHanlder::DetailsResolvingHanlder() : pimpl(make_unique<Impl>()) {}
 DetailsResolvingHanlder::~DetailsResolvingHanlder() {}
+
+void
+DetailsResolvingHanlder::init()
+{
+    return pimpl->init();
+}
 
 map<string, string>
 DetailsResolvingHanlder::getResolvedDetails() const

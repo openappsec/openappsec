@@ -17,6 +17,8 @@ public:
 private:
     IPSSignatureSubTypes::SignatureAction action = IPSSignatureSubTypes::SignatureAction::IGNORE;
     std::vector<std::string> file_names;
+    std::string trigger_id;
+    std::string exception_id;
 };
 
 #endif // __SNORT_BASIC_POLICY_H__

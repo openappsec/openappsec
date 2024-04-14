@@ -33,7 +33,7 @@
 using namespace std;
 using namespace ReportIS;
 
-USE_DEBUG_FLAG(D_ORCHESTRATOR);
+USE_DEBUG_FLAG(D_SERVICE_CONTROLLER);
 
 class SendConfigurations : public ClientRest
 {
@@ -56,7 +56,7 @@ public:
         auto service_controller = Singleton::Consume<I_ServiceController>::by<ServiceReconfStatusMonitor>();
         if (!finished.get()) {
             service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::IN_PROGRESS);
-            dbgTrace(D_ORCHESTRATOR)
+            dbgTrace(D_SERVICE_CONTROLLER)
                 << "Request for service reconfiguration is still in progress. ID: "
                 << id.get()
                 << ", Service Name: "
@@ -65,7 +65,7 @@ public:
         }
         if (error.get()) {
             service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::FAILED);
-            dbgError(D_ORCHESTRATOR)
+            dbgError(D_SERVICE_CONTROLLER)
                 << "Request for service reconfiguration failed to complete. ID: "
                 << id.get()
                 << ", Service Name: "
@@ -75,7 +75,7 @@ public:
             return;
         }
         service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::SUCCEEDED);
-        dbgInfo(D_ORCHESTRATOR)
+        dbgInfo(D_SERVICE_CONTROLLER)
             << "Request for service reconfiguration successfully accomplished. Reconf ID: "
             << id.get()
             << ", Service Name: "
@@ -112,7 +112,7 @@ ServiceDetails::isServiceActive() const
         }
     }
 
-    dbgDebug(D_ORCHESTRATOR)
+    dbgDebug(D_SERVICE_CONTROLLER)
         << "Executing service status check via watchdog api. Service name: "
         << service_name
         << ", Watchdog command: "
@@ -133,7 +133,7 @@ ServiceDetails::isServiceActive() const
     for (int current_attempt = 0; current_attempt < max_retry_attempts; ++current_attempt) {
         if (service_status.ok() || service_status.getErr().find("Reached timeout") == string::npos) break;
 
-        dbgWarning(D_ORCHESTRATOR)
+        dbgWarning(D_SERVICE_CONTROLLER)
             << "Retrying to execute service status check via watchdog API after getting timeout. Service name: "
             << service_name
             << ", Watchdog command: "
@@ -146,7 +146,7 @@ ServiceDetails::isServiceActive() const
     }
 
     if (!service_status.ok()) {
-        dbgWarning(D_ORCHESTRATOR)
+        dbgWarning(D_SERVICE_CONTROLLER)
             << "Changing service status to inactive after failure to its status from watchdog. Service name: "
             << service_name
             << ", Watchdog output: "
@@ -154,7 +154,7 @@ ServiceDetails::isServiceActive() const
         return false;
     }
 
-    dbgDebug(D_ORCHESTRATOR)
+    dbgDebug(D_SERVICE_CONTROLLER)
         << "Successfully retrieved service status from watchdog. Service name: "
         << service_name
         << ", Watchdog output: "
@@ -166,7 +166,7 @@ ServiceDetails::isServiceActive() const
     bool is_registered = status.find("not-registered") == string::npos && status.find("registered") != string::npos;
     bool is_running = status.find("not-running") == string::npos && status.find("running") != string::npos;
 
-    dbgTrace(D_ORCHESTRATOR)
+    dbgTrace(D_SERVICE_CONTROLLER)
         << "Successfully set service status. Service name: "
         << service_name
         << ", Status: "
@@ -189,7 +189,7 @@ ReconfStatus
 ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy_version)
 {
     if(!isServiceActive()) {
-        dbgDebug(D_ORCHESTRATOR) << "Service " << service_name << " is inactive";
+        dbgDebug(D_SERVICE_CONTROLLER) << "Service " << service_name << " is inactive";
         return ReconfStatus::INACTIVE;
     }
 
@@ -210,7 +210,7 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
 
     if (!res.ok()) {
         auto err = res.getErr();
-        dbgDebug(D_ORCHESTRATOR)
+        dbgDebug(D_SERVICE_CONTROLLER)
             << "Service: "
             << service_name
             << " didn't get new configuration. Error: "
@@ -223,7 +223,7 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
     if (new_config.finished.get()) {
         if (!new_config.error.get()) {
             service_details->startReconfStatus(new_config.id.get(), ReconfStatus::SUCCEEDED, service_name, service_id);
-            dbgDebug(D_ORCHESTRATOR) << "Loading service configuration succeeded for service " << service_name;
+            dbgDebug(D_SERVICE_CONTROLLER) << "Loading service configuration succeeded for service " << service_name;
             return ReconfStatus::SUCCEEDED;
         } else {
             string log_name = "Agent could not update policy to version " +
@@ -241,7 +241,7 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
                 << LogField("policyVersion", service_details->getPolicyVersion());
 
             service_details->startReconfStatus(new_config.id.get(), ReconfStatus::FAILED, service_name, service_id);
-            dbgDebug(D_ORCHESTRATOR)
+            dbgDebug(D_SERVICE_CONTROLLER)
                 << "Loading service configuration failed for service "
                 << service_name
                 << " with error: "
@@ -249,7 +249,7 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
             return ReconfStatus::FAILED;
         }
     }
-    dbgDebug(D_ORCHESTRATOR) << "Loading service configuration is in progress for service: " << service_name;
+    dbgDebug(D_SERVICE_CONTROLLER) << "Loading service configuration is in progress for service: " << service_name;
     service_details->startReconfStatus(new_config.id.get(), ReconfStatus::IN_PROGRESS, service_name, service_id);
     return ReconfStatus::IN_PROGRESS;
 }
@@ -257,7 +257,7 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
 void
 SetNanoServiceConfig::doCall()
 {
-    dbgFlow(D_ORCHESTRATOR)
+    dbgFlow(D_SERVICE_CONTROLLER)
         << "Received registration request from service. Service name: "
         << service_name.get()
         << ", service listening port: "
@@ -402,12 +402,12 @@ ServiceController::Impl::getUpdatedReconfStatus()
         auto maybe_service = getServiceDetails(service_id);
 
         if (!maybe_service.ok()) {
-            dbgWarning(D_ORCHESTRATOR) << "Unable to get service details. Error: " << maybe_service.getErr();
+            dbgWarning(D_SERVICE_CONTROLLER) << "Unable to get service details. Error: " << maybe_service.getErr();
             continue;
         }
 
         if (!maybe_service.unpack().isServiceActive()) {
-            dbgInfo(D_ORCHESTRATOR)
+            dbgInfo(D_SERVICE_CONTROLLER)
                 << "Service is not active, removing from registered services list. Service: "
                 << services_reconf_names[service_and_reconf_status.first]
                 << "ID: "
@@ -490,7 +490,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
     auto maybe_registered_services_str = Singleton::Consume<I_OrchestrationTools>::by<ServiceController::Impl>()->
         readFile(registered_services_file);
     if (!maybe_registered_services_str.ok()) {
-        dbgTrace(D_ORCHESTRATOR)
+        dbgTrace(D_SERVICE_CONTROLLER)
             << "could not read file. File: "
             << registered_services_file
             << " Error: " << maybe_registered_services_str.getErr();
@@ -501,7 +501,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
     cereal::JSONInputArchive ar(ss);
     ar(cereal::make_nvp("Registered Services", pending_services));
 
-    dbgInfo(D_ORCHESTRATOR)
+    dbgInfo(D_SERVICE_CONTROLLER)
         << "Orchestration pending services loaded from file."
         << " File: "
         << registered_services_file
@@ -509,7 +509,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
 
     for (const auto &id_service_pair : pending_services) {
         const auto &service = id_service_pair.second;
-        dbgInfo(D_ORCHESTRATOR)
+        dbgInfo(D_SERVICE_CONTROLLER)
             << "Service name: "
             << service.getServiceName()
             << ", Service ID: "
@@ -522,7 +522,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
 void
 ServiceController::Impl::writeRegisteredServicesToFile()
 {
-    dbgFlow(D_ORCHESTRATOR);
+    dbgFlow(D_SERVICE_CONTROLLER);
     auto registered_services_file = getConfigurationWithDefault<string>(
         filesystem_prefix + "/conf/orchestrations_registered_services.json",
         "orchestration",
@@ -533,14 +533,14 @@ ServiceController::Impl::writeRegisteredServicesToFile()
     cereal::JSONOutputArchive ar(ss);
     ar(cereal::make_nvp("Registered Services", registered_services));
 
-    dbgInfo(D_ORCHESTRATOR)
+    dbgInfo(D_SERVICE_CONTROLLER)
         << "Orchestration registered services file has been updated. File: "
         << registered_services_file
         << ". Registered Services:";
 
     for (const auto &id_service_pair : registered_services) {
         const auto &service = id_service_pair.second;
-        dbgInfo(D_ORCHESTRATOR)
+        dbgInfo(D_SERVICE_CONTROLLER)
             << "Service name: "
             << service.getServiceName()
             << ", Service ID: "
@@ -626,6 +626,7 @@ ServiceController::Impl::registerServiceConfig(
 
     pending_services.erase(service_config.getServiceID());
     pending_services.insert({service_config.getServiceID(), service_config});
+    refreshPendingServices();
 }
 
 bool
@@ -639,12 +640,12 @@ ServiceController::Impl::isServiceInstalled(const string &service_name)
 void
 ServiceController::Impl::refreshPendingServices()
 {
-    dbgFlow(D_ORCHESTRATOR);
+    dbgFlow(D_SERVICE_CONTROLLER);
     if (pending_services.empty()) return;
     for (const auto &service : pending_services) {
         registered_services.erase(service.first);
         registered_services.insert({service.first, service.second});
-        dbgDebug(D_ORCHESTRATOR) << "Successfully registered service. Name: " << service.first;
+        dbgDebug(D_SERVICE_CONTROLLER) << "Successfully registered service. Name: " << service.first;
     }
     pending_services.clear();
 
@@ -659,7 +660,7 @@ ServiceController::Impl::backupConfigurationFile(const string &config_file_path)
     string backup_file = config_file_path + backup_ext;
 
     if (!orchestration_tools->doesFileExist(config_file_path)) {
-        dbgTrace(D_ORCHESTRATOR) << "File does not exist. File: " << config_file_path;
+        dbgTrace(D_SERVICE_CONTROLLER) << "File does not exist. File: " << config_file_path;
         return true;
     }
 
@@ -670,7 +671,7 @@ ServiceController::Impl::backupConfigurationFile(const string &config_file_path)
         mainloop->yield(false);
     }
 
-    dbgWarning(D_ORCHESTRATOR) << "Failed to back up the file. File: " << config_file_path;
+    dbgWarning(D_SERVICE_CONTROLLER) << "Failed to back up the file. File: " << config_file_path;
     return false;
 }
 
@@ -692,12 +693,12 @@ ServiceController::Impl::createDirectoryForChildTenant(
     if (orchestration_tools->doesDirectoryExist(dir)) return true;
 
     if (!orchestration_tools->createDirectory(dir)) {
-        dbgError(D_ORCHESTRATOR)
+        dbgError(D_SERVICE_CONTROLLER)
             << "Failed to create configuration directory for tenant "
             << child_tenant_id;
         return false;
     }
-    dbgTrace(D_ORCHESTRATOR) << "Created new configuration directory for tenant " << child_tenant_id;
+    dbgTrace(D_SERVICE_CONTROLLER) << "Created new configuration directory for tenant " << child_tenant_id;
     return true;
 }
 
@@ -716,7 +717,7 @@ getChecksum(const string &file_path)
     try {
         checksum = to_string(boost::uuids::random_generator()());
     } catch (const boost::uuids::entropy_error &e) {
-        dbgDebug(D_ORCHESTRATOR) << "Couldn't generate random checksum";
+        dbgDebug(D_SERVICE_CONTROLLER) << "Couldn't generate random checksum";
     }
     return checksum;
 }
@@ -734,7 +735,7 @@ ServiceController::Impl::updateServiceConfiguration(
     if (!child_tenant_id.empty()) {
         tenant_and_profile_ids = " Child tenant id: " + child_tenant_id + ", Child profile id: " + child_profile_id;
     }
-    dbgFlow(D_ORCHESTRATOR)
+    dbgFlow(D_SERVICE_CONTROLLER)
         << "new_policy_path: "
         << new_policy_path
         << ",  new_settings_path: "
@@ -758,9 +759,9 @@ ServiceController::Impl::updateServiceConfiguration(
         }
 
         for (const string &data : new_data_files) {
-            dbgTrace(D_ORCHESTRATOR) << "data: " << data;
+            dbgTrace(D_SERVICE_CONTROLLER) << "data: " << data;
             if (service.second.isConfigurationRelevant(data)) {
-                dbgTrace(D_ORCHESTRATOR)
+                dbgTrace(D_SERVICE_CONTROLLER)
                     << "data has relevant configuration, will update the service: "
                     << service.first;
                 nano_services_to_update.insert(service.first);
@@ -770,7 +771,8 @@ ServiceController::Impl::updateServiceConfiguration(
     }
 
     if (new_policy_path == "") {
-        dbgDebug(D_ORCHESTRATOR) << "Policy file was not updated. Sending reload command regarding settings and data";
+        dbgDebug(D_SERVICE_CONTROLLER)
+            << "Policy file was not updated. Sending reload command regarding settings and data";
         auto signal_services = sendSignalForServices(nano_services_to_update, "");
         if (!signal_services.ok()) return signal_services.passErr();
         Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
@@ -779,7 +781,7 @@ ServiceController::Impl::updateServiceConfiguration(
 
     Maybe<string> loaded_policy_json = orchestration_tools->readFile(new_policy_path);
     if (!loaded_policy_json.ok()) {
-        dbgWarning(D_ORCHESTRATOR)
+        dbgWarning(D_SERVICE_CONTROLLER)
             << "Failed to load new file: "
             << new_policy_path
             << ". Error: "
@@ -795,7 +797,7 @@ ServiceController::Impl::updateServiceConfiguration(
     );
 
     if (!all_security_policies.ok()) {
-        dbgWarning(D_ORCHESTRATOR)
+        dbgWarning(D_SERVICE_CONTROLLER)
             << "Failed to parse json file: "
             << new_policy_path
             << ". Error: "
@@ -825,13 +827,13 @@ ServiceController::Impl::updateServiceConfiguration(
         if (child_tenant_id.empty() && single_policy.first == versions_param) {
             //In a multi-tenant env, only the parent should handle the versions parameter
             policy_versions = single_policy.second;
-            dbgWarning(D_ORCHESTRATOR) << "Found versions parameter in policy file:" << policy_versions;
+            dbgWarning(D_SERVICE_CONTROLLER) << "Found versions parameter in policy file:" << policy_versions;
         }
 
-        dbgDebug(D_ORCHESTRATOR) << "Starting to update policy file. Policy type: " << single_policy.first;
+        dbgDebug(D_SERVICE_CONTROLLER) << "Starting to update policy file. Policy type: " << single_policy.first;
 
         if (!createDirectoryForChildTenant(child_tenant_id, child_profile_id)) {
-            dbgWarning(D_ORCHESTRATOR)
+            dbgWarning(D_SERVICE_CONTROLLER)
                 << "Failed to create directory for child. Tenant id: " << child_tenant_id
                 << ", Profile id: " << child_profile_id;
             return genError("Failed to create directory for child tenant");
@@ -861,7 +863,7 @@ ServiceController::Impl::updateServiceConfiguration(
         }
         changed_policy_files.insert(policy_file_path);
 
-        dbgInfo(D_ORCHESTRATOR) << "Successfully updated policy file. Policy name: " << single_policy.first;
+        dbgInfo(D_SERVICE_CONTROLLER) << "Successfully updated policy file. Policy name: " << single_policy.first;
 
         auto orc_status = Singleton::Consume<I_OrchestrationStatus>::by<ServiceController>();
         orc_status->setServiceConfiguration(
@@ -878,7 +880,9 @@ ServiceController::Impl::updateServiceConfiguration(
             for (const auto &instance_id: instances) {
                 auto relevant_service = registered_services.find(instance_id);
                 if (relevant_service == registered_services.end()) {
-                    dbgWarning(D_ORCHESTRATOR) << "Could not find registered service. Service Id: " << instance_id;
+                    dbgWarning(D_SERVICE_CONTROLLER)
+                        << "Could not find registered service. Service Id: "
+                        << instance_id;
                     continue;
                 }
                 if (relevant_service->second.isConfigurationRelevant(single_policy.first)) {
@@ -902,7 +906,7 @@ ServiceController::Impl::updateServiceConfiguration(
         if (!is_send_signal_for_services.ok()) send_signal_for_services_err = is_send_signal_for_services.getErr();
     }
 
-    dbgTrace(D_ORCHESTRATOR) << "was policy updated: " << (was_policy_updated ? "true" : "false");
+    dbgTrace(D_SERVICE_CONTROLLER) << "was policy updated: " << (was_policy_updated ? "true" : "false");
 
     if (was_policy_updated) {
         string base_path =
@@ -916,14 +920,14 @@ ServiceController::Impl::updateServiceConfiguration(
         );
 
         if (new_policy_path.compare(config_file_path) == 0) {
-            dbgDebug(D_ORCHESTRATOR) << "Enforcing the default policy file";
+            dbgDebug(D_SERVICE_CONTROLLER) << "Enforcing the default policy file";
             policy_version = version_value;
             Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
             return Maybe<void>();
         }
 
         if (!backupConfigurationFile(config_file_path)) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to backup the policy file.";
+            dbgWarning(D_SERVICE_CONTROLLER) << "Failed to backup the policy file.";
             return genError("Failed to backup the policy file.");
         }
 
@@ -931,7 +935,7 @@ ServiceController::Impl::updateServiceConfiguration(
 
         // Save the new configuration file.
         if (!orchestration_tools->copyFile(new_policy_path, config_file_path)) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to save the policy file.";
+            dbgWarning(D_SERVICE_CONTROLLER) << "Failed to save the policy file.";
             return genError("Failed to save the policy file.");
         }
     }
@@ -946,11 +950,11 @@ ServiceController::Impl::sendSignalForServices(
     const set<string> &nano_services_to_update,
     const string &policy_version_to_update)
 {
-    dbgFlow(D_ORCHESTRATOR);
+    dbgFlow(D_SERVICE_CONTROLLER);
     for (auto &service_id : nano_services_to_update) {
         auto nano_service = registered_services.find(service_id);
         if (nano_service == registered_services.end()) {
-            dbgWarning(D_ORCHESTRATOR) << "Could not find registered service. Service Id: " << service_id;
+            dbgWarning(D_SERVICE_CONTROLLER) << "Could not find registered service. Service Id: " << service_id;
             continue;
         }
 
@@ -958,13 +962,13 @@ ServiceController::Impl::sendSignalForServices(
         auto reconf_status = nano_service->second.sendNewConfigurations(configuration_id, policy_version_to_update);
 
         if (reconf_status == ReconfStatus::INACTIVE) {
-            dbgWarning(D_ORCHESTRATOR) << "Erasing details regarding inactive service " << service_id;
+            dbgWarning(D_SERVICE_CONTROLLER) << "Erasing details regarding inactive service " << service_id;
             registered_services.erase(service_id);
             writeRegisteredServicesToFile();
         }
 
         if (reconf_status == ReconfStatus::FAILED) {
-            dbgDebug(D_ORCHESTRATOR) << "The reconfiguration failed for serivce: " << service_id;
+            dbgDebug(D_SERVICE_CONTROLLER) << "The reconfiguration failed for serivce: " << service_id;
             services_reconf_status.clear();
             services_reconf_names.clear();
             return genError("The reconfiguration failed for serivce: " + service_id);
@@ -985,13 +989,14 @@ ServiceController::Impl::sendSignalForServices(
     while(timer->getMonotonicTime() < current_timeout) {
         switch (getUpdatedReconfStatus()) {
             case ReconfStatus::SUCCEEDED: {
-                dbgDebug(D_ORCHESTRATOR) << "The reconfiguration was successfully completed for all the services";
+                dbgDebug(D_SERVICE_CONTROLLER)
+                    << "The reconfiguration was successfully completed for all the services";
                 services_reconf_status.clear();
                 services_reconf_names.clear();
                 return Maybe<void>();
             }
             case ReconfStatus::IN_PROGRESS: {
-                dbgTrace(D_ORCHESTRATOR) << "Reconfiguration in progress...";
+                dbgTrace(D_SERVICE_CONTROLLER) << "Reconfiguration in progress...";
                 Singleton::Consume<I_MainLoop>::by<ServiceController>()->yield(chrono::seconds(2));
                 break;
             }
@@ -1000,7 +1005,7 @@ ServiceController::Impl::sendSignalForServices(
                 for(auto &status : services_reconf_status) {
                     if (status.second == ReconfStatus::FAILED) {
                         failed_services_vec.push_back(services_reconf_names[status.first]);
-                        dbgDebug(D_ORCHESTRATOR)
+                        dbgDebug(D_SERVICE_CONTROLLER)
                             << "The reconfiguration failed for serivce "
                             << services_reconf_names[status.first];
                     }
@@ -1013,7 +1018,7 @@ ServiceController::Impl::sendSignalForServices(
                 return genError("The reconfiguration failed for serivces: " + failed_services);
             }
             case ReconfStatus::INACTIVE: {
-                dbgError(D_ORCHESTRATOR) << "Reached inactive state in the middle of reconfiguration!";
+                dbgError(D_SERVICE_CONTROLLER) << "Reached inactive state in the middle of reconfiguration!";
                 services_reconf_status.clear();
                 services_reconf_names.clear();
                 return genError("Reached inactive state in the middle of reconfiguration!");
@@ -1021,7 +1026,7 @@ ServiceController::Impl::sendSignalForServices(
         }
     }
 
-    dbgDebug(D_ORCHESTRATOR) << "The reconfiguration has reached a timeout";
+    dbgDebug(D_SERVICE_CONTROLLER) << "The reconfiguration has reached a timeout";
     services_reconf_status.clear();
     services_reconf_names.clear();
     return genError("The reconfiguration has reached a timeout");
@@ -1033,17 +1038,17 @@ ServiceController::Impl::updateServiceConfigurationFile(
     const string &configuration_file_path,
     const string &new_configuration)
 {
-    dbgFlow(D_ORCHESTRATOR) << "Updating configuration. Config Name: " << configuration_name;
+    dbgFlow(D_SERVICE_CONTROLLER) << "Updating configuration. Config Name: " << configuration_name;
 
     if (orchestration_tools->doesFileExist(configuration_file_path)) {
         Maybe<string> old_configuration = orchestration_tools->readFile(configuration_file_path);
         if (old_configuration.ok()) {
             bool service_changed = old_configuration.unpack().compare(new_configuration) != 0;
             if (service_changed == false) {
-                dbgDebug(D_ORCHESTRATOR) << "There is no update for policy file: " << configuration_file_path;
+                dbgDebug(D_SERVICE_CONTROLLER) << "There is no update for policy file: " << configuration_file_path;
                 return Maybe<void>();
             }
-            dbgDebug(D_ORCHESTRATOR)
+            dbgDebug(D_SERVICE_CONTROLLER)
                 << "Starting to update " << configuration_file_path << " to " << new_configuration;
             string old_configuration_backup_path = configuration_file_path + getConfigurationWithDefault<string>(
                 ".bk",
@@ -1051,13 +1056,15 @@ ServiceController::Impl::updateServiceConfigurationFile(
                 "Backup file extension"
             );
             if (orchestration_tools->copyFile(configuration_file_path, old_configuration_backup_path)) {
-                dbgDebug(D_ORCHESTRATOR) << "Backup of policy file has been created in: " << configuration_file_path;
+                dbgDebug(D_SERVICE_CONTROLLER)
+                    << "Backup of policy file has been created in: "
+                    << configuration_file_path;
             } else {
-                dbgWarning(D_ORCHESTRATOR) << "Failed to backup policy file";
+                dbgWarning(D_SERVICE_CONTROLLER) << "Failed to backup policy file";
                 return genError("Failed to backup policy file");
             }
         } else {
-            dbgWarning(D_ORCHESTRATOR)
+            dbgWarning(D_SERVICE_CONTROLLER)
                 << "Failed to read current policy file "
                 << configuration_file_path
                 << ". Error: "
@@ -1073,13 +1080,13 @@ ServiceController::Impl::updateServiceConfigurationFile(
     }
 
     if (orchestration_tools->writeFile(new_configuration, configuration_file_path)) {
-        dbgDebug(D_ORCHESTRATOR) << "New policy file has been saved in: " << configuration_file_path;
+        dbgDebug(D_SERVICE_CONTROLLER) << "New policy file has been saved in: " << configuration_file_path;
     } else {
-        dbgWarning(D_ORCHESTRATOR) << "Failed to save new policy file";
+        dbgWarning(D_SERVICE_CONTROLLER) << "Failed to save new policy file";
         return genError("Failed to save new policy file");
     }
 
-    dbgInfo(D_ORCHESTRATOR) << "Successfully updated policy file: " << configuration_file_path;
+    dbgInfo(D_SERVICE_CONTROLLER) << "Successfully updated policy file: " << configuration_file_path;
 
     return Maybe<void>();
 }
@@ -1120,14 +1127,14 @@ ServiceController::Impl::updateReconfStatus(int id, const string &service_name, 
     }
 
     if (services_reconf_status.find(id) == services_reconf_status.end()) {
-        dbgError(D_ORCHESTRATOR)
+        dbgError(D_SERVICE_CONTROLLER)
             << "Unable to find a mapping for reconfiguration ID:"
             << id
             << ". Service name: "
             << service_name;
         return;
     }
-    dbgTrace(D_ORCHESTRATOR)
+    dbgTrace(D_SERVICE_CONTROLLER)
         << "Updating reconf status for reconfiguration ID "
         << id
         << ", Service name: "
@@ -1144,7 +1151,7 @@ ServiceController::Impl::startReconfStatus(
     const string &service_name,
     const string &service_id)
 {
-    dbgTrace(D_ORCHESTRATOR)
+    dbgTrace(D_SERVICE_CONTROLLER)
         << "Starting reconf status. Configuration ID: "
         << id
         << ", service name: "

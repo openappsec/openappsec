@@ -40,7 +40,7 @@ public:
     ~OrchestrationStatus();
 
     void init() override;
-    
+
 private:
     class Impl;
     std::unique_ptr<Impl> pimpl;

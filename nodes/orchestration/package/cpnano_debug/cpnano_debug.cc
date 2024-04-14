@@ -1287,6 +1287,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::SDWAN);
         } else if (getServiceString(Service::LOGGER_SDWAN).find(maybe_service) == 0) {
             services.push_back(Service::LOGGER_SDWAN);
+        } else if (getServiceString(Service::CPVIEW_METRIC_PROVIDER).find(maybe_service) == 0) {
+            services.push_back(Service::CPVIEW_METRIC_PROVIDER);
         } else if (getServiceString(Service::IOT_WLP).find(maybe_service) == 0) {
             services.push_back(Service::IOT_WLP);
         } else if (getServiceString(Service::IDA).find(maybe_service) == 0) {

@@ -24,6 +24,21 @@
 using namespace testing;
 using namespace std;
 
+string host_address = "1.2.3.5";
+string host_url = "https://" + host_address + "/";
+Maybe<string> response(
+    string(
+        "{\n"
+        "    \"fog-address\": \"" + host_url + "\",\n"
+        "    \"agent-type\": \"test\",\n"
+        "    \"pulling-interval\": 25,\n"
+        "    \"error-pulling-interval\": 15\n"
+        "}"
+    )
+);
+string orchestration_policy_file_path = "/etc/cp/conf/orchestration/orchestration.policy";
+string orchestration_policy_file_path_bk = orchestration_policy_file_path + ".bk";
+
 class OrchestrationMultitenancyTest : public Test
 {
 public:
@@ -54,6 +69,11 @@ public:
     void
     init()
     {
+        EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
+        EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
+        EXPECT_CALL(mock_status, setFogAddress(host_url)).WillRepeatedly(Return());
+        EXPECT_CALL(mock_orchestration_tools, setClusterId());
+
         EXPECT_CALL(mock_service_controller, isServiceInstalled("Access Control")).WillRepeatedly(Return(false));
 
         // This Holding the Main Routine of the Orchestration.
@@ -61,8 +81,6 @@ public:
             mock_ml,
             addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Orchestration runner", true)
         ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
-
-        EXPECT_CALL(mock_orchestration_tools, getClusterId());
 
         EXPECT_CALL(mock_shell_cmd, getExecOutput("openssl version -d | cut -d\" \" -f2 | cut -d\"\\\"\" -f2", _, _))
             .WillOnce(Return(string("OpenSSL certificates Directory")));
@@ -209,7 +227,6 @@ TEST_F(OrchestrationMultitenancyTest, init)
 
 TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
 {
-    string orchestration_policy_file_path = "/etc/cp/conf/orchestration/orchestration.policy";
     string manifest_file_path = "/etc/cp/conf/manifest.json";
     string setting_file_path = "/etc/cp/conf/settings.json";
     string policy_file_path = "/etc/cp/conf/policy.json";
@@ -237,22 +254,6 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     init();
     expectDetailsResolver();
 
-    Maybe<string> response(
-        string(
-            "{\n"
-            "    \"fog-address\": \"" + host_url + "\",\n"
-            "    \"agent-type\": \"test\",\n"
-            "    \"pulling-interval\": 25,\n"
-            "    \"error-pulling-interval\": 15\n"
-            "}"
-        )
-    );
-
-    EXPECT_CALL(mock_orchestration_tools, doesFileExist(orchestration_policy_file_path)).WillOnce(Return(true));
-    EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
-    EXPECT_CALL(mock_message, setFogConnection(host_address, 443, true, MessageCategory::GENERIC))
-        .WillOnce(Return(true));
-    EXPECT_CALL(mock_update_communication, setAddressExtenesion(""));
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
@@ -268,7 +269,11 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
         .WillOnce(Return(data_checksum));
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
-        .Times(2).WillRepeatedly(ReturnRef(first_policy_version));
+        .Times(3).WillRepeatedly(ReturnRef(first_policy_version));
+
+    map<string, PortNumber> empty_service_to_port_map;
+    EXPECT_CALL(mock_service_controller, getServiceToPortMap()).WillRepeatedly(Return(empty_service_to_port_map));
+
 
     set<string> active_tenants = { "1236", "1235" };
     map<string, set<string>> old_tenant_profile_set;

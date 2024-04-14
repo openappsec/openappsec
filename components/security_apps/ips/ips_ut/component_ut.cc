@@ -596,6 +596,8 @@ TEST_F(ComponentTest, check_filtering_by_year)
 
 TEST_F(ComponentTest, log_fields)
 {
+    generic_rulebase.preload();
+    generic_rulebase.init();
     string config =
         "{"
             "\"IPS\": {"
@@ -632,6 +634,8 @@ TEST_F(ComponentTest, log_fields)
                         "\"assetId\": \"1-1-1\","
                         "\"practiceId\": \"2-2-2\","
                         "\"practiceName\": \"practice1\","
+                        "\"triggers\": \"5eaeefde6765c30010bae8b6\","
+                        "\"exceptions\": \"\","
                         "\"defaultAction\": \"Detect\","
                         "\"rules\": ["
                             "{"
@@ -643,10 +647,36 @@ TEST_F(ComponentTest, log_fields)
                         "]"
                     "}"
                 "]"
+            "},"
+            "\"rulebase\": {"
+                "\"log\": ["
+                    "{"
+                        "\"context\": \"triggerId(5eaeefde6765c30010bae8b6)\","
+                        "\"triggerName\": \"Logging Trigger\","
+                        "\"triggerType\": \"log\","
+                        "\"urlForSyslog\": \"\","
+                        "\"urlForCef\": \"128.1.1.1:333\","
+                        "\"acAllow\": false,"
+                        "\"acDrop\": true,"
+                        "\"complianceViolations\": true,"
+                        "\"complianceWarnings\": true,"
+                        "\"logToAgent\": true,"
+                        "\"logToCloud\": true,"
+                        "\"logToSyslog\": false,"
+                        "\"logToCef\": true,"
+                        "\"tpDetect\": true,"
+                        "\"tpPrevent\": true,"
+                        "\"verbosity\": \"Standard\","
+                        "\"webBody\": true,"
+                        "\"webHeaders\": true,"
+                        "\"webRequests\": true,"
+                        "\"webUrlPath\": true,"
+                        "\"webUrlQuery\": true"
+                    "}"
+                "]"
             "}"
         "}";
     loadPolicy(config);
-    setTrigger();
 
     EXPECT_CALL(table, createStateRValueRemoved(_, _));
     EXPECT_CALL(table, getState(_)).WillRepeatedly(Return(&entry));
@@ -829,6 +859,8 @@ TEST_F(ComponentTest, prxeem_exception_bug)
         "                \"practiceId\": \"2-2-2\","
         "                \"practiceName\": \"practice1\","
         "                \"defaultAction\": \"Prevent\","
+        "                \"triggers\": \"\","
+        "                \"exceptions\": \"6c3867be-4da5-42c2-93dc-8f509a764004\","
         "                \"rules\": []"
         "            }"
         "        ]"
@@ -847,6 +879,11 @@ TEST_F(ComponentTest, prxeem_exception_bug)
         "                       \"parameterId\": \"6c3867be-4da5-42c2-93dc-8f509a764003\","
         "                       \"parameterType\": \"exceptions\","
         "                       \"parameterName\": \"exception\""
+        "                    },"
+        "                    {"
+        "                       \"parameterId\": \"6c3867be-4da5-42c2-93dc-8f509a764004\","
+        "                       \"parameterType\": \"exceptions\","
+        "                       \"parameterName\": \"exception\""
         "                    }"
         "                ],"
         "                \"zoneId\": \"\","
@@ -855,7 +892,7 @@ TEST_F(ComponentTest, prxeem_exception_bug)
         "        ],"
         "        \"exception\": ["
         "            {"
-        "                \"context\": \"parameterId(6c3867be-4da5-42c2-93dc-8f509a764003)\","
+        "                \"context\": \"parameterId(6c3867be-4da5-42c2-93dc-8f509a764004)\","
         "                \"match\": {"
         "                   \"type\": \"operator\","
         "                   \"op\": \"and\","

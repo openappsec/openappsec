@@ -108,7 +108,7 @@ NamespaceData::loadJson(const string &json)
 }
 
 Maybe<string>
-NamespaceData::getNamespaceUidByName(const string &name)
+NamespaceData::getNamespaceUidByName(const string &name) const
 {
     if (ns_name_to_uid.find(name) == ns_name_to_uid.end()) {
         return genError("Namespace doesn't exist. Name: " + name);
