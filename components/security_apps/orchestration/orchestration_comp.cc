@@ -1963,6 +1963,10 @@ private:
                 << update_config.getErr();
             return;
         }
+        auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
+        if (getOrchestrationMode() == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
+            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
+        }
 
         auto policy_version = i_service_controller->getPolicyVersion();
         if (!policy_version.empty()) {
