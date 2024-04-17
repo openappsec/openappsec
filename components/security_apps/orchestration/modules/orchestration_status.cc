@@ -399,7 +399,6 @@ public:
         if (!write_result) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to write Orchestration status. File: " << orchestration_status_path;
         }
-        dbgTrace(D_ORCHESTRATOR) << "Orchestration status file has been updated. File: " << orchestration_status_path;
     }
 
     void
@@ -459,7 +458,6 @@ public:
             seconds(5),
             [this] ()
             {
-                dbgTrace(D_ORCHESTRATOR) << "Write Orchestration status file <co-routine>";
                 writeStatusToFile();
             },
             "Write Orchestration status file"

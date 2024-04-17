@@ -1,17 +1,36 @@
 #!/bin/sh
 
-[ -z ${FILESYSTEM_PATH} ] && FILESYSTEM_PATH="/etc/cp"
-LOG_FILE_PATH="/var/log"
+SCRIPT_FOLDER=$(dirname "$0")
+PARENT_FOLDER=$(dirname "$SCRIPT_FOLDER")
+FILESYSTEM_PATH=$PARENT_FOLDER
+VS_ID_PATTERN="vs[0-9]\+$"
+VS_ID=
+TMP_FOLDER="/tmp"
 USR_LIB_PATH="/usr/lib"
+NGEN_LIB_PATH=${USR_LIB_PATH}/cpnano/
+if echo "$PARENT_FOLDER" | grep -q "$VS_ID_PATTERN"; then
+    VS_ID="${PARENT_FOLDER##*vs}"
+    TMP_FOLDER="/tmp/${VS_ID}"
+    mkdir -p ${TMP_FOLDER}
+    NGEN_LIB_PATH=${USR_LIB_PATH}/cpnano/vs${VS_ID}/
+    if [ -f "/etc/bashrc" ]; then
+        . /etc/bashrc
+        vsenv ${VS_ID}
+    fi
+fi
+LOG_FILE_PATH="/var/log"
 INIT_D_PATH="/etc/init.d"
-WATCHDOG_PROCESS_RESTART_COUNTER="/etc/cp/watchdog/watchdog_process_restart"
+WATCHDOG_PROCESS_RESTART_COUNTER="${FILESYSTEM_PATH}/watchdog/watchdog_process_restart"
 LOG_FILE=nano_agent/cp-nano-watchdog.dbg
-AGENT_RUN_STATUS_FILE=/tmp/agent-status.txt
+AGENT_RUN_STATUS_FILE=${TMP_FOLDER}/agent-status.txt
 SRVS_FILE=watchdog/wd.services
+STARTUP_SRVS_FILE=watchdog/wd.services.startup
 TMP_SRVS_FILE=watchdog/wd.temp
 VOL_SRVS_FILE=watchdog/wd.volatile_services
 SRVS_CONTAINER_FILE=watchdog/wd.container_services_startup
 SRVS_TO_RESTART_FILE=watchdog/wd.services.restart
+SRVS_TO_STOP_FILE=watchdog/wd.services.stop
+TMP_SRVS_TO_STOP_FILE=watchdog/wd.stop.temp
 TMP_VOL_SRVS_FILE_PRE_STOP=watchdog/wd.volatile_services.stop
 TMP_VOL_SRVS_FILE_PRE_DEL=watchdog/wd.volatile_services.del
 SRVS_HALTED=watchdog/wd.services.halt
@@ -24,7 +43,10 @@ env_details_file=conf/environment-details.cfg
 DEFAULT_MAX_FILE_SIZE=4096
 #default amount of archived log files to rotate
 DEFAULT_MAX_ROTATION=10
+VS_EVAL_PREFIX=
 
+var_service_startup=
+var_upgarde=false
 
 get_basename()
 {
@@ -50,8 +72,18 @@ load_paths()
     if [ -n "${CP_ENV_LOG_FILE}" ]; then
         LOG_FILE_PATH=$CP_ENV_LOG_FILE
     fi
+    if [ -n "${CP_VS_ID}" ]; then
+        VS_ID=${CP_VS_ID}
+        VS_EVAL_PREFIX="ip netns exec CTX0000${VS_ID} env"
+        NGEN_LIB_PATH=${USR_LIB_PATH}/cpnano/vs${VS_ID}/
+    fi
     if [ -n "${CP_USR_LIB_PATH}" ]; then
         USR_LIB_PATH=$CP_USR_LIB_PATH
+        if [ -z "${VS_ID}" ]; then
+            NGEN_LIB_PATH=${USR_LIB_PATH}/cpnano/
+        else
+            NGEN_LIB_PATH=${USR_LIB_PATH}/cpnano/vs${VS_ID}/
+        fi
     fi
     if [ -n "${CP_INIT_D_PATH}" ]; then
         INIT_D_PATH=$CP_INIT_D_PATH
@@ -63,11 +95,10 @@ load_paths()
 	if [ -z "${MAX_ROTATION}" ]; then
         MAX_ROTATION=$DEFAULT_MAX_ROTATION
 	fi
+
 }
 
 load_paths
-
-NGEN_LIB_PATH=${USR_LIB_PATH}/cpnano/
 
 pidof_cmd="pidof -x"
 if command -v pidof > /dev/null 2>&1; then
@@ -101,7 +132,6 @@ alpine_pid()
 {
    ps -ef | grep $1 | grep -v grep | awk '{printf $1 " "}'
 }
-
 
 ls -l /etc/ | grep release > /dev/null 2>&1
 retval=$?
@@ -173,9 +203,11 @@ sigterm()
             stop_instance $service $instance_id $family
         done
         rm ${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_STOP}
+        # wait for kill_process_by_pid that is run async by stop_instance
+        wait
     fi
 
-    echo "down" >>$AGENT_RUN_STATUS_FILE
+    echo "down" > $AGENT_RUN_STATUS_FILE
 
     log "sigterm" "cp-nano-agent watchdog service was successfully stopped "
     exit 0
@@ -189,6 +221,111 @@ stop()
 trap 'sigterm' TERM
 trap 'sigterm' INT
 
+run_service()
+{
+    service=$1
+    execution_flags=
+    srv_debug_file=
+    srv_err_file=
+    gaia_ld_path=$2
+    run_in_vs=
+
+    log "run_service" "Running the service: $service"
+
+    if [ -f ${service}.cfg ]; then
+        . "${service}.cfg"
+    fi
+
+    if [ -z ${srv_debug_file} ]; then
+        base_name=$(get_basename $service)
+        srv_debug_file=${LOG_FILE_PATH}/nano_agent/${base_name}.dbg
+    fi
+
+    if [ -z ${srv_err_file} ]; then
+        base_name=$(get_basename $service)
+        srv_err_file=${LOG_FILE_PATH}/nano_agent/${base_name}.err
+    fi
+
+    if ! [ -z ${gaia_ld_path} ]; then
+        if [ -n "$VS_ID" ]; then
+            NGEN_LIB_PATH="${USR_LIB_PATH}/cpnano/vs${VS_ID}/:${gaia_ld_path}"
+        else
+            NGEN_LIB_PATH="${USR_LIB_PATH}/cpnano/:${gaia_ld_path}"
+        fi
+    fi
+
+    if [ -n "$VS_ID" ]; then
+        run_in_vs="ip netns exec CTX0000${VS_ID}"
+    fi
+
+    if [ "${service}" = "${FILESYSTEM_PATH}/agentCache/cp-nano-agent-cache" ] || [ "${service}" = "${FILESYSTEM_PATH}/agentIntelligence/redis/redis-server" ] || [ "${service}" = "${FILESYSTEM_PATH}/crowdsecAux/cp-nano-crowdsec-aux" ]; then
+        LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${run_in_vs} ${service} ${execution_flags} 2>${srv_err_file} 1>/dev/null &
+    else
+        LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${run_in_vs} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} --service_startup=${var_service_startup} 2>${srv_err_file} 1>/dev/null &
+    fi
+}
+
+run_volatile_service()
+{
+    service_line=$1
+    service=$(echo $service_line | cut -f1 -d ';')
+    family=$(echo $service_line | cut -f2 -d ';')
+    instance_id=$(echo $service_line | cut -f3 -d ';')
+    already_running="0"
+    execution_flags=
+    srv_debug_file=
+    srv_err_file=
+    gaia_ld_path=$2
+
+    log "run_volatile_service" "Running the service: ${service} ($family : $instance_id)"
+
+    if [ -f ${service}.cfg ]; then
+        . "${service}.cfg"
+    fi
+
+    if [ -z $family ]; then
+        debug_file_suffix=${instance_id}
+    else
+        debug_file_suffix=${family}_${instance_id}
+    fi
+
+    if [ -z ${srv_debug_file} ]; then
+        base_name=$(get_basename $service)
+        srv_debug_file=${LOG_FILE_PATH}/nano_agent/$base_name.dbg${debug_file_suffix}
+    fi
+
+    if [ -z ${srv_err_file} ]; then
+        base_name=$(get_basename $service)
+        srv_err_file=${LOG_FILE_PATH}/nano_agent/$base_name.err${debug_file_suffix}
+    fi
+
+    if ! [ -z ${gaia_ld_path} ]; then
+        if [ -n "$VS_ID" ]; then
+            NGEN_LIB_PATH="${USR_LIB_PATH}/cpnano/vs${VS_ID}/:${gaia_ld_path}"
+        else
+            NGEN_LIB_PATH="${USR_LIB_PATH}/cpnano/:${gaia_ld_path}"
+        fi
+        if [ "$is_smb" = "1" -a "$SUB_HW_VER" = "THX2" ]; then
+            NGEN_LIB_PATH="/lib64:/pfrm2.0/lib64:${NGEN_LIB_PATH}"
+        fi
+    fi
+
+    if [ -n "$VS_ID" ]; then
+        run_in_vs="ip netns exec CTX0000${VS_ID}"
+    fi
+
+    family_arg=""
+    if [ -n "${family}" ]; then
+        family_arg="--family=${family}"
+    fi
+
+    base_name=$(get_basename $service)
+    srv_err_file=${LOG_FILE_PATH}/nano_agent/$base_name.err${debug_file_suffix}
+
+    echo -en "["$(date)"]" >> ${srv_debug_file}
+    LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${run_in_vs} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} --service_startup=${var_service_startup} ${family_arg} --id=${instance_id} 2>${srv_err_file} &
+}
+
 register()
 {
     log "register" "enter"
@@ -198,6 +335,7 @@ register()
     family_name=$3
 
     if [ -z $service_name ]; then
+        log "register" "Error! no service provided for registration"
         echo "Error! no service provided for registration"
         exit 1
     fi
@@ -210,15 +348,30 @@ register()
     if [ -z $family_size ]; then
         #handle single instance services
         if ! [ -z "$(cat ${FILESYSTEM_PATH}/${SRVS_FILE} | grep ^${service_name}$)" ]; then
+            log "register" "Warning! service '$service_name' is already registered"
             echo "Warning! service '$service_name' is already registered"
             exit 0
         fi
-        echo "$service_name" >>${FILESYSTEM_PATH}/${SRVS_FILE}
+
+        if  echo "$service_name" | grep -q "orchestration"; then
+            temp_file=${FILESYSTEM_PATH}/${SRVS_FILE}.tmp
+            echo "$service_name" | cat - ${FILESYSTEM_PATH}/${SRVS_FILE} > $temp_file
+            mv $temp_file ${FILESYSTEM_PATH}/${SRVS_FILE}
+        else
+            echo "$service_name" >>${FILESYSTEM_PATH}/${SRVS_FILE}
+        fi
+
+        if [ $var_upgarde = false ]; then
+            log "register" "The service $service_name is running for the first time."
+            echo "$service_name" >>${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}
+        fi
+
     else
         touch ${FILESYSTEM_PATH}/${VOL_SRVS_FILE}
         # handle multiple instances services
         family_prev_size=$(cat ${FILESYSTEM_PATH}/${VOL_SRVS_FILE} | grep "^$service_name;${family_name};" | wc -l)
         if [ $family_size -eq $family_prev_size ]; then
+            log "register" "Service '$service_name' already registered with $family_size instances for family '${family_name}'"
             echo "Service '$service_name' already registered with $family_size instances for family '${family_name}'"
             exit 0
         fi
@@ -228,9 +381,15 @@ register()
                 stop_instance $service_name ${i} ${family_name}
             done
         fi
+        # wait for kill_process_by_pid that is run async by stop_instance
+        wait
         grep -v -e "^${service_name};${family_name};" ${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_STOP} >${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_DEL}
         for i in $(seq 1 ${family_size}); do
             echo "$service_name;$family_name;$i" >>${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_DEL}
+            if [ $var_upgarde = false ]; then
+                log "register" "The service $service_name is running for the first time."
+                echo "$service_name" >>${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}
+            fi
         done
         mv ${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_DEL} ${FILESYSTEM_PATH}/${VOL_SRVS_FILE}
         rm ${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_STOP}
@@ -265,7 +424,7 @@ stop_instance()
         cmd_pid=$(ps -eo pid,cmd,args | grep -- "${family_arg}" | grep -- "--id=$instance_id" | awk -v srv=${1} '{if($2 ~ srv || $3 ~ srv) print $1}')
     fi
     if ! [ "${cmd_pid:-null}" = null ]; then
-        log "stop_instance" "stopping $service_name (pid=$cmd_pid)"
+        log "stop_instance" "Stopping registered service '$service_name', family $family_name, instance $instance_id with pid=$cmd_pid"
         echo "Stopping registered service '$service_name', family $family_name, instance $instance_id with pid=$cmd_pid"
         kill_processes_by_pid $cmd_pid &
     fi
@@ -326,6 +485,7 @@ unregister()
     kill_flag=1
 
     if [ -z $service_name ]; then
+        log "unregister" "Error! no service provided for un-registration"
         echo "Error! no service provided for un-registration"
         exit 1
     fi
@@ -366,6 +526,7 @@ unregister()
             done
         fi
         rm ${FILESYSTEM_PATH}/${TMP_VOL_SRVS_FILE_PRE_STOP}
+        wait
     else
         # unregister standard service
         service="$(cat ${FILESYSTEM_PATH}/${SRVS_FILE} | grep ^${service_name}$)"
@@ -373,6 +534,11 @@ unregister()
             log "unregister" "Warning! service '$service_name' is already un-registered"
             exit 0
         fi
+
+        if [ -z "$(cat ${FILESYSTEM_PATH}/${SRVS_TO_STOP_FILE} | grep ^${service_name}$)" ]; then
+            echo $service >> ${FILESYSTEM_PATH}/${SRVS_TO_STOP_FILE}
+        fi
+
         if [ $ARCH = "arm" ]; then
             cmd_pid=$(ps | awk -v srv=${service} '{if($5==srv) print $1}')
             if [ "${cmd_pid:-null}" = null ] && [ $PIDOF_CMD_EXISTS -eq 1 ]; then
@@ -386,14 +552,18 @@ unregister()
         fi
         if ! [ "${cmd_pid:-null}" = null ]; then
             log "unregister" "Unregistering $service (pid=$cmd_pid)"
+            echo "Unregistering $service (pid=$cmd_pid)"
             if [ ${kill_flag} -eq 1 ]; then
-                echo "Stopping registered service '$service' with pid=$cmd_pid"
+                log "unregister" "Stopping registered service '$service' with pid=$cmd_pid"
                 kill_processes_by_pid $cmd_pid
             fi
         fi
 
         grep -v -e "^$service_name$" ${FILESYSTEM_PATH}/${SRVS_FILE} >${FILESYSTEM_PATH}/${TMP_SRVS_FILE}
         mv ${FILESYSTEM_PATH}/${TMP_SRVS_FILE} ${FILESYSTEM_PATH}/${SRVS_FILE}
+
+        grep -v -e "^$service_name$" ${FILESYSTEM_PATH}/${SRVS_TO_STOP_FILE} >${FILESYSTEM_PATH}/${TMP_SRVS_TO_STOP_FILE}
+        mv ${FILESYSTEM_PATH}/${TMP_SRVS_TO_STOP_FILE} ${FILESYSTEM_PATH}/${SRVS_TO_STOP_FILE}
     fi
 }
 
@@ -445,6 +615,9 @@ rotate_service_log()
             rotate_service_file ${srv_debug_file}
             rotate_service_file ${srv_log_file}
         done
+    fi
+    if [ -f ${LOG_FILE_PATH}/nano_agent/cp-nano-init-agent.dbg ]; then
+        rotate_service_file ${LOG_FILE_PATH}/nano_agent/cp-nano-init-agent.dbg
     fi
     rotate_service_file ${LOG_FILE_PATH}/$LOG_FILE
 }
@@ -518,9 +691,9 @@ is_service_running()
             cmd_pid=$(pidof $base_name)
         fi
     elif [ $ARCH = "alpine" ]; then
-        cmd_pid=$(ps -ef | awk -v srv="$service" '{if(($4 ~ srv || $3 ~ srv || $6 ~ srv) && ($4 != "awk" && $4 != "grep" )) print $1}')
+        cmd_pid=$(ps -ef | awk -v srv="$service$" '{if(($4 ~ srv || $3 ~ srv || $6 ~ srv) && ($4 != "awk" && $4 != "grep" )) print $1}')
     else
-        cmd_pid=$(ps -eo pid,cmd | awk -v srv="$service" '{if($2 ~ srv || $3 ~ srv) print $1}')
+        cmd_pid=$(ps -eo pid,cmd | awk -v srv="$service$" '{if($2 ~ srv || $3 ~ srv) print $1}')
     fi
 
     if [ "${cmd_pid:-null}" = null ]; then
@@ -576,8 +749,6 @@ load_volatile_services()
             family=$(echo $service_line | cut -f2 -d ';')
             instance_id=$(echo $service_line | cut -f3 -d ';')
             already_running="0"
-            execution_flags=
-            srv_debug_file=
             gaia_ld_path=
 
             if [ -n "$(cat ${FILESYSTEM_PATH}/$SRVS_HALTED | grep $service)" ]; then
@@ -588,39 +759,22 @@ load_volatile_services()
                 . "${service}.cfg"
             fi
 
-            if [ -z $family ]; then
-                debug_file_suffix=${instance_id}
-            else
-                debug_file_suffix=${family}_${instance_id}
-            fi
-
-            if [ -z ${srv_debug_file} ]; then
-                base_name=$(get_basename $service)
-                srv_debug_file=${LOG_FILE_PATH}/nano_agent/$base_name.dbg${debug_file_suffix}
-            fi
-
-            if ! [ -z ${gaia_ld_path} ]; then
-                NGEN_LIB_PATH="${USR_LIB_PATH}/cpnano/:${gaia_ld_path}"
-                if [ "$is_smb" = "1" -a "$SUB_HW_VER" = "THX2" ]; then
-                    NGEN_LIB_PATH="/lib64:/pfrm2.0/lib64:${NGEN_LIB_PATH}"
-                fi
-            fi
-
             if test "$(is_volatile_service_running $service $instance_id $family)" = "false"; then
-                family_arg=""
-                if [ -n "${family}" ]; then
-                    family_arg="--family=${family}"
+                if [ -n "$(cat ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE} | grep $service)" ]; then
+                    var_service_startup=true
+                    grep -v -e "^$service$" ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE} >${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}.tmp
+                    mv ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}.tmp ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}
+                else
+                    var_service_startup=false
                 fi
-                log "load_volatile_services" "Respawn ${service} ($family : $instance_id)"
-                echo -en "["$(date)"]" >> ${srv_debug_file}
-                eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} ${family_arg} --id=${instance_id} &"
+                run_volatile_service $service_line $gaia_ld_path
                 increment_watchdog_process_restart_counter
-                echo "running" >> $AGENT_RUN_STATUS_FILE
+                echo "running" > $AGENT_RUN_STATUS_FILE
                 already_running="1"
             fi
 
-            if test "$already_running" = "0" && [ -f /tmp/agent-status.txt ]; then
-                echo "already running" >>$AGENT_RUN_STATUS_FILE
+            if test "$already_running" = "0" && [ -f $AGENT_RUN_STATUS_FILE ]; then
+                echo "already running" > $AGENT_RUN_STATUS_FILE
             fi
         done
     fi
@@ -629,6 +783,8 @@ load_volatile_services()
 load_services()
 {
     load_paths
+
+    all_running=true
     is_startup_mode=false
     if [ -f ${FILESYSTEM_PATH}/watchdog/wd.startup ]; then
         rm -f ${FILESYSTEM_PATH}/watchdog/wd.startup
@@ -638,11 +794,11 @@ load_services()
 
     already_running="0"
     for service in $(cat ${FILESYSTEM_PATH}/${SRVS_FILE}); do
-        execution_flags=
-        srv_debug_file=
-        gaia_ld_path=
-
         if test "$is_startup_mode" = "false" && [ -n "$(cat ${FILESYSTEM_PATH}/$SRVS_HALTED | grep $service)" ]; then
+            continue
+        fi
+
+        if [ -n "$(cat ${FILESYSTEM_PATH}/${SRVS_TO_STOP_FILE} | grep $service)" ]; then
             continue
         fi
 
@@ -650,16 +806,9 @@ load_services()
             . "${service}.cfg"
         fi
 
-        if [ -z ${srv_debug_file} ]; then
-            base_name=$(get_basename $service)
-            srv_debug_file=${LOG_FILE_PATH}/nano_agent/${base_name}.dbg
-        fi
-
-        if ! [ -z ${gaia_ld_path} ]; then
-            NGEN_LIB_PATH="${USR_LIB_PATH}/cpnano/:${gaia_ld_path}"
-        fi
-
         if test "$(is_service_running $service)" = "false"; then
+            all_running=false
+
             if [ ! -z $IS_CONTAINER_ENV ] && [ -f ${FILESYSTEM_PATH}/$SRVS_CONTAINER_FILE ]; then
                 if grep -q "$service" ${FILESYSTEM_PATH}/$SRVS_CONTAINER_FILE; then
                     sed -i "/$service/d" ${FILESYSTEM_PATH}/$SRVS_CONTAINER_FILE
@@ -668,25 +817,35 @@ load_services()
             fi
 
             if [ ! -z $IS_CONTAINER_ENV ] && test "$is_startup_mode" = "false"; then
+                log "load_services" "Error: Nano service $service stopped running"
                 echo "Error: Nano service $service stopped running"
                 exit 1
             fi
 
             log "load_services" "Respawn ${service}"
-            if [ "${service}" = "${FILESYSTEM_PATH}/agentCache/cp-nano-agent-cache" ] || [ "${service}" == "/etc/cp/agentIntelligence/redis/redis-server" ] || [ "${service}" = "/etc/cp/crowdsecAux/cp-nano-crowdsec-aux" ]; then
-                eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} &"
+            if [ -n "$(cat ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE} | grep $service)" ]; then
+                var_service_startup=true
+                grep -v -e "^$service$" ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE} >${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}.tmp
+                mv ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}.tmp ${FILESYSTEM_PATH}/${STARTUP_SRVS_FILE}
             else
-                eval "LD_LIBRARY_PATH=${NGEN_LIB_PATH} ${service} ${execution_flags} --filesystem_path=${FILESYSTEM_PATH} --log_files_path=${LOG_FILE_PATH} &"
+                var_service_startup=false
             fi
+            run_service $service $gaia_ld_path
             increment_watchdog_process_restart_counter
-            echo "running" >> $AGENT_RUN_STATUS_FILE
+            echo "running" > $AGENT_RUN_STATUS_FILE
             already_running="1"
         fi
 
-        if test "$already_running" = "0" && [ -f /tmp/agent-status.txt ]; then
-            echo "already running" >>$AGENT_RUN_STATUS_FILE
+        if test "$already_running" = "0" && [ -f $AGENT_RUN_STATUS_FILE ]; then
+            echo "already running" > $AGENT_RUN_STATUS_FILE
         fi
     done
+
+    if test "$all_running" = "false"; then
+        rm -f /tmp/wd.all_running
+    else
+        touch /tmp/wd.all_running
+    fi
 }
 
 get_service_status()
@@ -716,6 +875,7 @@ get_service_status()
         shift
     done
     if [ -z $service ]; then
+        log "get_service_status" "Error: service name was not provided"
         echo "Error: service name was not provided"
         exit 1
     fi
@@ -732,6 +892,7 @@ get_service_status()
         if [ "$verbose" = "true" ]; then
             echo "service '$service' is ${registration_status} and ${running_status}"
         else
+            log "get_service_status" "service '$service' is ${registration_status}"
             echo "service '$service' is ${registration_status}"
         fi
     else
@@ -746,8 +907,10 @@ get_service_status()
 
         # handle multiple instances services
         if [ "$verbose" = "true" ]; then
+            log "get_service_status" "service '$service' (Family '$fid', uid '$uid') is ${registration_status} and ${running_status}"
             echo "service '$service' (Family '$fid', uid '$uid') is ${registration_status} and ${running_status}"
         else
+            log "get_service_status" "service '$service' (Family '$fid', uid '$uid') is ${registration_status}"
             echo "service '$service' (Family '$fid', uid '$uid') is ${registration_status}"
         fi
     fi
@@ -770,6 +933,10 @@ elif test "$1" = "--restart_count" || test "$1" = "-rc"; then
     echo ${counter}
     exit 0
 elif test "$1" = "--register" || test "$1" = "-r"; then
+    if test "$2" = "--upgrade"; then
+        var_upgarde=true
+        shift
+    fi
     if test "$3" = "--family" || test "$3" = "-f"; then
         family_name=$4
         if test "$5" = "--count" || test "$5" = "-c"; then
@@ -844,8 +1011,8 @@ fi
 IS_SERVICE_STARTED=false
 echo "" >${FILESYSTEM_PATH}/$SRVS_HALTED
 while $(true); do
-    if [ -z $IS_CONTAINER_ENV ] && [ -f /tmp/restart_watchdog ]; then
-        rm -f /tmp/restart_watchdog
+    if [ -z $IS_CONTAINER_ENV ] && [ -f ${FILESYSTEM_PATH}/orchestration/restart_watchdog ]; then
+        rm -f ${FILESYSTEM_PATH}/orchestration/restart_watchdog
         if [ $ARCH = "arm" ]; then
             cp_exec "$INIT_D_PATH/nano_agent.init restart"
         else

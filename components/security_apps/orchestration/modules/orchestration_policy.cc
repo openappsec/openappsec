@@ -22,13 +22,13 @@ OrchestrationPolicy::getFogAddress() const
     return fog_address;
 }
 
-const unsigned long &
+unsigned int
 OrchestrationPolicy::getSleepInterval() const
 {
     return sleep_interval;
 }
 
-const unsigned long &
+unsigned int
 OrchestrationPolicy::getErrorSleepInterval() const
 {
     return error_sleep_interval;
@@ -37,10 +37,13 @@ OrchestrationPolicy::getErrorSleepInterval() const
 void
 OrchestrationPolicy::serialize(JSONInputArchive &archive)
 {
-    // Split it, so the order doesn't matter.
-    archive(make_nvp("fog-address",             fog_address));
-    archive(make_nvp("pulling-interval",          sleep_interval));
-    archive(make_nvp("error-pulling-interval",    error_sleep_interval));
+    try {
+        archive(make_nvp("fog-address", fog_address));
+        archive(make_nvp("pulling-interval", sleep_interval));
+        archive(make_nvp("error-pulling-interval", error_sleep_interval));
+    } catch (const cereal::Exception&) {
+        archive(make_nvp("orchestration", *this));
+    }
 }
 
 bool

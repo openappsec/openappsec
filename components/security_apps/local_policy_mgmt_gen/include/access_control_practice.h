@@ -181,12 +181,14 @@ public:
     const AccessControlRateLimit &getRateLimit() const;
     const std::string & getAppSecClassName() const;
     const std::string & getName() const;
+    const std::string & getMode(const std::string &default_mode = "inactive") const;
     void setName(const std::string &_name);
 
 private:
     AccessControlRateLimit      rate_limit;
     std::string                 appsec_class_name;
     std::string                 practice_name;
+    std::string                 mode;
 };
 
 #endif // __ACCESS_CONTROL_PRACTICE_H__

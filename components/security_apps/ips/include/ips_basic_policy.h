@@ -50,9 +50,13 @@ public:
 
 private:
     void readRules(cereal::JSONInputArchive &ar);
+    void readTriggerId(cereal::JSONInputArchive &ar);
+    void readExceptionId(cereal::JSONInputArchive &ar);
     void readDefaultAction(cereal::JSONInputArchive &ar);
 
     std::vector<Rule> rules;
+    std::string trigger_id;
+    std::string exception_id;
 };
 
 #endif // __IPS_BASIC_POLICY_H__

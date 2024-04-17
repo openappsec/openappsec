@@ -7,6 +7,8 @@ SMB_LOG_FILE_PATH="/storage"
 USR_LIB_PATH="/usr/lib"
 USR_SBIN_PATH="/usr/sbin"
 INIT_D_PATH="/etc/init.d"
+NANO_AGENT_SERVICE_NAME="nano_agent"
+NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
 CONF_PATH="conf"
 CERTS_PATH="certs"
 DATA_PATH="data"
@@ -19,6 +21,8 @@ ENV_DETAILS_FILE="${CONF_PATH}/environment-details.cfg"
 WATCHDOG_MAX_ROTATIONS=10
 WATCHDOG_MAX_FILE_SIZE=4096
 FORCE_CLEAN_FLAG='^(--force-clean|-f)$'
+VS_ID=""
+VS_LIB_SUB_FOLDER=
 
 is_wlp_orchestration="false"
 ORCHESTRATION_EXE_SOURCE_PATH="./bin/orchestration_comp"
@@ -211,7 +215,6 @@ if [ -n "${CP_USR_SBIN_PATH}" ]; then
     export PATH=$PATH:$CP_USR_SBIN_PATH
 fi
 
-
 while true; do
     if [ "$1" = "--arm32_openwrt" ]; then
         var_arch="arm"
@@ -294,6 +297,14 @@ while true; do
             FILESYSTEM_PATH=$1
         fi
         echo "Filesystem paths: ${FILESYSTEM_PATH}"
+    elif [ "$1" = "--vs_id" ]; then
+        shift
+        VS_ID=$1
+        FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
+        NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
+        NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
+        VS_LIB_SUB_FOLDER="/vs${VS_ID}"
+        LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
     elif [ "$1" = "--log_files_path" ]; then
         shift
         var=$1
@@ -323,6 +334,23 @@ while true; do
     fi
     shift
 done
+
+# VS ID argument is available only on install, for other actions, extract it from the package location
+if [ -z "$VS_ID" ]; then
+    parent_pid=$PPID
+    parent_cmdline=$(ps -o cmd= -p "$parent_pid")
+    parent_dir=$(dirname "$parent_cmdline")
+    packages_folder=$(dirname "$parent_dir")
+    vs_folder=$(dirname "$packages_folder")
+    VS_ID=`echo ${vs_folder} | grep -oE '/etc/cp/vs[0-9]+$' | grep -oE '[0-9]+$'`
+    if [ -n "$VS_ID" ]; then
+        FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
+        NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
+        NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
+        VS_LIB_SUB_FOLDER="/vs${VS_ID}"
+        LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
+    fi
+fi
 
 if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
     if [ -n "$OTP_TOKEN" ] && [ -z "$var_token" ] && [ "$var_no_otp" = "false" ]; then
@@ -464,23 +492,30 @@ update_cloudguard_appsec_manifest()
 
 install_watchdog_gaia()
 {
+    watchdog_pm_name="cp-nano-watchdog"
+    if [ -n "$VS_ID" ]; then
+        watchdog_pm_name="cp-nano-watchdog-vs${VS_ID}"
+        cp_exec "ln -s ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/${watchdog_pm_name}"
+    fi
+    
     # verify that DB is clean from cp-nano-watchdog
-    tellpm cp-nano-watchdog
-    dbset process:cp-nano-watchdog
-    dbset process:cp-nano-watchdog:path
-    dbset process:cp-nano-watchdog:arg:1
-    dbset process:cp-nano-watchdog:runlevel
+    tellpm ${watchdog_pm_name}
+    dbset process:${watchdog_pm_name}
+    dbset process:${watchdog_pm_name}:path
+    dbset process:${watchdog_pm_name}:arg:1
+    dbset process:${watchdog_pm_name}:runlevel
     # Add cp-nano-watchdog to DB
-    dbset process:cp-nano-watchdog t
-    dbset process:cp-nano-watchdog:path ${FILESYSTEM_PATH}/${WATCHDOG_PATH}
-    dbset process:cp-nano-watchdog:arg:1 --gaia
-    dbset process:cp-nano-watchdog:runlevel 1
+    dbset process:${watchdog_pm_name} t
+    dbset process:${watchdog_pm_name}:path ${FILESYSTEM_PATH}/${WATCHDOG_PATH}
+    dbset process:${watchdog_pm_name}:arg:1 --gaia
+    dbset process:${watchdog_pm_name}:runlevel 1
     dbset :save
-    tellpm cp-nano-watchdog t
+    tellpm ${watchdog_pm_name} t
 }
 
 install_watchdog()
 {
+    is_upgrade=$1
     # Check if watchdog is updated/new
     old_cp_nano_watchdog_md5=""
     new_cp_nano_watchdog_md5=$(md5sum watchdog/watchdog | awk '{print$1}')
@@ -489,8 +524,8 @@ install_watchdog()
     fi
     if [ "$old_cp_nano_watchdog_md5" = "$new_cp_nano_watchdog_md5" ]; then
         # Watchdog did not changed
-        cp_print "There is no update in watchdog. Everything is up to date. Reregistering services to be on the sae side."
-        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+        cp_print "There is no update in watchdog. Everything is up to date. Reregistering services to be on the same side."
+        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
         if [ "$IS_K8S_ENV" = "true" ]; then
             cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
         fi
@@ -502,10 +537,11 @@ install_watchdog()
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${WATCHDOG_PATH}"
     cp_copy watchdog/watchdog ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog
     cp_copy watchdog/wait-for-networking-inspection-modules.sh ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh
-    cp_exec "chmod 700  ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog"
-    cp_exec "chmod 700  ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh"
+    cp_exec "chmod 700 ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog"
+    cp_exec "chmod 700 ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh"
     cp_exec "touch ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wd.services"
-    cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+
+    cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
     if [ "$IS_K8S_ENV" = "true" ]; then
         cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
     fi
@@ -533,11 +569,15 @@ install_watchdog()
             cp_exec "ln -s ${CPDIR}/bin/cpopenssl ${CPDIR}/bin/openssl"
         elif [ $var_startup_service = "systemd" ]; then
             cp_print "Install for systemd"
-            cp_copy service/x86/ubuntu16/nano_agent.service /etc/systemd/system/nano_agent.service
-            echo "ExecStart=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/nano_agent.service
-            echo "ExecStartPost=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh" >> /etc/systemd/system/nano_agent.service
-			echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/nano_agent.service
-
+            cp_copy service/x86/ubuntu16/nano_agent.service /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            if [ -z "$VS_ID" ]; then
+                echo "ExecStart=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+                echo "ExecStartPost=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            else
+                echo "ExecStart=ip netns exec CTX0000${VS_ID} ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            fi
+            echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            
             cp_exec "systemctl daemon-reload"
             cp_exec "systemctl enable nano_agent"
         else
@@ -562,7 +602,7 @@ install_watchdog()
         elif [ $var_arch = "gaia" ]; then
             install_watchdog_gaia
         else
-            cp_exec "service nano_agent start"
+            cp_exec "service $NANO_AGENT_SERVICE_NAME start"
         fi
     fi
 }
@@ -601,7 +641,7 @@ install_cp_nano_ctl()
         cp_exec "rm -rf $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED}"
     fi
     # Removing old CP-CTL
-    if [ -f ${FILESYSTEM_PATH}/${CONF_PATH}/CP_NANO_AGENT_CTL ]; then
+    if [ -f ${FILESYSTEM_PATH}/${CONF_PATH}/$CP_NANO_AGENT_CTL ]; then
         cp_exec "rm -rf ${FILESYSTEM_PATH}/${CONF_PATH}/$CP_NANO_AGENT_CTL"
     fi
 
@@ -612,6 +652,9 @@ install_cp_nano_ctl()
     cp_exec "cp -f $CP_NANO_CLI ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL"
 
+    if [ -n "$VS_ID" ]; then
+        CP_NANO_CTL="${CP_NANO_CTL}-vs${VS_ID}"
+    fi
     cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
     cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${OPEN_APPSEC_CTL}.sh $USR_SBIN_PATH/${OPEN_APPSEC_CTL}"
 
@@ -804,16 +847,17 @@ uninstall_messaging_proxy_if_needed()
 install_orchestration()
 {
     INSTALLATION_TIME=$(date)
+
     if [ "$is_smb" != "1" ]; then
-        cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano"
+        cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}"
     else
         cp_exec "mkdir -p /storage/nano_agent${USR_LIB_PATH}/cpnano"
         cp_exec "ln -sf /storage/nano_agent${USR_LIB_PATH}/cpnano ${USR_LIB_PATH}/cpnano"
         cp_exec "mkdir -p /storage/nano_agent/${FILESYSTEM_PATH}"
         cp_exec "ln -sf /storage/nano_agent/${FILESYSTEM_PATH} ${FILESYSTEM_PATH}"
     fi
-    ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano/
-    ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano/
+    ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
+    ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
 
     if [ $var_compact_mode = true ]; then
         [ -f /etc/environment ] && . "/etc/environment"
@@ -882,15 +926,14 @@ install_orchestration()
 
         upgrade_conf_if_needed
 
-        install_watchdog
+        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+        if [ "$IS_K8S_ENV" = "true" ]; then
+            cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
+        fi
+
         cp_print "Upgrade to latest"
 
         uninstall_messaging_proxy_if_needed
-
-        ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration "$var_arch_flag" > /dev/null 2>&1
-        if [ "$IS_K8S_ENV" = "true" ]; then
-            ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh
-        fi
 
         if [ ! -f ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH} ]; then
             echo "{\"agentSettings\": []}" >  ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH}
@@ -900,21 +943,18 @@ install_orchestration()
         copy_k8s_executable
         copy_nginx_metadata_script
 
-        ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag
-        if [ "$IS_K8S_ENV" = "true" ]; then
-            ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh
-        fi
+        install_watchdog "--upgrade"
 
         cp_print "Upgrade completed successfully" ${FORCE_STDOUT}
 
-        if [ -f /etc/systemd/system/nano_agent.service ]; then
-            cat "/etc/systemd/system/nano_agent.service" | grep -q "EnvironmentFile=/etc/environment"
+        if [ -f /etc/systemd/system/${NANO_AGENT_SERVICE_FILE} ]; then
+            cat "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}" | grep -q "EnvironmentFile=/etc/environment"
             result=$?
 
             if [ $var_container_mode = false ] && [ $result -eq 0 ]; then
-                sed -i "$ d" /etc/systemd/system/nano_agent.service
-                echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/nano_agent.service
-                echo >> /etc/systemd/system/nano_agent.service
+                sed -i "$ d" /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+                echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+                echo >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
                 cp_exec "systemctl daemon-reload"
                 cp_exec "systemctl restart nano_agent"
             fi
@@ -952,6 +992,9 @@ install_orchestration()
 
 		if [ -n "${FILESYSTEM_PATH}" ]; then
 			echo "CP_ENV_FILESYSTEM=${FILESYSTEM_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+		fi
+		if [ -n "${VS_ID}" ]; then
+			echo "CP_VS_ID=${VS_ID}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
 		fi
 		if [ -n "${LOG_FILE_PATH}" ]; then
 			echo "CP_ENV_LOG_FILE=${LOG_FILE_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
@@ -1095,19 +1138,19 @@ run_pre_install_test()
 run_post_install_test()
 {
     if [ $var_is_alpine = false ]; then
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_chrono.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_chrono.so* ]; then
             cp_print "Error, libboost_chrono .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_context.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_context.so* ]; then
             cp_print "Error, libboost_context .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_system.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_system.so* ]; then
             cp_print "Error, libboost_system .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano/libboost_thread.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_thread.so* ]; then
             cp_print "Error, libboost_thread .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi

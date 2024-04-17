@@ -438,6 +438,26 @@ private:
     }
 // LCOV_EXCL_STOP
 
+    BioConnectionStatus
+    tryToBioConnect(const string &full_address)
+    {
+        BIO_set_conn_hostname(bio.get(), full_address.c_str());
+        BIO_set_nbio(bio.get(), 1);
+        auto bio_connect = BIO_do_connect(bio.get());
+
+        if (bio_connect > 0) return BioConnectionStatus::SUCCESS;
+        if (BIO_should_retry(bio.get())) return BioConnectionStatus::SHOULD_RETRY;
+
+        string bio_error = ERR_error_string(ERR_get_error(), nullptr);
+        dbgWarning(D_CONNECTION)
+            << "Connection to: "
+            << full_address
+            << " failed and won't retry. Error: "
+            << bio_error;
+        return BioConnectionStatus::SHOULD_NOT_RETRY;
+    }
+
+
     Maybe<void>
     connectToHost()
     {
@@ -449,45 +469,43 @@ private:
         }
 
         dbgFlow(D_CONNECTION) << "Connecting to " << full_address;
-        BIO_set_conn_hostname(bio.get(), full_address.c_str());
-        BIO_set_nbio(bio.get(), 1);
 
         I_MainLoop *i_mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
         I_TimeGet *i_time = Singleton::Consume<I_TimeGet>::by<Messaging>();
 
-        auto bio_connect = BIO_do_connect(bio.get());
+        BioConnectionStatus bio_connect = tryToBioConnect(full_address);
         uint attempts_count = 0;
         auto conn_end_time = i_time->getMonotonicTime() + getConnectionTimeout();
-        while (i_time->getMonotonicTime() < conn_end_time && bio_connect <= 0) {
-            if (!BIO_should_retry(bio.get())) {
-                auto curr_time = chrono::duration_cast<chrono::seconds>(i_time->getMonotonicTime());
-                active = genError(curr_time + chrono::seconds(60));
-                string bio_error = ERR_error_string(ERR_get_error(), nullptr);
-                return genError(
-                    "Failed to connect to: " +
-                    full_address +
-                    ", error: " +
-                    bio_error +
-                    ". Connection suspended for 60 seconds");
-            }
-            attempts_count++;
-            if (!isBioSocketReady()) {
+        while (i_time->getMonotonicTime() < conn_end_time && bio_connect == BioConnectionStatus::SHOULD_RETRY) {
+            if (isBioSocketReady()) {
+                bio_connect = tryToBioConnect(full_address);
+            } else {
                 i_mainloop->yield((attempts_count % 10) == 0);
-                continue;
             }
-            bio_connect = BIO_do_connect(bio.get());
         }
-        if (bio_connect > 0) {
+
+        if (bio_connect == BioConnectionStatus::SUCCESS) {
             if (isUnsecure() || isOverProxy()) return Maybe<void>();
             return performHandshakeAndVerifyCert(i_time, i_mainloop);
         }
+
+        if (bio_connect == BioConnectionStatus::SHOULD_NOT_RETRY) {
+            auto curr_time = chrono::duration_cast<chrono::seconds>(i_time->getMonotonicTime());
+            active = genError(curr_time + chrono::seconds(60));
+            dbgWarning(D_CONNECTION)
+                << "Connection to: "
+                << full_address
+                << " failed and will be suspended for 60 seconds";
+            return genError(full_address + ". There won't be a retry attempt.");
+        }
+
         auto curr_time = chrono::duration_cast<chrono::seconds>(i_time->getMonotonicTime());
         active = genError(curr_time + chrono::seconds(60));
-        return genError(
-            "Failed to establish new connection to: " +
-            full_address +
-            " after reaching timeout." +
-            " Connection suspended for 60 seconds");
+        dbgWarning(D_CONNECTION)
+            << "Connection attempts to: "
+            << full_address
+            << " have reached timeout and will be suspended for 60 seconds";
+        return genError(full_address + ". Connection has reached timeout.");
     }
 
     Maybe<uint, HTTPResponse>
@@ -592,7 +610,7 @@ private:
             auto send_size = sendData(request, data_left_to_send);
             if (!send_size.ok()) return send_size.passErr();
             data_left_to_send -= *send_size;
-            i_mainloop->yield(*send_size == 0); // We want to force waiting if we failed to send the data
+            i_mainloop->yield(*send_size == 0);
         }
 
         auto receiving_end_time = i_time->getMonotonicTime() + getConnectionTimeout();

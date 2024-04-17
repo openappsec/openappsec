@@ -14,6 +14,9 @@
 #include "intelligence_invalidation.h"
 
 #include <sstream>
+#include <boost/uuid/uuid_generators.hpp>
+#include "boost/uuid/uuid_io.hpp"
+#include "boost/uuid/uuid.hpp"
 
 #include "i_intelligence_is_v2.h"
 
@@ -24,7 +27,8 @@ Invalidation::Invalidation(const string &class_value)
         :
     source_id(genError<void>()),
     object_type(genError<void>()),
-    listening_id(genError<void>())
+    listening_id(genError<void>()),
+    registration_id(genError<void>())
 {
     setClassifier(ClassifierType::CLASS, class_value);
 }
@@ -33,20 +37,6 @@ Invalidation &
 Invalidation::setClassifier(ClassifierType type, const string &val)
 {
     classifiers[type] = val;
-    return *this;
-}
-
-Invalidation &
-Invalidation::setStringAttr(const string &attr, const string &val, bool is_main)
-{
-    is_main ? string_main_attr[attr] = val : string_attr[attr] = val;
-    return *this;
-}
-
-Invalidation &
-Invalidation::setStringSetAttr(const string &attr, const set<string> &val, bool is_main)
-{
-    is_main ? set_string_main_attr[attr] = val : set_string_attr[attr] = val;
     return *this;
 }
 
@@ -71,38 +61,6 @@ Invalidation::setInvalidationType(InvalidationType type)
     return *this;
 }
 
-Maybe<string, void>
-Invalidation::getStringMainAttr(const string &attr) const
-{
-    auto val_ref = string_main_attr.find(attr);
-    if (val_ref == string_main_attr.end()) return genError<void>();
-    return val_ref->second;
-}
-
-Maybe<set<string>, void>
-Invalidation::getStringSetMainAttr(const string &attr) const
-{
-    auto val_ref = set_string_main_attr.find(attr);
-    if (val_ref == set_string_main_attr.end()) return genError<void>();
-    return val_ref->second;
-}
-
-Maybe<string, void>
-Invalidation::getStringAttr(const string &attr) const
-{
-    auto val_ref = string_attr.find(attr);
-    if (val_ref == string_attr.end()) return genError<void>();
-    return val_ref->second;
-}
-
-Maybe<set<string>, void>
-Invalidation::getStringSetAttr(const string &attr) const
-{
-    auto val_ref = set_string_attr.find(attr);
-    if (val_ref == set_string_attr.end()) return genError<void>();
-    return val_ref->second;
-}
-
 bool
 Invalidation::report(I_Intelligence_IS_V2 *interface) const
 {
@@ -113,6 +71,7 @@ Invalidation::report(I_Intelligence_IS_V2 *interface) const
 Maybe<uint>
 Invalidation::startListening(I_Intelligence_IS_V2 *interface, const function<void(const Invalidation &)> &cb)
 {
+    registration_id = to_string(boost::uuids::random_generator()());
     auto res = interface->registerInvalidation(*this, cb);
     if (res.ok()) listening_id = *res;
     return res;
@@ -176,53 +135,29 @@ Invalidation::genObject() const
     if (object_type.ok()) invalidation <<", \"objectType\": \"" << convertObjectType.at(*object_type) << '"';
     invalidation << ", \"invalidationType\": \"" << convertInvalidationType.at(invalidation_type) << '"';
     if (source_id.ok()) invalidation <<", \"sourceId\": \"" << *source_id << '"';
+    if (registration_id.ok()) invalidation <<", \"invalidationRegistrationId\": \"" << *registration_id << '"';
 
-    if (!string_main_attr.empty() || !set_string_main_attr.empty()) {
+    if (!main_attributes.empty()) {
         invalidation << ", \"mainAttributes\": [ ";
         bool first = true;
-        for (auto &attr : string_main_attr) {
+        for (auto &main_attr : main_attributes) {
             if (!first) invalidation << ", ";
-            invalidation << "{ \"" << attr.first << "\": \"" << attr.second << "\" }";
+            auto val = main_attr.genObject();
+            if (!val.ok()) continue;
+            invalidation << *val;
             first = false;
         }
-
-        for (auto &attr : set_string_main_attr) {
-            if (!first) invalidation << ", ";
-            auto val = makeSeparatedStr(attr.second, ", ");
-            invalidation << "{ \"" << attr.first << "\": [ ";
-            bool internal_first = true;
-            for (auto &value : attr.second) {
-                if (!internal_first) invalidation << ", ";
-                invalidation << "\"" << value << "\"";
-                internal_first = false;
-            }
-            invalidation << " ] }";
-            first = false;
-        }
-
         invalidation << " ]";
     }
 
-    if (!string_attr.empty() || !set_string_attr.empty()) {
+    if (!attributes.empty()) {
         invalidation << ", \"attributes\": [ ";
         bool first = true;
-        for (auto &attr : string_attr) {
+        for (auto &attr : attributes) {
             if (!first) invalidation << ", ";
-            invalidation << "{ \"" << attr.first << "\": \"" << attr.second << "\" }";
-            first = false;
-        }
-
-        for (auto &attr : set_string_attr) {
-            if (!first) invalidation << ", ";
-            auto val = makeSeparatedStr(attr.second, ", ");
-            invalidation << "{ \"" << attr.first << "\": [ ";
-            bool internal_first = true;
-            for (auto &value : attr.second) {
-                if (!internal_first) invalidation << ", ";
-                invalidation << "\"" << value << "\"";
-                internal_first = false;
-            }
-            invalidation << " ] }";
+            auto val = attr.genObject();
+            if (!val.ok()) continue;
+            invalidation << *val;
             first = false;
         }
 
@@ -237,7 +172,7 @@ Invalidation::genObject() const
 bool
 Invalidation::isLegalInvalidation() const
 {
-    if (!set_string_main_attr.empty() || !string_main_attr.empty()) {
+    if (!main_attributes.empty() || !attributes.empty()) {
         if (classifiers[ClassifierType::FAMILY] == "") return false;
     }
 
@@ -254,6 +189,18 @@ template <>
 class EnumCount<ClassifierType> : public EnumCountSpecialization<ClassifierType, 6> {};
 
 bool
+Invalidation::attr_matches(const vector<StrAttributes> &current, const vector<StrAttributes> &other) const
+{
+    if (current.empty()) return true;
+    for (auto &attr : current) {
+        for(auto &other_attr : other) {
+            if (attr.matches(other_attr)) return true;
+        }
+    }
+    return false;
+}
+
+bool
 Invalidation::matches(const Invalidation &other) const
 {
     for (auto key : NGEN::Range<ClassifierType>()) {
@@ -264,53 +211,104 @@ Invalidation::matches(const Invalidation &other) const
         if (!other.object_type.ok() || *object_type != *other.object_type) return false;
     }
 
-    if (invalidation_type != other.invalidation_type) return false;
-
     if (source_id.ok()) {
         if (!other.source_id.ok() || *source_id != *other.source_id) return false;
     }
 
-    for (auto &key_value : string_main_attr) {
-        if (!other.hasMainAttr(key_value.first, key_value.second)) return false;
-    }
+    if (!attr_matches(main_attributes, other.getMainAttributes())) return false;
 
-
-    for (auto &key_values : set_string_main_attr) {
-        for (auto &value : key_values.second) {
-            if (!other.hasMainAttr(key_values.first, value)) return false;
-        }
-    }
-
-    for (auto &key_value : string_attr) {
-        if (!other.hasAttr(key_value.first, key_value.second)) return false;
-    }
-
-
-    for (auto &key_values : set_string_attr) {
-        for (auto &value : key_values.second) {
-            if (!other.hasAttr(key_values.first, value)) return false;
-        }
-    }
+    if(!attr_matches(attributes, other.getAttributes())) return false;
 
     return true;
 }
 
-bool
-Invalidation::hasMainAttr(const string &key, const string &value) const
+Invalidation &
+Invalidation::addAttr(const StrAttributes &attr)
 {
-    auto string_elem = string_main_attr.find(key);
-    if (string_elem != string_main_attr.end()) return string_elem->second == value;
+    attributes.emplace_back(attr);
+    return *this;
+}
 
-    auto set_string_elem = set_string_main_attr.find(key);
-    if (set_string_elem != set_string_main_attr.end()) {
-        return set_string_elem->second.find(value) != set_string_elem->second.end();
+Invalidation &
+Invalidation::addMainAttr(const StrAttributes &attr)
+{
+    main_attributes.emplace_back(attr);
+    return *this;
+}
+
+Maybe<string, void>
+Invalidation::getRegistrationID() const{
+    return registration_id;
+}
+
+StrAttributes &
+StrAttributes::addStringAttr(const std::string &attr, const std::string &val)
+{
+    string_attr[attr] = val;
+    return *this;
+}
+
+StrAttributes &
+StrAttributes::addStringSetAttr(const std::string &attr, const std::set<std::string> &val)
+{
+    set_string_attr[attr] = val;
+    return *this;
+}
+
+Maybe<std::string, void>
+StrAttributes::getStringAttr(const std::string &attr) const
+{
+    auto val_ref = string_attr.find(attr);
+    if (val_ref == string_attr.end()) return genError<void>();
+    return val_ref->second;
+}
+
+Maybe<std::set<std::string>, void>
+StrAttributes::getStringSetAttr(const string &attr) const
+{
+    auto val_ref = set_string_attr.find(attr);
+    if (val_ref == set_string_attr.end()) return genError<void>();
+    return val_ref->second;
+}
+
+Maybe<std::string, void>
+StrAttributes::genObject() const
+{
+    stringstream attributes_ss;
+    if (string_attr.empty() && set_string_attr.empty()) return genError<void>();
+    bool first = true;
+    attributes_ss << "{ ";
+    for (auto &attr : string_attr) {
+        if (!first) attributes_ss << ", ";
+        attributes_ss << "\"" << attr.first << "\": \"" << attr.second << "\"";
+        first = false;
     }
 
-    return false;
+    for (auto &attr : set_string_attr) {
+        if (!first) attributes_ss << ", ";
+        auto val = makeSeparatedStr(attr.second, ", ");
+        attributes_ss << "\"" << attr.first << "\": [ ";
+        bool internal_first = true;
+        for (auto &value : attr.second) {
+            if (!internal_first) attributes_ss << ", ";
+            attributes_ss << "\"" << value << "\"";
+            internal_first = false;
+        }
+        attributes_ss << " ]";
+        first = false;
+    }
+    attributes_ss << " }";
+    return attributes_ss.str();
 }
 
 bool
-Invalidation::hasAttr(const string &key, const string &value) const
+StrAttributes::isEmpty() const
+{
+    return string_attr.empty() && set_string_attr.empty();
+}
+
+bool
+StrAttributes::hasAttr(const string &key, const string &value) const
 {
     auto string_elem = string_attr.find(key);
     if (string_elem != string_attr.end()) return string_elem->second == value;
@@ -321,4 +319,55 @@ Invalidation::hasAttr(const string &key, const string &value) const
     }
 
     return false;
+}
+
+bool
+StrAttributes::matches(const StrAttributes &other) const
+{
+    for (auto &key_value : string_attr) {
+        if (!other.hasAttr(key_value.first, key_value.second)) return false;
+    }
+
+    for (auto &key_values : set_string_attr) {
+        for (auto &value : key_values.second) {
+            if (!other.hasAttr(key_values.first, value)) return false;
+        }
+    }
+
+    return true;
+}
+
+void
+StrAttributes::serialize(cereal::JSONInputArchive &ar)
+{
+    SerializableMultiMap<string, set<string>> attributes_map;
+    attributes_map.load(ar);
+    string_attr = attributes_map.getMap<string>();
+    set_string_attr = attributes_map.getMap<set<string>>();
+}
+
+void
+StrAttributes::performOutputingSchema(ostream &out, int level) {
+    bool first = true;
+    RestHelper::printIndent(out, level) << "{\n";
+    for (auto &attr : string_attr) {
+        if (!first) out << ",\n";
+        RestHelper::printIndent(out, level + 1) << "\"" << attr.first << "\": \"" << attr.second << "\"";
+        first = false;
+    }
+
+    for (auto &attr : set_string_attr) {
+        if (!first) out << ",\n";
+        RestHelper::printIndent(out, level + 1) << "\"" << attr.first << "\": [\n";
+        bool internal_first = true;
+        for (auto &value : attr.second) {
+            if (!internal_first) out << ",\n";
+            RestHelper::printIndent(out, level + 2) << "\"" << value << "\"";
+            internal_first = false;
+        }
+        out << "\n";
+        RestHelper::printIndent(out, level + 1) << "]\n";
+        first = false;
+    }
+    RestHelper::printIndent(out, level) << "}";
 }

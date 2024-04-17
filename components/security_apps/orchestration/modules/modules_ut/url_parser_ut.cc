@@ -59,6 +59,15 @@ TEST_F(URLParserTest, parseAWSWithoutSlash)
     EXPECT_EQ("", link.getQuery());
 }
 
+TEST_F(URLParserTest, setHost)
+{
+    URLParser link("http://172.23.92.180:180/something");
+
+    EXPECT_EQ(link.getHost(), "172.23.92.180");
+    link.setHost("my.domain");
+    EXPECT_EQ(link.getHost(), "my.domain");
+}
+
 TEST_F(URLParserTest, protocolIsMissing)
 {
     // HTTPS is set by default when protocol is not present in URL.

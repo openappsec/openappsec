@@ -223,7 +223,7 @@ FILE_CONTENT_HANDLER(
 FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 #endif // gaia || smb
 
-FILE_CONTENT_HANDLER("AppSecModelVersion", "/etc/cp/conf/waap/waap.data", getWaapModelVersion)
+FILE_CONTENT_HANDLER("AppSecModelVersion", "<FILESYSTEM-PREFIX>/conf/waap/waap.data", getWaapModelVersion)
 
 #endif // FILE_CONTENT_HANDLER
 

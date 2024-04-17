@@ -129,6 +129,18 @@ URLParser::parseProtocol(const string &url) const
     return URLProtocol::HTTPS;
 }
 
+string
+URLParser::getHost() const
+{
+    return host.empty() ? base_url : host;
+}
+
+void
+URLParser::setHost(const string &new_host)
+{
+    host = new_host;
+}
+
 void
 URLParser::setQuery(const string &new_query)
 {

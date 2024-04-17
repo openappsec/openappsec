@@ -47,6 +47,7 @@ HybridModeMetric::upon(const HybridModeMetricEvent &)
     string cmd_output = maybe_cmd_output.unpack();
     trim(cmd_output);
     dbgDebug(D_ORCHESTRATOR) << "Watchdog process counter: " << cmd_output;
+    if (cmd_output.empty()) return;
 
     try {
         wd_process_restart.report(stoi(cmd_output));

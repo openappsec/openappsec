@@ -1025,6 +1025,7 @@ NewAppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
     parseMandatoryAppsecJSONKey<NewAppSecPracticeWebAttacks>("webAttacks", web_attacks, archive_in);
     parseAppsecJSONKey<NewAppSecPracticeAntiBot>("antiBot", anti_bot, archive_in);
     parseAppsecJSONKey<string>("name", practice_name, archive_in);
+    parseAppsecJSONKey<string>("practiceMode", mode, archive_in, "inherited");
 }
 
 void
@@ -1080,4 +1081,11 @@ NewAppSecPracticeSpec::getName() const
 {
     return practice_name;
 }
+
+const string &
+NewAppSecPracticeSpec::getMode(const string &default_mode) const
+{
+    return isModeInherited(mode) ? default_mode : mode;
+}
+
 // LCOV_EXCL_STOP

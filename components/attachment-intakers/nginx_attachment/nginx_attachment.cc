@@ -1136,7 +1136,8 @@ private:
             NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
             uuid = opaque.getSessionUUID();
         }
-        web_response_data.uuid_size = uuid.size();
+        web_response_data.uuid_size =
+            string("Incident Id: ").length() + uuid.size();
 
         if (web_trigger_conf.getDetailsLevel() == "Redirect") {
             web_response_data.response_data.redirect_data.redirect_location_size =

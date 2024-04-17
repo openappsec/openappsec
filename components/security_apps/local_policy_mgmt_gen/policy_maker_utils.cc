@@ -1002,8 +1002,9 @@ PolicyMakerUtils::createIpsSections(
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
         policy);
+    const string &override_mode =
+        apssec_practice.getIntrusionPrevention().getMode(apssec_practice.getMode(default_mode));
 
-    const string &override_mode = apssec_practice.getIntrusionPrevention().getMode(default_mode);
     if (override_mode == "Inactive" || override_mode == "Disabled") return;
 
     IpsProtectionsSection ips_section = IpsProtectionsSection(
@@ -1076,8 +1077,9 @@ PolicyMakerUtils::createSnortSections(
     auto apssec_practice = getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
         rule_annotations[AnnotationTypes::PRACTICE],
         policy);
+    const string &override_mode =
+        apssec_practice.getSnortSignatures().getOverrideMode(apssec_practice.getMode(default_mode));
 
-    const string &override_mode = apssec_practice.getSnortSignatures().getOverrideMode(default_mode);
     if (override_mode == "Inactive" ||
         override_mode == "Disabled" ||
         apssec_practice.getSnortSignatures().getFiles().size() == 0) {
@@ -1129,7 +1131,7 @@ PolicyMakerUtils::createFileSecuritySections(
         asset_id,
         practice_name,
         practice_id,
-        default_mode
+        apssec_practice.getMode(default_mode)
     );
 
     file_security[asset_name] = file_security_section;
@@ -1171,7 +1173,7 @@ PolicyMakerUtils::createRateLimitSection(
         asset_name,
         url,
         uri,
-        access_control_practice.getRateLimit().getMode(default_mode),
+        access_control_practice.getRateLimit().getMode(access_control_practice.getMode(default_mode)),
         practice_id,
         rule_annotations[AnnotationTypes::ACCESS_CONTROL_PRACTICE],
         rules
@@ -1191,6 +1193,8 @@ PolicyMakerUtils::createWebAppSection(
             rule_annotations[AnnotationTypes::PRACTICE],
             policy
         );
+    const string &practice_mode = apssec_practice.getMode(default_mode);
+
     PracticeAdvancedConfig practice_advance_config(
         apssec_practice.getWebAttacks().getMaxHeaderSizeBytes(),
         apssec_practice.getWebAttacks().getMaxBodySizeKb(),
@@ -1206,8 +1210,8 @@ PolicyMakerUtils::createWebAppSection(
         practice_id,
         rule_annotations[AnnotationTypes::PRACTICE],
         rule_config.getContext(),
-        apssec_practice.getWebAttacks().getMinimumConfidence(default_mode),
-        apssec_practice.getWebAttacks().getMode(default_mode),
+        apssec_practice.getWebAttacks().getMinimumConfidence(practice_mode),
+        apssec_practice.getWebAttacks().getMode(practice_mode),
         practice_advance_config,
         apssec_practice.getAntiBot(),
         log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],

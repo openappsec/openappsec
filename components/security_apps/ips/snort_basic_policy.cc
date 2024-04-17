@@ -16,6 +16,19 @@ using namespace std;
 void
 SnortRuleSelector::load(cereal::JSONInputArchive &ar)
 {
+    try {
+        ar(cereal::make_nvp("triggers", trigger_id));
+    } catch (const cereal::Exception &e) {
+        ar.setNextName(nullptr);
+        trigger_id = "";
+    }
+
+    try {
+        ar(cereal::make_nvp("exceptions", exception_id));
+    } catch (const cereal::Exception &e) {
+        ar.setNextName(nullptr);
+        exception_id = "";
+    }
     string mode;
     ar(cereal::make_nvp("mode", mode), cereal::make_nvp("files", file_names));
 
@@ -38,7 +51,7 @@ SnortRuleSelector::selectSignatures() const
 
     for (auto &file : file_names) {
         for (auto &signature : (*signatures).getSignatures(file)) {
-            res.emplace_back(signature, action);
+            res.emplace_back(signature, action, trigger_id, exception_id);
         }
     }
     return res;

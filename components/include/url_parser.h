@@ -35,8 +35,10 @@ public:
     bool isOverSSL() const { return over_ssl; }
     std::string getPort() const { return port; }
     std::string getQuery() const { return query; }
+    std::string getHost() const;
     URLProtocol getProtocol() const { return protocol; }
     std::string toString() const;
+    void setHost(const std::string &new_host);
     void setQuery(const std::string &new_query);
 
 private:
@@ -47,6 +49,7 @@ private:
     std::string base_url;
     std::string port;
     std::string query;
+    std::string host;
     URLProtocol protocol;
 };
 

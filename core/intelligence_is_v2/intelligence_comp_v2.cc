@@ -37,13 +37,11 @@ static const string registration_uri = "/api/v2/intelligence/invalidation/regist
 class I_InvalidationCallBack
 {
 public:
-    virtual void performCallBacks(const Invalidation &invalidation) const = 0;
+    virtual void performCallBacks(const Invalidation &invalidation, const string &registration_id) const = 0;
 
 protected:
     virtual ~I_InvalidationCallBack() {}
 };
-
-using MainAttrTypes = SerializableMultiMap<string, set<string>>;
 
 static const map<string, Intelligence::ObjectType> object_names = {
     { "asset", Intelligence::ObjectType::ASSET },
@@ -52,6 +50,12 @@ static const map<string, Intelligence::ObjectType> object_names = {
     { "configuration", Intelligence::ObjectType::CONFIGURATION },
     { "session", Intelligence::ObjectType::SESSION },
     { "shortLived", Intelligence::ObjectType::SHORTLIVED }
+};
+
+static const map<string, Intelligence::InvalidationType> invalidation_type_names = {
+    { "add", Intelligence::InvalidationType::ADD },
+    { "delete", Intelligence::InvalidationType::DELETE },
+    { "update", Intelligence::InvalidationType::UPDATE }
 };
 
 class InvalidationRegistration
@@ -108,11 +112,22 @@ public:
         do {
             ++running_id;
         } while (callbacks.find(running_id) != callbacks.end());
+        auto invalidation_reg_id = invalidation.getRegistrationID();
+        if (invalidation_reg_id.ok()) registration_id_to_cb[*invalidation_reg_id] = cb;
         callbacks.emplace(running_id, make_pair(invalidation, cb));
         return running_id;
     }
 
-    void erase(uint id) { callbacks.erase(id); }
+    void
+    erase(uint id)
+    {
+        auto actual_invalidation = callbacks.find(id);
+        if (actual_invalidation == callbacks.end()) return;
+        auto invalidation_reg_id = actual_invalidation->second.first.getRegistrationID();
+        if (invalidation_reg_id.ok()) registration_id_to_cb.erase(*invalidation_reg_id);
+        callbacks.erase(id);
+    }
+
     bool empty() const { return callbacks.empty(); }
 
     InvalidationRegistration::RestCall
@@ -128,9 +143,13 @@ public:
     }
 
     void
-    performCallBacks(const Invalidation &invalidation) const override
+    performCallBacks(const Invalidation &invalidation, const string &registration_id) const override
     {
         dbgDebug(D_INTELLIGENCE) << "Looking for callbacks for invalidation " << invalidation.genObject();
+        if (registration_id != "") {
+            auto invalidation_cb = registration_id_to_cb.find(registration_id);
+            if (invalidation_cb != registration_id_to_cb.end()) return invalidation_cb->second(invalidation);
+        }
         for (auto &registed_invalidation : callbacks) {
             dbgTrace(D_INTELLIGENCE) << "Checking against: " << registed_invalidation.second.first.genObject();
             performCallBacksImpl(invalidation, registed_invalidation.second);
@@ -140,20 +159,22 @@ public:
 private:
     void
     performCallBacksImpl(
-        const Invalidation &actual_invalidation,
-        const pair<Invalidation, function<void(const Invalidation &)>> &invalidation_and_cb
+            const Invalidation &actual_invalidation,
+            const pair<Invalidation, function<void(const Invalidation &)>> &invalidation_and_cb
     ) const
     {
         auto &registereed_invalidation = invalidation_and_cb.first;
         auto &cb = invalidation_and_cb.second;
-        if (registereed_invalidation.matches(actual_invalidation)) cb(actual_invalidation);
+        if (!registereed_invalidation.matches(actual_invalidation)) return;
+        cb(actual_invalidation);
     }
 
     map<uint, pair<Invalidation, function<void(const Invalidation &)>>> callbacks;
+    map<string, function<void(const Invalidation &)>> registration_id_to_cb;
     uint running_id = 0;
 };
 
-class RecieveInvalidation : public ServerRest
+class ReceiveInvalidation : public ServerRest
 {
 public:
     void
@@ -168,14 +189,14 @@ public:
         if (kind.isActive()) invalidation.setClassifier(ClassifierType::KIND, kind.get());
 
         if (mainAttributes.isActive()) {
-            auto strings = getMainAttr<string>();
-            for (const auto &value : strings) {
-                invalidation.setStringAttr(value.first, value.second);
+            for (auto &vec_entry : mainAttributes.get()) {
+                invalidation.addMainAttr(vec_entry);
             }
+        }
 
-            auto string_sets = getMainAttr<set<string>>();
-            for (const auto &value : string_sets) {
-                invalidation.setStringSetAttr(value.first, value.second);
+        if (attributes.isActive()) {
+            for (auto &vec_entry : attributes.get()) {
+                invalidation.addAttr(vec_entry);
             }
         }
 
@@ -186,25 +207,14 @@ public:
 
         if (sourceId.isActive()) invalidation.setSourceId(sourceId.get());
 
+        string registration_id = "";
+        if (invalidationRegistrationId.isActive()) registration_id = invalidationRegistrationId.get();
+
         auto i_cb = Singleton::Consume<I_InvalidationCallBack>::from<InvalidationCallBack>();
-        i_cb->performCallBacks(invalidation);
+        i_cb->performCallBacks(invalidation, registration_id);
     }
 
 private:
-    template <typename ValType>
-    map<string, ValType>
-    getMainAttr()
-    {
-        map<string, ValType> res;
-
-        for (auto &vec_entry : mainAttributes.get()) {
-            for (auto &attr : vec_entry.getMap<ValType>()) {
-                res[attr.first] = attr.second;
-            }
-        }
-
-        return res;
-    }
 
     C2S_LABEL_PARAM(string, class_name, "class");
     C2S_OPTIONAL_PARAM(string, category);
@@ -214,7 +224,9 @@ private:
     C2S_OPTIONAL_PARAM(string, kind);
     C2S_OPTIONAL_PARAM(string, objectType);
     C2S_OPTIONAL_PARAM(string, sourceId);
-    C2S_OPTIONAL_PARAM(vector<MainAttrTypes>, mainAttributes);
+    C2S_OPTIONAL_PARAM(string, invalidationRegistrationId);
+    C2S_OPTIONAL_PARAM(vector<StrAttributes>, mainAttributes);
+    C2S_OPTIONAL_PARAM(vector<StrAttributes>, attributes);
 };
 
 class IntelligenceComponentV2::Impl
@@ -238,7 +250,7 @@ public:
         );
 
         auto rest_api = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
-        rest_api->addRestCall<RecieveInvalidation>(RestAction::SET, "new-invalidation/source/invalidation");
+        rest_api->addRestCall<ReceiveInvalidation>(RestAction::SET, "new-invalidation/source/invalidation");
     }
 
     bool
@@ -256,8 +268,9 @@ public:
     registerInvalidation(const Invalidation &invalidation, const function<void(const Invalidation &)> &cb) override
     {
         if (!invalidation.isLegalInvalidation()) return genError("Attempting to register invalid invalidation");
-        if (!sendRegistration(invalidation)) return genError("Failed to register for invalidation");
-        return invalidations.emplace(invalidation, cb);
+        auto res = invalidations.emplace(invalidation, cb);
+        sendReccurringInvalidationRegistration();
+        return res;
     }
 
     void

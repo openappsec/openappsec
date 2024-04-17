@@ -80,4 +80,13 @@ enum class HTTPStatusCode
     HTTP_SUSPEND = -2
 };
 
+enum class BioConnectionStatus
+{
+    SUCCESS,
+    SHOULD_RETRY,
+    SHOULD_NOT_RETRY,
+
+    COUNT
+};
+
 #endif // __MESSAGING_ENUMS_H__

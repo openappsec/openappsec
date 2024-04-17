@@ -117,7 +117,7 @@ public:
         const std::string &conf_path) const = 0;
     virtual bool copyFile(const std::string &src_path, const std::string &dst_path) const = 0;
     virtual bool doesFileExist(const std::string &file_path) const = 0;
-    virtual void getClusterId() const = 0;
+    virtual void setClusterId() const = 0;
     virtual void fillKeyInJson(
         const std::string &filename,
         const std::string &_key,

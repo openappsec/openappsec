@@ -27,6 +27,7 @@
 #include "log_generator.h"
 #include "parsed_context.h"
 #include "pm_hook.h"
+#include "i_generic_rulebase.h"
 
 /// \namespace IPSSignatureSubTypes
 /// \brief Namespace containing subtypes for IPS signatures.
@@ -348,8 +349,16 @@ public:
     /// \brief Construct a SignatureAndAction object.
     /// \param _signature The complete signature.
     /// \param _action The signature action.
-    SignatureAndAction(std::shared_ptr<CompleteSignature> _signature, SignatureAction _action) :
-        signature(_signature), action(_action)
+    SignatureAndAction(
+        std::shared_ptr<CompleteSignature> _signature,
+        SignatureAction _action,
+        std::string _trigger_id,
+        std::string _exception_id)
+            :
+        signature(_signature),
+        action(_action),
+        trigger_id(_trigger_id),
+        exception_id(_exception_id)
     {}
 
     /// \brief Check if the signature is matched for prevention.
@@ -375,6 +384,11 @@ public:
         return signature->getContext();
     }
 
+    LogTriggerConf getTrigger() const;
+
+    std::set<ParameterBehavior>
+    getBehavior(const std::unordered_map<std::string, std::set<std::string>> &exceptions_dict) const;
+
 private:
     /// \brief Get the action results for the IPS state.
     /// \param ips_state The IPS entry.
@@ -382,6 +396,8 @@ private:
 
     std::shared_ptr<CompleteSignature> signature;
     SignatureAction action;
+    std::string trigger_id;
+    std::string exception_id;
 };
 } // namespace IPSSignatureSubTypes
 

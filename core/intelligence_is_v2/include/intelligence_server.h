@@ -33,7 +33,7 @@ private:
     Maybe<Response> sendQueryObjectToLocalServer(bool is_primary_port);
     Maybe<Response> sendQueryMessage();
     Maybe<Response> sendMessage();
-    Maybe<Response> createResponse();
+    Maybe<Response> createResponse(const std::string &response_body);
 
     IntelligenceRequest request;
     Flags<MessageConnectionConfig> conn_flags;

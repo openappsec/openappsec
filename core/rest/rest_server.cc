@@ -133,7 +133,7 @@ RestServer::Impl::init()
 
         auto is_primary = Singleton::Consume<I_Environment>::by<RestServer>()->get<bool>("Is Rest primary routine");
         id = mainloop->addFileRoutine(
-            I_MainLoop::RoutineType::RealTime,
+            I_MainLoop::RoutineType::Offline,
             fd,
             [&] () { this->startNewConnection(); },
             "REST server listener",
@@ -174,7 +174,7 @@ RestServer::Impl::startNewConnection() const
 
     RestConn conn(new_socket, mainloop, this);
     mainloop->addFileRoutine(
-        I_MainLoop::RoutineType::RealTime,
+        I_MainLoop::RoutineType::Offline,
         new_socket,
         [conn] () { conn.parseConn(); },
         "REST server connection handler"

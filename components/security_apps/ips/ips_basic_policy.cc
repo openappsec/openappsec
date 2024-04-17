@@ -17,6 +17,8 @@ void
 RuleSelector::load(cereal::JSONInputArchive &ar)
 {
     readRules(ar);
+    readTriggerId(ar);
+    readExceptionId(ar);
     readDefaultAction(ar);
 }
 
@@ -36,7 +38,7 @@ RuleSelector::selectSignatures() const
             if (rule.isSignaturedMatched(*signature)) {
                 if (rule.getAction() != IPSSignatureSubTypes::SignatureAction::IGNORE) {
                     signature->setIndicators("Check Point", signatures_version);
-                    res.emplace_back(signature, rule.getAction());
+                    res.emplace_back(signature, rule.getAction(), trigger_id, exception_id);
                 }
                 break;
             }
@@ -50,6 +52,28 @@ void
 RuleSelector::readRules(cereal::JSONInputArchive &ar)
 {
     ar(cereal::make_nvp("rules", rules));
+}
+
+void
+RuleSelector::readTriggerId(cereal::JSONInputArchive &ar)
+{
+    try {
+        ar(cereal::make_nvp("triggers", trigger_id));
+    } catch (const cereal::Exception &e) {
+        ar.setNextName(nullptr);
+        trigger_id = "";
+    }
+}
+
+void
+RuleSelector::readExceptionId(cereal::JSONInputArchive &ar)
+{
+    try {
+        ar(cereal::make_nvp("exceptions", exception_id));
+    } catch (const cereal::Exception &e) {
+        ar.setNextName(nullptr);
+        exception_id = "";
+    }
 }
 
 void

@@ -34,9 +34,7 @@ public:
     bool isPagingActivated() const;
     Maybe<bool> isPagingFinished() const;
     Maybe<Intelligence_IS_V2::CursorState> getPagingStatus() const;
-    bool loadJson(const std::string &json);
     Maybe<std::string> genJson() const;
-    Maybe<std::string> getResponseFromFog() const;
 
     size_t getSize() const { return queries.size(); }
     bool isBulk() const { return is_bulk; }

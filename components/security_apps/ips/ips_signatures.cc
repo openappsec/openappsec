@@ -280,8 +280,7 @@ SignatureAndAction::getAction(const IPSEntry &ips_state) const
         exceptions_dict["sourceIdentifier"].insert(*env_source_identifier);
     }
 
-    I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<IPSComp>();
-    auto behaviors = i_rulebase->getBehavior(exceptions_dict);
+    auto behaviors = getBehavior(exceptions_dict);
 
     set<BehaviorValue> override_actions;
     vector<string> override_ids;
@@ -314,6 +313,23 @@ static const auto url_path = LogTriggerConf::WebLogFields::webUrlPath;
 static const auto url_query = LogTriggerConf::WebLogFields::webUrlQuery;
 static const auto res_body = LogTriggerConf::WebLogFields::responseBody;
 static const auto res_code = LogTriggerConf::WebLogFields::responseCode;
+
+LogTriggerConf
+SignatureAndAction::getTrigger() const
+{
+    if (trigger_id.empty()) return getConfigurationWithDefault(LogTriggerConf(), "rulebase", "log");
+
+    return Singleton::Consume<I_GenericRulebase>::by<IPSComp>()->getLogTriggerConf(trigger_id);
+}
+
+set<ParameterBehavior>
+SignatureAndAction::getBehavior(const unordered_map<string, set<string>> &exceptions_dict) const
+{
+    I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<IPSComp>();
+    if (exception_id.empty()) return i_rulebase->getBehavior(exceptions_dict);
+
+    return i_rulebase->getParameterException(exception_id).getBehavior(exceptions_dict);
+}
 
 bool
 SignatureAndAction::matchSilent(const Buffer &sample) const
@@ -398,7 +414,7 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
 
     dbgDebug(D_IPS) << "Signature matched - sending log";
 
-    auto &trigger = getConfigurationWithDefault(default_triger, "rulebase", "log");
+    auto trigger = getTrigger();
     bool is_prevent = get<0>(override_action) == IPSSignatureSubTypes::SignatureAction::PREVENT;
 
     auto severity = signature->getSeverity() < IPSLevel::HIGH ? Severity::HIGH : Severity::CRITICAL;

@@ -587,6 +587,7 @@ public:
     const NewFileSecurity & getFileSecurity() const;
     const std::string & getAppSecClassName() const;
     const std::string & getName() const;
+    const std::string & getMode(const std::string &default_mode = "inactive") const;
     void setName(const std::string &_name);
 
 private:
@@ -598,6 +599,7 @@ private:
     NewAppSecPracticeAntiBot                    anti_bot;
     std::string                                 appsec_class_name;
     std::string                                 practice_name;
+    std::string                                 mode;
 };
 
 #endif // __NEW_PRACTICE_H__

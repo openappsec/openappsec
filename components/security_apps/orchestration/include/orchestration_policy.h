@@ -21,8 +21,8 @@ class OrchestrationPolicy
 {
 public:
     const std::string & getFogAddress() const;
-    const unsigned long & getSleepInterval() const;
-    const unsigned long & getErrorSleepInterval() const;
+    unsigned int getSleepInterval() const;
+    unsigned int getErrorSleepInterval() const;
 
     void serialize(cereal::JSONInputArchive & archive);
 
@@ -31,8 +31,8 @@ public:
 
 private:
     std::string fog_address;
-    unsigned long sleep_interval;
-    unsigned long error_sleep_interval;
+    unsigned int sleep_interval;
+    unsigned int error_sleep_interval;
 };
 
 #endif // __ORCHESTRATION_POLICY_H__

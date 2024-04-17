@@ -21,6 +21,7 @@
 #include "url_parser.h"
 #include "i_agent_details.h"
 #include "i_mainloop.h"
+#include "i_environment.h"
 #include "singleton.h"
 #include "component.h"
 
@@ -32,6 +33,7 @@ class Downloader
     Singleton::Consume<I_Encryptor>,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_OrchestrationTools>,
+    Singleton::Consume<I_Environment>,
     Singleton::Consume<I_UpdateCommunication>
 {
 public:

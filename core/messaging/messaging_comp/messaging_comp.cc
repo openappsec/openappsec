@@ -62,7 +62,7 @@ MessagingComp::getConnection(MessageCategory category, const MessageMetadata &me
 
     auto maybe_conn = i_conn->establishConnection(metadata, category);
     if (!maybe_conn.ok()) {
-        dbgWarning(D_MESSAGING) << "Failed to establish connection: " << maybe_conn.getErr();
+        dbgWarning(D_MESSAGING) << maybe_conn.getErr();
     }
     return maybe_conn;
 }
