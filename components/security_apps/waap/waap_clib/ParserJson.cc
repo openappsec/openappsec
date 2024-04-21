@@ -23,6 +23,7 @@ USE_DEBUG_FLAG(D_WAAP_PARSER_JSON);
 USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 
 const std::string ParserJson::m_parserName = "jsonParser";
+static const std::string OPERATION_NAME_GRAPHQL = "operationName";
 
 int
 ParserJson::cb_null()

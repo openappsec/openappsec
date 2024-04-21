@@ -34,6 +34,10 @@ ValidBulkQueryResponse::serialize(cereal::JSONInputArchive &ar)
 void
 IntelligenceQueryBulkResponse::serialize(cereal::JSONInputArchive &ar)
 {
-    ar(cereal::make_nvp("errors", errors));
     ar(cereal::make_nvp("queriesResponse", valid_responses));
+    try {
+        ar(cereal::make_nvp("errors", errors));
+    } catch (const cereal::Exception &e) {
+        ar.setNextName(nullptr);
+    }
 }

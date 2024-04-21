@@ -39,6 +39,15 @@ Maybe<string> response(
 string orchestration_policy_file_path = "/etc/cp/conf/orchestration/orchestration.policy";
 string orchestration_policy_file_path_bk = orchestration_policy_file_path + ".bk";
 
+class ExpectInitializer
+{
+public:
+    ExpectInitializer(StrictMock<MockOrchestrationTools> &mock_orchestration_tools)
+    {
+        EXPECT_CALL(mock_orchestration_tools, doesFileExist("/.dockerenv")).WillRepeatedly(Return(false));
+    }
+};
+
 class OrchestrationMultitenancyTest : public Test
 {
 public:
@@ -200,6 +209,7 @@ public:
     NiceMock<MockAgenetDetailsReporter> mock_agent_reporter;
     NiceMock<MockLogging> mock_log;
 
+    ExpectInitializer initializer{mock_orchestration_tools};
     OrchestrationComp orchestration_comp;
 
 private:

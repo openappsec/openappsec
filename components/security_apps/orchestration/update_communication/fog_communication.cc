@@ -96,8 +96,6 @@ FogCommunication::downloadAttributeFile(const GetResourceFile &resourse_file, co
 {
     if (!access_token.ok()) return genError("Acccess Token not available.");
 
-    auto unpacked_access_token = access_token.unpack().getToken();
-
     string policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
     if (policy_mgmt_mode == "declarative" && resourse_file.getFileName() =="policy") {
         dbgDebug(D_ORCHESTRATOR) << "Download policy on declarative mode - returning the local policy";

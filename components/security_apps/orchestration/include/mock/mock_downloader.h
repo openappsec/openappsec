@@ -24,7 +24,7 @@ class MockDownloader :
 {
 public:
     MOCK_CONST_METHOD3(
-        downloadFileFromFog,
+        downloadFile,
         Maybe<std::string>(const std::string &, Package::ChecksumTypes, const GetResourceFile &)
     );
 

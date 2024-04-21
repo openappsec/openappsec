@@ -117,12 +117,12 @@ TEST(InvalidationBasic, SettersAndGetters)
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::GROUP), "");
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::ORDER), "");
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::KIND), "");
-    EXPECT_EQ(invalidation.getInvalidationType(), InvalidationType::ADD);
 
     EXPECT_TRUE(invalidation.getMainAttributes().empty());
     EXPECT_TRUE(invalidation.getAttributes().empty());
     EXPECT_FALSE(invalidation.getSourceId().ok());
     EXPECT_FALSE(invalidation.getObjectType().ok());
+    EXPECT_FALSE(invalidation.getInvalidationType().ok());
 
     set<string> main_vals = { "2", "3" };
     set<string> vals = { "5", "6" };
@@ -152,7 +152,7 @@ TEST(InvalidationBasic, SettersAndGetters)
     EXPECT_EQ(invalidation.getAttributes().begin()->getStringSetAttr("attr2").unpack(), vals);
     EXPECT_EQ(invalidation.getSourceId().unpack(), "id");
     EXPECT_EQ(invalidation.getObjectType().unpack(), Intelligence::ObjectType::ASSET);
-    EXPECT_EQ(invalidation.getInvalidationType(), InvalidationType::DELETE);
+    EXPECT_EQ(invalidation.getInvalidationType().unpack(), InvalidationType::DELETE);
 }
 
 TEST(InvalidationBasic, Matching)
@@ -348,7 +348,6 @@ TEST_F(IntelligenceInvalidation, sending_public_invalidation)
         "\"category\": \"bbb\", "
         "\"family\": \"ccc\", "
         "\"objectType\": \"asset\", "
-        "\"invalidationType\": \"add\", "
         "\"sourceId\": \"id\", "
         "\"mainAttributes\": [ { \"attr2\": \"2\" } ], "
         "\"attributes\": [ { \"attr3\": \"3\" } ]"
@@ -389,7 +388,6 @@ TEST_F(IntelligenceInvalidation, multiple_assets_invalidation)
         "\"category\": \"bbb\", "
         "\"family\": \"ccc\", "
         "\"objectType\": \"asset\", "
-        "\"invalidationType\": \"add\", "
         "\"sourceId\": \"id\", "
         "\"mainAttributes\": [ { \"attr2\": \"2\" }, { \"attr2\": \"22\", \"attr3\": [ \"33\", \"44\" ] } ], "
         "\"attributes\": [ { \"attr3\": \"3\" } ]"
@@ -439,7 +437,6 @@ TEST_F(IntelligenceInvalidation, sending_private_invalidation)
         "\"category\": \"bbb\", "
         "\"family\": \"ccc\", "
         "\"objectType\": \"asset\", "
-        "\"invalidationType\": \"add\", "
         "\"sourceId\": \"id\", "
         "\"mainAttributes\": [ { \"attr2\": \"2\" } ], "
         "\"attributes\": [ { \"attr3\": \"3\" } ]"

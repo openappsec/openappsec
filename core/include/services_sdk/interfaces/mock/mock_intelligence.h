@@ -26,11 +26,19 @@ public:
     MOCK_CONST_METHOD1(sendInvalidation, bool(const Invalidation &invalidation));
     MOCK_METHOD2(registerInvalidation, Maybe<uint>(const Invalidation &invalidation, const InvalidationCb &callback));
     MOCK_METHOD1(unregisterInvalidation, void(uint id));
+    MOCK_CONST_METHOD4(
+        getResponse,
+        Maybe<Response>(
+            const std::vector<QueryRequest> &query_requests,
+            bool is_pretty,
+            bool is_bulk,
+            const MessageMetadata &req_md
+        )
+    );
     MOCK_CONST_METHOD3(
         getResponse,
-        Maybe<Response>(const std::vector<QueryRequest> &query_requests, bool is_pretty, bool is_bulk)
+        Maybe<Response>(const QueryRequest &query_request, bool is_pretty, const MessageMetadata &req_md)
     );
-    MOCK_CONST_METHOD2(getResponse, Maybe<Response>(const QueryRequest &query_request, bool is_pretty));
     MOCK_CONST_METHOD0(getIsOfflineOnly, bool(void));
     MOCK_CONST_METHOD1(getOfflineInfoString, Maybe<std::string>(const SerializableQueryFilter &query));
 };

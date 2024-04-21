@@ -202,10 +202,25 @@ public:
 
         if (objectType.isActive()) {
             auto type = object_names.find(objectType.get());
-            if (type != object_names.end()) invalidation.setObjectType(type->second);
+            if (type != object_names.end()) {
+                invalidation.setObjectType(type->second);
+            }
+            else {
+                dbgWarning(D_INTELLIGENCE) << "Received invalid object type: " << objectType.get();
+            }
         }
 
         if (sourceId.isActive()) invalidation.setSourceId(sourceId.get());
+
+        if (invalidationType.isActive()) {
+            auto type = invalidation_type_names.find(invalidationType.get());
+            if (type != invalidation_type_names.end()) {
+                invalidation.setInvalidationType(type->second);
+            }
+            else {
+                dbgWarning(D_INTELLIGENCE) << "Received invalid invalidation type: " << invalidationType.get();
+            }
+        }
 
         string registration_id = "";
         if (invalidationRegistrationId.isActive()) registration_id = invalidationRegistrationId.get();
@@ -227,6 +242,7 @@ private:
     C2S_OPTIONAL_PARAM(string, invalidationRegistrationId);
     C2S_OPTIONAL_PARAM(vector<StrAttributes>, mainAttributes);
     C2S_OPTIONAL_PARAM(vector<StrAttributes>, attributes);
+    C2S_OPTIONAL_PARAM(string, invalidationType);
 };
 
 class IntelligenceComponentV2::Impl
@@ -280,9 +296,14 @@ public:
     }
 
     Maybe<Response>
-    getResponse(const vector<QueryRequest> &query_requests, bool is_pretty, bool is_bulk) const override
+    getResponse(
+        const vector<QueryRequest> &query_requests,
+        bool is_pretty,
+        bool is_bulk,
+        const MessageMetadata &req_md
+    ) const override
     {
-        IntelligenceRequest intelligence_req(query_requests, is_pretty, is_bulk);
+        IntelligenceRequest intelligence_req(query_requests, is_pretty, is_bulk, req_md);
         if (!intelligence_req.checkAssetsLimit().ok()) return intelligence_req.checkAssetsLimit().passErr();
         if (!intelligence_req.checkMinConfidence().ok()) return intelligence_req.checkMinConfidence().passErr();
         if (intelligence_req.isPagingActivated()) {
@@ -297,10 +318,10 @@ public:
     }
 
     Maybe<Intelligence::Response>
-    getResponse(const QueryRequest &query_request, bool is_pretty) const override
+    getResponse(const QueryRequest &query_request, bool is_pretty, const MessageMetadata &req_md) const override
     {
         vector<QueryRequest> queries = {query_request};
-        return getResponse(queries, is_pretty, false);
+        return getResponse(queries, is_pretty, false, req_md);
     }
 
 private:
@@ -312,6 +333,11 @@ private:
         if (!is_supported) {
             is_supported = getProfileAgentSettingWithDefault<bool>(false, "agent.config.supportInvalidation");
         }
+
+        if (!is_supported) {
+            is_supported = getConfigurationWithDefault(false, "intelligence", "support Invalidation");
+        }
+
         return is_supported;
     }
 
@@ -390,7 +416,8 @@ private:
         auto tenant = details->getTenantId();
         if (tenant == "") tenant = "Global";
         headers["X-Tenant-Id"] = tenant;
-        auto agent = details->getAgentId();
+        auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
+        auto agent = details->getAgentId() + ":" + to_string(rest->getListeningPort());
         headers["X-Source-Id"] = agent;
 
         return headers;
@@ -474,6 +501,7 @@ IntelligenceComponentV2::preload()
 {
     registerExpectedConfiguration<uint>("intelligence", "maximum request overall time");
     registerExpectedConfiguration<uint>("intelligence", "maximum request lap time");
+    registerExpectedConfiguration<bool>("intelligence", "support Invalidation");
     registerExpectedSetting<string>("intelligence", "local intelligence server ip");
     registerExpectedSetting<uint>("intelligence", primary_port_setting);
     registerExpectedSetting<uint>("intelligence", secondary_port_setting);

@@ -37,10 +37,7 @@
 #include "maybe_res.h"
 #include "declarative_policy_utils.h"
 
-class HybridCommunication
-        :
-    public FogAuthenticator,
-    Singleton::Consume<I_EnvDetails>
+class HybridCommunication : public FogAuthenticator
 {
 public:
     void init() override;

@@ -513,7 +513,6 @@ private:
     {
         if (!isBioSocketReady()) return 0;
 
-        dbgTrace(D_MESSAGING) << "Sending request: " << printOut(request);
         size_t offset = request.length() - data_left_to_send;
         auto curr_data_to_send = request.c_str() + offset;
         int data_sent_len = BIO_write(bio.get(), curr_data_to_send, data_left_to_send);
@@ -544,7 +543,6 @@ private:
         int receive_len = BIO_read(bio.get(), buffer, sizeof(buffer) - 1);
 
         if (receive_len > 0) {
-            dbgTrace(D_CONNECTION) << "Received " << receive_len << " bytes";
             return string(buffer, receive_len);
         }
 

@@ -24,7 +24,7 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
     vector<QueryRequest> requests = {request};
-    Intelligence::IntelligenceRequest query(requests, true, false);
+    Intelligence::IntelligenceRequest query(requests, true, false, MessageMetadata("", 0));
 
     std::string expected = "{\n"
         "    \"limit\": 20,\n"
@@ -42,7 +42,7 @@ TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequest) {
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
     vector<QueryRequest> requests = {request};
-    Intelligence::IntelligenceRequest query(requests, false, false);
+    Intelligence::IntelligenceRequest query(requests, false, false, MessageMetadata("", 0));
 
     std::string expected = "{"
         "\"limit\":20,"
@@ -59,7 +59,7 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequestSpaces) {
     QueryRequest request(Condition::EQUALS, "ph ase", "te sti\" n g\\", true);
     vector<QueryRequest> requests = {request};
-    Intelligence::IntelligenceRequest query(requests, false, false);
+    Intelligence::IntelligenceRequest query(requests, false, false, MessageMetadata("", 0));
     std::string expected = "{"
         "\"limit\":20,"
         "\"fullResponse\":true,"
@@ -76,7 +76,7 @@ TEST(IntelligenceQueryTestV2, genJsonPrettyBulkRequests) {
     QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
     QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
     std::vector<QueryRequest> requests = {request1, request2};
-    Intelligence::IntelligenceRequest query(requests, true, true);
+    Intelligence::IntelligenceRequest query(requests, true, true, MessageMetadata("", 0));
 
     std::string expected = "{\n"
         "    \"queries\": [\n"
@@ -114,7 +114,7 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettyBulkRequest) {
     QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
     QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
     std::vector<QueryRequest> requests = {request1, request2};
-    Intelligence::IntelligenceRequest query(requests, false, true);
+    Intelligence::IntelligenceRequest query(requests, false, true, MessageMetadata("", 0));
 
     std::string expected = "{"
             "\"queries\":[{"

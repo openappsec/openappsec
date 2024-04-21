@@ -61,7 +61,6 @@ main(int argc, char **argv)
 {
     NodeComponents<
         OrchestrationStatus,
-        OrchestrationTools,
         PackageHandler,
         Downloader,
         ServiceController,
@@ -70,6 +69,7 @@ main(int argc, char **argv)
         AgentDetailsReporter,
         DetailsResolver,
         OrchestrationComp,
+        OrchestrationTools,
         HealthChecker,
         HealthCheckManager,
         LocalPolicyMgmtGenerator

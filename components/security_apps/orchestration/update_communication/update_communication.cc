@@ -69,6 +69,11 @@ public:
         return i_update_comm_impl->authenticateAgent();
     }
 
+    void registerLocalAgentToFog()
+    {
+        i_update_comm_impl->registerLocalAgentToFog();
+    }
+
     Maybe<void>
     getUpdate(CheckUpdateRequest &request) override
     {

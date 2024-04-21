@@ -92,8 +92,9 @@ enum class Service {
     HTTP_TRANSACTION_HANDLER,
     DEDICATED_NETWORK_HANDLER,
     HELLO_WORLD,
-    IDA,
     IDA_SAML,
+    IDA_IDN,
+    IDA_IDN_BG,
     IOT_ACCESS_CONTROL,
     HORIZON_TELEMETRY,
 
@@ -169,8 +170,9 @@ getServiceString(const Service service)
         case (Service::LOGGER_SDWAN): return "logger-sdwan";
         case (Service::IOT_WLP): return "workload-protection";
         case (Service::HELLO_WORLD): return "hello-world";
-        case (Service::IDA): return "identity-awareness";
         case (Service::IDA_SAML): return "ida-saml";
+        case (Service::IDA_IDN): return "ida-idn";
+        case (Service::IDA_IDN_BG): return "ida-idn-bg";
         case (Service::IOT_ACCESS_CONTROL): return "iot-access-control";
         case (Service::HORIZON_TELEMETRY): return "horizon-telemetry";
         default:
@@ -341,15 +343,20 @@ getServiceConfig (const Service service)
                 filesystem_path + "/conf/cp-nano-cpview-metric-provider-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-cpview-metric-provider.dbg"
             );
-        case (Service::IDA):
-            return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-ida-debug-conf.json",
-                log_files_path + "/nano_agent/cp-nano-ida.dbg"
-            );
         case (Service::IDA_SAML):
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-ida-saml-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-ida-saml.dbg"
+            );
+        case (Service::IDA_IDN):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-ida-idn-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-ida-idn.dbg"
+            );
+        case (Service::IDA_IDN_BG):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-ida-idn-bg-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-ida-idn-bg.dbg"
             );
         case (Service::HELLO_WORLD):
             return ServiceConfig(
@@ -1291,10 +1298,12 @@ extractServices(const vector<string> &args)
             services.push_back(Service::CPVIEW_METRIC_PROVIDER);
         } else if (getServiceString(Service::IOT_WLP).find(maybe_service) == 0) {
             services.push_back(Service::IOT_WLP);
-        } else if (getServiceString(Service::IDA).find(maybe_service) == 0) {
-            services.push_back(Service::IDA);
         } else if (getServiceString(Service::IDA_SAML).find(maybe_service) == 0) {
             services.push_back(Service::IDA_SAML);
+        } else if (getServiceString(Service::IDA_IDN).find(maybe_service) == 0) {
+            services.push_back(Service::IDA_IDN);
+        } else if (getServiceString(Service::IDA_IDN_BG).find(maybe_service) == 0) {
+            services.push_back(Service::IDA_IDN_BG);
         } else if (getServiceString(Service::IOT_ACCESS_CONTROL).find(maybe_service) == 0) {
             services.push_back(Service::IOT_ACCESS_CONTROL);
         } else if (getServiceString(Service::HORIZON_TELEMETRY).find(maybe_service) == 0) {

@@ -76,7 +76,7 @@ public:
         MessageMetadata message_metadata = MessageMetadata()
     ) = 0;
 
-    virtual Maybe<HTTPStatusCode, HTTPResponse> downloadFile(
+    virtual Maybe<void, HTTPResponse> downloadFile(
         const HTTPMethod method,
         const std::string &uri,
         const std::string &download_file_path,
@@ -84,7 +84,7 @@ public:
         MessageMetadata message_metadata = MessageMetadata()
     ) = 0;
 
-    virtual Maybe<HTTPStatusCode, HTTPResponse> uploadFile(
+    virtual Maybe<void, HTTPResponse> uploadFile(
         const std::string & uri,
         const std::string & upload_file_path,
         const MessageCategory category = MessageCategory::GENERIC,

@@ -22,6 +22,7 @@
 #include "agent_details.h"
 #include "customized_cereal_map.h"
 #include "health_check_status/health_check_status.h"
+#include "declarative_policy_utils.h"
 
 using namespace testing;
 using namespace std;
@@ -40,6 +41,15 @@ Maybe<string> response(
 );
 string orchestration_policy_file_path = "/etc/cp/conf/orchestration/orchestration.policy";
 string orchestration_policy_file_path_bk = orchestration_policy_file_path + ".bk";
+
+class ExpectInitializer
+{
+public:
+    ExpectInitializer(StrictMock<MockOrchestrationTools> &mock_orchestration_tools)
+    {
+        EXPECT_CALL(mock_orchestration_tools, doesFileExist("/.dockerenv")).WillRepeatedly(Return(false));
+    }
+};
 
 class OrchestrationTest : public testing::TestWithParam<bool>
 {
@@ -150,6 +160,7 @@ public:
         EXPECT_CALL(mock_details_resolver, getPlatform()).WillRepeatedly(Return(string("linux")));
         EXPECT_CALL(mock_details_resolver, getArch()).WillRepeatedly(Return(string("x86_64")));
         EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isCloudStorageEnabled()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isVersionAboveR8110()).WillRepeatedly(Return(false));
@@ -245,6 +256,17 @@ public:
     }
 
     void
+    runRegTokenRoutine()
+    {
+        EXPECT_CALL(
+            mock_ml,
+            addRecurringRoutine(I_MainLoop::RoutineType::Offline, _, _, "Check For Environment Registration Token", _)
+        ).WillOnce(DoAll(SaveArg<2>(&reg_token_routine), Return(0)));
+
+        routine();
+    }
+
+    void
     runStatusRoutine()
     {
         status_routine();
@@ -303,9 +325,12 @@ public:
     StrictMock<MockDetailsResolver> mock_details_resolver;
     NiceMock<MockAgenetDetailsReporter> mock_agent_reporter;
     NiceMock<MockTenantManager> tenant_manager;
+    ExpectInitializer initializer{mock_orchestration_tools};
     OrchestrationComp orchestration_comp;
+    DeclarativePolicyUtils declarative_policy_utils;
     AgentDetails agent_details;
     I_MainLoop::Routine sending_routine;
+    I_MainLoop::Routine reg_token_routine;
     string message_body;
 
 private:
@@ -325,6 +350,48 @@ private:
     I_MainLoop::Routine routine;
     I_MainLoop::Routine status_routine;
 };
+
+
+TEST_F(OrchestrationTest, hybridModeRegisterLocalAgentRoutine)
+{
+    EXPECT_CALL(rest, mockRestCall(_, _, _)).WillRepeatedly(Return(true));
+    Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(
+        vector<string>{"--orchestration-mode=hybrid_mode"}
+    );
+
+    preload();
+    env.init();
+    init();
+
+    EXPECT_CALL(mock_service_controller, updateServiceConfiguration(_, _, _, _, _, _))
+        .WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(_, _)).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string()));
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_update_communication, getUpdate(_));
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setFieldStatus(_, _, _));
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(_));
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([] (chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+
+    EXPECT_CALL(
+        mock_ml,
+        addOneTimeRoutine(I_MainLoop::RoutineType::Offline, _, "Send registration data", false)
+    ).WillOnce(Return(1));
+
+    try {
+        runRegTokenRoutine();
+    } catch (const invalid_argument& e) {}
+
+    EXPECT_CALL(mock_update_communication, registerLocalAgentToFog());
+    reg_token_routine();
+}
 
 TEST_F(OrchestrationTest, testAgentUninstallRest)
 {
@@ -671,7 +738,7 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdatRollback)
     GetResourceFile policy_file(GetResourceFile::ResourceFileType::POLICY);
     EXPECT_CALL(
         mock_downloader,
-        downloadFileFromFog(new_policy_checksum, Package::ChecksumTypes::SHA256, policy_file)
+        downloadFile(new_policy_checksum, Package::ChecksumTypes::SHA256, policy_file)
     ).WillOnce(Return(Maybe<std::string>(new_policy_path)));
 
     vector<string> expected_data_types = {};
@@ -850,7 +917,7 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
     GetResourceFile policy_file(GetResourceFile::ResourceFileType::POLICY);
     EXPECT_CALL(
         mock_downloader,
-        downloadFileFromFog(new_policy_checksum, Package::ChecksumTypes::SHA256, policy_file)
+        downloadFile(new_policy_checksum, Package::ChecksumTypes::SHA256, policy_file)
     ).WillOnce(Return(Maybe<std::string>(new_policy_path)));
 
     vector<string> expected_data_types = {};
@@ -1060,7 +1127,7 @@ TEST_F(OrchestrationTest, manifestUpdate)
 
     GetResourceFile manifest_file(GetResourceFile::ResourceFileType::MANIFEST);
     EXPECT_CALL(mock_downloader,
-        downloadFileFromFog(
+        downloadFile(
             string("new check sum"),
             Package::ChecksumTypes::SHA256,
             manifest_file
@@ -1147,7 +1214,7 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     GetResourceFile policy_file(GetResourceFile::ResourceFileType::POLICY);
     EXPECT_CALL(
         mock_downloader,
-            downloadFileFromFog(
+            downloadFile(
             string("111111"),
             Package::ChecksumTypes::SHA256,
             policy_file
@@ -1324,14 +1391,14 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
     GetResourceFile manifest_file(GetResourceFile::ResourceFileType::MANIFEST);
 
     EXPECT_CALL(mock_downloader,
-            downloadFileFromFog(
+            downloadFile(
             string("manifest-checksum"),
             Package::ChecksumTypes::SHA256,
             manifest_file
         )
     ).WillOnce(Return(download_error));
     EXPECT_CALL(mock_downloader,
-            downloadFileFromFog(
+            downloadFile(
             string("settings-checksum"),
             Package::ChecksumTypes::SHA256,
             settings_file
@@ -1690,7 +1757,7 @@ TEST_F(OrchestrationTest, dataUpdate)
     string new_data_file_path = data_file_path + ".download";
     GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
     EXPECT_CALL(mock_downloader,
-        downloadFileFromFog(
+        downloadFile(
             string("new data"),
             Package::ChecksumTypes::SHA256,
             data_file

@@ -22,7 +22,7 @@
 class I_Downloader
 {
 public:
-    virtual Maybe<std::string> downloadFileFromFog(
+    virtual Maybe<std::string> downloadFile(
         const std::string &checksum,
         Package::ChecksumTypes,
         const GetResourceFile &resourse_file
