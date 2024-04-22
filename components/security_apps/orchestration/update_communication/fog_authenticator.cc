@@ -450,9 +450,9 @@ getDeplymentType()
     auto deplyment_type = Singleton::Consume<I_EnvDetails>::by<FogAuthenticator>()->getEnvType();
     switch (deplyment_type) {
         case EnvType::LINUX: return "Embedded";
-        case EnvType::DOCKER: return "Docker";
+        case EnvType::DOCKER: return "Embedded";
         case EnvType::NON_CRD_K8S:
-        case EnvType::K8S: return "K8S";
+        case EnvType::K8S: return "Embedded";
         case EnvType::COUNT: break;
     }
 
