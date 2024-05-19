@@ -24,6 +24,7 @@ enum AttachmentType
     NGINX_ATT_ID,
     PRELOAD_ATT_ID,
     SQUID_ATT_ID,
+    ENVOY_ATT_ID,
 #ifdef __cplusplus
     COUNT
 #endif

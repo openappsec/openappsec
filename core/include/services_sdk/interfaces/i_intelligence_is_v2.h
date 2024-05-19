@@ -21,6 +21,8 @@
 #include "intelligence_is_v2/intelligence_response.h"
 #include "intelligence_is_v2/intelligence_types_v2.h"
 #include "intelligence_is_v2/query_request_v2.h"
+#include "messaging/messaging_enums.h"
+#include "messaging/messaging_metadata.h"
 #include "maybe_res.h"
 
 namespace Intelligence {
@@ -43,18 +45,29 @@ public:
     getResponse(
         const std::vector<QueryRequest> &query_requests,
         bool is_pretty,
-        bool is_bulk
+        bool is_bulk,
+        const MessageMetadata &req_md
     ) const = 0;
 
-    virtual Maybe<Intelligence::Response> getResponse(const QueryRequest &query_request, bool is_pretty) const = 0;
+    virtual Maybe<Intelligence::Response>
+    getResponse(const QueryRequest &query_request, bool is_pretty, const MessageMetadata &req_md) const = 0;
 
     template<typename Data>
     Maybe<std::vector<AssetReply<Data>>>
-    queryIntelligence(QueryRequest &query_request, bool ignore_in_progress = false, bool is_pretty = true);
+    queryIntelligence(
+        QueryRequest &query_request,
+        bool ignore_in_progress = false,
+        bool is_pretty = true,
+        MessageMetadata req_md = MessageMetadata("", 0)
+    );
 
     template<typename Data>
     Maybe<std::vector<Maybe<std::vector<AssetReply<Data>>>>>
-    queryIntelligence(std::vector<QueryRequest> &query_requests, bool is_pretty = true);
+    queryIntelligence(
+        std::vector<QueryRequest> &query_requests,
+        bool is_pretty = true,
+        MessageMetadata req_md = MessageMetadata("", 0)
+    );
 
 protected:
     virtual ~I_Intelligence_IS_V2() {}

@@ -44,6 +44,7 @@ WaapTelemetryBase::sendLog(const LogRest &metric_client_rest) const
         "X-Tenant-Id",
         Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getTenantId()
     );
+    req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendSyncMessageWithoutResponse(
         HTTPMethod::POST,
         fog_metric_uri,

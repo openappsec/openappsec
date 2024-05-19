@@ -153,7 +153,7 @@ poll_for_status_file()
     until [ ${attempt_counter} -eq ${max_attempts} ]; do
         if [ ${attempt_counter} -eq ${max_attempts} ];then
             echo "Max attempts reached"
-            exit 1
+            return 1
         fi
         file_exists="$(curl -s -w "%{http_code}\n" --request GET -H \
             "user-agent: Infinity Next (a7030abf93a4c13)" -H \
@@ -165,7 +165,7 @@ poll_for_status_file()
             FAILURE=$(echo $file_exists | grep "false")
             if [ ! -z "$FAILURE" ]; then
                 echo "Failed creating the Assets: $(echo $file_exists | cut -c27- | cut -d '"' -f 1)"
-                exit 1
+                return 1
             else
                 echo "."
                 return 0
@@ -177,7 +177,7 @@ poll_for_status_file()
         fi
     done
     echo "Error: Status file was not generated"
-    exit 1
+    return 1
 }
 
 upload_policy_to_the_cloud()
@@ -215,7 +215,7 @@ upload_policy_to_the_cloud()
         STATUS="SUCCESS"
         exit 0
     fi
-    if [ "$STATUS" = "FAILURE" ]; then
+        if [ "$STATUS" = "FAILURE" ]; then
         echo "Failed to upload policy to the cloud"
         exit 1
     fi

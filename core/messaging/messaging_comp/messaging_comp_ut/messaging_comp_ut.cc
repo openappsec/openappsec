@@ -183,7 +183,6 @@ TEST_F(TestMessagingComp, testUploadFile)
     EXPECT_CALL(mock_messaging_connection, mockSendRequest(_, _, _)).WillOnce(Return(res));
     auto upload_res = messaging_comp.uploadFile(uri, path, category, conn_metadata);
     ASSERT_TRUE(upload_res.ok());
-    EXPECT_EQ(upload_res.unpack(), HTTPStatusCode::HTTP_OK);
 }
 
 TEST_F(TestMessagingComp, testDownloadFile)
@@ -207,7 +206,6 @@ TEST_F(TestMessagingComp, testDownloadFile)
     EXPECT_CALL(mock_messaging_connection, mockSendRequest(_, _, _)).WillOnce(Return(res));
     auto upload_res = messaging_comp.downloadFile(method, uri, "/tmp/test.txt", category, conn_metadata);
     ASSERT_TRUE(upload_res.ok());
-    EXPECT_EQ(upload_res.unpack(), HTTPStatusCode::HTTP_OK);
 }
 
 bool

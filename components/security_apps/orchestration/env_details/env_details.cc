@@ -15,6 +15,7 @@
 
 #include "config.h"
 #include "debug.h"
+#include "orchestration_tools.h"
 
 using namespace std;
 
@@ -22,10 +23,15 @@ USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 static const string k8s_service_account = "/var/run/secrets/kubernetes.io/serviceaccount";
 // LCOV_EXCL_START Reason: can't use on the pipline environment
-EnvDetails::EnvDetails()
+EnvDetails::EnvDetails() : env_type(EnvType::LINUX)
 {
+    auto tools = Singleton::Consume<I_OrchestrationTools>::from<OrchestrationTools>();
+    if (tools->doesFileExist("/.dockerenv")) env_type = EnvType::DOCKER;
     token = retrieveToken();
-    token.empty() ? env_type = EnvType::LINUX : env_type = EnvType::K8S;
+    if (!token.empty()) {
+        auto env_res = getenv("deployment_type");
+        env_type = env_res != nullptr && env_res == string("non_crd_k8s") ? EnvType::NON_CRD_K8S : EnvType::K8S;
+    }
 }
 
 EnvType

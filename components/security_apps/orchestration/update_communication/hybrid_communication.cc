@@ -104,8 +104,6 @@ HybridCommunication::downloadAttributeFile(const GetResourceFile &resourse_file,
     if (resourse_file.getFileName() == "manifest") {
         if (!access_token.ok()) return genError("Acccess Token not available.");
 
-        auto unpacked_access_token = access_token.unpack().getToken();
-
         auto attribute_file = Singleton::Consume<I_Messaging>::by<HybridCommunication>()->downloadFile(
             resourse_file.getRequestMethod(),
             agent_resource_api + '/' + resourse_file.getFileName(),

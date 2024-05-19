@@ -136,8 +136,10 @@ private:
                 string service_underscore_name = service_name;
                 replace(service_underscore_name.begin(), service_underscore_name.end(), ' ', '_');
 
+                string logFilesPath = getLogFilesPathConfig();
+
                 trace_file_path = getConfigurationWithDefault<string>(
-                    "/var/log/nano_agent/trace_export_files/" + service_underscore_name + "_trace_file.dbg",
+                    logFilesPath + "/nano_agent/trace_export_files/" + service_underscore_name + "_trace_file.dbg",
                     "SignalHandler",
                     "outputFilePath"
                 );

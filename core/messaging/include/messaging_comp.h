@@ -54,7 +54,7 @@ public:
         bool force_buffering = true
     );
 
-    Maybe<HTTPStatusCode, HTTPResponse> downloadFile(
+    Maybe<void, HTTPResponse> downloadFile(
         HTTPMethod method,
         const std::string &uri,
         const std::string &download_file_path,
@@ -62,7 +62,7 @@ public:
         const MessageMetadata &message_metadata = MessageMetadata()
     );
 
-    Maybe<HTTPStatusCode, HTTPResponse> uploadFile(
+    Maybe<void, HTTPResponse> uploadFile(
         const std::string &uri,
         const std::string &upload_file_path,
         MessageCategory category,

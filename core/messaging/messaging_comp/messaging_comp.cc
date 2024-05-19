@@ -145,7 +145,7 @@ MessagingComp::sendAsyncMessage(
     i_messaging_buffer->pushNewBufferedMessage(body, method, uri, category, new_message_metadata, false);
 }
 
-Maybe<HTTPStatusCode, HTTPResponse>
+Maybe<void, HTTPResponse>
 MessagingComp::downloadFile(
     HTTPMethod method,
     const string &uri,
@@ -166,7 +166,9 @@ MessagingComp::downloadFile(
 
     auto response = sendSyncMessage(method, uri, "", category, message_metadata);
     if (!response.ok()) return response.passErr();
-
+    if (response.unpack().getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+        return genError(HTTPResponse(response.unpack().getHTTPStatusCode(), response.unpack().getBody()));
+    }
     ofstream file_stream(download_file_path);
     if (!file_stream.is_open()) {
         string open_err = "Failed to open the destination file. Path: " + download_file_path;
@@ -177,10 +179,10 @@ MessagingComp::downloadFile(
     file_stream.close();
 
     dbgTrace(D_MESSAGING) << "Successfully downloaded and save file to: " << download_file_path;
-    return HTTPStatusCode::HTTP_OK;
+    return Maybe<void, HTTPResponse>();
 }
 
-Maybe<HTTPStatusCode, HTTPResponse>
+Maybe<void, HTTPResponse>
 MessagingComp::uploadFile(
     const string &uri,
     const string &upload_file_path,
@@ -205,9 +207,12 @@ MessagingComp::uploadFile(
         sendSyncMessage(HTTPMethod::PUT, uri, buffer.str(), category, message_metadata);
 
     if (!response.ok()) return response.passErr();
+    if (response.unpack().getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+        return genError(HTTPResponse(response.unpack().getHTTPStatusCode(), response.unpack().getBody()));
+    }
 
     dbgTrace(D_MESSAGING) << "Successfully upload file from: " << upload_file_path;
-    return HTTPStatusCode::HTTP_OK;
+    return Maybe<void, HTTPResponse>();
 }
 
 bool

@@ -35,6 +35,7 @@ public:
     MOCK_METHOD0(getPlatform,                Maybe<std::string>());
     MOCK_METHOD0(getArch,                    Maybe<std::string>());
     MOCK_METHOD0(getAgentVersion,            std::string());
+    MOCK_METHOD0(isCloudStorageEnabled,        bool());
     MOCK_METHOD0(isReverseProxy,             bool());
     MOCK_METHOD0(isKernelVersion3OrHigher,   bool());
     MOCK_METHOD0(isGwNotVsx,                 bool());

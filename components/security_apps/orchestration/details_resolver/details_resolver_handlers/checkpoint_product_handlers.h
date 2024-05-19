@@ -33,6 +33,17 @@ checkSAMLSupportedBlade(const string &command_output)
 }
 
 Maybe<string>
+checkIDABlade(const string &command_output)
+{
+    string idaBlade = "identityServer";
+    if (command_output.find(idaBlade) != string::npos) {
+        return string("true");
+    }
+
+    return genError("Current host does not have IDA installed");
+}
+
+Maybe<string>
 checkSAMLPortal(const string &command_output)
 {
     if (command_output.find("Portal is running") != string::npos) {
@@ -43,9 +54,19 @@ checkSAMLPortal(const string &command_output)
 }
 
 Maybe<string>
-getIDASSamlGaia(const string &command_output)
+checkPepIdaIdnStatus(const string &command_output)
 {
-    return string("idaSaml_gaia");
+    if (command_output.find("ida_idn_nano_service_enabled=1") != string::npos) {
+        return string("true");
+    }
+
+    return genError("Current host does not have PEP control IDA IDN enabled");
+}
+
+Maybe<string>
+getIDAGaiaPackages(const string &command_output)
+{
+    return string("idaSaml_gaia;idaIdn_gaia;idaIdnBg_gaia;");
 }
 
 Maybe<string>
@@ -77,6 +98,18 @@ checkIsInstallHorizonTelemetrySucceeded(const string &command_output)
 }
 
 Maybe<string>
+getQUID(const string &command_output)
+{
+    if (command_output == "" ) return string("false");
+    //  validate valid QUID - contains exactly 4 '-'
+    if (std::count(command_output.begin(), command_output.end(), '-') != 4) {
+        return genError("not valid QUID");
+    }
+    return command_output;
+}
+
+
+Maybe<string>
 checkHasSDWan(const string &command_output)
 {
     if (command_output.front() == '1') return string("true");
@@ -90,6 +123,26 @@ checkCanUpdateSDWanData(const string &command_output)
     if (command_output == "true" || command_output == "false") return command_output;
 
     return string("true");
+}
+
+Maybe<string>
+checkLsmProfileName(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+
+    return genError("LSM profile name was not found");
+}
+
+Maybe<string>
+checkLsmProfileUuid(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+
+    return genError("LSM profile uuid was not found");
 }
 
 Maybe<string>

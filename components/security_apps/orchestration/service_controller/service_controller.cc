@@ -702,26 +702,6 @@ ServiceController::Impl::createDirectoryForChildTenant(
     return true;
 }
 
-static string
-getChecksum(const string &file_path)
-{
-    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
-    Maybe<string> file_checksum = orchestration_tools->calculateChecksum(
-        Package::ChecksumTypes::MD5,
-        file_path
-    );
-
-    if (file_checksum.ok()) return file_checksum.unpack();
-
-    string checksum = "unknown version";
-    try {
-        checksum = to_string(boost::uuids::random_generator()());
-    } catch (const boost::uuids::entropy_error &e) {
-        dbgDebug(D_SERVICE_CONTROLLER) << "Couldn't generate random checksum";
-    }
-    return checksum;
-}
-
 Maybe<void>
 ServiceController::Impl::updateServiceConfiguration(
     const string &new_policy_path,
@@ -827,7 +807,7 @@ ServiceController::Impl::updateServiceConfiguration(
         if (child_tenant_id.empty() && single_policy.first == versions_param) {
             //In a multi-tenant env, only the parent should handle the versions parameter
             policy_versions = single_policy.second;
-            dbgWarning(D_SERVICE_CONTROLLER) << "Found versions parameter in policy file:" << policy_versions;
+            dbgTrace(D_SERVICE_CONTROLLER) << "Found versions parameter in policy file:" << policy_versions;
         }
 
         dbgDebug(D_SERVICE_CONTROLLER) << "Starting to update policy file. Policy type: " << single_policy.first;
@@ -901,7 +881,7 @@ ServiceController::Impl::updateServiceConfiguration(
     // In a multi-tenant env, we send the signal to the services only on the last iteration
     if (!is_multi_tenant_env || last_iteration) {
         auto is_send_signal_for_services =
-            sendSignalForServices(nano_services_to_update, version_value + ',' + getChecksum(new_policy_path));
+            sendSignalForServices(nano_services_to_update, version_value + ',' + policy_versions);
         was_policy_updated &= is_send_signal_for_services.ok();
         if (!is_send_signal_for_services.ok()) send_signal_for_services_err = is_send_signal_for_services.getErr();
     }
@@ -950,7 +930,7 @@ ServiceController::Impl::sendSignalForServices(
     const set<string> &nano_services_to_update,
     const string &policy_version_to_update)
 {
-    dbgFlow(D_SERVICE_CONTROLLER);
+    dbgFlow(D_SERVICE_CONTROLLER) << "Policy version to update: " << policy_version_to_update;
     for (auto &service_id : nano_services_to_update) {
         auto nano_service = registered_services.find(service_id);
         if (nano_service == registered_services.end()) {

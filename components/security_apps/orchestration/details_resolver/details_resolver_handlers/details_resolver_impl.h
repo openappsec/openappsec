@@ -46,6 +46,9 @@ SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
     "[ -f /var/log/nano_agent/cp-nano-horizon-telemetry-prerequisites.log ] "
     "&& head -1 /var/log/nano_agent/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
     checkIsInstallHorizonTelemetrySucceeded)
+SHELL_CMD_HANDLER("QUID", "[ -d /opt/CPquid ] "
+    "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo ''",
+    getQUID)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
@@ -56,6 +59,16 @@ SHELL_CMD_HANDLER(
     "isSdwanRunning",
     "[ -v $(pidof cp-nano-sdwan) ] && echo 'false' || echo 'true'",
     checkIfSdwanRunning)
+SHELL_CMD_HANDLER(
+    "lsmProfileName",
+    "jq -r .lsm_profile_name /tmp/cpsdwan_getdata_orch.json",
+    checkLsmProfileName
+)
+SHELL_CMD_HANDLER(
+    "lsmProfileUuid",
+    "jq -r .lsm_profile_uuid /tmp/cpsdwan_getdata_orch.json",
+    checkLsmProfileUuid
+)
 SHELL_CMD_HANDLER(
     "IP Address",
     "[ $(cpprod_util FWisDAG) -eq 1 ] && echo \"Dynamic Address\" "
@@ -84,8 +97,10 @@ SHELL_CMD_HANDLER(
 
 #if defined(gaia)
 SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
-SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status saml-vpn", checkSAMLPortal)
-SHELL_CMD_HANDLER("requiredNanoServices", "ida_saml_gaia", getIDASSamlGaia)
+SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
+SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
+SHELL_CMD_HANDLER("hasIdaIdnEnabled", "pep control IDN_nano_Srv_support status", checkPepIdaIdnStatus)
+SHELL_CMD_HANDLER("requiredNanoServices", "ida_packages", getIDAGaiaPackages)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "cat $FWDIR/database/myself_objects.C "

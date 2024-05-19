@@ -32,7 +32,7 @@ public:
 
     MOCK_METHOD5(
         downloadFile,
-        Maybe<HTTPStatusCode, HTTPResponse> (
+        Maybe<void, HTTPResponse> (
             HTTPMethod,
             const string &,
             const string &,
@@ -43,7 +43,7 @@ public:
 
     MOCK_METHOD4(
         uploadFile,
-        Maybe<HTTPStatusCode, HTTPResponse> (
+        Maybe<void, HTTPResponse> (
             const string &,
             const string &,
             MessageCategory,
@@ -58,12 +58,6 @@ public:
 
 static std::ostream &
 operator<<(std::ostream &os, const HTTPResponse &)
-{
-    return os;
-}
-
-static std::ostream &
-operator<<(std::ostream &os, const HTTPStatusCode &)
 {
     return os;
 }

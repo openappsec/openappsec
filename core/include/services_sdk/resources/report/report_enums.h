@@ -68,6 +68,7 @@ enum class Tags {
     API_DISCOVERY,
     NGINX_PROXY_MANAGER,
     WEB_SERVER_APISIX,
+    DEPLOYMENT_DOCKER,
 
     COUNT
 };

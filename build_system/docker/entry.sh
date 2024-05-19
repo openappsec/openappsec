@@ -47,6 +47,7 @@ fi
 
 orchestration_service_installation_flags="--container_mode --skip_registration"
 if [ ! -z $var_token ]; then
+    export AGENT_TOKEN="$var_token"
     orchestration_service_installation_flags="$orchestration_service_installation_flags --token $var_token"
 fi
 if [ ! -z $var_fog_address ]; then

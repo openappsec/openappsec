@@ -98,9 +98,12 @@ public:
             "orchestration",
             "Settings file path"
         );
+    }
 
+    void
+    init()
+    {
         service_controller.init();
-
         registerNewService();
     }
 
@@ -173,14 +176,14 @@ public:
     }
 
     void
-    expectNewConfigRequest(const string &req_body, const string &response)
+    expectNewConfigRequest(const string &response)
     {
         EXPECT_CALL(
             mock_message,
             sendSyncMessage(
                 HTTPMethod::POST,
                 "/set-new-configuration",
-                req_body,
+                HasSubstr("1.0.2"),
                 _,
                 _
             )
@@ -224,16 +227,37 @@ public:
     ostringstream                       capture_debug;
     string                              version_value = "1.0.2";
     string                              old_version = "1.0.1";
+
+    string versions =
+            "["
+            "    {"
+            "        \"id\": \"d8c3cc3c-f9df-83c8-f875-322dd8a0c161\","
+            "        \"name\": \"Linux Embedded Agents\","
+            "        \"version\": \"1.0.2\""
+            "    }"
+            "]";
+    string old_versions =
+            "["
+            "    {"
+            "        \"id\": \"d8c3cc3c-f9df-83c8-f875-322dd8a0c161\","
+            "        \"name\": \"Linux Embedded Agents\","
+            "        \"version\": \"1.0.1\""
+            "    }"
+            "]";
+
 };
 
 TEST_F(ServiceControllerTest, doNothing)
 {
+    init();
 }
 
 TEST_F(ServiceControllerTest, UpdateConfiguration)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -271,7 +295,13 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -284,9 +314,6 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
-
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -295,7 +322,7 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
 
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -309,25 +336,13 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
-    EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
+    EXPECT_EQ(i_service_controller->getPolicyVersions(), versions);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 }
 
 TEST_F(ServiceControllerTest, supportVersions)
 {
-    string versions = "["
-                    "  {"
-                    "    \"id\" : \"40c4a460-eb24-f002-decb-f4a7f00423fc\","
-                    "    \"name\" : \"Linux Embedded Agents\","
-                    "    \"version\" : 1"
-                    "  },"
-                    "  {"
-                    "    \"id\" : \"93788960-6969-11ee-be56-0242ac120002\","
-                    "    \"name\" : \"Linux SUPER Embedded Agents\","
-                    "    \"version\" : 420"
-                    "  }"
-                    "]";
-
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
                                 "   \"versions\": " + versions +
@@ -386,9 +401,6 @@ TEST_F(ServiceControllerTest, supportVersions)
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_EQ(i_service_controller->getPolicyVersions(), "");
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
-
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -397,7 +409,7 @@ TEST_F(ServiceControllerTest, supportVersions)
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
 
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -417,8 +429,10 @@ TEST_F(ServiceControllerTest, supportVersions)
 
 TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -456,7 +470,13 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -467,9 +487,6 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
@@ -500,7 +517,7 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 
     string general_settings_path = "/my/settings/path";
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
@@ -509,6 +526,7 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 
 TEST_F(ServiceControllerTest, readRegisteredServicesFromFile)
 {
+    init();
     int family1_id3_port = 1111;
     string registered_services_json =  "{\n"
                             "    \"Registered Services\": {\n"
@@ -560,8 +578,10 @@ TEST_F(ServiceControllerTest, readRegisteredServicesFromFile)
 
 TEST_F(ServiceControllerTest, noPolicyUpdate)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -599,7 +619,13 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
                             "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -612,11 +638,8 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
-
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_CALL(
         mock_shell_cmd,
@@ -634,8 +657,10 @@ TEST_F(ServiceControllerTest, noPolicyUpdate)
 
 TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -673,7 +698,12 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -684,9 +714,6 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
@@ -705,7 +732,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
     string general_settings_path = "/my/settings/path";
     string reply_msg1 = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg1);
+    expectNewConfigRequest(reply_msg1);
 
     // both policy and settings now being updated
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
@@ -725,13 +752,15 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
 
     general_settings_path += "/new";
 
     string reply_msg2 = "{\"id\": 2, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 2,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg2);
+    expectNewConfigRequest(reply_msg2);
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
@@ -739,8 +768,10 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
 TEST_F(ServiceControllerTest, backup)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -779,6 +810,7 @@ TEST_F(ServiceControllerTest, backup)
 
     string old_configuration =  "{"
                                 "   \"version\": \"" + old_version + "\""
+                                "   \"versions\": \"" + old_versions + "\""
                                 "    \"app\": \"netfilter\","
                                 "    \"l4_firewall_rules\": ["
                                 "        {"
@@ -796,7 +828,13 @@ TEST_F(ServiceControllerTest, backup)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -804,9 +842,6 @@ TEST_F(ServiceControllerTest, backup)
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(
         mock_orchestration_tools,
@@ -842,8 +877,10 @@ TEST_F(ServiceControllerTest, backup)
 
 TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -882,6 +919,7 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
 
     string old_configuration =  "{"
                                 "   \"version\": \"" + old_version + "\""
+                                "   \"versions\": \"" + old_versions + "\""
                                 "    \"app\": \"netfilter\","
                                 "    \"l4_firewall_rules\": ["
                                 "        {"
@@ -899,7 +937,14 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -907,9 +952,6 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(
         mock_orchestration_tools,
@@ -937,7 +979,7 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
@@ -946,8 +988,10 @@ TEST_F(ServiceControllerTest, backup_file_doesnt_exist)
 
 TEST_F(ServiceControllerTest, backupAttempts)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -986,6 +1030,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
 
     string old_configuration =  "{"
                                 "   \"version\": \"" + old_version + "\""
+                                "   \"versions\": \"" + old_versions + "\""
                                 "    \"app\": \"netfilter\","
                                 "    \"l4_firewall_rules\": ["
                                 "        {"
@@ -1003,7 +1048,14 @@ TEST_F(ServiceControllerTest, backupAttempts)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -1011,9 +1063,6 @@ TEST_F(ServiceControllerTest, backupAttempts)
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(
         mock_orchestration_tools,
@@ -1041,7 +1090,7 @@ TEST_F(ServiceControllerTest, backupAttempts)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_CALL(mock_ml, yield(false)).Times(2);
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
@@ -1053,8 +1102,10 @@ TEST_F(ServiceControllerTest, backupAttempts)
 
 TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -1110,8 +1161,16 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
     Maybe<map<string, string>> json_parser_return = map<string, string>({
         {"version", version_value},
         {"l4_firewall", l4_firewall},
-        {"orchestration", orchestration}
+        {"orchestration", orchestration},
+        {"versions", versions}
     });
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     string orchestration_policy_path =  configuration_dir + "/orchestration/orchestration" + policy_extension;
     string orchestration_settings_path = configuration_dir + "/orchestration/orchestration" + settings_extension;
 
@@ -1124,9 +1183,6 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("orchestration", orchestration_policy_path, OrchestrationStatusConfigType::POLICY));
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false))
         .WillOnce(Return(true));
@@ -1148,12 +1204,13 @@ TEST_F(ServiceControllerTest, MultiUpdateConfiguration)
     ).WillRepeatedly(Return(string("registered and running")));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
     set<string> changed_policies = {
         "/etc/cp/conf/l4_firewall/l4_firewall.policy",
-        "/etc/cp/conf/orchestration/orchestration.policy"
+        "/etc/cp/conf/orchestration/orchestration.policy",
+        policy_versions_path
     };
     EXPECT_EQ(i_service_controller->moveChangedPolicies(), changed_policies);
 }
@@ -1166,6 +1223,7 @@ public:
 
 TEST_F(ServiceControllerTest, badJsonFile)
 {
+    init();
     Maybe<string> err = genError("Error");
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(err));
     EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
@@ -1173,6 +1231,7 @@ TEST_F(ServiceControllerTest, badJsonFile)
 
 TEST_F(ServiceControllerTest, emptyServices)
 {
+    init();
     Maybe<map<string, string>> json_parser_return = map<string, string>();
     string empty_string = "";
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(empty_string));
@@ -1185,16 +1244,15 @@ TEST_F(ServiceControllerTest, emptyServices)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
-
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
 TEST_F(ServiceControllerTest, failingWhileLoadingCurrentConfiguration)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -1232,23 +1290,31 @@ TEST_F(ServiceControllerTest, failingWhileLoadingCurrentConfiguration)
                                 "}";
 
     Maybe<string> err = genError("Error");
+
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(err));
 
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
     EXPECT_FALSE(i_service_controller->updateServiceConfiguration(file_name, "").ok());
 }
 
 TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -1287,6 +1353,7 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
 
     string old_configuration =  "{"
                                 "   \"version\": \"" + old_version + "\""
+                                "   \"versions\": \"" + old_versions + "\""
                                 "    \"app\": \"netfilter\","
                                 "    \"l4_firewall_rules\": ["
                                 "        {"
@@ -1304,15 +1371,20 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _)).Times(1).WillRepeatedly(
         Return(json_parser_return)
     );
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -1325,10 +1397,12 @@ TEST_F(ServiceControllerTest, failingWhileCopyingCurrentConfiguration)
 
 TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
 {
+    init();
     Debug::setUnitTestFlag(D_SERVICE_CONTROLLER, Debug::DebugLevel::NOISE);
     Debug::setNewDefaultStdout(&capture_debug);
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -1368,7 +1442,14 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
     EXPECT_CALL(time, getWalltime()).WillRepeatedly(Return(chrono::microseconds(0)));
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -1383,9 +1464,6 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
         mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY)
     );
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_EQ(i_service_controller->getPolicyVersion(), "");
 
@@ -1417,8 +1495,10 @@ TEST_F(ServiceControllerTest, ErrorUpdateConfigurationRest)
 
 TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
 {
+    init();
     string new_configuration =  "{"
                                 "   \"version\": \"" + version_value + "\""
+                                "   \"versions\": \"" + versions + "\""
                                 "   \"l4_firewall\":"
                                 "       {"
                                 "           \"app\": \"netfilter\","
@@ -1457,6 +1537,7 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
 
     string old_configuration =  "{"
                                 "   \"version\": \"" + old_version + "\""
+                                "   \"versions\": \"" + old_versions + "\""
                                 "    \"app\": \"netfilter\","
                                 "    \"l4_firewall_rules\": ["
                                 "        {"
@@ -1474,15 +1555,20 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
                                 "}";
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).Times(1).WillRepeatedly(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _)).Times(1).WillRepeatedly(
         Return(json_parser_return)
     );
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, readFile(l4_firewall_policy_path)).WillOnce(Return(old_configuration));
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
     EXPECT_CALL(
         mock_orchestration_tools,
         copyFile(l4_firewall_policy_path, l4_firewall_policy_path + backup_extension)
@@ -1498,6 +1584,7 @@ TEST_F(ServiceControllerTest, errorWhileWrtingNewConfiguration)
 
 TEST_F(ServiceControllerTest, testPortsRest)
 {
+    init();
     stringstream empty_json;
     empty_json << "{}";
     auto res = get_services_ports->performRestCall(empty_json);
@@ -1507,7 +1594,12 @@ TEST_F(ServiceControllerTest, testPortsRest)
 
 TEST_F(ServiceControllerTest, testMultitenantConfFiles)
 {
+    setSetting<string>("VirtualNSaaS", "agentType");
+    init();
+
     map<pair<string, string>, pair<string, string>> tenant_files_input = {
+        {make_pair("", ""),
+        make_pair("/etc/cp/conf/policy.json", "")},
         {make_pair("tenant1", "1234"),
         make_pair("/etc/cp/conf/tenant1_profile_1234_policy.json", "/etc/cp/conf/tenant1_profile_1234_settings.json")},
         {make_pair("tenant2", "1235"),
@@ -1517,11 +1609,11 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
     set<string> ids = {"family1_id2"};
     set<string> empty_ids;
 
-    EXPECT_CALL(tenant_manager, getInstances("tenant1", "1234")).WillOnce(Return(ids));
-    EXPECT_CALL(tenant_manager, getInstances("tenant2", "1235")).WillOnce(Return(empty_ids));
+    EXPECT_CALL(tenant_manager, getInstances("tenant1", "1234")).WillRepeatedly(Return(ids));
+    EXPECT_CALL(tenant_manager, getInstances("tenant2", "1235")).WillRepeatedly(Return(empty_ids));
 
     string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": true, \"error_message\": \"\"}";
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     for(auto entry : tenant_files_input) {
         auto tenant = entry.first.first;
@@ -1532,6 +1624,7 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
 
         string new_configuration =  "{"
                                     "   \"version\": \"" + version_value + "\""
+                                    "   \"versions\": \"" + versions + "\""
                                     "   \"l4_firewall\":"
                                     "       {"
                                     "           \"app\": \"netfilter\","
@@ -1568,44 +1661,72 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
                                     "    ]"
                                     "}";
 
-        string l4_firewall_policy_path_new =
-            configuration_dir + "/tenant_" + tenant +
-            "_profile_" + profile +"/l4_firewall/l4_firewall" + policy_extension;
         Maybe<map<string, string>> json_parser_return =
-            map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
-
+            map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
         EXPECT_CALL(mock_orchestration_tools, readFile(conf_file_name)).WillOnce(Return(new_configuration));
-
         EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, tenant, profile))
             .WillOnce(Return(json_parser_return));
+        if (!tenant.empty()) {
+            string l4_firewall_policy_path_new =
+                configuration_dir + "/tenant_" + tenant +
+                "_profile_" + profile +"/l4_firewall/l4_firewall" + policy_extension;
+            string policy_versions_path_new =
+                configuration_dir + "/tenant_" + tenant +
+                "_profile_" + profile +"/versions/versions" + policy_extension;
 
-        EXPECT_CALL(
-            mock_orchestration_tools,
-            doesDirectoryExist(configuration_dir + "/tenant_" + tenant + "_profile_" + profile)
-        ).WillOnce(Return(false));
+            EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path_new)).WillOnce(Return(false));
+            EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path_new, false))
+                .WillOnce(Return(true));
+            EXPECT_CALL(mock_orchestration_status,
+                setServiceConfiguration("versions", policy_versions_path_new, OrchestrationStatusConfigType::POLICY));
 
-        EXPECT_CALL(
-            mock_orchestration_tools,
-            createDirectory(configuration_dir + "/tenant_" + tenant + "_profile_" + profile)
-        ).WillOnce(Return(true));
+            EXPECT_CALL(
+                mock_orchestration_tools,
+                doesDirectoryExist(configuration_dir + "/tenant_" + tenant + "_profile_" + profile)
+            ).WillOnce(Return(false)).WillOnce(Return(true));
 
-        EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path_new)).WillOnce(Return(false));
+            EXPECT_CALL(
+                mock_orchestration_tools,
+                createDirectory(configuration_dir + "/tenant_" + tenant + "_profile_" + profile)
+            ).WillOnce(Return(true));
 
-        EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path_new, false))
-            .WillOnce(Return(true));
+            EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path_new)).WillOnce(Return(false));
 
-        EXPECT_CALL(mock_orchestration_status, setServiceConfiguration(
-            "l4_firewall", l4_firewall_policy_path_new, OrchestrationStatusConfigType::POLICY)
-        );
+            EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path_new, false))
+                .WillOnce(Return(true));
 
-        EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, conf_file_name))
-            .WillRepeatedly(Return(version_value));
+            string new_policy_file_path =
+                "/etc/cp/conf/tenant_" + tenant + "_profile_" + profile + "/" + "policy.json";
+            EXPECT_CALL(
+                mock_orchestration_tools,
+                copyFile(new_policy_file_path, new_policy_file_path + backup_extension)
+            ).WillOnce(Return(true));
+            EXPECT_CALL(mock_orchestration_tools, copyFile(conf_file_name, new_policy_file_path))
+                .WillOnce(Return(true));
+            EXPECT_CALL(mock_orchestration_tools, doesFileExist(new_policy_file_path)).WillOnce(Return(true));
 
-        string new_policy_file_path = "/etc/cp/conf/tenant_" + tenant + "_profile_" + profile + "/" + "policy.json";
-        EXPECT_CALL(mock_orchestration_tools, copyFile(new_policy_file_path, new_policy_file_path + backup_extension))
-            .WillOnce(Return(true));
-        EXPECT_CALL(mock_orchestration_tools, copyFile(conf_file_name, new_policy_file_path)).WillOnce(Return(true));
-        EXPECT_CALL(mock_orchestration_tools, doesFileExist(new_policy_file_path)).WillOnce(Return(true));
+            EXPECT_CALL(mock_orchestration_status, setServiceConfiguration(
+                "l4_firewall", l4_firewall_policy_path_new, OrchestrationStatusConfigType::POLICY)
+            );
+        } else {
+            EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
+            EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false)).
+                WillOnce(Return(true));
+            EXPECT_CALL(
+                mock_orchestration_status,
+                setServiceConfiguration(
+                    "l4_firewall",
+                    l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY
+                )
+            );
+
+            string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+            EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+            EXPECT_CALL(
+                mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+            EXPECT_CALL(mock_orchestration_status,
+                setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+        }
 
         EXPECT_CALL(
             mock_shell_cmd,
@@ -1623,7 +1744,8 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
                 settings_file_name,
                 {},
                 tenant,
-                profile
+                profile,
+                tenant.empty()
             ).ok()
         );
     }
@@ -1631,6 +1753,7 @@ TEST_F(ServiceControllerTest, testMultitenantConfFiles)
 
 TEST_F(ServiceControllerTest, cleanup_virtual_files)
 {
+    init();
     string agent_tenants_files =
         "111111\n"
         "222222\n"
@@ -1653,9 +1776,11 @@ TEST_F(ServiceControllerTest, cleanup_virtual_files)
 
 TEST_F(ServiceControllerTest, test_delayed_reconf)
 {
+    init();
     string new_configuration =
         "{"
         "   \"version\": \"" + version_value + "\""
+        "   \"versions\": " + versions +
         "   \"l4_firewall\":"
         "       {"
         "           \"app\": \"netfilter\","
@@ -1696,7 +1821,14 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     setConfiguration(60, "orchestration", "Reconfiguration timeout seconds");
 
     Maybe<map<string, string>> json_parser_return =
-        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}});
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
     EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
     EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
         .WillOnce(Return(json_parser_return));
@@ -1705,9 +1837,6 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
         WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_status,
         setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
-
-    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::MD5, file_name))
-        .WillOnce(Return(version_value));
 
     EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
         .WillOnce(Return(true));
@@ -1737,7 +1866,7 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
         << "    \"error_message\": \"\""
         << "}";
 
-    expectNewConfigRequest("{\n    \"id\": 1,\n    \"policy_version\": \"1.0.2,1.0.2\"\n}", reply_msg);
+    expectNewConfigRequest(reply_msg);
 
     auto func = [&] (chrono::microseconds) { set_reconf_status->performRestCall(reconf_status); };
     EXPECT_CALL(mock_ml, yield(chrono::microseconds(2000000))).WillOnce(Invoke(func));

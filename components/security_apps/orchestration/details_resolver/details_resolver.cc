@@ -44,6 +44,7 @@ public:
     bool isGwNotVsx() override;
     bool isVersionAboveR8110() override;
     bool isReverseProxy() override;
+    bool isCloudStorageEnabled() override;
     Maybe<tuple<string, string, string>> parseNginxMetadata() override;
 #if defined(gaia) || defined(smb)
     bool compareCheckpointVersion(int cp_version, std::function<bool(int, int)> compare_operator) const override;
@@ -133,6 +134,18 @@ DetailsResolver::Impl::isReverseProxy()
     }
 #endif
     return getenv("DOCKER_RPM_ENABLED") && getenv("DOCKER_RPM_ENABLED") == string("true");
+}
+
+bool
+DetailsResolver::Impl::isCloudStorageEnabled()
+{
+    auto cloud_storage_mode_override = getProfileAgentSetting<bool>("agent.cloudStorage.enabled");
+    if (cloud_storage_mode_override.ok()) {
+        dbgInfo(D_ORCHESTRATOR) << "Received cloud-storage mode override: " << *cloud_storage_mode_override;
+        return *cloud_storage_mode_override;
+    }
+
+    return getenv("CLOUD_STORAGE_ENABLED") && getenv("CLOUD_STORAGE_ENABLED") == string("true");
 }
 
 bool

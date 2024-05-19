@@ -40,6 +40,12 @@ LocalCommunication::authenticateAgent()
     return Maybe<void>();
 }
 
+void
+LocalCommunication::registerLocalAgentToFog()
+{
+    return;
+}
+
 string
 LocalCommunication::getChecksum(const string &file_path)
 {

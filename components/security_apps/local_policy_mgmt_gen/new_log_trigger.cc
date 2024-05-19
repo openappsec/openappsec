@@ -27,7 +27,7 @@ NewAppsecTriggerAccessControlLogging::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger - Access Control Logging";
     parseAppsecJSONKey<bool>("allowEvents", ac_allow_events, archive_in, false);
-    parseAppsecJSONKey<bool>("dropEvents", ac_drop_events, archive_in, false);
+    parseAppsecJSONKey<bool>("dropEvents", ac_drop_events, archive_in, true);
 }
 
 void
@@ -36,8 +36,7 @@ NewAppsecTriggerAdditionalSuspiciousEventsLogging::load(cereal::JSONInputArchive
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger - Additional Suspicious Events Logging";
     parseAppsecJSONKey<bool>("enabled", enabled, archive_in, true);
     parseAppsecJSONKey<bool>("responseBody", response_body, archive_in, false);
-    //the old code didn't parse the responsecode so ask Noam what is the currenct default value for it
-    parseAppsecJSONKey<bool>("responseCode", response_code, archive_in, false);
+    parseAppsecJSONKey<bool>("responseCode", response_code, archive_in, true);
     parseAppsecJSONKey<string>("minSeverity", minimum_severity, archive_in, "high");
     if (valid_severities.count(minimum_severity) == 0) {
         dbgWarning(D_LOCAL_POLICY)
@@ -175,8 +174,12 @@ void
 NewAppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger LogDestination";
-    // TBD: support "file"
-    parseAppsecJSONKey<bool>("cloud", cloud, archive_in, false);
+    if (getConfigurationFlag("orchestration-mode") != "hybrid_mode") {
+        // TBD: support "file"
+        parseAppsecJSONKey<bool>("cloud", cloud, archive_in, false);
+    } else {
+        cloud = false;
+    }
     auto mode = Singleton::Consume<I_AgentDetails>::by<NewAppsecTriggerLogDestination>()->getOrchestrationMode();
     auto env_type = Singleton::Consume<I_EnvDetails>::by<NewAppsecTriggerLogDestination>()->getEnvType();
     bool k8s_service_default = (mode == OrchestrationMode::HYBRID && env_type == EnvType::K8S);
@@ -184,7 +187,7 @@ NewAppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
 
     NewStdoutLogging stdout_log;
     parseAppsecJSONKey<NewStdoutLogging>("stdout", stdout_log, archive_in);
-    agent_local = !(stdout_log.getFormat().empty());
+    parseAppsecJSONKey<bool>("logToAgent", agent_local, archive_in, true);
     beautify_logs = stdout_log.getFormat() == "json-formatted";
     parseAppsecJSONKey<NewLoggingService>("syslogService", syslog_service, archive_in);
     parseAppsecJSONKey<NewLoggingService>("cefService", cef_service, archive_in);

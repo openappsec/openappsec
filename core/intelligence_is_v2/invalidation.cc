@@ -27,6 +27,7 @@ Invalidation::Invalidation(const string &class_value)
         :
     source_id(genError<void>()),
     object_type(genError<void>()),
+    invalidation_type(genError<void>()),
     listening_id(genError<void>()),
     registration_id(genError<void>())
 {
@@ -133,7 +134,9 @@ Invalidation::genObject() const
     }
 
     if (object_type.ok()) invalidation <<", \"objectType\": \"" << convertObjectType.at(*object_type) << '"';
-    invalidation << ", \"invalidationType\": \"" << convertInvalidationType.at(invalidation_type) << '"';
+    if (invalidation_type.ok()) {
+        invalidation << ", \"invalidationType\": \"" << convertInvalidationType.at(*invalidation_type) << '"';
+    }
     if (source_id.ok()) invalidation <<", \"sourceId\": \"" << *source_id << '"';
     if (registration_id.ok()) invalidation <<", \"invalidationRegistrationId\": \"" << *registration_id << '"';
 
@@ -209,6 +212,10 @@ Invalidation::matches(const Invalidation &other) const
 
     if (object_type.ok()) {
         if (!other.object_type.ok() || *object_type != *other.object_type) return false;
+    }
+
+    if (invalidation_type.ok()) {
+        if (!other.invalidation_type.ok() || *invalidation_type != *other.invalidation_type) return false;
     }
 
     if (source_id.ok()) {

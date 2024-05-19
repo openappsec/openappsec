@@ -142,7 +142,14 @@ Sender::sendMessage()
 {
     if (server_port.ok() && !server_ip.ok()) return genError("Can't send intelligence request. Server ip invalid");
     if (server_ip.ok() && !server_port.ok()) return genError("Can't send intelligence request. Server port invalid");
-    auto req_md = server_ip.ok() ? MessageMetadata(*server_ip, *server_port, conn_flags) : MessageMetadata();
+
+    MessageMetadata req_md;
+    if (server_ip.ok()) {
+        req_md = MessageMetadata(*server_ip, *server_port, conn_flags);
+    }
+    else {
+        req_md = request.getReqMD().getHostName().empty() ? MessageMetadata() : request.getReqMD();
+    }
 
     if (server_ip.ok()) {
         dbgTrace(D_INTELLIGENCE)

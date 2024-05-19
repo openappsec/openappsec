@@ -70,7 +70,7 @@ public:
     std::vector<StrAttributes> getAttributes() const { return attributes; }
     const Maybe<std::string, void> & getSourceId() const { return source_id; }
     const Maybe<ObjectType, void> & getObjectType() const { return object_type; }
-    InvalidationType getInvalidationType() const { return invalidation_type; }
+    const Maybe<InvalidationType, void> & getInvalidationType() const { return invalidation_type; }
     Maybe<std::string, void> getRegistrationID() const;
 
     bool report(I_Intelligence_IS_V2 *interface) const;
@@ -92,7 +92,7 @@ private:
     std::vector<StrAttributes> attributes;
     Maybe<std::string, void> source_id;
     Maybe<ObjectType, void> object_type;
-    InvalidationType invalidation_type = InvalidationType::ADD;
+    Maybe<InvalidationType, void> invalidation_type;
     Maybe<uint, void> listening_id;
     Maybe<std::string, void> registration_id;
 };
