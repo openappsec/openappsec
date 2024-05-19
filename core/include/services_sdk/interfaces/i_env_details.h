@@ -17,7 +17,7 @@
 #include <string>
 #include <stdbool.h>
 
-enum class EnvType { LINUX, K8S, COUNT };
+enum class EnvType { LINUX, DOCKER, K8S, NON_CRD_K8S, COUNT };
 
 class I_EnvDetails
 {

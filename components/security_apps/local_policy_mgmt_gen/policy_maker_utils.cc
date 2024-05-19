@@ -147,7 +147,7 @@ string
 PolicyMakerUtils::dumpPolicyToFile(
     const PolicyWrapper &policy,
     const string &policy_path,
-    const string &settings_path)
+    const string &)
 {
     clearElementsMaps();
 
@@ -170,6 +170,7 @@ PolicyMakerUtils::dumpPolicyToFile(
         cereal::JSONOutputArchive ar(settings_ss);
         policy.getSettings().save(ar);
     }
+#if 0
     string settings_str = settings_ss.str();
     try {
         ofstream settings_file(settings_path);
@@ -179,6 +180,7 @@ PolicyMakerUtils::dumpPolicyToFile(
         dbgDebug(D_NGINX_POLICY) << "Error while writing settings to " << settings_path << ", Error: " << e.what();
     }
     dbgDebug(D_LOCAL_POLICY) << settings_path << " content: " << settings_str;
+#endif
 
     return policy_str;
 }

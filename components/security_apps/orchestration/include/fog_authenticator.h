@@ -33,6 +33,7 @@
 #include "i_rest_api.h"
 #include "i_time_get.h"
 #include "i_encryptor.h"
+#include "i_shell_cmd.h"
 #include "maybe_res.h"
 
 class FogAuthenticator
@@ -43,10 +44,13 @@ class FogAuthenticator
     Singleton::Consume<I_DetailsResolver>,
     Singleton::Consume<I_OrchestrationStatus>,
     Singleton::Consume<I_OrchestrationTools>,
+    Singleton::Consume<I_EnvDetails>,
     Singleton::Consume<I_Encryptor>,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_Messaging>,
-    Singleton::Consume<I_TimeGet>
+    Singleton::Consume<I_TimeGet>,
+    Singleton::Consume<I_ShellCmd>,
+    Singleton::Consume<I_Environment>
 {
     class AccessToken
     {
@@ -88,6 +92,8 @@ public:
         void serialize(cereal::JSONOutputArchive &out_ar) const;
         void serialize(cereal::JSONInputArchive &in_ar);
 
+        std::string getData() const;
+
     private:
         AuthenticationType type;
         std::string data;
@@ -103,6 +109,7 @@ public:
     Maybe<void> authenticateAgent() override;
     void setAddressExtenesion(const std::string &extension) override;
     static std::string getUserEdition();
+    void registerLocalAgentToFog() override;
 
 protected:
     class UserCredentials
@@ -138,6 +145,7 @@ protected:
 
     bool saveCredentialsToFile(const UserCredentials &credentials) const;
     Maybe<UserCredentials> getCredentialsFromFile() const;
+    Maybe<RegistrationData> getRegistrationToken();
     Maybe<RegistrationData> getRegistrationData();
 
     std::string base64Encode(const std::string &in) const;

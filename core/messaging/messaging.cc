@@ -62,7 +62,7 @@ public:
         return messaging_comp.sendAsyncMessage(method, uri, body, category, message_metadata, force_buffering);
     }
 
-    Maybe<HTTPStatusCode, HTTPResponse>
+    Maybe<void, HTTPResponse>
     downloadFile(
         const HTTPMethod method,
         const std::string &uri,
@@ -74,7 +74,7 @@ public:
         return messaging_comp.downloadFile(method, uri, download_file_path, category, message_metadata);
     }
 
-    Maybe<HTTPStatusCode, HTTPResponse>
+    Maybe<void, HTTPResponse>
     uploadFile(
         const std::string &uri,
         const std::string &upload_file_path,

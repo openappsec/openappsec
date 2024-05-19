@@ -32,6 +32,7 @@ public:
         const std::string &policy_versions
     ) const = 0;
     virtual Maybe<void> authenticateAgent() = 0;
+    virtual void registerLocalAgentToFog() = 0;
     virtual Maybe<void> getUpdate(CheckUpdateRequest &request) = 0;
     virtual Maybe<std::string> downloadAttributeFile(
         const GetResourceFile &resourse_file,

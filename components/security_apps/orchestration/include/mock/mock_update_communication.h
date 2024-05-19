@@ -29,6 +29,7 @@ class MockUpdateCommunication :
 public:
     void init() {}
     MOCK_METHOD0(authenticateAgent, Maybe<void>());
+    MOCK_METHOD0(registerLocalAgentToFog, void());
     MOCK_METHOD1(getUpdate, Maybe<void>(CheckUpdateRequest &));
     MOCK_METHOD2(
         downloadAttributeFile,

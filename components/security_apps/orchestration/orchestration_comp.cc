@@ -310,7 +310,7 @@ private:
         dbgInfo(D_ORCHESTRATOR) << "There is a new manifest file.";
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::MANIFEST);
         Maybe<string> new_manifest_file =
-            Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromFog(
+            Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
                 orch_manifest.unpack(),
                 I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
                 resource_file
@@ -394,7 +394,6 @@ private:
         if (restart_watchdog_orch.good()) {
             ofstream restart_watchdog("/tmp/restart_watchdog", ofstream::out);
             restart_watchdog.close();
-            remove((filesystem_prefix + "/orchestration/restart_watchdog").c_str());
             restart_watchdog_orch.close();
         }
 
@@ -501,7 +500,7 @@ private:
         dbgInfo(D_ORCHESTRATOR) << "There is a new policy file.";
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::POLICY);
         Maybe<string> new_policy_file =
-        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromFog(
+        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
             new_policy.unpack(),
             I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
             resource_file
@@ -677,7 +676,7 @@ private:
             "Data file path"
         );
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::DATA);
-        Maybe<string> new_data_files = Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromFog(
+        Maybe<string> new_data_files = Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
             orch_data.unpack(),
             I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
             resource_file
@@ -753,7 +752,7 @@ private:
         dbgInfo(D_ORCHESTRATOR) << "There is a new settings file.";
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::SETTINGS);
         Maybe<string> new_settings_file =
-        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromFog(
+        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
             orch_settings.unpack(),
             I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
             resource_file
@@ -1330,6 +1329,12 @@ private:
             agent_data_report << AgentReportFieldWithLabel("reverse_proxy", "true");
         }
 
+        if (i_details_resolver->isCloudStorageEnabled()) {
+            agent_data_report << AgentReportFieldWithLabel("cloud_storage_service", "true");
+        } else {
+            agent_data_report << AgentReportFieldWithLabel("cloud_storage_service", "false");
+        }
+
         if (i_details_resolver->isKernelVersion3OrHigher()) {
             agent_data_report << AgentReportFieldWithLabel("isKernelVersion3OrHigher", "true");
         }
@@ -1417,7 +1422,7 @@ private:
             is_new_success = false;
             sleep_interval = calcSleepInterval(policy.getErrorSleepInterval());
             dbgWarning(D_ORCHESTRATOR)
-                << "Failed during check update from Fog. Error: "
+                << "Failed during check update. Error: "
                 << check_update_result.getErr()
                 << ", new check will be every: "
                 << sleep_interval << " seconds";
@@ -1425,7 +1430,7 @@ private:
             health_check_status_listener.setStatus(
                 HealthCheckStatus::UNHEALTHY,
                 OrchestrationStatusFieldType::LAST_UPDATE,
-                "Failed during check update from Fog. Error: " + check_update_result.getErr()
+                "Failed during check update. Error: " + check_update_result.getErr()
             );
             return;
         }
@@ -1507,11 +1512,23 @@ private:
             << LogField("agentType", "Orchestration")
             << LogField("agentVersion", Version::get());
 
-        Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
+        auto mainloop = Singleton::Consume<I_MainLoop>::by<OrchestrationComp>();
+        mainloop->addOneTimeRoutine(
             I_MainLoop::RoutineType::Offline,
             sendRegistrationData,
             "Send registration data"
         );
+
+        if (getOrchestrationMode() == OrchestrationMode::HYBRID) {
+            Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addRecurringRoutine(
+                I_MainLoop::RoutineType::Offline,
+                chrono::seconds(60),
+                [&] () {
+                    Singleton::Consume<I_UpdateCommunication>::by<OrchestrationComp>()->registerLocalAgentToFog();
+                },
+                "Check For Environment Registration Token"
+            );
+        }
 
         reportAgentDetailsMetaData();
 
@@ -1557,6 +1574,11 @@ private:
                 tags.insert(Tags::DEPLOYMENT_EMBEDDED);
                 break;
             }
+            case EnvType::DOCKER: {
+                tags.insert(Tags::DEPLOYMENT_DOCKER);
+                break;
+            }
+            case EnvType::NON_CRD_K8S:
             case EnvType::K8S: {
                 tags.insert(Tags::DEPLOYMENT_K8S);
                 break;
@@ -1760,7 +1782,7 @@ private:
         string orchestration_mode = getConfigurationFlag("orchestration-mode");
         if (
             orchestration_mode == "online_mode" ||
-            orchestration_mode == "hybrid_mode" ||
+            orchestration_mode  ==  "hybrid_mode" ||
             orchestration_mode == "offline_mode"
         ) {
             dbgTrace(D_ORCHESTRATOR) << "Orchestraion mode: " << orchestration_mode;

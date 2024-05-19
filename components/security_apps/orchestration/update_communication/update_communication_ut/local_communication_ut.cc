@@ -38,6 +38,12 @@ public:
         return local_communication.authenticateAgent();
     }
 
+    void
+    registerLocalAgentToFog()
+    {
+        local_communication.registerLocalAgentToFog();
+    }
+
     Maybe<void>
     sendPolicyVersion(const string &version, const string &policy_versions)
     {
@@ -120,6 +126,11 @@ TEST_F(LocalCommunicationTest, authenticateAgent)
 {
     auto authenticat_res = authenticateAgent();
     EXPECT_TRUE(authenticat_res.ok());
+}
+
+TEST_F(LocalCommunicationTest, registerLocalAgentToFog)
+{
+    registerLocalAgentToFog();
 }
 
 TEST_F(LocalCommunicationTest, downloadManifest)

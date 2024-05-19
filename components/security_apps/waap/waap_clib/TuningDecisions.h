@@ -59,6 +59,7 @@ private:
         if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
             req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             auto req_status = messaging->sendSyncMessage(
                 method,
                 uri,

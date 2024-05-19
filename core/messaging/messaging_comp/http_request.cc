@@ -61,7 +61,9 @@ HTTPRequest::setConnectionHeaders(const Connection &conn)
         }
     }
 
-    insertHeader("Host", host);
+    if (headers.find("Host") == headers.end()) {
+        insertHeader("Host", host);
+    }
     insertHeader("Content-Length", to_string(body.size()));
     insertHeader("Content-type", "application/json");
     insertHeader("Accept-Encoding", "identity");
@@ -82,16 +84,20 @@ HTTPRequest::prepareRequest(
 {
     HTTPRequest req(method, uri, headers, body);
 
-    if (!req.setConnectionHeaders(conn)) return genError("Failed to identify the HTTP method");
-
-    string agent_registration_query = R"("authenticationMethod": "token")";
     bool dont_add_access_token = false;
+    if (headers.find("Host") != headers.end()) {
+        dont_add_access_token = true;
+        dbgTrace(D_MESSAGING) << "Request is not for FOG";
+    }
+    string agent_registration_query = R"("authenticationMethod": "token")";
     if (method == HTTPMethod::CONNECT || body.find(agent_registration_query) != string::npos) {
         dont_add_access_token = true;
         dbgTrace(D_MESSAGING) << "Request is for agent authentication";
     }
     auto res = req.addAccessToken(conn, dont_add_access_token);
     if (!res.ok()) return res.passErr();
+
+    if (!req.setConnectionHeaders(conn)) return genError("Failed to identify the HTTP method");
 
     if (conn.isOverProxy()) {
         auto res = req.addProxyAuthorization(conn);

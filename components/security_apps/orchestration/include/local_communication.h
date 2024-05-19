@@ -29,6 +29,7 @@ public:
     void init();
 
     Maybe<void> authenticateAgent() override;
+    void registerLocalAgentToFog() override;
     Maybe<void> getUpdate(CheckUpdateRequest &request) override;
 
     Maybe<std::string> downloadAttributeFile(

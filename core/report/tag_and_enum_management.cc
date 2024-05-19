@@ -110,7 +110,8 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"apiDiscoveryCloudMessaging", ReportIS::Tags::API_DISCOVERY},
         {"Playground", ReportIS::Tags::PLAYGROUND},
         {"Nginx Proxy Manager", ReportIS::Tags::NGINX_PROXY_MANAGER},
-        {"APISIX Server", ReportIS::Tags::WEB_SERVER_APISIX}
+        {"APISIX Server", ReportIS::Tags::WEB_SERVER_APISIX},
+        {"Docker Deployment", ReportIS::Tags::DEPLOYMENT_DOCKER}
     };
     
     auto report_is_tag = strings_to_tags.find(tag);
@@ -318,7 +319,8 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Playground",
     "apiDiscoveryCloudMessaging",
     "Nginx Proxy Manager",
-    "APISIX Server"
+    "APISIX Server",
+    "Docker Deployment"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

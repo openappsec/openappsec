@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http_client.h"
+#include "https_client.h"
 
 Maybe<void>
-HTTPClient::getFileSSLDirect(const URLParser &, std::ofstream &, const std::string &)
+HTTPSClient::getFileSSLDirect(const URLParser &, const std::string &, const std::string &)
 {
     return genError("No direct downloading in open-source");
 }

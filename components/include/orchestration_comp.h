@@ -31,6 +31,7 @@
 #include "i_environment.h"
 #include "i_tenant_manager.h"
 #include "i_package_handler.h"
+#include "i_proxy_configuration.h"
 #include "i_env_details.h"
 #include "component.h"
 
@@ -54,7 +55,8 @@ class OrchestrationComp
     Singleton::Consume<I_UpdateCommunication>,
     Singleton::Consume<I_Downloader>,
     Singleton::Consume<I_ManifestController>,
-    Singleton::Consume<I_EnvDetails>
+    Singleton::Consume<I_EnvDetails>,
+    Singleton::Consume<I_ProxyConfiguration>
 {
 public:
     OrchestrationComp();

@@ -15,7 +15,7 @@
 
 #include "i_orchestration_tools.h"
 #include "singleton.h"
-#include "http_client.h"
+#include "https_client.h"
 #include "debug.h"
 #include "config.h"
 #include "rest.h"
@@ -63,7 +63,7 @@ class Downloader::Impl : Singleton::Provide<I_Downloader>::From<Downloader>
 public:
     void init();
 
-    Maybe<string> downloadFileFromFog(
+    Maybe<string> downloadFile(
         const string &checksum,
         Package::ChecksumTypes checksum_type,
         const GetResourceFile &resourse_file
@@ -87,7 +87,7 @@ public:
     string getProfileFromMap(const string &tenant_id) const override;
 
 private:
-    Maybe<string> downloadFileFromFogByHTTP(
+    Maybe<string> downloadAttributeFile(
         const GetResourceFile &resourse_file,
         const string &file_name
     ) const;
@@ -130,12 +130,12 @@ Downloader::Impl::init()
 }
 
 Maybe<string>
-Downloader::Impl::downloadFileFromFog(
+Downloader::Impl::downloadFile(
     const string &checksum,
     Package::ChecksumTypes checksum_type,
     const GetResourceFile &resourse_file) const
 {
-    auto file_path = downloadFileFromFogByHTTP(resourse_file, resourse_file.getFileName() + ".download");
+    auto file_path = downloadAttributeFile(resourse_file, resourse_file.getFileName() + ".download");
 
     if (!file_path.ok()) {
         return file_path;
@@ -378,11 +378,11 @@ Downloader::Impl::validateChecksum(
 }
 
 Maybe<string>
-Downloader::Impl::downloadFileFromFogByHTTP(const GetResourceFile &resourse_file, const string &file_name) const
+Downloader::Impl::downloadAttributeFile(const GetResourceFile &resourse_file, const string &file_name) const
 {
     string file_path = dir_path + "/" + file_name;
 
-    dbgInfo(D_ORCHESTRATOR) << "Downloading file from fog. File: " << resourse_file.getFileName();
+    dbgInfo(D_ORCHESTRATOR) << "Downloading file. File: " << resourse_file.getFileName();
 
     I_UpdateCommunication *update_communication = Singleton::Consume<I_UpdateCommunication>::by<Downloader>();
     auto downloaded_file = update_communication->downloadAttributeFile(resourse_file, file_path);
@@ -408,17 +408,14 @@ Downloader::Impl::getFileFromLocal(const string &local_file_path, const string &
 Maybe<string>
 Downloader::Impl::getFileFromURL(const URLParser &url, const string &file_path, bool auth_required) const
 {
-    ofstream outFile(file_path, ofstream::out | ofstream::binary);
-    HTTPClient http_client;
     dbgInfo(D_ORCHESTRATOR) << "Downloading file. URL: " << url;
-    auto get_file_response = http_client.getFile(url, outFile, auth_required);
+    auto get_file_response = HTTPSClient().getFile(url, file_path, auth_required);
     if (!get_file_response.ok()) {
         Maybe<string> error = genError("Failed to download file from " + url.getBaseURL().unpack() +
                     ". Error: " + get_file_response.getErr());
         dbgWarning(D_ORCHESTRATOR) << "Download failed";
         return error;
     }
-    outFile.close();
     dbgInfo(D_ORCHESTRATOR) << "Download completed. URL: " << url;
     return file_path;
 }

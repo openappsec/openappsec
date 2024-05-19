@@ -18,6 +18,7 @@ WATCHDOG_PATH="watchdog"
 SERVICE_PATH="orchestration"
 DBG_FILE_PATH="${LOG_PATH}/cp-nano-orchestration.dbg"
 ENV_DETAILS_FILE="${CONF_PATH}/environment-details.cfg"
+TMP_FOLDER="/tmp"
 WATCHDOG_MAX_ROTATIONS=10
 WATCHDOG_MAX_FILE_SIZE=4096
 FORCE_CLEAN_FLAG='^(--force-clean|-f)$'
@@ -76,6 +77,7 @@ var_gaia_release=1
 var_mds_release=1
 var_alpine_release=1
 var_which_cmd_exists=0
+var_cloud_storage=
 
 if [ -f /.dockerenv ]; then
     var_container_mode=true
@@ -305,6 +307,7 @@ while true; do
         NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
         VS_LIB_SUB_FOLDER="/vs${VS_ID}"
         LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
+        TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
     elif [ "$1" = "--log_files_path" ]; then
         shift
         var=$1
@@ -321,6 +324,9 @@ while true; do
 		continue
     elif [ "$1" = "--skip_registration" ]; then
         var_skip_registration=true
+    elif [ "$1" = "--cloud-storage" ]; then
+        shift
+        var_cloud_storage=$1
     elif echo "$1" | grep -q ${FORCE_CLEAN_FLAG}; then
         var_upgrade_mode=
     elif echo "$1" | grep -q ${DEBUG_FLAG}; then
@@ -349,6 +355,7 @@ if [ -z "$VS_ID" ]; then
         NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
         VS_LIB_SUB_FOLDER="/vs${VS_ID}"
         LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
+        TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
     fi
 fi
 
@@ -474,9 +481,9 @@ update_cloudguard_appsec_manifest()
         return
     fi
 
-    selected_cloudguard_appsec_manifest_path="/tmp/cloudguard_appsec_manifest.json"
+    selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/cloudguard_appsec_manifest.json"
     if [ "${DOCKER_RPM_ENABLED}" = "false" ]; then
-        selected_cloudguard_appsec_manifest_path="/tmp/self_managed_cloudguard_appsec_manifest.json"
+        selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/self_managed_cloudguard_appsec_manifest.json"
     fi
 
     if [ ! -f "$selected_cloudguard_appsec_manifest_path" ]; then
@@ -490,6 +497,43 @@ update_cloudguard_appsec_manifest()
     sed "s/namespace/${fog_host}/g" ${cloudguard_appsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
 }
 
+set_cloud_storage()
+{
+    CP_NANO_CLOUD_STORAGE_CONFIG_PATH="${TMP_FOLDER}/cp-nano-cloud-storage.conf"
+    if [ ! -f "${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}" ] && [ -z "${var_cloud_storage}" ]; then
+        sed -i '/CLOUD_STORAGE_ENABLED/d' ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+        return
+    fi
+
+    touch ${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}
+
+    if [ -n "${var_token}" ]; then
+        if ! command -v "openssl" 1> /dev/null 2> /dev/null && command -v "cpopenssl" 1> /dev/null 2> /dev/null; then
+            ln -s "$(command -v cpopenssl)" "$(dirname $(command -v cpopenssl))/openssl"
+        fi
+        HASHED_TOKEN=$(openssl passwd -6 -salt cp-cloud-key ${var_token})
+        if grep -q "HASHED_TOKEN" "${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}"; then
+            sed -i "/HASHED_TOKEN/c\HASHED_TOKEN='${HASHED_TOKEN}'" "${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}"
+        else
+            echo "HASHED_TOKEN='${HASHED_TOKEN}'" >> ${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}
+        fi
+    fi
+
+    if [ -n "${var_cloud_storage}" ]; then
+        if grep -q "CLOUD_STORAGE" "${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}"; then
+            sed -i "/CLOUD_STORAGE/c\CLOUD_STORAGE=${var_cloud_storage}" "${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}"
+        else
+            echo "CLOUD_STORAGE=${var_cloud_storage}" >> "${CP_NANO_CLOUD_STORAGE_CONFIG_PATH}"
+        fi
+    fi
+
+    if grep -q "CLOUD_STORAGE_ENABLED" "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"; then
+        sed -i "/CLOUD_STORAGE_ENABLED/c\export CLOUD_STORAGE_ENABLED=true" "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
+    else
+        echo "export CLOUD_STORAGE_ENABLED=true" >> "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
+    fi
+}
+
 install_watchdog_gaia()
 {
     watchdog_pm_name="cp-nano-watchdog"
@@ -497,7 +541,7 @@ install_watchdog_gaia()
         watchdog_pm_name="cp-nano-watchdog-vs${VS_ID}"
         cp_exec "ln -s ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/${watchdog_pm_name}"
     fi
-    
+
     # verify that DB is clean from cp-nano-watchdog
     tellpm ${watchdog_pm_name}
     dbset process:${watchdog_pm_name}
@@ -529,7 +573,6 @@ install_watchdog()
         if [ "$IS_K8S_ENV" = "true" ]; then
             cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
         fi
-
         return
     fi
     cp_print "Installing the watchdog" ${FORCE_STDOUT}
@@ -577,7 +620,7 @@ install_watchdog()
                 echo "ExecStart=ip netns exec CTX0000${VS_ID} ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             fi
             echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
-            
+
             cp_exec "systemctl daemon-reload"
             cp_exec "systemctl enable nano_agent"
         else
@@ -847,7 +890,6 @@ uninstall_messaging_proxy_if_needed()
 install_orchestration()
 {
     INSTALLATION_TIME=$(date)
-
     if [ "$is_smb" != "1" ]; then
         cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}"
     else
@@ -899,6 +941,11 @@ install_orchestration()
         add_uninstall_script
         cp_exec "cp -f certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem"
 
+        if [ -n ${OTP_TOKEN} ]; then
+            cp_print "Saving authentication token to file"
+            printf '{\n   "registration type": "token",\n   "registration data": "%b"\n}' "$OTP_TOKEN" | ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_BASE64} -e > ${FILESYSTEM_PATH}/${CONF_PATH}/registration-data.json
+        fi
+
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
         previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
 
@@ -930,6 +977,8 @@ install_orchestration()
         if [ "$IS_K8S_ENV" = "true" ]; then
             cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
         fi
+
+        set_cloud_storage
 
         cp_print "Upgrade to latest"
 
@@ -1016,11 +1065,15 @@ install_orchestration()
         done
     fi
 
-    cp_print "Building the default policy json"
-    echo '{"'$ORCHESTRATION_NAME'": { "fog-address":"'$var_fog_address'", ' > ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
-    echo '"pulling-interval":'$var_sleep_interval', ' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
-    echo '"error-pulling-interval":'$var_error_sleep_interval'},' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
-    echo '"registration-data": { "email-address": "'$var_email'", "registered-server": "'$var_server'"}}' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+    if [ ! -f ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json ] ; then
+        cp_print "Building the default policy json"
+        echo '{"'$ORCHESTRATION_NAME'": { "fog-address":"'$var_fog_address'", ' > ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+        echo '"pulling-interval":'$var_sleep_interval', ' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+        echo '"error-pulling-interval":'$var_error_sleep_interval'},' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+        echo '"registration-data": { "email-address": "'$var_email'", "registered-server": "'$var_server'"}}' >> ${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+    fi
+
+    set_cloud_storage
 
     copy_orchestration_executable
     copy_k8s_executable

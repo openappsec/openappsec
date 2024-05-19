@@ -68,6 +68,12 @@ FogAuthenticator::RegistrationData::RegistrationData(const string &token)
 {
 }
 
+string
+FogAuthenticator::RegistrationData::getData() const
+{
+    return data;
+}
+
 FogAuthenticator::UserCredentials::UserCredentials(const string &_client_id, const string &_shared_secret)
         :
     client_id(_client_id),
@@ -193,6 +199,10 @@ FogAuthenticator::registerAgent(
         request << make_pair("reverse_proxy", "true");
     }
 
+    if (details_resolver->isCloudStorageEnabled()) {
+        request << make_pair("cloud_storage_service", "true");
+    }
+
     if (details_resolver->isKernelVersion3OrHigher()) {
         request << make_pair("isKernelVersion3OrHigher", "true");
     }
@@ -211,6 +221,10 @@ FogAuthenticator::registerAgent(
     }
     if (details_resolver->compareCheckpointVersion(8200, std::greater_equal<int>())) {
         request << make_pair("isCheckpointVersionGER82", "true");
+    }
+    auto maybe_vs_id = Singleton::Consume<I_Environment>::by<FogAuthenticator>()->get<string>("VS ID");
+    if (maybe_vs_id.ok()) {
+        request << make_pair("virtualSystemId", maybe_vs_id.unpack());
     }
 #endif // gaia || smb
 
@@ -297,36 +311,88 @@ FogAuthenticator::getRegistrationData()
         return reg_data;
     }
 
-    const char *env_otp = getenv("NANO_AGENT_TOKEN");
-    if (env_otp) {
-        dbgInfo(D_ORCHESTRATOR) << "Loading registration token from environment";
-        return RegistrationData(env_otp);
-    }
     if (reg_data.ok()) {
         dbgInfo(D_ORCHESTRATOR) << "Loading registration token from cache";
         return reg_data;
     }
 
+    auto local_env_token = getRegistrationToken();
+    if (local_env_token.ok()) return local_env_token;
+
+    return genError("Failed to load registration token from the environment.");
+}
+
+Maybe<FogAuthenticator::RegistrationData>
+FogAuthenticator::getRegistrationToken()
+{
     auto reg_data_path = getConfigurationWithDefault<string>(
         filesystem_prefix + "/conf/registration-data.json",
         "orchestration",
         "Registration data Path"
     );
+    dbgTrace(D_ORCHESTRATOR) << "Getting registration token from " << reg_data_path;
 
-    dbgDebug(D_ORCHESTRATOR) << "Loading registration data from " << reg_data_path;
     auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<FogAuthenticator>();
     auto raw_reg_data = orchestration_tools->readFile(reg_data_path);
-    if (!raw_reg_data.ok()) return genError(raw_reg_data.getErr());
+    if (raw_reg_data.ok()) {
+        auto decoded_reg_data = orchestration_tools->base64Decode(raw_reg_data.unpack());
+        reg_data = orchestration_tools->jsonStringToObject<RegistrationData>(decoded_reg_data);
 
-    dbgTrace(D_ORCHESTRATOR) << "Successfully loaded the registration data";
-    auto decoded_reg_data = orchestration_tools->base64Decode(raw_reg_data.unpack());
-    reg_data = orchestration_tools->jsonStringToObject<RegistrationData>(decoded_reg_data);
-
-    if (reg_data.ok()) {
-        dbgTrace(D_ORCHESTRATOR) << "Registration token has been converted to an object";
+        if (reg_data.ok()) {
+            dbgInfo(D_ORCHESTRATOR) << "Registration token has been loaded from: " << reg_data_path;
+            return reg_data;
+        }
     }
 
-    return reg_data;
+    dbgTrace(D_ORCHESTRATOR) << "Getting registration token from container environment.";
+    const char *container_otp = getenv("AGENT_TOKEN");
+    if (container_otp) {
+        dbgInfo(D_ORCHESTRATOR) << "Registration token has been loaded from container environment";
+        return RegistrationData(container_otp);
+    }
+
+    dbgTrace(D_ORCHESTRATOR) << "Getting registration token from the environment.";
+    const char *env_otp = getenv("NANO_AGENT_TOKEN");
+    if (env_otp) {
+        dbgInfo(D_ORCHESTRATOR) << "Registration token has been loaded from the environment";
+        return RegistrationData(env_otp);
+    }
+
+    return genError("No registration token in the environment");
+}
+
+void
+FogAuthenticator::registerLocalAgentToFog()
+{
+    auto local_reg_token = getRegistrationToken();
+    if (!local_reg_token.ok()) return;
+    dbgInfo(D_ORCHESTRATOR) << "Start local agent registration to the fog";
+
+    string exec_command = "open-appsec-ctl --set-mode --online_mode --token " + local_reg_token.unpack().getData();
+
+    auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<FogAuthenticator>();
+    auto fog_address = i_agent_details->getFogDomain();
+    if (fog_address.ok()) exec_command = exec_command + " --fog https://" + fog_address.unpack();
+
+    auto shell_cmd = Singleton::Consume<I_ShellCmd>::by<FogAuthenticator>();
+    auto maybe_cmd_output = shell_cmd->getExecOutputAndCode(
+        exec_command,
+        300000,
+        true
+    );
+    if (!maybe_cmd_output.ok()){
+        dbgWarning(D_ORCHESTRATOR)
+            << "Failed in local agent registertion to the fog. Error: "
+            << maybe_cmd_output.getErr();
+        return;
+    }
+
+    if (maybe_cmd_output.unpack().second != 0) {
+        dbgWarning(D_ORCHESTRATOR)
+            << "Failed in local agent registertion to the fog. Error: "
+            << maybe_cmd_output.unpack().first;
+        return;
+    }
 }
 
 bool
@@ -378,6 +444,22 @@ FogAuthenticator::getCredentialsFromFile() const
     return orchestration_tools->jsonStringToObject<UserCredentials>(encrypted_cred.unpack());
 }
 
+static string
+getDeplymentType()
+{
+    auto deplyment_type = Singleton::Consume<I_EnvDetails>::by<FogAuthenticator>()->getEnvType();
+    switch (deplyment_type) {
+        case EnvType::LINUX: return "Embedded";
+        case EnvType::DOCKER: return "Embedded";
+        case EnvType::NON_CRD_K8S:
+        case EnvType::K8S: return "Embedded";
+        case EnvType::COUNT: break;
+    }
+
+    dbgAssert(false) << "Failed to get a legitimate deplyment type: " << static_cast<uint>(deplyment_type);
+    return "Embedded";
+}
+
 Maybe<FogAuthenticator::UserCredentials>
 FogAuthenticator::getCredentials()
 {
@@ -386,7 +468,7 @@ FogAuthenticator::getCredentials()
         return maybe_credentials;
     }
 
-    dbgTrace(D_ORCHESTRATOR) << "Credentials were not not receoived from the file. Getting registration data.";
+    dbgTrace(D_ORCHESTRATOR) << "Credentials were not not received from the file. Getting registration data.";
     auto reg_data = getRegistrationData();
     if (!reg_data.ok()) {
         return genError("Failed to load a valid registration token, Error: " + reg_data.getErr());
@@ -396,17 +478,24 @@ FogAuthenticator::getCredentials()
     Maybe<string> name = details_resolver->getHostname();
     if (!name.ok()) return name.passErr();
 
+    auto maybe_vs_id = Singleton::Consume<I_Environment>::by<FogAuthenticator>()->get<string>("VS ID");
+    string host_name = *name;
+    if (maybe_vs_id.ok()) {
+        host_name.append(":");
+        host_name.append(maybe_vs_id.unpack());
+    }
+
     Maybe<string> platform = details_resolver->getPlatform();
     if (!platform.ok()) return platform.passErr();
 
     Maybe<string> arch = details_resolver->getArch();
     if (!arch.ok()) return arch.passErr();
 
-    string type = getConfigurationWithDefault<string>("Embedded", "orchestration", "Agent type");
-    maybe_credentials = registerAgent(reg_data.unpack(), *name, type, *platform, *arch);
+    string type = getSettingWithDefault(getDeplymentType(), "orchestration", "Agent type");
+    maybe_credentials = registerAgent(reg_data.unpack(), host_name, type, *platform, *arch);
 
     auto orc_status = Singleton::Consume<I_OrchestrationStatus>::by<FogAuthenticator>();
-    orc_status->setRegistrationDetails(*name, type, *platform, *arch);
+    orc_status->setRegistrationDetails(host_name, type, *platform, *arch);
 
     if (!maybe_credentials.ok()) return maybe_credentials;
 

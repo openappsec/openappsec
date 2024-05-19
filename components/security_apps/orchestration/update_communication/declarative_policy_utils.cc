@@ -100,11 +100,19 @@ DeclarativePolicyUtils::updateCurrentPolicy(const string &policy_checksum)
 {
     string clean_policy_checksum = getCleanChecksum(policy_checksum);
     auto env = Singleton::Consume<I_EnvDetails>::by<DeclarativePolicyUtils>()->getEnvType();
-    curr_policy = Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->generateAppSecLocalPolicy(
-        env,
-        clean_policy_checksum,
-        local_policy_path
-    );
+    string maybe_policy =
+        Singleton::Consume<I_LocalPolicyMgmtGen>::by<DeclarativePolicyUtils>()->generateAppSecLocalPolicy(
+            env,
+            clean_policy_checksum,
+            local_policy_path
+        );
+
+    if (maybe_policy.empty()) {
+        dbgWarning(D_ORCHESTRATOR) << "Could not generate appsec local policy";
+        return;
+    }
+
+    curr_policy = maybe_policy;
 }
 
 string

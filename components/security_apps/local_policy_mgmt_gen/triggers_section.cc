@@ -387,8 +387,12 @@ void
 AppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Trigger LogDestination";
-    // TBD: support "file"
-    parseAppsecJSONKey<bool>("cloud", cloud, archive_in, false);
+    if (getConfigurationFlag("orchestration-mode") != "hybrid_mode") {
+        // TBD: support "file"
+        parseAppsecJSONKey<bool>("cloud", cloud, archive_in, false);
+    } else {
+        cloud = false;
+    }
     auto mode = Singleton::Consume<I_AgentDetails>::by<AppsecTriggerLogDestination>()->getOrchestrationMode();
     auto env_type = Singleton::Consume<I_EnvDetails>::by<AppsecTriggerLogDestination>()->getEnvType();
     bool k8s_service_default = (mode == OrchestrationMode::HYBRID && env_type == EnvType::K8S);

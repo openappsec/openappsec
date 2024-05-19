@@ -38,7 +38,7 @@ TEST_F(DownloaderTest, doNothing)
 {
 }
 
-TEST_F(DownloaderTest, downloadFileFromFog)
+TEST_F(DownloaderTest, downloadFile)
 {
     string fog_response = "bla bla";
     string checksum = "123";
@@ -55,7 +55,7 @@ TEST_F(DownloaderTest, downloadFileFromFog)
 
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile("/tmp/virtualSettings.download")).WillOnce(Return(true));
 
-    Maybe<string> downloaded_file = i_downloader->downloadFileFromFog(
+    Maybe<string> downloaded_file = i_downloader->downloadFile(
         checksum,
         Package::ChecksumTypes::SHA256,
         resourse_file
@@ -76,7 +76,7 @@ TEST_F(DownloaderTest, downloadFileFromFogFailure)
         downloadAttributeFile(resourse_file, "/tmp/settings.download")
     ).WillOnce(Return(fog_response));
 
-    Maybe<string> downloaded_file = i_downloader->downloadFileFromFog(
+    Maybe<string> downloaded_file = i_downloader->downloadFile(
         checksum,
         Package::ChecksumTypes::SHA256,
         resourse_file
@@ -241,7 +241,7 @@ TEST_F(DownloaderTest, downloadEmptyFileFromFog)
         calculateChecksum(Package::ChecksumTypes::SHA256, "/tmp/manifest.download")
     ).WillOnce(Return(checksum));
 
-    Maybe<string> downloaded_file = i_downloader->downloadFileFromFog(
+    Maybe<string> downloaded_file = i_downloader->downloadFile(
         checksum,
         Package::ChecksumTypes::SHA256,
         resourse_file
