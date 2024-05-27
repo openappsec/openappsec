@@ -88,7 +88,7 @@ public:
         // This Holding the Main Routine of the Orchestration.
         EXPECT_CALL(
             mock_ml,
-            addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Orchestration runner", true)
+            addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Orchestration runner", true)
         ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
 
         EXPECT_CALL(mock_shell_cmd, getExecOutput("openssl version -d | cut -d\" \" -f2 | cut -d\"\\\"\" -f2", _, _))
@@ -143,6 +143,9 @@ public:
 
         map<string, string> resolved_mgmt_details({{"kernel_version", "4.4.0-87-generic"}});
         EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_mgmt_details));
+        EXPECT_CALL(mock_details_resolver, readCloudMetadata()).WillRepeatedly(
+            Return(Maybe<tuple<string, string, string>>(genError("No cloud metadata")))
+        );
     }
 
     void

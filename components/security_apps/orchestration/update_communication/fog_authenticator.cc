@@ -179,6 +179,15 @@ FogAuthenticator::registerAgent(
         dbgDebug(D_ORCHESTRATOR) << nginx_data.getErr();
     }
 
+    auto cloud_metadata = details_resolver->readCloudMetadata();
+    if (cloud_metadata.ok()) {
+        request << make_pair("cloudAccountId", ::get<0>(cloud_metadata.unpack()));
+        request << make_pair("cloudVpcId", ::get<1>(cloud_metadata.unpack()));
+        request << make_pair("cloudInstanceId", ::get<2>(cloud_metadata.unpack()));
+    } else {
+        dbgDebug(D_ORCHESTRATOR) << cloud_metadata.getErr();
+    }
+
     for (const pair<string, string> details : details_resolver->getResolvedDetails()) {
         request << details;
     }
@@ -450,9 +459,9 @@ getDeplymentType()
     auto deplyment_type = Singleton::Consume<I_EnvDetails>::by<FogAuthenticator>()->getEnvType();
     switch (deplyment_type) {
         case EnvType::LINUX: return "Embedded";
-        case EnvType::DOCKER: return "Embedded";
+        case EnvType::DOCKER: return "Docker";
         case EnvType::NON_CRD_K8S:
-        case EnvType::K8S: return "Embedded";
+        case EnvType::K8S: return "K8S";
         case EnvType::COUNT: break;
     }
 
@@ -579,7 +588,7 @@ FogAuthenticator::authenticateAgent()
     auto mainloop = Singleton::Consume<I_MainLoop>::by<FogAuthenticator>();
     if (!mainloop->doesRoutineExist(routine)) {
         routine = mainloop->addOneTimeRoutine(
-            I_MainLoop::RoutineType::RealTime,
+            I_MainLoop::RoutineType::System,
             [this, min_expiration_time] ()
             {
                 uint expiration_time;

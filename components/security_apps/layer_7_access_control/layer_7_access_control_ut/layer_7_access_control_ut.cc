@@ -142,6 +142,13 @@ string disabled_settings =
         "}"
     "],\n";
 
+
+string local_intelligence =
+    "\"intelligence\":{"
+    "  \"local intelligence server ip\":\"127.0.0.1\","
+    "  \"local intelligence server primary port\":9090"
+    "}\n,";
+
 string policy =
     "\"rulebase\": {"
         "\"usersIdentifiers\": ["
@@ -259,7 +266,7 @@ Layer7AccessControlTest::verifyReport(
 
 TEST_F(Layer7AccessControlTest, ReturnAcceptVerdict)
 {
-    stringstream ss_conf(prevent_settings + policy);
+    stringstream ss_conf(prevent_settings + local_intelligence + policy);
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss_conf);
 
     string intelligence_response_ok = loadIntelligenceResponse("data/ok_intelligence_response.json");
@@ -305,7 +312,7 @@ TEST_F(Layer7AccessControlTest, ReturnAcceptVerdict)
 
 TEST_F(Layer7AccessControlTest, ReturnDropVerdictOnMaliciousReputation)
 {
-    stringstream ss_conf(prevent_settings + policy);
+    stringstream ss_conf(prevent_settings + local_intelligence + policy);
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss_conf);
     
     string malicious_intelligence_response = loadIntelligenceResponse("data/malicious_intelligence_response.json");
@@ -351,7 +358,7 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictOnMaliciousReputation)
 
 TEST_F(Layer7AccessControlTest, ReturnDropVerdictCacheBased)
 {
-    stringstream ss_conf(prevent_settings + policy);
+    stringstream ss_conf(prevent_settings + local_intelligence + policy);
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss_conf);
 
     string malicious_intelligence_response = loadIntelligenceResponse("data/malicious_intelligence_response.json");
@@ -403,7 +410,7 @@ TEST_F(Layer7AccessControlTest, ReturnDropVerdictCacheBased)
 
 TEST_F(Layer7AccessControlTest, AcceptOnDetect)
 {
-    stringstream ss_conf(detect_settings + policy);
+    stringstream ss_conf(detect_settings + local_intelligence + policy);
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss_conf);
     
     string malicious_intelligence_response = loadIntelligenceResponse("data/malicious_intelligence_response.json");
@@ -449,7 +456,7 @@ TEST_F(Layer7AccessControlTest, AcceptOnDetect)
 
 TEST_F(Layer7AccessControlTest, FallbackToSourceIPAndDrop)
 {
-    stringstream ss_conf(prevent_settings + policy);
+    stringstream ss_conf(prevent_settings + local_intelligence + policy);
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss_conf);
 
     string malicious_intelligence_response = loadIntelligenceResponse("data/malicious_intelligence_response.json");

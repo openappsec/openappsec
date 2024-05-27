@@ -87,6 +87,12 @@ public:
     void resume(RoutineID id) override;
 
     void
+    reloadConfigurationCb()
+    {
+        reload_configuration = true;
+    }
+
+    void
     init()
     {
         fini_signal_flag = false;
@@ -120,7 +126,7 @@ public:
 private:
     void reportStartupEvent();
     void stop(const RoutineMap::iterator &iter);
-    uint32_t getCurrentTimeSlice(uint32_t current_stress);
+    uint32_t getCurrentTimeSlice(uint32_t current_stress, int idle_time_slice, int busy_time_slice);
     RoutineID getNextID();
 
     I_TimeGet *
@@ -130,7 +136,14 @@ private:
         return timer;
     }
 
+    I_Environment *
+    getEnvironment() {
+        if (env == nullptr) env = Singleton::Consume<I_Environment>::by<MainloopComponent>();
+        return env;
+    }
+
     I_TimeGet *timer = nullptr;
+    I_Environment *env = nullptr;
 
     RoutineMap routines;
     RoutineMap::iterator curr_iter = routines.end();
@@ -144,6 +157,7 @@ private:
     chrono::seconds metric_report_interval;
     MainloopEvent mainloop_event;
     MainloopMetric mainloop_metric;
+    bool reload_configuration = false;
 };
 
 static I_MainLoop::RoutineType rounds[] = {
@@ -171,7 +185,7 @@ MainloopComponent::Impl::reportStartupEvent()
     chrono::microseconds curr_time = Singleton::Consume<I_TimeGet>::by<MainloopComponent>()->getWalltime();
 
     ReportIS::AudienceTeam audience_team = ReportIS::AudienceTeam::NONE;
-    auto i_env = Singleton::Consume<I_Environment>::by<MainloopComponent>();
+    auto i_env = getEnvironment();
     auto team = i_env->get<ReportIS::AudienceTeam>("Audience Team");
     if (team.ok()) audience_team = *team;
 
@@ -222,18 +236,27 @@ MainloopComponent::Impl::run()
     const chrono::seconds one_sec(1);
 
     string service_name = "Unnamed Nano Service";
-    auto name = Singleton::Consume<I_Environment>::by<MainloopComponent>()->get<string>("Service Name");
+    auto name = getEnvironment()->get<string>("Service Name");
     if (name.ok()) service_name = *name;
 
     string error_prefix = "Service " + service_name + " crashed. Error details: ";
     string error;
+    int idle_time_slice = getConfigurationWithDefault<int>(1500, "Mainloop", "Idle routine time slice");
+    int busy_time_slice = getConfigurationWithDefault<int>(100, "Mainloop", "Busy routine time slice");
+    int exceed_warning_slice = getConfigurationWithDefault(100, "Mainloop", "Exceed Warning");
 
     while (has_primary_routines) {
         mainloop_event.setStressValue(current_stress);
-        int time_slice_to_use = getCurrentTimeSlice(current_stress);
+        if (reload_configuration) {
+            idle_time_slice = getConfigurationWithDefault<int>(1500, "Mainloop", "Idle routine time slice");
+            busy_time_slice = getConfigurationWithDefault<int>(100, "Mainloop", "Busy routine time slice");
+            exceed_warning_slice = getConfigurationWithDefault(100, "Mainloop", "Exceed Warning");
+            reload_configuration = false;
+        }
+        int time_slice_to_use = getCurrentTimeSlice(current_stress, idle_time_slice, busy_time_slice);
         mainloop_event.setTimeSlice(time_slice_to_use);
         chrono::microseconds basic_time_slice(time_slice_to_use);
-        chrono::milliseconds large_exceeding(getConfigurationWithDefault(100u, "Mainloop", "Exceed Warning"));
+        chrono::milliseconds large_exceeding(exceed_warning_slice);
         auto start_time = getTimer()->getMonotonicTime();
         has_primary_routines = false;
 
@@ -351,9 +374,9 @@ MainloopComponent::Impl::addOneTimeRoutine(
     auto id = getNextID();
 
     string routine_name = _routine_name.empty() ? string("Generic routine, id: " + to_string(id)) : _routine_name;
-    auto env = Singleton::Consume<I_Environment>::by<MainloopComponent>()->createEnvironment();
+    auto env = getEnvironment()->createEnvironment();
     Routine func_wrapper = [this, env, func, routine_name] () mutable {
-        Singleton::Consume<I_Environment>::by<MainloopComponent>()->loadEnvironment(move(env));
+        getEnvironment()->loadEnvironment(move(env));
 
         try {
             if (this->do_stop) return;
@@ -446,9 +469,9 @@ MainloopComponent::Impl::yield(bool force)
     if (do_stop) throw MainloopStop();
     if (!force && getTimer()->getMonotonicTime() < stop_time) return;
 
-    auto env = Singleton::Consume<I_Environment>::by<MainloopComponent>()->saveEnvironment();
+    auto env = getEnvironment()->saveEnvironment();
     curr_iter->second.yield();
-    Singleton::Consume<I_Environment>::by<MainloopComponent>()->loadEnvironment(move(env));
+    getEnvironment()->loadEnvironment(move(env));
     if (do_stop) throw MainloopStop();
 }
 
@@ -533,7 +556,7 @@ MainloopComponent::Impl::stop(const RoutineMap::iterator &iter)
     if (iter->second.isActive()) {
         dbgDebug(D_MAINLOOP) << "Stoping the routine " << iter->first;
         do_stop = true;
-        auto env = Singleton::Consume<I_Environment>::by<MainloopComponent>()->saveEnvironment();
+        auto env = getEnvironment()->saveEnvironment();
         RoutineMap::iterator save_routine  = curr_iter;
         curr_iter = iter;
         // We are going to let the routine run one last time, so it can throw an exception which will cause the stack
@@ -560,10 +583,13 @@ MainloopComponent::Impl::getNextID()
 void
 MainloopComponent::Impl::updateCurrentStress(bool is_busy)
 {
-    const int stress_factor = 6; // calculated by trial and error, should be revisited
+    const int ramp_stress_factor = 10; // calculated by trial and error, should be revisited
+    const int steady_stress_factor = 6; // calculated by trial and error, should be revisited
     if (is_busy) {
-        if (current_stress < 95) {
-            current_stress += stress_factor;
+        if (current_stress < 50) {
+            current_stress += ramp_stress_factor;
+        } else if (current_stress < 95) {
+            current_stress += steady_stress_factor;
         } else {
             current_stress = 100;
         }
@@ -573,10 +599,8 @@ MainloopComponent::Impl::updateCurrentStress(bool is_busy)
 }
 
 uint32_t
-MainloopComponent::Impl::getCurrentTimeSlice(uint32_t current_stress)
+MainloopComponent::Impl::getCurrentTimeSlice(uint32_t current_stress, int idle_time_slice, int busy_time_slice)
 {
-    int idle_time_slice = getConfigurationWithDefault<int>(1000, "Mainloop", "Idle routine time slice");
-    int busy_time_slice = getConfigurationWithDefault<int>(1, "Mainloop", "Busy routine time slice");
     return idle_time_slice - (((idle_time_slice - busy_time_slice) * current_stress) / 100);
 }
 
@@ -598,4 +622,5 @@ MainloopComponent::preload()
     registerExpectedConfiguration<int>("Mainloop", "Busy routine time slice");
     registerExpectedConfiguration<uint>("Mainloop", "metric reporting interval");
     registerExpectedConfiguration<uint>("Mainloop", "Exceed Warning");
+    registerConfigLoadCb([&] () { pimpl->reloadConfigurationCb(); });
 }

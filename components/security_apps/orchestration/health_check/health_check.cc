@@ -246,7 +246,7 @@ private:
             }
         }
         routine_id = i_mainloop->addFileRoutine(
-            I_MainLoop::RoutineType::RealTime,
+            I_MainLoop::RoutineType::System,
             server_sock,
             [this] () { handleConnection(); },
             "Health check probe server",
@@ -344,7 +344,7 @@ private:
         dbgDebug(D_HEALTH_CHECK) << "Successfully accepted client, client fd: " << new_client_socket;
         open_connections_counter++;
         auto curr_routine = i_mainloop->addOneTimeRoutine(
-            I_MainLoop::RoutineType::RealTime,
+            I_MainLoop::RoutineType::System,
             [this] ()
             {
                 auto curr_routine_id = i_mainloop->getCurrentRoutineId().unpack();

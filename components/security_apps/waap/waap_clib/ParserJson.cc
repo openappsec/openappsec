@@ -304,6 +304,7 @@ ParserJson::ParserJson(
     m_key.push("json", 4);
 }
 
+
 ParserJson::~ParserJson()
 {
     // Cleanup JSON

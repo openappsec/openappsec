@@ -4,10 +4,16 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <algorithm>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <boost/algorithm/string.hpp>
 
+#include "cidrs_data.h"
 #include "generic_rulebase/generic_rulebase.h"
 #include "generic_rulebase/parameters_config.h"
 #include "generic_rulebase/triggers_config.h"
+#include "user_identifiers_config.h"
 #include "debug.h"
 #include "config.h"
 #include "rest.h"
@@ -21,9 +27,10 @@ USE_DEBUG_FLAG(D_GEO_FILTER);
 
 static const LogTriggerConf default_triger;
 
-class HttpGeoFilter::Impl : public Listener<NewHttpTransactionEvent>
+class HttpGeoFilter::Impl : public Listener<HttpRequestHeaderEvent>
 {
 public:
+
     void
     init()
     {
@@ -55,32 +62,42 @@ public:
     }
 
     EventVerdict
-    respond(const NewHttpTransactionEvent &event) override
+    respond(const HttpRequestHeaderEvent &event) override
     {
         dbgTrace(D_GEO_FILTER) << getListenerName() << " new transaction event";
 
-        if (!ParameterException::isGeoLocationExceptionExists() &&
-            !getConfiguration<GeoConfig>("rulebase", "httpGeoFilter").ok()
-        ) {
-            dbgTrace(D_GEO_FILTER) << "No geo location practice nor exception was found. Returning default verdict";
+        if (!event.isLastHeader()) return EventVerdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
+        std::set<std::string> xff_set;
+        auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
+        auto maybe_xff = env->get<std::string>(HttpTransactionData::xff_vals_ctx);
+        if (!maybe_xff.ok()) {
+            dbgTrace(D_GEO_FILTER) << "failed to get xff vals from env";
+        } else {
+            xff_set = split(maybe_xff.unpack(), ',');
+        }
+        dbgDebug(D_GEO_FILTER) << getListenerName() << " last header, start lookup";
+
+        if (xff_set.size() > 0) {
+            removeTrustedIpsFromXff(xff_set);
+        } else {
+            dbgDebug(D_GEO_FILTER) << "xff not found in headers";
+        }
+
+        auto maybe_source_ip = env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
+        if (!maybe_source_ip.ok()) {
+            dbgWarning(D_GEO_FILTER) << "failed to get source ip from env";
             return EventVerdict(default_action);
         }
 
-        I_GeoLocation *i_geo_location = Singleton::Consume<I_GeoLocation>::by<HttpGeoFilter>();
-        auto asset_location = i_geo_location->lookupLocation(event.getSourceIP());
-        if (!asset_location.ok()) {
-            dbgTrace(D_GEO_FILTER) << "Lookup location failed, Error: " << asset_location.getErr();
-            return EventVerdict(default_action);
-        }
+        auto source_ip = convertIpAddrToString(maybe_source_ip.unpack());
+        xff_set.insert(source_ip);
 
-        EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data = asset_location.unpack();
-
-        ngx_http_cp_verdict_e exception_verdict = getExceptionVerdict(event, geo_location_data);
+        ngx_http_cp_verdict_e exception_verdict = getExceptionVerdict(xff_set);
         if (exception_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
             return EventVerdict(exception_verdict);
         }
 
-        ngx_http_cp_verdict_e geo_lookup_verdict = getGeoLookupVerdict(event, geo_location_data);
+        ngx_http_cp_verdict_e geo_lookup_verdict = getGeoLookupVerdict(xff_set);
         if (geo_lookup_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
             return EventVerdict(geo_lookup_verdict);
         }
@@ -88,6 +105,73 @@ public:
     }
 
 private:
+    std::set<std::string>
+    split(const std::string& s, char delim) {
+        std::set<std::string> elems;
+        std::stringstream ss(s);
+        std::string value;
+        while (std::getline(ss, value, delim)) {
+            elems.insert(trim(value));
+        }
+        return elems;
+    }
+
+    static inline std::string &ltrim(std::string &s) {
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(),
+            [] (char c) { return !std::isspace(c); }));
+        return s;
+    }
+
+    // trim from end
+    static inline std::string &rtrim(std::string &s) {
+        s.erase(std::find_if(s.rbegin(), s.rend(),
+            [] (char c) { return !std::isspace(c); }).base(), s.end());
+        return s;
+    }
+
+    // trim from both ends
+    static inline std::string &trim(std::string &s) {
+        return ltrim(rtrim(s));
+    }
+
+    void
+    removeTrustedIpsFromXff(std::set<std::string> &xff_set)
+    {
+        auto identify_config = getConfiguration<UsersAllIdentifiersConfig>(
+            "rulebase",
+            "usersIdentifiers"
+        );
+        if (!identify_config.ok()) {
+            dbgDebug(D_GEO_FILTER) << "did not find users identifiers definition in policy";
+        } else {
+            auto trusted_ips = (*identify_config).getHeaderValuesFromConfig("x-forwarded-for");
+            for (auto it = xff_set.begin(); it != xff_set.end();) {
+                if (isIpTrusted(*it, trusted_ips)) {
+                    dbgTrace(D_GEO_FILTER) << "xff value is in trusted ips: " << *it;
+                    it = xff_set.erase(it);
+                } else {
+                    dbgTrace(D_GEO_FILTER) << "xff value is not in trusted ips: " << *it;
+                    ++it;
+                }
+            }
+        }
+    }
+
+    bool
+    isIpTrusted(const string &ip, const vector<string> &trusted_ips)
+    {
+        for (const auto &trusted_ip : trusted_ips) {
+            CIDRSData cidr_data(trusted_ip);
+            if (
+                ip == trusted_ip ||
+                (cidr_data.contains(ip))
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     string
     convertIpAddrToString(const IPAddr &ip_to_convert)
     {
@@ -117,54 +201,75 @@ private:
     }
 
     ngx_http_cp_verdict_e
-    getGeoLookupVerdict(
-        const NewHttpTransactionEvent &event,
-        const EnumArray<I_GeoLocation::GeoLocationField, std::string> &geo_location_data)
+    getGeoLookupVerdict(const std::set<std::string> &sources)
     {
         auto maybe_geo_config = getConfiguration<GeoConfig>("rulebase", "httpGeoFilter");
         if (!maybe_geo_config.ok()) {
-            dbgWarning(D_GEO_FILTER) << "Failed to load HTTP Geo Filter config. Error:" << maybe_geo_config.getErr();
+            dbgTrace(D_GEO_FILTER) << "Failed to load HTTP Geo Filter config. Error:" << maybe_geo_config.getErr();
             return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
         }
         GeoConfig geo_config = maybe_geo_config.unpack();
-        string country_code = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_CODE];
+        EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data;
+        I_GeoLocation *i_geo_location = Singleton::Consume<I_GeoLocation>::by<HttpGeoFilter>();
 
-        if (geo_config.isAllowedCountry(country_code)) {
-            dbgTrace(D_GEO_FILTER)
-                << "geo verdict ACCEPT, practice id: "
-                << geo_config.getId()
-                << ", country code: "
-                << country_code;
-            generateVerdictLog(
-                ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT,
-                event,
-                geo_config.getId(),
-                true,
-                geo_location_data
-            );
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-        }
-        if (geo_config.isBlockedCountry(country_code)) {
-            dbgTrace(D_GEO_FILTER)
-                << "geo verdict DROP, practice id: "
-                << geo_config.getId()
-                << ", country code: "
-                << country_code;
-            generateVerdictLog(
-                ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP,
-                event,
-                geo_config.getId(),
-                true,
-                geo_location_data
-            );
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        for (const std::string& source : sources) {
+            Maybe<IPAddr> maybe_source_ip = IPAddr::createIPAddr(source);
+            if (!maybe_source_ip.ok()){
+                dbgWarning(D_GEO_FILTER) <<
+                "create ip address failed for source: " <<
+                source <<
+                ", Error: " <<
+                maybe_source_ip.getErr();
+                continue;
+            }
+            auto asset_location = i_geo_location->lookupLocation(maybe_source_ip.unpack());
+            if (!asset_location.ok()) {
+                dbgWarning(D_GEO_FILTER) <<
+                "Lookup location failed for source: " <<
+                source <<
+                ", Error: " <<
+                asset_location.getErr();
+                continue;
+            }
+
+            geo_location_data = asset_location.unpack();
+
+            string country_code = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_CODE];
+
+            if (geo_config.isAllowedCountry(country_code)) {
+                dbgTrace(D_GEO_FILTER)
+                    << "geo verdict ACCEPT, practice id: "
+                    << geo_config.getId()
+                    << ", country code: "
+                    << country_code;
+                generateVerdictLog(
+                    ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT,
+                    geo_config.getId(),
+                    true,
+                    geo_location_data
+                );
+                return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+            }
+            if (geo_config.isBlockedCountry(country_code)) {
+                dbgTrace(D_GEO_FILTER)
+                    << "geo verdict DROP, practice id: "
+                    << geo_config.getId()
+                    << ", country code: "
+                    << country_code;
+                generateVerdictLog(
+                    ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP,
+                    geo_config.getId(),
+                    true,
+                    geo_location_data
+                );
+                return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+            }
         }
         dbgTrace(D_GEO_FILTER)
             << "No matched practice. Returned default action: "
             << geo_config.getDefaultAction();
         generateVerdictLog(
             convertActionToVerdict(geo_config.getDefaultAction()),
-            event,
             geo_config.getId(),
             true,
             geo_location_data,
@@ -176,7 +281,6 @@ private:
     Maybe<pair<ngx_http_cp_verdict_e, string>>
     getBehaviorsVerdict(
         const unordered_map<string, set<string>> &behaviors_map_to_search,
-        const NewHttpTransactionEvent &event,
         EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data)
     {
         bool is_matched = false;
@@ -193,7 +297,6 @@ private:
                 dbgTrace(D_GEO_FILTER) << "behavior verdict: DROP, exception id: " << behavior.getId();
                 generateVerdictLog(
                     matched_verdict,
-                    event,
                     behavior.getId(),
                     false,
                     geo_location_data
@@ -218,63 +321,83 @@ private:
     }
 
     ngx_http_cp_verdict_e
-    getExceptionVerdict(
-        const NewHttpTransactionEvent &event,
-        EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data
-    ){
-        string country_code = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_CODE];
-        string country_name = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_NAME];
-        string source_ip = convertIpAddrToString(event.getSourceIP());
+    getExceptionVerdict(const std::set<std::string> &sources) {
 
         pair<ngx_http_cp_verdict_e, string> curr_matched_behavior;
         ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+        I_GeoLocation *i_geo_location = Singleton::Consume<I_GeoLocation>::by<HttpGeoFilter>();
+        EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data;
 
-        dbgTrace(D_GEO_FILTER)
+        for (const std::string& source : sources) {
+
+            Maybe<IPAddr> maybe_source_ip = IPAddr::createIPAddr(source);
+            if (!maybe_source_ip.ok()){
+                dbgWarning(D_GEO_FILTER) <<
+                "create ip address failed for source: " <<
+                source <<
+                ", Error: " <<
+                maybe_source_ip.getErr();
+                continue;
+            }
+
+
+            auto asset_location = i_geo_location->lookupLocation(maybe_source_ip.unpack());
+            if (!asset_location.ok()) {
+                dbgWarning(D_GEO_FILTER) << "Lookup location failed for source: " <<
+                source <<
+                ", Error: " <<
+                asset_location.getErr();
+                continue;
+            }
+            geo_location_data = asset_location.unpack();
+            string country_code = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_CODE];
+            string country_name = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_NAME];
+            dbgTrace(D_GEO_FILTER)
             << "Get exception verdict. "
             << "country code: "
             << country_code
             << ", country name: "
             << country_name
             << ", source ip address: "
-            << source_ip;
+            << source;
 
-        unordered_map<string, set<string>> exception_value_source_ip = {{"sourceIP", {source_ip}}};
-        auto matched_behavior_maybe = getBehaviorsVerdict(exception_value_source_ip, event, geo_location_data);
-        if (matched_behavior_maybe.ok()) {
-            curr_matched_behavior = matched_behavior_maybe.unpack();
-            verdict = curr_matched_behavior.first;
-            if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
-                return verdict;
+            unordered_map<string, set<string>> exception_value_source_ip = {{"sourceIP", {source}}};
+            auto matched_behavior_maybe = getBehaviorsVerdict(exception_value_source_ip, geo_location_data);
+            if (matched_behavior_maybe.ok()) {
+                curr_matched_behavior = matched_behavior_maybe.unpack();
+                verdict = curr_matched_behavior.first;
+                dbgDebug(D_GEO_FILTER) << "found sourceIP exception, return verdict";
+                break;
+            }
+
+            unordered_map<string, set<string>> exception_value_country_code = {
+                {"countryCode", {country_code}}
+            };
+            matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_code, geo_location_data);
+            if (matched_behavior_maybe.ok()) {
+                curr_matched_behavior = matched_behavior_maybe.unpack();
+                verdict = curr_matched_behavior.first;
+                if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+                    return verdict;
+                }
+            }
+
+            unordered_map<string, set<string>> exception_value_country_name = {
+                {"countryName", {country_name}}
+            };
+            matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_name, geo_location_data);
+            if (matched_behavior_maybe.ok()) {
+                curr_matched_behavior = matched_behavior_maybe.unpack();
+                verdict = curr_matched_behavior.first;
+                if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+                    return verdict;
+                }
             }
         }
 
-        unordered_map<string, set<string>> exception_value_country_code = {
-            {"countryCode", {country_code}}
-        };
-        matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_code, event, geo_location_data);
-        if (matched_behavior_maybe.ok()) {
-            curr_matched_behavior = matched_behavior_maybe.unpack();
-            verdict = curr_matched_behavior.first;
-            if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
-                return verdict;
-            }
-        }
-
-        unordered_map<string, set<string>> exception_value_country_name = {
-            {"countryName", {country_name}}
-        };
-        matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_name, event, geo_location_data);
-        if (matched_behavior_maybe.ok()) {
-            curr_matched_behavior = matched_behavior_maybe.unpack();
-            verdict = curr_matched_behavior.first;
-            if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
-                return verdict;
-            }
-        }
         if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT) {
             generateVerdictLog(
                 verdict,
-                event,
                 curr_matched_behavior.second,
                 false,
                 geo_location_data
@@ -286,7 +409,6 @@ private:
     void
     generateVerdictLog(
         const ngx_http_cp_verdict_e &verdict,
-        const NewHttpTransactionEvent &event,
         const string &matched_id,
         bool is_geo_filter,
         const EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data,
@@ -307,14 +429,24 @@ private:
             LogField(matched_on, matched_id),
             ReportIS::Tags::HTTP_GEO_FILTER
         );
-        log
-            << LogField("sourceIP", convertIpAddrToString(event.getSourceIP()))
-            << LogField("sourcePort", event.getSourcePort())
-            << LogField("hostName", event.getDestinationHost())
-            << LogField("httpMethod", event.getHttpMethod())
-            << LogField("securityAction", is_prevent ? "Prevent" : "Detect");
+        auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
+        auto source_ip = env->get<string>(HttpTransactionData::client_ip_ctx);
+        if (source_ip.ok()) log << LogField("sourceIP", source_ip.unpack());
+
+        auto source_port = env->get<string>(HttpTransactionData::client_port_ctx);
+        if (source_port.ok()) log << LogField("sourcePort", source_port.unpack());
+
+        auto host_name = env->get<string>(HttpTransactionData::host_name_ctx);
+        if (host_name.ok()) log << LogField("hostName", host_name.unpack());
+
+        auto method = env->get<string>(HttpTransactionData::method_ctx);
+        if (method.ok()) log << LogField("httpMethod", method.unpack());
+
+        log << LogField("securityAction", is_prevent ? "Prevent" : "Detect");
 
         if (is_default_action) log << LogField("isDefaultSecurityAction", true);
+        auto xff = env->get<std::string>(HttpTransactionData::xff_vals_ctx);
+        if (xff.ok()) log << LogField("proxyIP", xff.unpack());
 
         log
             << LogField("sourceCountryCode", geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_CODE])

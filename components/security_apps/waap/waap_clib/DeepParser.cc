@@ -27,6 +27,7 @@
 #include "ParserPairs.h"
 #include "ParserDelimiter.h"
 #include "ParserPDF.h"
+#include "ParserBinaryFile.h"
 #include "WaapAssetState.h"
 #include "Waf2Regex.h"
 #include "Waf2Util.h"
@@ -274,7 +275,8 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     bool base64ParamFound = false;
     dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
     std::string decoded_val, decoded_key;
-    base64_variants base64_status = Waap::Util::b64Test(cur_val, decoded_key, decoded_val);
+    Waap::Util::BinaryFileType base64BinaryFileType = Waap::Util::BinaryFileType::FILE_TYPE_NONE;
+    base64_variants base64_status = Waap::Util::b64Test(cur_val, decoded_key, decoded_val, base64BinaryFileType);
 
     dbgTrace(D_WAAP_DEEP_PARSER)
         << " status = "
@@ -355,7 +357,8 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             isUrlPayload,
             isUrlParamPayload,
             flags,
-            parser_depth
+            parser_depth,
+            base64BinaryFileType
         );
     } else {
         offset = 0;
@@ -425,7 +428,8 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
                 isUrlParamPayload,
                 flags,
                 parser_depth,
-                base64ParamFound
+                base64ParamFound,
+                base64BinaryFileType
                 );
             if (rc != CONTINUE_PARSING) {
                 return rc;
@@ -798,7 +802,8 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
     bool isUrlParamPayload,
     int flags,
     size_t parser_depth,
-    bool base64ParamFound)
+    bool base64ParamFound,
+    Waap::Util::BinaryFileType b64FileType)
 {
     int offset = -1;
     int rc = 0;
@@ -815,7 +820,8 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
             isUrlPayload,
             isUrlParamPayload,
             flags,
-            parser_depth
+            parser_depth,
+            b64FileType
         );
     } else {
         offset = 0;
@@ -919,7 +925,8 @@ DeepParser::createInternalParser(
     bool isUrlPayload,
     bool isUrlParamPayload,
     int flags,
-    size_t parser_depth
+    size_t parser_depth,
+    Waap::Util::BinaryFileType b64FileType
 )
 {
     dbgTrace(D_WAAP_DEEP_PARSER)
@@ -1152,10 +1159,25 @@ DeepParser::createInternalParser(
                 m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserPDF>>(*this, parser_depth + 1));
                 offset = 0;
             } else {
-                dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a binary file";
-                m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserBinary>>(*this, parser_depth + 1));
-                offset = 0;
+                Waap::Util::BinaryFileType fileType = ParserBinaryFile::detectBinaryFileHeader(cur_val);
+                if (fileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE) {
+                    dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a known binary file (type=" << fileType << ")";
+                    m_parsersDeque.push_back(
+                        std::make_shared<BufferedParser<ParserBinaryFile>>(*this, parser_depth + 1, false, fileType)
+                    );
+                    offset = 0;
+                } else {
+                    dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a binary file";
+                    m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserBinary>>(*this, parser_depth + 1));
+                    offset = 0;
+                }
             }
+        } else if (b64FileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE) {
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a known binary file, base64 encoded";
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserBinaryFile>>(*this, parser_depth + 1, true, b64FileType)
+            );
+            offset = 0;
         }
     }
     if (offset < 0) {

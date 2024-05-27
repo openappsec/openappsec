@@ -20,7 +20,6 @@
 #include "intelligence_invalidation.h"
 #include "intelligence_is_v2/intelligence_response.h"
 #include "intelligence_request.h"
-#include "intelligence_server.h"
 
 using namespace std;
 using namespace chrono;
@@ -33,6 +32,8 @@ static const string primary_port_setting = "local intelligence server primary po
 static const string secondary_port_setting = "local intelligence server secondary port";
 static const string invalidation_uri = "/api/v2/intelligence/invalidation";
 static const string registration_uri = "/api/v2/intelligence/invalidation/register";
+static const string query_uri = "/api/v2/intelligence/assets/query";
+static const string queries_uri = "/api/v2/intelligence/assets/queries";
 
 class I_InvalidationCallBack
 {
@@ -245,6 +246,51 @@ private:
     C2S_OPTIONAL_PARAM(string, invalidationType);
 };
 
+class PagingController
+{
+public:
+    PagingController()
+    {
+        uint request_overall_timeout_conf = getConfigurationWithDefault<uint>(
+                20,
+                "intelligence",
+                "request overall timeout"
+        );
+
+        timer = Singleton::Consume<I_TimeGet>::by<IntelligenceComponentV2>();
+        mainloop = Singleton::Consume<I_MainLoop>::by<IntelligenceComponentV2>();
+
+        paging_timeout = timer->getMonotonicTime() + chrono::microseconds(request_overall_timeout_conf * 1000000);
+    }
+
+    bool
+    isMoreResponses(const Maybe<Response> &res, const IntelligenceRequest &req)
+    {
+        response = res;
+        if (!res.ok() || req.getPagingStatus().ok()) return false;
+        if (res->getResponseStatus() != ResponseStatus::IN_PROGRESS) return false;
+        dbgTrace(D_INTELLIGENCE) << "Intelligence paging response is in progress";
+        mainloop->yield(true);
+        return hasTimeoutRemaining();
+    }
+
+    Maybe<Response> getResponse() const { return response; }
+
+private:
+    bool
+    hasTimeoutRemaining() const
+    {
+        if (timer->getMonotonicTime() < paging_timeout) return true;
+        dbgDebug(D_INTELLIGENCE) << "Intelligence paging response reached timeout";
+        return false;
+    }
+
+    chrono::microseconds paging_timeout;
+    Maybe<Response> response = genError("Paging response is uninitialized");
+    I_TimeGet *timer;
+    I_MainLoop *mainloop;
+};
+
 class IntelligenceComponentV2::Impl
         :
     Singleton::Provide<I_Intelligence_IS_V2>::From<IntelligenceComponentV2>
@@ -255,13 +301,12 @@ public:
     init()
     {
         message = Singleton::Consume<I_Messaging>::by<IntelligenceComponentV2>();
-        timer = Singleton::Consume<I_TimeGet>::by<IntelligenceComponentV2>();
         mainloop = Singleton::Consume<I_MainLoop>::by<IntelligenceComponentV2>();
 
         mainloop->addRecurringRoutine(
             I_MainLoop::RoutineType::System,
             chrono::minutes(12),
-            [this] () { sendReccurringInvalidationRegistration(); },
+            [this] () { sendRecurringInvalidationRegistration(); },
             "Sending intelligence invalidation"
         );
 
@@ -272,12 +317,7 @@ public:
     bool
     sendInvalidation(const Invalidation &invalidation) const override
     {
-        if (hasLocalInvalidationSupport()) {
-            return sendLocalInvalidation(invalidation);
-        }
-        else {
-            return sendGlobalInvalidation(invalidation);
-        }
+        return sendIntelligence(invalidation).ok();
     }
 
     Maybe<uint>
@@ -285,7 +325,7 @@ public:
     {
         if (!invalidation.isLegalInvalidation()) return genError("Attempting to register invalid invalidation");
         auto res = invalidations.emplace(invalidation, cb);
-        sendReccurringInvalidationRegistration();
+        sendRecurringInvalidationRegistration();
         return res;
     }
 
@@ -312,8 +352,7 @@ public:
                 return genError("Paging is activated and already finished. No need for more queries.");
             }
         }
-        Sender intelligence_server(intelligence_req);
-        auto response = intelligence_server.sendIntelligenceRequest();
+        auto response = sendIntelligenceRequest(intelligence_req);
         return response;
     }
 
@@ -326,86 +365,163 @@ public:
 
 private:
     bool
-    hasLocalInvalidationSupport() const
+    hasLocalIntelligenceSupport() const
     {
-        auto is_supported = getProfileAgentSettingWithDefault<bool>(false, "agent.config.useLocalIntelligence");
+        if (getProfileAgentSettingWithDefault<bool>(false, "agent.config.useLocalIntelligence")) return true;
 
-        if (!is_supported) {
-            is_supported = getProfileAgentSettingWithDefault<bool>(false, "agent.config.supportInvalidation");
+        auto crowsec_env = getenv("CROWDSEC_ENABLED");
+        bool crowdsec_enabled = crowsec_env != nullptr && string(crowsec_env) == "true";
+
+        if (getProfileAgentSettingWithDefault<bool>(crowdsec_enabled, "layer7AccessControl.crowdsec.enabled")) {
+            return true;
         }
 
-        if (!is_supported) {
-            is_supported = getConfigurationWithDefault(false, "intelligence", "support Invalidation");
+        if (getProfileAgentSettingWithDefault<bool>(false, "agent.config.supportInvalidation")) return true;
+        dbgTrace(D_INTELLIGENCE) << "Local intelligence not supported";
+
+        return false;
+    }
+
+    template <typename IntelligenceRest>
+    Maybe<Response>
+    sendIntelligence(const IntelligenceRest &rest_req) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending intelligence request";
+        auto res = sendLocalIntelligenceToLocalServer(rest_req);
+        if (res.ok()) return res;
+        return sendGlobalIntelligence(rest_req);
+    }
+
+    template <typename IntelligenceRest>
+    Maybe<Response>
+    sendLocalIntelligenceToLocalServer(const IntelligenceRest &rest_req) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending local intelligence request";
+        if (!hasLocalIntelligenceSupport()) {
+            dbgDebug(D_INTELLIGENCE) << "Local intelligence not supported";
+            return genError("Local intelligence not configured");
         }
-
-        return is_supported;
-    }
-
-    bool
-    sendLocalInvalidation(const Invalidation &invalidation) const
-    {
-        dbgFlow(D_INTELLIGENCE) << "Starting local invalidation";
-        return sendLocalInvalidationImpl(invalidation) || sendGlobalInvalidation(invalidation);
-    }
-
-    bool
-    sendLocalInvalidationImpl(const Invalidation &invalidation) const
-    {
         auto server = getSetting<string>("intelligence", "local intelligence server ip");
         if (!server.ok()) {
-            dbgWarning(D_INTELLIGENCE) << "Local intelligence server not configured";
-            return false;
+            dbgWarning(D_INTELLIGENCE) << "Local intelligence server ip not configured";
+            return genError("Local intelligence server ip not configured");
         }
 
-        return
-            sendLocalInvalidationImpl(invalidation, *server, primary_port_setting) ||
-            sendLocalInvalidationImpl(invalidation, *server, secondary_port_setting);
+        auto res = sendLocalIntelligenceToLocalServer(rest_req, *server, primary_port_setting);
+        if (res.ok()) return res;
+        return sendLocalIntelligenceToLocalServer(rest_req, *server, secondary_port_setting);
     }
 
-    bool
-    sendLocalInvalidationImpl(const Invalidation &invalidation, const string &server, const string &port_setting) const
+    template <typename IntelligenceRest>
+    Maybe<Response>
+    sendLocalIntelligenceToLocalServer(
+        const IntelligenceRest &rest_req,
+        const string &server,
+        const string &port_setting
+    ) const
     {
-        dbgFlow(D_INTELLIGENCE) << "Sending to local intelligence";
-
         auto port = getSetting<uint>("intelligence", port_setting);
         if (!port.ok()) {
-            dbgWarning(D_INTELLIGENCE) << "Could not resolve port for " << port_setting;
-            return false;
+            dbgWarning(D_INTELLIGENCE) << "Could not resolve port for " + port_setting;
+            return genError("Could not resolve port for " + port_setting);
         }
 
         dbgTrace(D_INTELLIGENCE)
-            << "Invalidation value: "
-            << (invalidation.genJson().ok() ? invalidation.genJson().unpack() : invalidation.genJson().getErr());
+            << "Intelligence rest request value: "
+            << (rest_req.genJson().ok() ? rest_req.genJson().unpack() : rest_req.genJson().getErr());
 
-        MessageMetadata invalidation_req_md(server, *port);
-        invalidation_req_md.insertHeaders(getHTTPHeaders());
-        invalidation_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
-        return message->sendSyncMessageWithoutResponse(
-            HTTPMethod::POST,
-            invalidation_uri,
-            invalidation,
-            MessageCategory::INTELLIGENCE,
-            invalidation_req_md
-        );
+        MessageMetadata req_md(server, *port);
+        req_md.insertHeaders(getHTTPHeaders());
+        req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        return sendIntelligenceRequestImpl(rest_req, req_md);
     }
 
-    bool
-    sendGlobalInvalidation(const Invalidation &invalidation) const
+    template <typename IntelligenceRest>
+    Maybe<Response>
+    sendGlobalIntelligence(const IntelligenceRest &rest_req) const
     {
-        dbgFlow(D_INTELLIGENCE) << "Starting global invalidation";
+        dbgFlow(D_INTELLIGENCE) << "Sending global intelligence request";
 
         dbgTrace(D_INTELLIGENCE)
-            << "Invalidation value: "
-            << (invalidation.genJson().ok() ? invalidation.genJson().unpack() : invalidation.genJson().getErr());
-        MessageMetadata global_invalidation_req_md;
-        global_invalidation_req_md.insertHeaders(getHTTPHeaders());
-        return message->sendSyncMessageWithoutResponse(
+            << "Intelligence rest value: "
+            << (rest_req.genJson().ok() ? rest_req.genJson().unpack() : rest_req.genJson().getErr());
+        MessageMetadata global_req_md;
+        global_req_md.insertHeaders(getHTTPHeaders());
+        return sendIntelligenceRequestImpl(rest_req, global_req_md);
+    }
+
+    Maybe<Response>
+    createResponse(const string &response_body, const IntelligenceRequest &query_request) const
+    {
+        Response response(response_body, query_request.getSize(), query_request.isBulk());
+        auto load_status = response.load();
+        if (load_status.ok()) return response;
+        dbgWarning(D_INTELLIGENCE) << "Could not create intelligence response.";
+        return load_status.passErr();
+    }
+
+    Maybe<Response>
+    sendIntelligenceRequestImpl(const Invalidation &invalidation, const MessageMetadata &local_req_md) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending intelligence invalidation";
+        auto res = message->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             invalidation_uri,
             invalidation,
             MessageCategory::INTELLIGENCE,
-            global_invalidation_req_md
+            local_req_md
         );
+        if (res) return Response();
+        dbgWarning(D_INTELLIGENCE) << "Could not send local intelligence invalidation.";
+        return genError("Could not send local intelligence invalidation");
+    }
+
+    Maybe<Response>
+    sendIntelligenceRequestImpl(
+        const InvalidationRegistration::RestCall &registration,
+        const MessageMetadata &registration_req_md
+    ) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending intelligence invalidation registration";
+        auto res = message->sendSyncMessageWithoutResponse(
+            HTTPMethod::POST,
+            registration_uri,
+            registration,
+            MessageCategory::INTELLIGENCE,
+            registration_req_md
+        );
+        if (res) return Response();
+        dbgWarning(D_INTELLIGENCE) << "Could not send intelligence invalidation registration.";
+        return genError("Could not send intelligence invalidation registration");
+    }
+
+    Maybe<Response>
+    sendIntelligenceRequestImpl(const IntelligenceRequest &query_request, const MessageMetadata &global_req_md) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending intelligence query";
+        auto json_body = query_request.genJson();
+        if (!json_body.ok()) return json_body.passErr();
+        auto req_data = message->sendSyncMessage(
+                HTTPMethod::POST,
+                query_request.isBulk() ? queries_uri : query_uri,
+                *json_body,
+                MessageCategory::INTELLIGENCE,
+                global_req_md
+        );
+        if (!req_data.ok()) {
+            auto response_error = req_data.getErr().toString();
+            dbgWarning(D_INTELLIGENCE)
+                << "Could not send intelligence query. "
+                << req_data.getErr().getBody()
+                << " "
+                << req_data.getErr().toString();
+            return genError("Could not send intelligence query.");
+        } else if (req_data->getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+            dbgWarning(D_INTELLIGENCE) << "Invalid intelligence response: " << req_data->toString();
+            return genError(req_data->toString());
+        }
+
+        return createResponse(req_data->getBody(), query_request);
     }
 
     map<string, string>
@@ -423,66 +539,26 @@ private:
         return headers;
     }
 
-    bool
-    sendRegistration(const Invalidation &invalidation) const
-    {
-        InvalidationRegistration registration;
-        registration.addInvalidation(invalidation);
-
-        return sendLocalRegistrationImpl(registration.genJson());
-    }
-
-    bool
-    sendLocalRegistrationImpl(const InvalidationRegistration::RestCall &registration) const
-    {
-        auto server = getSetting<string>("intelligence", "local intelligence server ip");
-        if (!server.ok()) {
-            dbgWarning(D_INTELLIGENCE) << "Local intelligence server not configured";
-            return false;
-        }
-        return
-            sendLocalRegistrationImpl(registration, *server, primary_port_setting) ||
-            sendLocalRegistrationImpl(registration, *server, secondary_port_setting);
-    }
-
-    bool
-    sendLocalRegistrationImpl(
-        const InvalidationRegistration::RestCall &registration,
-        const string &server,
-        const string &port_setting
-    ) const
-    {
-        dbgFlow(D_INTELLIGENCE) << "Sending to local registration";
-
-        auto port = getSetting<uint>("intelligence", port_setting);
-        if (!port.ok()) {
-            dbgWarning(D_INTELLIGENCE) << "Could not resolve port for " << port_setting;
-            return false;
-        }
-
-        dbgTrace(D_INTELLIGENCE) << "Invalidation value: " << registration.genJson();
-        MessageMetadata registration_req_md(server, *port);
-        registration_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
-        return message->sendSyncMessageWithoutResponse(
-            HTTPMethod::POST,
-            registration_uri,
-            registration,
-            MessageCategory::INTELLIGENCE,
-            registration_req_md
-        );
-    }
-
     void
-    sendReccurringInvalidationRegistration() const
+    sendRecurringInvalidationRegistration() const
     {
-        if (!hasLocalInvalidationSupport() || invalidations.empty()) return;
+        if (invalidations.empty()) return;
 
-        sendLocalRegistrationImpl(invalidations.getRegistration());
+        sendLocalIntelligenceToLocalServer(invalidations.getRegistration());
+    }
+
+    Maybe<Response>
+    sendIntelligenceRequest(const IntelligenceRequest& req) const
+    {
+        PagingController paging;
+
+        while (paging.isMoreResponses(sendIntelligence(req), req));
+
+        return paging.getResponse();
     }
 
     InvalidationCallBack         invalidations;
     I_Messaging               *message = nullptr;
-    I_TimeGet                    *timer = nullptr;
     I_MainLoop                   *mainloop = nullptr;
 };
 

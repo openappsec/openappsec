@@ -36,7 +36,9 @@ I_Intelligence_IS_V2::queryIntelligence(
         query_request.setCursor(Intelligence_IS_V2::CursorState::DONE, "");
     } else {
         query_request.setCursor(Intelligence_IS_V2::CursorState::IN_PROGRESS, response->getCursor());
-        if (ignore_in_progress) return genError("Query intelligence response with InProgress status");
+        if (ignore_in_progress && response->getResponseStatus() == Intelligence_IS_V2::ResponseStatus::IN_PROGRESS) {
+            return genError("Query intelligence response with InProgress status");
+        }
     }
 
     return serializable_response.getData();

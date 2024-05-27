@@ -18,6 +18,7 @@
 #include "KeyStack.h"
 #include "WaapAssetState.h"
 #include "Waf2Regex.h"
+#include "Waf2Util.h"
 #include "maybe_res.h"
 #include <deque>
 
@@ -129,7 +130,8 @@ private:
         bool isUrlPayload,
         bool isUrlParamPayload,
         int flags,
-        size_t parser_depth
+        size_t parser_depth,
+        Waap::Util::BinaryFileType b64FileType
     );
 
     int createUrlParserForJson(
@@ -160,7 +162,8 @@ private:
         bool isUrlParamPayload,
         int flags,
         size_t parser_depth,
-        bool base64ParamFound
+        bool base64ParamFound,
+        Waap::Util::BinaryFileType b64FileType
     );
     int pushValueToTopParser(std::string &cur_val, int flags, bool base64ParamFound, int offset, size_t parser_depth);
     int parseBuffer(

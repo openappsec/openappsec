@@ -8,6 +8,7 @@
 #include "mock/mock_messaging.h"
 #include "mock/mock_rest_api.h"
 #include "mock/mock_time_get.h"
+#include "mock/mock_agent_details.h"
 #include "read_attribute_v2.h"
 #include "singleton.h"
 
@@ -44,6 +45,9 @@ public:
             addRecurringRoutine(I_MainLoop::RoutineType::System, chrono::microseconds(720000000), _, _, _)
         ).WillRepeatedly(Return(0));
 
+        EXPECT_CALL(mock_agent_details, getAgentId()).WillRepeatedly(Return("dummy_agent_id"));
+        EXPECT_CALL(mock_agent_details, getTenantId()).WillRepeatedly(Return("dummy_tenant_id"));
+
         EXPECT_CALL(
             mock_rest,
             mockRestCall(_, "new-invalidation/source/invalidation", _)
@@ -62,6 +66,7 @@ public:
     stringstream debug_output;
     StrictMock<MockMainLoop> mock_ml;
     StrictMock<MockRestApi> mock_rest;
+    StrictMock<MockAgentDetails> mock_agent_details;
     NiceMock<MockTimeGet> mock_time;
     ::Environment env;
     ConfigComponent conf;
@@ -411,6 +416,8 @@ TEST_F(IntelligenceComponentTestV2, fakeOnlineIntelligenceTest)
     "}\n"
     );
 
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
+
     MessageMetadata md;
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(DoAll(SaveArg<4>(&md), Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str))));
@@ -484,6 +491,8 @@ TEST_F(IntelligenceComponentTestV2, fakeLocalIntelligenceTest)
     );
 
     MessageMetadata md;
+
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
 
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(DoAll(SaveArg<4>(&md), Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str))));
@@ -625,6 +634,8 @@ TEST_F(IntelligenceComponentTestV2, multiAssetsIntelligenceTest)
     "}\n"
     );
 
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
+
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str1)));
 
@@ -753,6 +764,8 @@ TEST_F(IntelligenceComponentTestV2, inProgressQueryTest)
         "  \"totalNumAssets\": 2\n"
     "}\n"
     );
+
+    EXPECT_CALL(mock_rest, getListeningPort()).Times(2).WillRepeatedly(Return(8888));
 
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, in_progress_response_str))
@@ -943,6 +956,8 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     "}\n"
     );
 
+    EXPECT_CALL(mock_rest, getListeningPort()).Times(3).WillRepeatedly(Return(8888));
+
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_in_progress_response_str1)));
 
@@ -1126,6 +1141,8 @@ TEST_F(IntelligenceComponentTestV2, bulkOnlineIntelligenceTest)
         "}\n"
     );
     Debug::setNewDefaultStdout(&cout);
+
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response_str)));
 
@@ -1288,6 +1305,8 @@ TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
         "  \"cursor\": \"efgh\"\n"
     "}\n"
     );
+
+    EXPECT_CALL(mock_rest, getListeningPort()).Times(2).WillRepeatedly(Return(8888));
 
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _))
         .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_in_progress_response_str)))

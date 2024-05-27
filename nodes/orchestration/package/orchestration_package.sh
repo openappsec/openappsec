@@ -31,6 +31,7 @@ ORCHESTRATION_EXE_SOURCE_PATH="./bin/orchestration_comp"
 NGINX_METADAT_EXTRACTOR_PATH="./scripts/cp-nano-makefile-generator.sh"
 ORCHESTRATION_FILE_NAME="cp-nano-orchestration"
 NGINX_METADDATA_EXTRACTOR_NAME="cp-nano-makefile-generator.sh"
+GET_CLOUD_METADATA_PATH="get-cloud-metadata.sh"
 AGENT_UNINSTALL="cp-agent-uninstall.sh"
 ORCHESTRATION_NAME="orchestration"
 CP_AGENT_INFO_NAME="cp-agent-info"
@@ -197,7 +198,7 @@ save_local_policy_config()
 
 [ -f /etc/environment ] && . "/etc/environment"
 if [ -n "${CP_ENV_FILESYSTEM}" ] ; then
-    FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
+    export FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
 fi
 if [ -n "${CP_ENV_LOG_FILE}" ] ; then
     LOG_FILE_PATH=$CP_ENV_LOG_FILE
@@ -294,15 +295,15 @@ while true; do
         last_char=${var##${var%%?}}
         echo $var
         if [ "$last_char" = "/" ]; then
-            FILESYSTEM_PATH=${var%?}
+            export FILESYSTEM_PATH=${var%?}
         else
-            FILESYSTEM_PATH=$1
+            export FILESYSTEM_PATH=$1
         fi
         echo "Filesystem paths: ${FILESYSTEM_PATH}"
     elif [ "$1" = "--vs_id" ]; then
         shift
         VS_ID=$1
-        FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
+        export FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
         NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
         NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
         VS_LIB_SUB_FOLDER="/vs${VS_ID}"
@@ -350,7 +351,7 @@ if [ -z "$VS_ID" ]; then
     vs_folder=$(dirname "$packages_folder")
     VS_ID=`echo ${vs_folder} | grep -oE '/etc/cp/vs[0-9]+$' | grep -oE '[0-9]+$'`
     if [ -n "$VS_ID" ]; then
-        FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
+        export FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
         NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
         NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
         VS_LIB_SUB_FOLDER="/vs${VS_ID}"
@@ -828,6 +829,13 @@ copy_nginx_metadata_script()
     cp_exec "chmod +x ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${NGINX_METADDATA_EXTRACTOR_NAME}"
 }
 
+copy_and_run_cloud_metadata_script()
+{
+    cp_copy "${SCRIPTS_PATH}/$GET_CLOUD_METADATA_PATH" ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}
+    cp_exec "chmod +x ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}"
+    cp_exec "${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}"
+}
+
 install_public_key()
 {
     return
@@ -885,6 +893,13 @@ uninstall_messaging_proxy_if_needed()
         ${messaging_exec_path} --uninstall
         rm -rf ${FILESYSTEM_PATH}/packages/messagingProxy
     fi
+}
+
+get_status_content()
+{
+    gsc_temp_old_status=$(sed -e 's/{\|}\|,\|"//g' -e '/^\s*$/d' -e 's/^    //' ${FILESYSTEM_PATH}/conf/orchestration_status.json)
+
+    echo ${gsc_temp_old_status}
 }
 
 install_orchestration()
@@ -991,6 +1006,7 @@ install_orchestration()
         copy_orchestration_executable
         copy_k8s_executable
         copy_nginx_metadata_script
+        copy_and_run_cloud_metadata_script
 
         install_watchdog "--upgrade"
 
@@ -1078,6 +1094,7 @@ install_orchestration()
     copy_orchestration_executable
     copy_k8s_executable
     copy_nginx_metadata_script
+    copy_and_run_cloud_metadata_script
 
     install_cp_nano_ctl
 
@@ -1171,7 +1188,7 @@ install_orchestration()
         time_sleep=2
         time_out=60
         cp_print "Registering open-appsec Nano Agent to Fog.." ${FORCE_STDOUT}
-        until $USR_SBIN_PATH/${CP_NANO_CTL} -s 2> /dev/null | grep -q "Registration status: Succeeded"; do
+        until get_status_content | grep -q "Registration status: Succeeded"; do
             time_out=$(( time_out - time_sleep ))
             if [ $time_out -le 0 ]; then
                 cp_print "open-appsec Nano Agent registration failed. Failed to register to Fog: $var_fog_address" ${FORCE_STDOUT}

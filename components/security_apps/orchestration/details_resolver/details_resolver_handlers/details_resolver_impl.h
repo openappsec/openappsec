@@ -43,8 +43,8 @@ SHELL_PRE_CMD("gunzip local.cfg", "gunzip -c $FWDIR/state/local/FW1/local.cfg.gz
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
 SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
-    "[ -f /var/log/nano_agent/cp-nano-horizon-telemetry-prerequisites.log ] "
-    "&& head -1 /var/log/nano_agent/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
+    "FS_PATH=<FILESYSTEM-PREFIX>; [ -f ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log ] "
+    "&& head -1 ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
     checkIsInstallHorizonTelemetrySucceeded)
 SHELL_CMD_HANDLER("QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo ''",
@@ -99,6 +99,12 @@ SHELL_CMD_HANDLER(
 SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
 SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
+SHELL_CMD_HANDLER(
+    "hasAgentIntelligenceInstalled",
+    "<FILESYSTEM-PREFIX>/watchdog/cp-nano-watchdog "
+    "--status --service <FILESYSTEM-PREFIX>/agentIntelligence/cp-nano-agent-intelligence-service",
+    checkAgentIntelligence
+)
 SHELL_CMD_HANDLER("hasIdaIdnEnabled", "pep control IDN_nano_Srv_support status", checkPepIdaIdnStatus)
 SHELL_CMD_HANDLER("requiredNanoServices", "ida_packages", getIDAGaiaPackages)
 SHELL_CMD_HANDLER(
@@ -149,6 +155,12 @@ SHELL_CMD_HANDLER(
     "| awk -F '[:()]' '/:masters/ {found=1; next} found && /:Name/ {print $3; exit}'",
     getSMCBasedMgmtName
 )
+SHELL_CMD_HANDLER(
+    "managements",
+    "sed -n '/:masters (/,$p' $FWDIR/database/myself_objects.C |"
+    " sed -e ':a' -e 'N' -e '$!ba' -e 's/\\n//g' -e 's/\t//g' -e 's/ //g' | sed 's/))):.*/)))):/'",
+    extractManagements
+)
 #endif //gaia
 
 #if defined(smb)
@@ -198,6 +210,13 @@ SHELL_CMD_HANDLER(
     "cat /tmp/local.cfg "
     "| awk -F '[:()]' '/:masters/ {found=1; next} found && /:Name/ {print $3; exit}'",
     getSMCBasedMgmtName
+)
+
+SHELL_CMD_HANDLER(
+    "managements",
+    "sed -n '/:masters (/,$p' /tmp/local.cfg |"
+    " sed -e ':a' -e 'N' -e '$!ba' -e 's/\\n//g' -e 's/\t//g' -e 's/ //g' | sed 's/))):.*/)))):/'",
+    extractManagements
 )
 #endif//smb
 

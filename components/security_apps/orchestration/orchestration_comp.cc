@@ -203,7 +203,7 @@ public:
         loadFogAddress();
 
         Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
-            I_MainLoop::RoutineType::RealTime,
+            I_MainLoop::RoutineType::System,
             [this] () { run(); },
             "Orchestration runner",
             true
@@ -1291,6 +1291,21 @@ private:
     }
 
     void
+    reportCloudMetadata(AgentDataReport &report)
+    {
+        I_DetailsResolver *i_details_resolver = Singleton::Consume<I_DetailsResolver>::by<OrchestrationComp>();
+        auto cloud_metadata = i_details_resolver->readCloudMetadata();
+        if (!cloud_metadata.ok()) {
+            dbgDebug(D_ORCHESTRATOR) << cloud_metadata.getErr();
+            return;
+        }
+
+        report << make_pair("cloudAccountId", ::get<0>(cloud_metadata.unpack()));
+        report << make_pair("cloudVpcId", ::get<1>(cloud_metadata.unpack()));
+        report << make_pair("cloudInstanceId", ::get<2>(cloud_metadata.unpack()));
+    }
+
+    void
     reportAgentDetailsMetaData()
     {
         I_DetailsResolver *i_details_resolver = Singleton::Consume<I_DetailsResolver>::by<OrchestrationComp>();
@@ -1334,6 +1349,8 @@ private:
         } else {
             agent_data_report << AgentReportFieldWithLabel("cloud_storage_service", "false");
         }
+
+        reportCloudMetadata(agent_data_report);
 
         if (i_details_resolver->isKernelVersion3OrHigher()) {
             agent_data_report << AgentReportFieldWithLabel("isKernelVersion3OrHigher", "true");

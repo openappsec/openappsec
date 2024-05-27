@@ -91,8 +91,9 @@ public:
             }
 
             char buffer[128];
-            if (fgets(buffer, sizeof(buffer)-1, pipe) != nullptr) result += buffer;
-            if (do_yield && mainloop != nullptr) mainloop->yield();
+            bool did_get = fgets(buffer, sizeof(buffer)-1, pipe) != nullptr;
+            if (did_get) result += buffer;
+            if (do_yield && mainloop != nullptr) mainloop->yield(!did_get);
         }
 
         auto code = pclose(pipe) / 256;

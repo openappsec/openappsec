@@ -42,6 +42,7 @@ public:
     MOCK_METHOD0(getResolvedDetails,         std::map<std::string, std::string>());
     MOCK_METHOD0(isVersionAboveR8110, bool());
     MOCK_METHOD0(parseNginxMetadata, Maybe<std::tuple<std::string, std::string, std::string>>());
+    MOCK_METHOD0(readCloudMetadata, Maybe<std::tuple<std::string, std::string, std::string>>());
 };
 
 #endif // __MOCK_DETAILS_RESOLVER_H__
