@@ -306,17 +306,20 @@ UsersAllIdentifiersConfig::parseXForwardedFor(const string &str) const
 void
 UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, ExtractType type) const
 {
+    auto i_transaction_table = Singleton::Consume<I_TableSpecific<SessionID>>::by<NginxAttachment>();
+    if (!i_transaction_table || !i_transaction_table->hasState<NginxAttachmentOpaque>()) {
+        dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Can't get the transaction table";
+        return;
+    }
+    NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
+    opaque.setSavedData(HttpTransactionData::xff_vals_ctx, header.getValue());
+    dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "xff found, value from header: " << static_cast<string>(header.getValue());
     auto value = parseXForwardedFor(header.getValue());
     if (!value.ok()) {
         dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Could not extract source identifier from X-Forwarded-For header";
         return;
     };
-    auto i_transaction_table = Singleton::Consume<I_TableSpecific<SessionID>>::by<NginxAttachment>();
-    if (!i_transaction_table || !i_transaction_table->hasState<NginxAttachmentOpaque>()) {
-        dbgDebug(D_NGINX_ATTACHMENT_PARSER) << "Can't get the transaction table";
-        return;
-    }
-    NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
+
     if (type == ExtractType::SOURCEIDENTIFIER) {
         opaque.setSourceIdentifier(header.getKey(), value.unpack());
         dbgDebug(D_NGINX_ATTACHMENT_PARSER)

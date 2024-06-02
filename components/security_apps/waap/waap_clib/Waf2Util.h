@@ -34,6 +34,7 @@
 
 enum base64_variants {SINGLE_B64_CHUNK_CONVERT, KEY_VALUE_B64_PAIR, CONTINUE_AS_IS};
 enum base64_stage {BEFORE_EQUAL, EQUAL, DONE, MISDETECT};
+enum base64_decode_status {B64_DECODE_INVALID, B64_DECODE_OK, B64_DECODE_INCOMPLETE};
 
 // This is portable version of stricmp(), which is non-standard function (not even in C).
 // Contrary to stricmp(), for a slight optimization, s2 is ASSUMED to be already in lowercase.
@@ -858,12 +859,13 @@ void unescapeUnicode(std::string &text);
 // Try to find and decode UTF7 chunks
 std::string filterUTF7(const std::string &text);
 
-bool
+base64_decode_status
 decodeBase64Chunk(
     const std::string &value,
     std::string::const_iterator it,
     std::string::const_iterator end,
-    std::string &decoded);
+    std::string &decoded,
+    bool clear_on_error = true);
 
 bool
 b64DecodeChunk(
@@ -889,6 +891,13 @@ namespace Util {
             std::string &key,
             std::string &value);
 
+    enum BinaryFileType {
+        FILE_TYPE_NONE,
+        FILE_TYPE_PNG,
+        FILE_TYPE_JPEG,
+        FILE_TYPE_PDF
+    };
+
     void b64Decode(
             const std::string &s,
             RegexSubCallback_f cb,
@@ -899,7 +908,8 @@ namespace Util {
     base64_variants b64Test (
             const std::string &s,
             std::string &key,
-            std::string &value);
+            std::string &value,
+            BinaryFileType &binaryFileType);
 
     // The original stdlib implementation of isalpha() supports locale settings which we do not really need.
     // It is also proven to contribute to slow performance in some of the algorithms using it.

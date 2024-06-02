@@ -77,12 +77,20 @@ void
 DetailsResolvingHanlder::Impl::init()
 {
     string actual_filesystem_prefix = getFilesystemPathConfig();
+    size_t place_holder_size = filesystem_place_holder.size();
 
     for (auto &file_handler : file_content_handlers) {
         string &path = file_handler.second.first;
-        size_t place_holder_size = filesystem_place_holder.size();
         if (path.substr(0, place_holder_size) == filesystem_place_holder) {
             path = actual_filesystem_prefix + path.substr(place_holder_size);
+        }
+    }
+
+    for (auto &cmd_handler_pair : shell_command_handlers) {
+        string &cmd_str = cmd_handler_pair.second.first;
+        size_t fs_pos = cmd_str.find(filesystem_place_holder);
+        if (fs_pos != string::npos) {
+            cmd_str.replace(fs_pos, place_holder_size, actual_filesystem_prefix);
         }
     }
 }

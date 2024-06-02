@@ -45,6 +45,7 @@ public:
     bool isVersionAboveR8110() override;
     bool isReverseProxy() override;
     bool isCloudStorageEnabled() override;
+    Maybe<tuple<string, string, string>> readCloudMetadata() override;
     Maybe<tuple<string, string, string>> parseNginxMetadata() override;
 #if defined(gaia) || defined(smb)
     bool compareCheckpointVersion(int cp_version, std::function<bool(int, int)> compare_operator) const override;
@@ -188,17 +189,16 @@ DetailsResolver::Impl::getCheckpointVersion() const
 {
 #ifdef gaia
     static const string cmd =
-        "echo $CPDIR | awk -F'-' '{print $NF}' | cut -c 2- |"
-        " awk -F'.' '{ if( NF == 1 ) {print $1\"00\"} else {print $1$2} }'";
+        "echo $CPDIR | awk '{sub(/.*-R/,\"\"); sub(/\\/.*/,\"\")}/^[0-9]*$/{$0=$0\".00\"}{sub(/\\./, \"\"); print}'";
 #else // smb
     static const string cmd = "sqlcmd 'select major,minor from cpver' |"
         "awk '{if ($1 == \"major\") v += (substr($3,2) * 100);"
         " if ($1 == \"minor\") v += $3; } END { print v}'";
-
 #endif // gaia
     auto version_out = DetailsResolvingHanlder::getCommandOutput(cmd);
     int cp_version = 0;
     if (version_out.ok()) {
+        dbgTrace(D_ORCHESTRATOR) << "Identified version " << version_out.unpack();
         stringstream version_stream(version_out.unpack());
         version_stream >> cp_version;
     }
@@ -298,6 +298,58 @@ DetailsResolver::Impl::parseNginxMetadata()
         config_opt += line;
     }
     return make_tuple(config_opt, cc_opt, nginx_version);
+}
+
+Maybe<tuple<string, string, string>>
+DetailsResolver::Impl::readCloudMetadata()
+{
+    auto env_read_cloud_metadata = []() -> Maybe<tuple<string, string, string>> {
+            string account_id = getenv("CLOUD_ACCOUNT_ID") ? getenv("CLOUD_ACCOUNT_ID") : "";
+            string vpc_id = getenv("CLOUD_VPC_ID") ? getenv("CLOUD_VPC_ID") : "";
+            string instance_id = getenv("CLOUD_INSTANCE_ID") ? getenv("CLOUD_INSTANCE_ID") : "";
+
+        if (account_id.empty() || vpc_id.empty() || instance_id.empty()) {
+            return genError("Could not read cloud metadata");
+        }
+
+        return make_tuple(account_id, vpc_id, instance_id);
+    };
+
+    auto cloud_metadata = env_read_cloud_metadata();
+    if (!cloud_metadata.ok()) {
+        const string cmd = getFilesystemPathConfig() + "/scripts/get-cloud-metadata.sh";
+        dbgTrace(D_ORCHESTRATOR) << cloud_metadata.getErr() << ", trying to fetch it via cmd: " << cmd;
+
+        auto result = DetailsResolvingHanlder::getCommandOutput(cmd);
+        if (result.ok()) {
+            istringstream iss(result.unpack());
+            string line;
+            while (getline(iss, line)) {
+                size_t pos = line.find('=');
+                if (pos != string::npos) {
+                    string key = line.substr(0, pos);
+                    string value = line.substr(pos + 1);
+                    if (!key.empty() && !value.empty()) setenv(key.c_str(), value.c_str(), 1);
+                }
+            }
+            cloud_metadata = env_read_cloud_metadata();
+        } else {
+            dbgWarning(D_ORCHESTRATOR) << "Could not fetch cloud metadata from cmd: " << result.getErr();
+        }
+    }
+
+    if (!cloud_metadata.ok()) {
+        dbgWarning(D_ORCHESTRATOR) << cloud_metadata.getErr();
+        return genError("Failed to fetch cloud metadata");
+    }
+
+    dbgTrace(D_ORCHESTRATOR)
+        << "Successfully fetched cloud metadata: "
+        << ::get<0>(cloud_metadata.unpack()) << ", "
+        << ::get<1>(cloud_metadata.unpack()) << ", "
+        << ::get<2>(cloud_metadata.unpack());
+
+    return cloud_metadata.unpack();
 }
 
 DetailsResolver::DetailsResolver() : Component("DetailsResolver"), pimpl(make_unique<Impl>()) {}

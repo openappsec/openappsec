@@ -15,7 +15,8 @@ class HttpGeoFilter
     public Component,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_GeoLocation>,
-    Singleton::Consume<I_GenericRulebase>
+    Singleton::Consume<I_GenericRulebase>,
+    Singleton::Consume<I_Environment>
 {
 public:
     HttpGeoFilter();

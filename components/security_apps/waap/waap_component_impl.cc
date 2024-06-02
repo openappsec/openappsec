@@ -42,6 +42,7 @@ using namespace std;
 USE_DEBUG_FLAG(D_WAAP);
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
 USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
+USE_DEBUG_FLAG(D_NGINX_EVENTS);
 
 WaapComponent::Impl::Impl() :
     pending_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT),
@@ -124,7 +125,7 @@ WaapComponent::Impl::getListenerName() const
 EventVerdict
 WaapComponent::Impl::respond(const NewHttpTransactionEvent &event)
 {
-    dbgTrace(D_WAAP) << " * \e[32mNGEN_EVENT: NewTransactionEvent\e[0m";
+    dbgTrace(D_NGINX_EVENTS) << " * \e[32mNGEN_EVENT: NewTransactionEvent\e[0m";
 
     if (waapStateTable->hasState<Waf2Transaction>()) {
         dbgWarning(D_WAAP) << " * \e[31 -- NewTransactionEvent called twice on same entry \e[0m";
@@ -202,7 +203,7 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
     auto &header_name = event.getKey();
     auto &header_value = event.getValue();
 
-    dbgTrace(D_WAAP)
+    dbgTrace(D_NGINX_EVENTS)
         << " * \e[32mNGEN_EVENT: HttpHeaderRequest event: "
         << string(header_name)
         << ": "
@@ -210,7 +211,7 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
         << "\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP)
+        dbgWarning(D_NGINX_EVENTS)
             << " * \e[31mNGEN_EVENT: http_header - "
             << "failed to get waf2 transaction, state not exist\e[0m";
 
@@ -257,10 +258,10 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
 EventVerdict
 WaapComponent::Impl::respond(const HttpRequestBodyEvent &event)
 {
-    dbgTrace(D_WAAP) << " * \e[32mNGEN_EVENT: HttpBodyRequest data buffer event\e[0m";
+    dbgTrace(D_NGINX_EVENTS) << " * \e[32mNGEN_EVENT: HttpBodyRequest data buffer event\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP) <<
+        dbgWarning(D_NGINX_EVENTS) <<
             " * \e[31mNGEN_EVENT: data buffer - failed to get waf2 transaction, state not exist\e[0m";
         return drop_response;
     }
@@ -295,10 +296,10 @@ WaapComponent::Impl::respond(const HttpRequestBodyEvent &event)
 EventVerdict
 WaapComponent::Impl::respond(const EndRequestEvent &)
 {
-    dbgTrace(D_WAAP) << " * \e[32mNGEN_EVENT: endRequest event\e[0m";
+    dbgTrace(D_NGINX_EVENTS) << " * \e[32mNGEN_EVENT: endRequest event\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP)
+        dbgWarning(D_NGINX_EVENTS)
                 << "* \e[31mNGEN_EVENT: endRequest - failed to get waf2 transaction, state does not exist\e[0m";
         return drop_response;
     }
@@ -333,13 +334,13 @@ WaapComponent::Impl::respond(const EndRequestEvent &)
 EventVerdict
 WaapComponent::Impl::respond(const ResponseCodeEvent &event)
 {
-    dbgTrace(D_WAAP)
+    dbgTrace(D_NGINX_EVENTS)
         << " * \e[32mNGEN_EVENT: ResponseCodeTransactionEvent event code = "
         << event.getResponseCode()
         << "\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP)
+        dbgWarning(D_NGINX_EVENTS)
                 << " * \e[31mNGEN_EVENT: ResponseCodeTransactionEvent - failed to get waf2 transaction, "
                 << "state does not exist\e[0m";
         return drop_response;
@@ -385,7 +386,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
     auto &header_name = event.getKey();
     auto &header_value = event.getValue();
 
-    dbgTrace(D_WAAP)
+    dbgTrace(D_NGINX_EVENTS)
         << " * \e[32mNGEN_EVENT: HttpHeaderResponse event: "
         << string(header_name)
         << ": "
@@ -393,7 +394,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
         << "\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP)
+        dbgWarning(D_NGINX_EVENTS)
             << " * \e[31mNGEN_EVENT: HttpHeaderResponse - "
             << "failed to get waf2 transaction, state does not exist\e[0m";
         return drop_response;
@@ -491,10 +492,10 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
 EventVerdict
 WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
 {
-    dbgTrace(D_WAAP) << " * \e[32mNGEN_EVENT: HttpBodyResponse data buffer event\e[0m";
+    dbgTrace(D_NGINX_EVENTS) << " * \e[32mNGEN_EVENT: HttpBodyResponse data buffer event\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP) <<
+        dbgWarning(D_NGINX_EVENTS) <<
             " * \e[31mNGEN_EVENT: HttpBodyResponse - failed to get waf2 transaction, state does not exist\e[0m";
         return drop_response;
     }
@@ -591,7 +592,7 @@ EventVerdict
 WaapComponent::Impl::respond(const EndTransactionEvent &)
 {
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_WAAP) <<
+        dbgWarning(D_NGINX_EVENTS) <<
             " * \e[31mNGEN_EVENT: endTransaction - failed to get waf2 transaction, state does not exist\e[0m";
         return EventVerdict(drop_response);
     }

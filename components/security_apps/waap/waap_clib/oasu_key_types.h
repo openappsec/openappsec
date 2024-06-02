@@ -14,7 +14,8 @@ enum SchemaKeyType
     StartObjectKeyName,
     StartArrayKeyName,
     EndArrayKeyName,
-    OtherKey
+    OtherKey,
+    JsonFailure
 };
 
 #endif // __OA_SCHEMA_UPDATER_KEYS_H__

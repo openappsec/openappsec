@@ -1698,7 +1698,7 @@ private:
                 }
             };
         mainloop->addFileRoutine(
-            I_MainLoop::RoutineType::RealTime,
+            I_MainLoop::RoutineType::System,
             server_sock,
             accept_attachment_routine,
             "Nginx Attachment registration listener",

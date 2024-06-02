@@ -132,7 +132,7 @@ void
 NewLoggingService::load(cereal::JSONInputArchive &archive_in)
 {
     parseAppsecJSONKey<string>("address", address, archive_in);
-    parseAppsecJSONKey<string>("proto", proto, archive_in);
+    parseAppsecJSONKey<string>("proto", proto, archive_in, "tcp");
     if (valid_protocols.count(proto) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Logging Service - proto invalid: " << proto;
         throw PolicyGenException("AppSec Logging Service - proto invalid: " + proto);

@@ -15,7 +15,9 @@
 #define __CHECKPOINT_PRODUCT_HANDLERS_H__
 
 #include <algorithm>
+#include <regex>
 #include <boost/regex.hpp>
+#include <boost/algorithm/string.hpp>
 
 #if defined(gaia)
 
@@ -61,6 +63,16 @@ checkPepIdaIdnStatus(const string &command_output)
     }
 
     return genError("Current host does not have PEP control IDA IDN enabled");
+}
+
+Maybe<string>
+checkAgentIntelligence(const string &command_output)
+{
+    if (command_output.find("is registered") != string::npos) {
+        return string("true");
+    }
+
+    return genError("Current host does not have agent intelligence installed");
 }
 
 Maybe<string>
@@ -323,6 +335,34 @@ Maybe<string>
 getSmbGWIPSecVPNBlade(const string &command_output)
 {
     return getSmbBlade(command_output, "IPSec VPN Blade was not found");
+}
+
+Maybe<string>
+extractManagements(const string &command_output)
+{
+    size_t start_pos = command_output.find(":masters(");
+    if (start_pos == string::npos) {
+        return genError("Starting pattern \":masters(\" not found.");
+    }
+    size_t end_pos = command_output.find("))):", start_pos);
+    if (end_pos == string::npos) {
+        return genError("Ending pattern \"))):\" not found.");
+    }
+    string input_string = command_output.substr(start_pos, end_pos - start_pos + 3);
+    string json_output = "[";
+    regex pattern("\\(ReferenceObject\\:Uid\\(\"\\{([\\w-]+)\\}\"\\)\\:Name\\(([^\\)]+)\\)\\:Table\\(([^\\)]+)\\)\\)");
+    smatch matches;
+    auto words_begin = sregex_iterator(input_string.begin(), input_string.end(), pattern);
+    auto words_end = sregex_iterator();
+    for (sregex_iterator i = words_begin; i != words_end; ++i) {
+        const smatch& match = *i;
+        string uid = boost::algorithm::to_lower_copy(match[1].str());
+        string name = match[2].str();
+        if (json_output.back() != '[') json_output += ",";
+        json_output += "{\"Uid\":\"" + uid + "\",\"Name\":\"" + name + "\"}";
+    }
+    json_output += "]";
+    return json_output;
 }
 #endif // gaia || smb
 

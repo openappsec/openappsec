@@ -52,6 +52,7 @@ const string HttpTransactionData::req_headers        = "transaction_request_head
 const string HttpTransactionData::req_body           = "transaction_request_body";
 const string HttpTransactionData::source_identifier  = "sourceIdentifiers";
 const string HttpTransactionData::proxy_ip_ctx       = "proxy_ip";
+const string HttpTransactionData::xff_vals_ctx       = "xff_vals";
 
 const CompressionType HttpTransactionData::default_response_content_encoding = CompressionType::NO_COMPRESSION;
 

@@ -79,7 +79,7 @@ public:
         EXPECT_CALL(mock_orchestration_tools, setClusterId());
         EXPECT_CALL(
             mock_ml,
-            addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Orchestration runner", true)
+            addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Orchestration runner", true)
         ).WillOnce(DoAll(SaveArg<1>(&routine), Return(1)));
 
         EXPECT_CALL(
@@ -170,6 +170,9 @@ public:
 
         map<string, string> resolved_mgmt_details({{"kernel_version", "4.4.0-87-generic"}});
         EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_mgmt_details));
+        EXPECT_CALL(mock_details_resolver, readCloudMetadata()).WillRepeatedly(
+            Return(Maybe<tuple<string, string, string>>(genError("No cloud metadata")))
+        );
     }
 
     string
@@ -990,7 +993,7 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
 
     EXPECT_CALL(
         mock_ml,
-        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Orchestration runner", true)
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Orchestration runner", true)
     );
 
     EXPECT_CALL(

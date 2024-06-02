@@ -111,12 +111,12 @@ TEST_F(HealthCheckerTest, clientConnection)
 
     EXPECT_CALL(
         mock_mainloop,
-        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+        addFileRoutine(I_MainLoop::RoutineType::System, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
     EXPECT_CALL(
         mock_mainloop,
-        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Health check probe connection handler", true)
     ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
 
     int socket = 1;
@@ -145,7 +145,7 @@ TEST_F(HealthCheckerTest, loadFromDynamicConfiguration)
 
     EXPECT_CALL(
         mock_mainloop,
-        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+        addFileRoutine(I_MainLoop::RoutineType::System, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
     health_checker.init();
@@ -183,7 +183,7 @@ TEST_F(HealthCheckerTest, connectionsLimit)
 
     EXPECT_CALL(
         mock_mainloop,
-        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+        addFileRoutine(I_MainLoop::RoutineType::System, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
     EXPECT_CALL(mock_mainloop, doesRoutineExist(_)).WillRepeatedly(Return(false));
@@ -218,12 +218,12 @@ TEST_F(HealthCheckerTest, disablingAfterEnabled)
 
     EXPECT_CALL(
         mock_mainloop,
-        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+        addFileRoutine(I_MainLoop::RoutineType::System, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
     EXPECT_CALL(
         mock_mainloop,
-        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Health check probe connection handler", true)
     ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
 
     int socket = 1;
@@ -273,12 +273,12 @@ TEST_F(HealthCheckerTest, changePortIpConfig)
 
     EXPECT_CALL(
         mock_mainloop,
-        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+        addFileRoutine(I_MainLoop::RoutineType::System, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
     EXPECT_CALL(
         mock_mainloop,
-        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Health check probe connection handler", true)
     ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
 
     int socket = 1;
@@ -321,12 +321,12 @@ TEST_F(HealthCheckerTest, FailedHealthCheck)
 
     EXPECT_CALL(
         mock_mainloop,
-        addFileRoutine(I_MainLoop::RoutineType::RealTime, _, _, _, true)
+        addFileRoutine(I_MainLoop::RoutineType::System, _, _, _, true)
     ).WillRepeatedly(DoAll(SaveArg<2>(&connection_handler_routine), Return(0)));
 
     EXPECT_CALL(
         mock_mainloop,
-        addOneTimeRoutine(I_MainLoop::RoutineType::RealTime, _, "Health check probe connection handler", true)
+        addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Health check probe connection handler", true)
     ).WillOnce(DoAll(SaveArg<1>(&connection_handler_routine), Return(0)));
 
     int socket = 1;
