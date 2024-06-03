@@ -11,6 +11,7 @@ var_fog_address=
 var_proxy=
 var_mode=
 var_token=
+var_ignore=
 init=
 
 if [ ! -f /nano-service-installers/$ORCHESTRATION_INSTALLATION_SCRIPT ]; then
@@ -33,6 +34,8 @@ while true; do
         var_proxy="$1"
     elif [ "$1" == "--hybrid-mode" ] || [ "$1" == "--standalone" ]; then
         var_mode="--hybrid_mode"
+    elif [ "$1" == "--no-upgrade" ]; then
+        var_ignore="--ignore all"
     elif [ "$1" == "--token" ]; then
         shift
         var_token="$1"
@@ -59,6 +62,9 @@ fi
 
 if [ ! -z $var_mode ]; then
     orchestration_service_installation_flags="$orchestration_service_installation_flags $var_mode"
+fi
+if [ ! -z "$var_ignore" ]; then
+    orchestration_service_installation_flags="$orchestration_service_installation_flags $var_ignore"
 fi
 
 
