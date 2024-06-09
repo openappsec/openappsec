@@ -26,6 +26,7 @@
 #include "i_time_get.h"
 #include "i_encryptor.h"
 #include "i_shell_cmd.h"
+#include "i_rest_api.h"
 #include "i_instance_awareness.h"
 
 #include "config.h"
@@ -41,6 +42,7 @@ class Messaging
     Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_ShellCmd>,
     Singleton::Consume<I_MainLoop>,
+    Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_InstanceAwareness>
 {
 public:

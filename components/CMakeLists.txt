@@ -4,7 +4,6 @@ add_subdirectory(signal_handler)
 add_subdirectory(gradual_deployment)
 add_subdirectory(packet)
 add_subdirectory(pending_key)
-add_subdirectory(health_check_manager)
 
 add_subdirectory(utils)
 add_subdirectory(attachment-intakers)

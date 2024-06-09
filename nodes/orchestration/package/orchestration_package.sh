@@ -418,9 +418,9 @@ cp_print()
         printf "%b\n" "$1"
     fi
     if [ "$is_smb" != "1" ]; then
-        printf "%b\n" "$1" >> ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
+        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
     else
-        printf "%b\n" "$1" >> ${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
+        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> ${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
     fi
 }
 

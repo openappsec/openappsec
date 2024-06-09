@@ -19,6 +19,7 @@
 #include "config.h"
 #include "agent_details.h"
 #include "orchestration_comp.h"
+#include "updates_process_event.h"
 
 using namespace std;
 
@@ -174,14 +175,13 @@ ManifestHandler::downloadPackages(const map<string, Package> &new_packages_to_do
                     " software update failed. Agent is running previous software. Contact Check Point support.";
             }
 
-            auto orchestration_status = Singleton::Consume<I_OrchestrationStatus>::by<ManifestHandler>();
-            if (orchestration_status->getManifestError().find("Gateway was not fully deployed") == string::npos) {
-                orchestration_status->setFieldStatus(
-                    OrchestrationStatusFieldType::MANIFEST,
-                    OrchestrationStatusResult::FAILED,
-                    install_error
-                );
-            }
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::MANIFEST,
+                UpdatesFailureReason::DOWNLOAD_FILE,
+                package.getName(),
+                install_error
+            ).notify();
             return genError(
                 "Failed to download installation package. Package: " +
                 package.getName() +
@@ -219,11 +219,13 @@ ManifestHandler::installPackage(
                 err_hostname +
                 " software update failed. Agent is running previous software. Contact Check Point support.";
             if (orchestration_status->getManifestError().find("Gateway was not fully deployed") == string::npos) {
-                orchestration_status->setFieldStatus(
-                    OrchestrationStatusFieldType::MANIFEST,
-                    OrchestrationStatusResult::FAILED,
+                UpdatesProcessEvent(
+                    UpdatesProcessResult::FAILED,
+                    UpdatesConfigType::MANIFEST,
+                    UpdatesFailureReason::INSTALL_PACKAGE,
+                    package_name,
                     install_error
-                );
+                ).notify();
             }
         }
         return self_update_status;
@@ -289,11 +291,13 @@ ManifestHandler::installPackage(
 
         auto orchestration_status = Singleton::Consume<I_OrchestrationStatus>::by<ManifestHandler>();
         if (orchestration_status->getManifestError().find("Gateway was not fully deployed") == string::npos) {
-            orchestration_status->setFieldStatus(
-                OrchestrationStatusFieldType::MANIFEST,
-                OrchestrationStatusResult::FAILED,
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::MANIFEST,
+                UpdatesFailureReason::INSTALL_PACKAGE,
+                package_name,
                 install_error
-            );
+            ).notify();
         }
         return false;
     }

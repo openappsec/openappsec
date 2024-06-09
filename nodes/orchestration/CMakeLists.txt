@@ -28,6 +28,7 @@ target_link_libraries(
     orchestration_tools
     env_details
     local_policy_mgmt_gen
+    updates_process_reporter
     curl
 
     -Wl,--end-group

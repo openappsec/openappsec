@@ -19,6 +19,8 @@
 
 #include "debug.h"
 #include "config.h"
+#include "updates_process_event.h"
+#include "health_check_status/health_check_status.h"
 
 using namespace cereal;
 using namespace std;
@@ -383,7 +385,10 @@ private:
     map<string, string> service_settings;
 };
 
-class OrchestrationStatus::Impl : Singleton::Provide<I_OrchestrationStatus>::From<OrchestrationStatus>
+class OrchestrationStatus::Impl
+        :
+    Singleton::Provide<I_OrchestrationStatus>::From<OrchestrationStatus>,
+    public Listener<UpdatesProcessEvent>
 {
 public:
     void
@@ -462,6 +467,13 @@ public:
             },
             "Write Orchestration status file"
         );
+        registerListener();
+    }
+
+    void
+    upon(const UpdatesProcessEvent &event) override
+    {
+        setFieldStatus(event.getStatusFieldType(), event.getOrchestrationStatusResult(), event.parseDescription());
     }
 
 private:

@@ -727,7 +727,6 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
             "sync notification for '" + m_assetId + "'",
             ReportIS::AudienceTeam::WAAP,
             syncNotification,
-            false,
             MessageCategory::GENERIC,
             ReportIS::Tags::WAF,
             ReportIS::Notification::SYNC_LEARNING

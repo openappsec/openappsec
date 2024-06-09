@@ -89,11 +89,4 @@ private:
     std::map<std::string, std::string> extended_status = {};
 };
 
-class HealthCheckStatusEvent : public Event<HealthCheckStatusEvent, HealthCheckStatusReply>
-{
-public:
-    HealthCheckStatusEvent() {}
-    ~HealthCheckStatusEvent() {}
-};
-
 #endif // __HEALTH_CHECK_STATUS_H__

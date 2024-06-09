@@ -42,6 +42,8 @@
 #include "hybrid_communication.h"
 #include "agent_core_utilities.h"
 #include "fog_communication.h"
+#include "updates_process_event.h"
+#include "updates_process_reporter.h"
 
 using namespace std;
 using namespace chrono;
@@ -52,85 +54,6 @@ USE_DEBUG_FLAG(D_ORCHESTRATOR);
 #if defined(gaia) || defined(smb)
 static string fw_last_update_time = "";
 #endif // gaia || smb
-
-class HealthCheckStatusListener : public Listener<HealthCheckStatusEvent>
-{
-public:
-    void upon(const HealthCheckStatusEvent &) override {}
-
-    HealthCheckStatusReply
-    respond(const HealthCheckStatusEvent &) override
-    {
-        return HealthCheckStatusReply(comp_name, status, extended_status);
-    }
-
-    string getListenerName() const override { return "HealthCheckStatusListener"; }
-
-    void
-    setStatus(
-        HealthCheckStatus _status,
-        OrchestrationStatusFieldType _status_field_type,
-        const string &_status_description = "Success")
-    {
-        string status_field_type_str = convertOrchestrationStatusFieldTypeToStr(_status_field_type);
-        extended_status[status_field_type_str] = _status_description;
-        field_types_status[status_field_type_str] = _status;
-
-        switch(_status) {
-            case HealthCheckStatus::UNHEALTHY: {
-                status = HealthCheckStatus::UNHEALTHY;
-                return;
-            }
-            case HealthCheckStatus::DEGRADED: {
-                for (const auto &type_status : field_types_status) {
-                    if ((type_status.first != status_field_type_str)
-                            && (type_status.second == HealthCheckStatus::UNHEALTHY))
-                    {
-                        return;
-                    }
-                }
-                status = HealthCheckStatus::DEGRADED;
-                return;
-            }
-            case HealthCheckStatus::HEALTHY: {
-                for (const auto &type_status : field_types_status) {
-                    if ((type_status.first != status_field_type_str)
-                            && (type_status.second == HealthCheckStatus::UNHEALTHY
-                                || type_status.second == HealthCheckStatus::DEGRADED)
-                        )
-                    {
-                        return;
-                    }
-                    status = HealthCheckStatus::HEALTHY;
-                }
-                return;
-            }
-            case HealthCheckStatus::IGNORED: {
-                return;
-            }
-        }
-    }
-
-private:
-    string
-    convertOrchestrationStatusFieldTypeToStr(OrchestrationStatusFieldType type)
-    {
-        switch (type) {
-            case OrchestrationStatusFieldType::REGISTRATION : return "Registration";
-            case OrchestrationStatusFieldType::MANIFEST : return "Manifest";
-            case OrchestrationStatusFieldType::LAST_UPDATE : return "Last Update";
-            case OrchestrationStatusFieldType::COUNT : return "Count";
-        }
-
-        dbgError(D_ORCHESTRATOR) << "Trying to convert unknown orchestration status field to string.";
-        return "";
-    }
-
-    string comp_name = "Orchestration";
-    HealthCheckStatus status = HealthCheckStatus::IGNORED;
-    map<string, string> extended_status;
-    map<string, HealthCheckStatus> field_types_status;
-};
 
 class SetAgentUninstall
         :
@@ -257,6 +180,13 @@ private:
             << "Failed to load Orchestration Policy. Error: "
             << maybe_policy.getErr()
             <<  "Trying to load from backup.";
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::POLICY,
+            UpdatesFailureReason::POLICY_CONFIGURATION,
+            orchestration_policy_file,
+            maybe_policy.getErr()
+        ).notify();
         return loadOrchestrationPolicyFromBackup();
     }
 
@@ -280,6 +210,13 @@ private:
             return maybe_policy;
         }
 
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::POLICY,
+            UpdatesFailureReason::POLICY_CONFIGURATION,
+            orchestration_policy_file + backup_ext,
+            maybe_policy.getErr()
+        ).notify();
         return genError("Failed to load Orchestration policy from backup.");
     }
 
@@ -337,17 +274,13 @@ private:
                 << new_manifest_file.getErr()
                 << " Presenting the next message to the user: "
                 << install_error;
-            i_orchestration_status->setFieldStatus(
-                OrchestrationStatusFieldType::MANIFEST,
-                OrchestrationStatusResult::FAILED,
-                install_error
-            );
-
-            health_check_status_listener.setStatus(
-                HealthCheckStatus::UNHEALTHY,
-                OrchestrationStatusFieldType::MANIFEST,
-                install_error
-            );
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::MANIFEST,
+                UpdatesFailureReason::DOWNLOAD_FILE,
+                resource_file.getFileName(),
+                new_manifest_file.getErr()
+            ).notify();
 
             return genError(install_error);
         }
@@ -372,23 +305,12 @@ private:
                 << "Manifest failed to be updated. Presenting the next message to the user: "
                 << install_error;
 
-            health_check_status_listener.setStatus(
-                HealthCheckStatus::UNHEALTHY,
-                OrchestrationStatusFieldType::MANIFEST,
-                install_error
-            );
-
             return genError(install_error);
         }
-
-        i_orchestration_status->setFieldStatus(
-                OrchestrationStatusFieldType::MANIFEST,
-                OrchestrationStatusResult::SUCCESS
-        );
-        health_check_status_listener.setStatus(
-            HealthCheckStatus::HEALTHY,
-            OrchestrationStatusFieldType::MANIFEST
-        );
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::MANIFEST
+        ).notify();
 
         ifstream restart_watchdog_orch(filesystem_prefix + "/orchestration/restart_watchdog");
         if (restart_watchdog_orch.good()) {
@@ -473,6 +395,13 @@ private:
             if (!updateFogAddress(policy.getFogAddress())) {
                 dbgWarning(D_ORCHESTRATOR) << "Failed to restore the old Fog address.";
             }
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::POLICY,
+                UpdatesFailureReason::POLICY_FOG_CONFIGURATION,
+                orchestration_policy.getFogAddress(),
+                "Failed to update the new Fog address."
+            ).notify();
             return "";
         }
 
@@ -499,13 +428,19 @@ private:
         // Handling policy update.
         dbgInfo(D_ORCHESTRATOR) << "There is a new policy file.";
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::POLICY);
-        Maybe<string> new_policy_file =
-        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
+        Maybe<string> new_policy_file = Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
             new_policy.unpack(),
             I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
             resource_file
         );
         if (!new_policy_file.ok()) {
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::POLICY,
+                UpdatesFailureReason::DOWNLOAD_FILE,
+                resource_file.getFileName(),
+                new_policy_file.getErr()
+            ).notify();
             return genError("Failed to download the new policy file. Error: " + new_policy_file.getErr());
         }
 
@@ -564,6 +499,13 @@ private:
                 << LogField("policyVersion", updated_policy_version)
                 << LogField("previousPolicyVersion", old_policy_version);
 
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::POLICY,
+                UpdatesFailureReason::POLICY_CONFIGURATION,
+                updated_policy_version,
+                res.getErr()
+            ).notify();
             return genError(error_str);
         }
         i_service_controller->moveChangedPolicies();
@@ -648,6 +590,11 @@ private:
             "Send policy update report"
         );
 
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::POLICY
+        ).notify();
+
         dbgInfo(D_ORCHESTRATOR) << "Policy update report was successfully sent to fog";
 
         return Maybe<void>();
@@ -683,10 +630,24 @@ private:
         );
 
         if (!new_data_files.ok()) {
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::DATA,
+                UpdatesFailureReason::DOWNLOAD_FILE,
+                resource_file.getFileName(),
+                new_data_files.getErr()
+            ).notify();
             return genError("Failed to download new data file, Error: " + new_data_files.getErr());
         }
         auto new_data_file_input = i_orchestration_tools->readFile(new_data_files.unpack());
         if (!new_data_file_input.ok()) {
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::DATA,
+                UpdatesFailureReason::HANDLE_FILE,
+                resource_file.getFileName(),
+                "Failed to read new data file, Error: " + new_data_file_input.getErr()
+            ).notify();
             return genError("Failed to read new data file, Error: " + new_data_file_input.getErr());
         }
 
@@ -702,21 +663,35 @@ private:
                 << e.what()
                 << ". Content: "
                 << new_data_files.unpack();
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::DATA,
+                UpdatesFailureReason::HANDLE_FILE,
+                new_data_files.unpack(),
+                string("Failed to load data from JSON file, Error: ") + e.what()
+            ).notify();
             return genError(e.what());
         }
 
         for (const auto &data_file : parsed_data) {
             const string data_file_save_path = getPolicyConfigPath(data_file.first, Config::ConfigFileType::Data);
             Maybe<string> new_data_file =
-            Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromURL(
-                data_file.second.getDownloadPath(),
-                data_file.second.getChecksum(),
-                I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
-                "data_" + data_file.first
-            );
+                Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromURL(
+                    data_file.second.getDownloadPath(),
+                    data_file.second.getChecksum(),
+                    I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
+                    "data_" + data_file.first
+                );
 
             if (!new_data_file.ok()) {
                 dbgWarning(D_ORCHESTRATOR) << "Failed to download the " << data_file.first << " data file.";
+                UpdatesProcessEvent(
+                    UpdatesProcessResult::FAILED,
+                    UpdatesConfigType::DATA,
+                    UpdatesFailureReason::DOWNLOAD_FILE,
+                    data_file.first,
+                    new_data_file.getErr()
+                ).notify();
                 return new_data_file.passErr();
             }
             auto data_new_checksum = getChecksum(new_data_file.unpack());
@@ -729,6 +704,16 @@ private:
                     << data_new_checksum;
 
                 dbgWarning(D_ORCHESTRATOR) << current_error.str();
+                UpdatesProcessEvent(
+                    UpdatesProcessResult::FAILED,
+                    UpdatesConfigType::DATA,
+                    UpdatesFailureReason::CHECKSUM_UNMATCHED,
+                    data_file.first,
+                    " Expected checksum: " +
+                    data_file.second.getChecksum() +
+                    ". Downloaded checksum: " +
+                    data_new_checksum
+                ).notify();
                 return genError(current_error.str());
             }
             if (!i_orchestration_tools->copyFile(new_data_file.unpack(), data_file_save_path)) {
@@ -741,6 +726,10 @@ private:
             dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new agents' data file to " << data_file_path;
         }
 
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::DATA
+        ).notify();
         return Maybe<void>();
     }
 
@@ -751,8 +740,7 @@ private:
 
         dbgInfo(D_ORCHESTRATOR) << "There is a new settings file.";
         GetResourceFile resource_file(GetResourceFile::ResourceFileType::SETTINGS);
-        Maybe<string> new_settings_file =
-        Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
+        Maybe<string> new_settings_file = Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFile(
             orch_settings.unpack(),
             I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
             resource_file
@@ -762,6 +750,13 @@ private:
             dbgWarning(D_ORCHESTRATOR)
                 << "Failed to download the new settings file. Error: "
                 << new_settings_file.getErr();
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::SETTINGS,
+                UpdatesFailureReason::DOWNLOAD_FILE,
+                resource_file.getFileName(),
+                new_settings_file.getErr()
+            ).notify();
             return genError("Failed to download the new settings file. Error: " + new_settings_file.getErr());
         }
 
@@ -769,6 +764,10 @@ private:
         if (res.ok()) {
             settings_file_path = *res;
             reloadConfiguration();
+            UpdatesProcessEvent(
+                UpdatesProcessResult::SUCCESS,
+                UpdatesConfigType::SETTINGS
+            ).notify();
             return Maybe<void>();
         }
 
@@ -877,11 +876,13 @@ private:
 
         if (!response.ok()) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to get the update. Error: " << response.getErr();
-            i_orchestration_status->setFieldStatus(
-                OrchestrationStatusFieldType::LAST_UPDATE,
-                OrchestrationStatusResult::FAILED,
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::GENERAL,
+                UpdatesFailureReason::GET_UPDATE_REQUEST,
+                "",
                 "Warning: Agent/Gateway failed during the update process. Contact Check Point support."
-            );
+            ).notify();
 
             return genError(response.getErr());
         }
@@ -924,10 +925,10 @@ private:
         OrchSettings orch_settings  = response.getSettings();
         OrchData orch_data          = response.getData();
 
-        i_orchestration_status->setFieldStatus(
-            OrchestrationStatusFieldType::LAST_UPDATE,
-            OrchestrationStatusResult::SUCCESS
-        );
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::GENERAL
+        ).notify();
         i_orchestration_status->setIsConfigurationUpdated(
             EnumArray<OrchestrationStatusConfigType, bool>(
                 orch_manifest.ok(), orch_policy.ok(), orch_settings.ok(), orch_data.ok()
@@ -1017,6 +1018,10 @@ private:
         }
 
         if (maybe_errors != "") return genError(maybe_errors);
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::GENERAL
+        ).notify();
         return Maybe<void>();
     }
 
@@ -1196,6 +1201,13 @@ private:
         dbgTrace(D_ORCHESTRATOR) << "The settings directory is " << settings_file_path;
         if (!i_orchestration_tools->copyFile(new_settings_file, settings_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to update the settings.";
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::SETTINGS,
+                UpdatesFailureReason::HANDLE_FILE,
+                settings_file_path,
+                "Failed to update the settings"
+            ).notify();
             return genError("Failed to update the settings");
         }
 
@@ -1443,20 +1455,24 @@ private:
                 << check_update_result.getErr()
                 << ", new check will be every: "
                 << sleep_interval << " seconds";
-
-            health_check_status_listener.setStatus(
-                HealthCheckStatus::UNHEALTHY,
-                OrchestrationStatusFieldType::LAST_UPDATE,
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::GENERAL,
+                UpdatesFailureReason::CHECK_UPDATE,
+                "",
                 "Failed during check update. Error: " + check_update_result.getErr()
-            );
+            ).notify();
             return;
         }
         failure_count = 0;
         dbgDebug(D_ORCHESTRATOR) << "Check update process completed successfully";
-        health_check_status_listener.setStatus(
-            HealthCheckStatus::HEALTHY,
-            OrchestrationStatusFieldType::LAST_UPDATE
-        );
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::GENERAL,
+            UpdatesFailureReason::CHECK_UPDATE,
+            "",
+            "Check update procces succeeded!"
+        ).notify();
         sleep_interval = policy.getSleepInterval();
         if (!is_new_success) {
             dbgInfo(D_ORCHESTRATOR)
@@ -1491,11 +1507,13 @@ private:
         sleep_interval = policy.getErrorSleepInterval();
         Maybe<void> registration_status(genError("Not running yet."));
         while (!(registration_status = registerToTheFog()).ok()) {
-            health_check_status_listener.setStatus(
-                HealthCheckStatus::UNHEALTHY,
-                OrchestrationStatusFieldType::REGISTRATION,
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::GENERAL,
+                UpdatesFailureReason::REGISTRATION,
+                "",
                 registration_status.getErr()
-            );
+            ).notify();
             sleep_interval = getConfigurationWithDefault<int>(
                 30,
                 "orchestration",
@@ -1515,10 +1533,11 @@ private:
 
         Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(chrono::seconds(1));
 
-        health_check_status_listener.setStatus(
-            HealthCheckStatus::HEALTHY,
-            OrchestrationStatusFieldType::REGISTRATION
-        );
+        UpdatesProcessEvent(
+            UpdatesProcessResult::SUCCESS,
+            UpdatesConfigType::GENERAL,
+            UpdatesFailureReason::REGISTRATION
+        ).notify();
 
         LogGen(
             "Check Point Orchestration nano service successfully started",
@@ -1552,16 +1571,18 @@ private:
         if (!Singleton::Consume<I_ManifestController>::by<OrchestrationComp>()->loadAfterSelfUpdate()) {
             // Should restore from backup
             dbgWarning(D_ORCHESTRATOR) << "Failed to load Orchestration after self-update";
-            health_check_status_listener.setStatus(
-                HealthCheckStatus::UNHEALTHY,
-                OrchestrationStatusFieldType::LAST_UPDATE,
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::GENERAL,
+                UpdatesFailureReason::ORCHESTRATION_SELF_UPDATE,
+                "",
                 "Failed to load Orchestration after self-update"
-            );
+            ).notify();
         } else {
-            health_check_status_listener.setStatus(
-                HealthCheckStatus::HEALTHY,
-                OrchestrationStatusFieldType::MANIFEST
-            );
+            UpdatesProcessEvent(
+                UpdatesProcessResult::SUCCESS,
+                UpdatesConfigType::MANIFEST
+            ).notify();
         }
 
         setUpgradeTime();
@@ -1911,7 +1932,7 @@ private:
             ReportIS::Audience::INTERNAL
         );
         hybrid_mode_metric.registerListener();
-        health_check_status_listener.registerListener();
+        updates_process_reporter_listener.registerListener();
     }
 
     void
@@ -2024,7 +2045,7 @@ private:
     unsigned int sleep_interval = 0;
     bool is_new_success = false;
     OrchestrationPolicy policy;
-    HealthCheckStatusListener health_check_status_listener;
+    UpdatesProcessReporter updates_process_reporter_listener;
     HybridModeMetric hybrid_mode_metric;
     EnvDetails env_details;
     chrono::minutes upgrade_delay_time;

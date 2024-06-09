@@ -281,13 +281,7 @@ TEST_F(ManifestControllerTest, badChecksum)
     EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/packages/my/my")).WillOnce(Return(false));
 
     string hostname = "hostname";
-    string empty_err;
-    EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(empty_err));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return( Maybe<string>(hostname)));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -710,10 +704,6 @@ TEST_F(ManifestControllerTest, selfUpdateWithOldCopyWithError)
     string hostname = "hostname";
     string empty_err;
     EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(empty_err));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
     load(manifest, new_services);
 
     EXPECT_CALL(mock_orchestration_tools,
@@ -932,10 +922,6 @@ TEST_F(ManifestControllerTest, badInstall)
     string empty_err;
     EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(empty_err));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return( Maybe<string>(hostname)));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
 
     string corrupted_packages_manifest =
         "{"
@@ -1008,12 +994,6 @@ TEST_F(ManifestControllerTest, failToDownloadWithselfUpdate)
         doesFileExist("/etc/cp/packages/orchestration/orchestration")
     ).WillOnce(Return(false));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(string("hostname")));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
-    string not_error;
-    EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(not_error));
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1404,12 +1384,6 @@ TEST_F(ManifestControllerTest, failureOnDownloadSharedObject)
     ).WillOnce(Return(false));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(string("hostname")));
     EXPECT_CALL(mock_orchestration_tools, removeFile("/tmp/temp_file1")).WillOnce(Return(true));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
-    string not_error;
-    EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(not_error));
 
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
@@ -2538,12 +2512,6 @@ TEST_F(ManifestDownloadTest, download_relative_path)
         doesFileExist("/etc/cp/packages/orchestration/orchestration")
     ).WillOnce(Return(false));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(string("hostname")));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
-    string not_error;
-    EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(not_error));
 
     EXPECT_FALSE(i_manifest_controller->updateManifest(manifest_file.fname));
 }
@@ -2589,8 +2557,6 @@ TEST_F(ManifestDownloadTest, download_relative_path_no_fog_domain)
         mock_orchestration_tools,
         doesFileExist("/etc/cp/packages/orchestration/orchestration")
     ).WillOnce(Return(false));
-    string not_error;
-    EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(not_error));
 
     checkIfFileExistsCall(new_packages.at("orchestration"));
 
@@ -2604,10 +2570,6 @@ TEST_F(ManifestDownloadTest, download_relative_path_no_fog_domain)
         )
     ).WillOnce(Return(downloaded_package));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(string("hostname")));
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::FAILED, _)
-    );
 
     EXPECT_FALSE(i_manifest_controller->updateManifest(manifest_file.fname));
 }
