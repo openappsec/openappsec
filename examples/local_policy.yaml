@@ -24,10 +24,10 @@ practices:
       minimum-confidence: critical
       override-mode: prevent-learn
       protections:
-        csrf-protection: prevent-learn
-        error-disclosure: prevent-learn
-        non-valid-http-methods: true
-        open-redirect: prevent-learn
+        csrf-protection: inactive
+        error-disclosure: inactive
+        non-valid-http-methods: false
+        open-redirect: inactive
     anti-bot:
       injected-URIs: []
       validated-URIs: []
