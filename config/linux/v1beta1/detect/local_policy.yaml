@@ -50,3 +50,13 @@ log-triggers:
       http-headers: false
       request-body: false
       url-path: false
+      url-query: false
+    log-destination:
+      cloud: true
+      stdout:
+        format: json
+
+custom-responses:
+  - name: appsec-default-web-user-response
+    mode: response-code-only
+    http-response-code: 403
