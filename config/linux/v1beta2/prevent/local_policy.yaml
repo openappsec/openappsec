@@ -1,0 +1,110 @@
+# open-appsec default declarative configuration file
+# based on schema version: "v1beta2"
+# more information on declarative configuration: https://docs.openappsec.io
+
+apiVersion: v1beta2
+
+policies:
+  default:
+    # start in prevent-learn 
+    mode: prevent-learn
+    threatPreventionPractices:
+    - default-threat-prevention-practice
+    accessControlPractices:
+    - default-access-control-practice
+    customResponses: default-web-user-response
+    triggers:
+    - default-log-trigger
+  specificRules:
+    - host: www.example.com
+      # this is an example for specific rule, adjust the values as required for the protected app
+      mode: detect-learn
+      threatPreventionPractices:
+      - default-threat-prevention-practice
+      accessControlPractices:
+      - default-access-control-practice
+      triggers:
+      - default-log-trigger
+
+threatPreventionPractices:
+  - name: default-threat-prevention-practice
+    practiceMode: inherited
+    webAttacks:
+      overrideMode: inherited
+      minimumConfidence: high
+    intrusionPrevention:
+    # intrusion prevention (IPS) requires "Premium Edition"
+      overrideMode: inherited
+      maxPerformanceImpact: medium
+      minSeverityLevel: medium
+      minCveYear: 2016
+      highConfidenceEventAction: inherited
+      mediumConfidenceEventAction: inherited
+      lowConfidenceEventAction: detect
+    fileSecurity:
+    # file security requires "Premium Edition"
+      overrideMode: inherited
+      minSeverityLevel: medium
+      highConfidenceEventAction: inherited
+      mediumConfidenceEventAction: inherited
+      lowConfidenceEventAction: detect
+    snortSignatures:
+      # you must specify snort signatures in configmap or file to activate snort inspection
+      overrideMode: inherited
+      configmap: []
+      # relevant for deployments on kubernetes
+      # 0 or 1 configmaps supported in array
+      files: []
+      # relevant for docker and linux embedded deployments
+      # 0 or 1 files supported in array
+    openapiSchemaValidation: # schema validation requires "Premium Edition" 
+      overrideMode: inherited
+      configmap: []
+      # relevant for deployments on kubernetes
+      # 0 or 1 configmaps supported in array
+      files: []
+      # relevant for docker and linux embedded deployments
+      # 0 or 1 files supported in array
+    antiBot: # antibot requires "Premium Edition" 
+      overrideMode: inherited
+      injectedUris: []
+      validatedUris: []
+
+accessControlPractices:
+  - name: default-access-control-practice
+    practiceMode: inherited
+    rateLimit:
+    # specify one or more rules below to use rate limiting
+      overrideMode: inherited
+      rules: []
+
+logTriggers:
+  - name: default-log-trigger
+    accessControlLogging:
+      allowEvents: false
+      dropEvents: true
+    appsecLogging:
+      detectEvents: true
+      preventEvents: true
+      allWebRequests: false
+    extendedLogging:
+      urlPath: true
+      urlQuery: true
+      httpHeaders: false
+      requestBody: false      
+    additionalSuspiciousEventsLogging:
+      enabled: true
+      minSeverity: high
+      responseBody: false
+      responseCode: true
+
+    logDestination:
+      cloud: true
+      logToAgent: false
+      stdout:
+        format: json
+
+customResponses:
+  - name: default-web-user-response
+    mode: response-code-only
+    httpResponseCode: 403

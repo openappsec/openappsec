@@ -1,0 +1,13 @@
+apiVersion: openappsec.io/v1beta1
+kind: Policy
+metadata:
+    name: open-appsec-best-practice-policy
+spec:
+    default:
+        mode: detect-learn
+        practices: [appsec-best-practice]
+        triggers: [appsec-log-trigger]
+        custom-response: 403-forbidden
+        source-identifiers: ""
+        trusted-sources: ""
+        exceptions: []
