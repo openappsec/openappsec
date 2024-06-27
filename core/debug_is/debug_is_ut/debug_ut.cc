@@ -14,6 +14,7 @@
 #include "mock/mock_messaging.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_environment.h"
+#include "mock/mock_rest_api.h"
 #include "mock/mock_instance_awareness.h"
 
 using namespace std;
@@ -551,7 +552,6 @@ public:
         Debug::setNewDefaultStdout(&capture_debug);
     }
 
-
     ~DebugConfigTest()
     {
         loadConfiguration("");
@@ -583,10 +583,19 @@ public:
         Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
     }
 
+    bool
+    setDebugConfig(const unique_ptr<RestInit> &p)
+    {
+        set_debug_config = p->getRest();
+        return true;
+    }
+
     ConfigComponent conf;
     ::Environment env;
     stringstream capture_debug;
     StrictMock<MockAgentDetails> mock_agent_details;
+    NiceMock<MockRestApi> mock_rest;
+    unique_ptr<ServerRest> set_debug_config;
 };
 
 TEST_F(DebugConfigTest, basic_configuration)
@@ -784,6 +793,54 @@ TEST_F(DebugConfigTest, fail_configuration)
     Debug::preload();
     string debug_config = "{\"Output\": \"STDOUT\", \"D_FW\": \"Jrace\"}";
     EXPECT_FALSE(loadConfiguration(debug_config));
+}
+
+TEST_F(DebugConfigTest, testSetConfig)
+{
+    NiceMock<MockMainLoop> mock_mainloop;
+    StrictMock<MockTimeGet> mock_time;
+    Debug::setUnitTestFlag(D_FW, Debug::DebugLevel::WARNING);
+    EXPECT_TRUE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::ERROR));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::INFO));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::DEBUG));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::TRACE));
+
+    EXPECT_CALL(mock_rest, mockRestCall(RestAction::SET, "change-debug-config", _))
+        .WillOnce(WithArg<2>(Invoke(this, &DebugConfigTest::setDebugConfig))
+    );
+    Maybe<I_MainLoop::RoutineID> error_id = genError("no id");
+    EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(error_id));
+    EXPECT_CALL(mock_time, getWalltimeStr()).WillRepeatedly(Return(string("")));
+
+    EXPECT_CALL(mock_rest, mockRestCall(RestAction::ADD, "declare-boolean-variable", _)).WillOnce(Return(true));
+
+    env.preload();
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Executable Name", "debug-ut");
+    env.init();
+
+    Debug::init();
+
+    setConfiguration(
+        cptestFnameInSrcDir(string("debug-ut-debug-conf.json")),
+        string("Debug I/S"),
+        string("Debug conf file path")
+    );
+
+    stringstream ss("{}");
+    Maybe<string> maybe_res = set_debug_config->performRestCall(ss);
+    ASSERT_TRUE(maybe_res.ok());
+    EXPECT_EQ(maybe_res.unpack(), "{\n    \"output\": \"New debug configuration set succesfully\"\n}");
+
+    EXPECT_TRUE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::ERROR));
+    EXPECT_TRUE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::INFO));
+    EXPECT_TRUE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::DEBUG));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::TRACE));
+    Debug::setUnitTestFlag(D_FW, Debug::DebugLevel::WARNING); // Reset debug level so it won't effect other tests
+    EXPECT_TRUE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::ERROR));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::INFO));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::DEBUG));
+    EXPECT_FALSE(Debug::isFlagAtleastLevel(D_FW, Debug::DebugLevel::TRACE));
+    Debug::fini();
 }
 
 ACTION(InvokeMainLoopCB)

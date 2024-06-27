@@ -21,6 +21,7 @@
 #include "report/report.h"
 #include "i_agent_details.h"
 #include "i_environment.h"
+#include "i_rest_api.h"
 #include "i_mainloop.h"
 #include "report/report_bulks.h"
 

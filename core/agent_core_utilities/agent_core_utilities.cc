@@ -175,7 +175,7 @@ copyFile(const string &src, const string &dest, bool overide_if_exists, mode_t p
     struct stat stat_buf;
     int source_fd = open(src.c_str(), O_RDONLY);
     fstat(source_fd, &stat_buf);
-    int dest_fd = open(dest.c_str(), O_WRONLY | O_CREAT, permission);
+    int dest_fd = open(dest.c_str(), O_WRONLY | O_CREAT | O_TRUNC, permission);
     int bytes_copied = 1;
     while (bytes_copied > 0) {
         static const int buf_size = 4096*1000;

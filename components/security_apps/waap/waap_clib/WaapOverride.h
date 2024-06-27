@@ -39,12 +39,19 @@ public:
         m_op = to_lower_copy(m_op);
         m_isCidr = false;
         m_value = "";
+        m_isValid = true;
 
         if (m_op == "basic") {
             // If op == "BASIC" - read numeric value
             ar(cereal::make_nvp("tag", m_tag));
             m_tag = to_lower_copy(m_tag);
 
+            if (m_tag != "sourceip" && m_tag != "sourceidentifier" && m_tag != "url" && m_tag != "hostname" &&
+                m_tag != "keyword" && m_tag != "paramname" && m_tag != "paramvalue" && m_tag != "paramlocation" &&
+                m_tag != "responsebody" &&  m_tag != "headername" && m_tag != "headervalue" ) {
+                m_isValid = false;
+                dbgDebug(D_WAAP_OVERRIDE) << "Invalid override tag: " << m_tag;
+            }
             // The name "value" here is misleading. The real meaning is "regex pattern string"
             ar(cereal::make_nvp("value", m_value));
 
@@ -73,12 +80,14 @@ public:
                 m_operand2 = std::make_shared<Match>();
                 ar(cereal::make_nvp("operand2", *m_operand2));
                 m_isOverrideResponse = m_operand1->m_isOverrideResponse || m_operand2->m_isOverrideResponse;
+                m_isValid = m_operand1->m_isValid && m_operand2->m_isValid;
             }
             else if (m_op == "not") {
                 // If op is "NOT" get one operand
                 m_operand1 = std::make_shared<Match>();
                 ar(cereal::make_nvp("operand1", *m_operand1));
                 m_isOverrideResponse = m_operand1->m_isOverrideResponse;
+                m_isValid = m_operand1->m_isValid;
             }
         }
     }
@@ -120,6 +129,10 @@ public:
         return m_isOverrideResponse;
     }
 
+    bool isValidMatch() const{
+        return m_isValid;
+    }
+
 private:
     std::string m_op;
     std::shared_ptr<Match> m_operand1;
@@ -130,6 +143,7 @@ private:
     Waap::Util::CIDRData m_cidr;
     bool        m_isCidr;
     bool        m_isOverrideResponse;
+    bool m_isValid;
 };
 
 class Behavior
@@ -189,6 +203,9 @@ private:
 
 class Rule {
 public:
+
+    Rule(): m_match(), m_isChangingRequestData(false), isValid(true){}
+
     bool operator==(const Rule &other) const;
 
     template <typename _A>
@@ -202,6 +219,11 @@ public:
             m_id.clear();
         }
         ar(cereal::make_nvp("parsedMatch", m_match));
+        if (!m_match.isValidMatch()) {
+            dbgDebug(D_WAAP_OVERRIDE) << "An override rule was not load";
+            isValid = false;
+        }
+
         ar(cereal::make_nvp("parsedBehavior", m_behaviors));
 
         m_isChangingRequestData = false;
@@ -242,6 +264,7 @@ public:
         dbgTrace(D_WAAP_OVERRIDE) << "Rule not matched";
     }
 
+
     bool isChangingRequestData() const {
         return m_isChangingRequestData;
     }
@@ -253,11 +276,16 @@ public:
         return m_id;
     }
 
+    bool isValidRule() const {
+        return isValid;
+    }
+
 private:
     Match m_match;
     bool  m_isChangingRequestData;
     std::vector<Behavior> m_behaviors;
     std::string m_id;
+    bool isValid;
 };
 
 class Policy {
@@ -270,6 +298,10 @@ public:
 
         for (std::vector<Waap::Override::Rule>::const_iterator it = rules.begin(); it != rules.end(); ++it) {
             const Waap::Override::Rule& rule = *it;
+            if (!rule.isValidRule()) {
+                dbgWarning(D_WAAP_OVERRIDE) << "rule is not valid";
+                continue;
+            }
             if (rule.isChangingRequestData())
             {
                 m_RequestOverrides.push_back(rule);

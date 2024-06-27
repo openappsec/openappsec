@@ -31,7 +31,7 @@ public:
     virtual bool isReverseProxy() = 0;
     virtual bool isCloudStorageEnabled() = 0;
     virtual Maybe<std::tuple<std::string, std::string, std::string>> parseNginxMetadata() = 0;
-    virtual Maybe<std::tuple<std::string, std::string, std::string>> readCloudMetadata() = 0;
+    virtual Maybe<std::tuple<std::string, std::string, std::string, std::string, std::string>> readCloudMetadata() = 0;
     virtual std::map<std::string, std::string> getResolvedDetails() = 0;
 #if defined(gaia) || defined(smb)
     virtual bool compareCheckpointVersion(int cp_version, std::function<bool(int, int)> compare_operator) const = 0;

@@ -333,7 +333,7 @@ private:
 
     ReconfStatus getUpdatedReconfStatus();
     Maybe<ServiceDetails> getServiceDetails(const string &service_name);
-    map<string, PortNumber> getServiceToPortMap();
+    map<string, vector<PortNumber>> getServiceToPortMap();
 
     template<class Archive>
     void serializeRegisterServices(Archive &ar) { ar(pending_services); }
@@ -358,6 +358,7 @@ private:
     string filesystem_prefix;
     bool is_multi_tenant_env = false;
     set<string> changed_policy_files;
+    ServiceDetails orchestration_service_details;
 
     I_OrchestrationTools *orchestration_tools = nullptr;
     I_MainLoop *mainloop = nullptr;
@@ -374,8 +375,13 @@ public:
         for (auto const& entry: ports_map) {
             string service = entry.first;
             replace(service.begin(), service.end(), ' ', '-');
-            output << service << ":";
-            output << entry.second << ",";
+            output << service;
+            char delim = ':';
+            for (PortNumber port : entry.second) {
+                output << delim << port;
+                delim  = ',';
+            }
+            output << ";";
         }
         ports_list = output.str();
     }
@@ -500,6 +506,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
     stringstream ss(maybe_registered_services_str.unpack());
     cereal::JSONInputArchive ar(ss);
     ar(cereal::make_nvp("Registered Services", pending_services));
+    pending_services.erase("cp-nano-orchestration");
 
     dbgInfo(D_SERVICE_CONTROLLER)
         << "Orchestration pending services loaded from file."
@@ -529,16 +536,24 @@ ServiceController::Impl::writeRegisteredServicesToFile()
         "Orchestration registered services"
     );
 
+    map<string, ServiceDetails> registered_services_with_orch = registered_services;
+    if (orchestration_service_details.getServiceID() != "") {
+        registered_services_with_orch.emplace(
+            orchestration_service_details.getServiceID(),
+            orchestration_service_details
+        );
+    }
+
     ofstream ss(registered_services_file);
     cereal::JSONOutputArchive ar(ss);
-    ar(cereal::make_nvp("Registered Services", registered_services));
+    ar(cereal::make_nvp("Registered Services", registered_services_with_orch));
 
     dbgInfo(D_SERVICE_CONTROLLER)
         << "Orchestration registered services file has been updated. File: "
         << registered_services_file
         << ". Registered Services:";
 
-    for (const auto &id_service_pair : registered_services) {
+    for (const auto &id_service_pair : registered_services_with_orch) {
         const auto &service = id_service_pair.second;
         dbgInfo(D_SERVICE_CONTROLLER)
             << "Service name: "
@@ -591,20 +606,20 @@ ServiceController::Impl::cleanUpVirtualFiles()
     }
 }
 
-map<string, PortNumber>
+map<string, vector<PortNumber>>
 ServiceController::Impl::getServiceToPortMap()
 {
-    map<string, PortNumber> ports_map;
+    map<string, vector<PortNumber>> ports_map;
     for (auto const& entry: registered_services) {
-        const string &service = entry.first;
+        const string &service = entry.second.getServiceName();
         PortNumber port = entry.second.getPort();
-        ports_map[service] = port;
+        ports_map[service].push_back(port);
     }
 
     for (auto const& entry: pending_services) {
-        const string &service = entry.first;
+        const string &service = entry.second.getServiceName();
         PortNumber port = entry.second.getPort();
-        ports_map[service] = port;
+        ports_map[service].push_back(port);
     }
 
     return ports_map;
@@ -623,6 +638,12 @@ ServiceController::Impl::registerServiceConfig(
         relevant_configurations,
         service_id
     );
+
+    if (service_name == "cp-nano-orchestration") {
+        dbgTrace(D_SERVICE_CONTROLLER) << "Save the orchestration service details";
+        orchestration_service_details = service_config;
+        return;
+    }
 
     pending_services.erase(service_config.getServiceID());
     pending_services.insert({service_config.getServiceID(), service_config});

@@ -89,6 +89,12 @@ IntelligenceRequest::genJson() const
     JsonStream json_stream(&str_stream, is_pretty);
     {
         cereal::JSONOutputArchive out_ar(json_stream);
+
+        out_ar.setNextName("queryTypes");
+        out_ar.startNode();
+        out_ar(cereal::make_nvp("proxyToCloud", is_proxy));
+        out_ar.finishNode();
+
         if (isBulk()) {
             out_ar.setNextName("queries");
             out_ar.startNode();

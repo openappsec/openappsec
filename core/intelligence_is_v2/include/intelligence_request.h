@@ -29,10 +29,11 @@ public:
         const std::vector<QueryRequest> &queries,
         bool is_pretty,
         bool is_bulk,
+        bool _is_proxy,
         const MessageMetadata &req_md
     )
             :
-        queries(queries), is_pretty(is_pretty), is_bulk(is_bulk), req_md(req_md)
+        queries(queries), is_pretty(is_pretty), is_bulk(is_bulk), is_proxy(_is_proxy), req_md(req_md)
     {}
 
     Maybe<void> checkAssetsLimit() const;
@@ -51,6 +52,7 @@ private:
     const std::vector<QueryRequest> &queries;
     bool is_pretty = true;
     bool is_bulk = false;
+    bool is_proxy = false;
     Maybe<std::string> response_from_fog = genError("Uninitialized");
     const MessageMetadata &req_md;
 };

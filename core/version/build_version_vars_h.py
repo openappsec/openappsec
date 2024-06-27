@@ -15,7 +15,7 @@ timestamp = "%s%s" % (now.replace(microsecond=0).isoformat(), time.strftime("%z"
 version_prefix = ""
 full_version = "private"
 
-branch = os.getenv("CI_BUILD_REF_NAME")
+branch = os.getenv("CI_COMMIT_REF_NAME")
 if branch is None:
     branch = "private"
 

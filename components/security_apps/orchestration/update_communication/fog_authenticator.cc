@@ -184,6 +184,8 @@ FogAuthenticator::registerAgent(
         request << make_pair("cloudAccountId", ::get<0>(cloud_metadata.unpack()));
         request << make_pair("cloudVpcId", ::get<1>(cloud_metadata.unpack()));
         request << make_pair("cloudInstanceId", ::get<2>(cloud_metadata.unpack()));
+        request << make_pair("cloudInstanceLocalIp", ::get<3>(cloud_metadata.unpack()));
+        request << make_pair("cloudRegion", ::get<4>(cloud_metadata.unpack()));
     } else {
         dbgDebug(D_ORCHESTRATOR) << cloud_metadata.getErr();
     }

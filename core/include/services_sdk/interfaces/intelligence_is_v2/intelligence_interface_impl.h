@@ -24,10 +24,11 @@ I_Intelligence_IS_V2::queryIntelligence(
     QueryRequest &query_request,
     bool ignore_in_progress,
     bool is_pretty,
+    bool is_proxy,
     MessageMetadata req_md
 )
 {
-    auto response = getResponse(query_request, is_pretty, req_md);
+    auto response = getResponse(query_request, is_pretty, is_proxy, req_md);
 
     if (!response.ok()) return response.passErr();
     auto serializable_response = response->getSerializableResponse<Data>();
@@ -49,10 +50,11 @@ Maybe<std::vector<Maybe<std::vector<AssetReply<Data>>>>>
 I_Intelligence_IS_V2::queryIntelligence(
     std::vector<QueryRequest> &query_requests,
     bool is_pretty,
+    bool is_proxy,
     MessageMetadata req_md
 )
 {
-    auto res = getResponse(query_requests, is_pretty, true, req_md);
+    auto res = getResponse(query_requests, is_pretty, true, is_proxy, req_md);
     if (!res.ok()) return res.passErr();
 
     return res->getBulkData<Data>();

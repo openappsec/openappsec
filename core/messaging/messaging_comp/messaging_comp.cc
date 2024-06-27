@@ -18,12 +18,47 @@
 
 #include "agent_core_utilities.h"
 #include "connection_comp.h"
+#include "rest.h"
 #include "debug.h"
 #include "messaging_buffer.h"
 
 using namespace std;
 
 USE_DEBUG_FLAG(D_MESSAGING);
+
+class FogConnectionChecker : public ServerRest
+{
+public:
+    void
+    doCall() override
+    {
+        dbgTrace(D_MESSAGING) << "Checking connection to the FOG";
+        auto response = Singleton::Consume<I_Messaging>::from<Messaging>()->sendSyncMessage(
+            HTTPMethod::GET,
+            "/access-manager/health/live",
+            string("")
+        );
+        if (!response.ok()) {
+            dbgTrace(D_MESSAGING) << "Failed to check connection to the FOG";
+            connected_to_fog = false;
+            error = response.getErr().toString();
+            return;
+        }
+        if (response.unpack().getHTTPStatusCode() == HTTPStatusCode::HTTP_OK) {
+            dbgTrace(D_MESSAGING) << "Connected to the FOG";
+            connected_to_fog = true;
+            error = "";
+        } else {
+            dbgTrace(D_MESSAGING) << "No connection to the FOG";
+            connected_to_fog = false;
+            error = response.unpack().toString();
+        }
+    }
+
+private:
+    S2C_PARAM(bool, connected_to_fog);
+    S2C_PARAM(string, error);
+};
 
 void
 MessagingComp::init()
@@ -42,6 +77,13 @@ MessagingComp::init()
         "message",
         "Buffer Failed Requests"
     );
+
+    if (Singleton::exists<I_RestApi>()) {
+        Singleton::Consume<I_RestApi>::by<Messaging>()->addRestCall<FogConnectionChecker>(
+            RestAction::SHOW,
+            "check-fog-connection"
+        );
+    }
 }
 
 static bool

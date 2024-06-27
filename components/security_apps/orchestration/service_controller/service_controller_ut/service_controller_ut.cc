@@ -178,16 +178,17 @@ public:
     void
     expectNewConfigRequest(const string &response)
     {
+        Maybe<HTTPResponse, HTTPResponse> res = HTTPResponse(HTTPStatusCode::HTTP_OK, response);
         EXPECT_CALL(
             mock_message,
             sendSyncMessage(
                 HTTPMethod::POST,
                 "/set-new-configuration",
-                HasSubstr("1.0.2"),
+                _,
                 _,
                 _
             )
-        ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, response)));
+        ).WillOnce(DoAll(SaveArg<2>(&version_body), Return(res)));
     }
 
     CPTestTempfile                      status_file;
@@ -196,6 +197,7 @@ public:
     ::Environment                       env;
     ConfigComponent                     config;
     DeclarativePolicyUtils              declarative_policy_utils;
+    string version_body;
     string                              configuration_dir;
     string                              policy_extension;
     string                              settings_extension;
@@ -229,19 +231,21 @@ public:
     string                              old_version = "1.0.1";
 
     string versions =
-            "["
-            "    {"
-            "        \"id\": \"d8c3cc3c-f9df-83c8-f875-322dd8a0c161\","
-            "        \"name\": \"Linux Embedded Agents\","
-            "        \"version\": \"1.0.2\""
-            "    }"
+            "[\n"
+            "    {\n"
+            "        \"id\": \"d8c3cc3c-f9df-83c8-f875-322dd8a0c161\",\n"
+            "        \"name\": \"Linux Embedded Agents\",\n"
+            "        \"version\": \"1.0.2\",\n"
+            "        \"profileType\": \"Embedded\"\n"
+            "    }\n"
             "]";
     string old_versions =
             "["
             "    {"
             "        \"id\": \"d8c3cc3c-f9df-83c8-f875-322dd8a0c161\","
             "        \"name\": \"Linux Embedded Agents\","
-            "        \"version\": \"1.0.1\""
+            "        \"version\": \"1.0.1\","
+            "        \"profileType\": \"Embedded\""
             "    }"
             "]";
 
@@ -338,6 +342,23 @@ TEST_F(ServiceControllerTest, UpdateConfiguration)
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getPolicyVersions(), versions);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
+
+    stringstream ver_ss;
+    ver_ss
+        << "{\n"
+        << "    \"id\": 1,\n"
+        << "    \"policy_version\": \"1.0.2,[\\n"
+        << "    {\\n"
+        << "        \\\"id\\\": \\\"d8c3cc3c-f9df-83c8-f875-322dd8a0c161\\\",\\n"
+        << "        \\\"name\\\": \\\"Linux Embedded Agents\\\",\\n"
+        << "        \\\"version\\\": \\\"1.0.2\\\",\\n"
+        << "        \\\"profileType\\\": \\\"Embedded\\\"\\n"
+        << "    }\\n"
+        << "]\"\n}";
+    EXPECT_EQ(
+        version_body,
+        ver_ss.str()
+    );
 }
 
 TEST_F(ServiceControllerTest, supportVersions)
@@ -527,13 +548,13 @@ TEST_F(ServiceControllerTest, TimeOutUpdateConfiguration)
 TEST_F(ServiceControllerTest, readRegisteredServicesFromFile)
 {
     init();
-    int family1_id3_port = 1111;
+    uint16_t family1_id3_port = 1111;
     string registered_services_json =  "{\n"
                             "    \"Registered Services\": {\n"
                             "        \"family1_id3\": {\n"
                             "            \"Service name\": \"mock access control\",\n"
                             "            \"Service ID\": \"family1_id3\",\n"
-                            "            \"Service port\": 1111,\n"
+                            "            \"Service port\": " + to_string(family1_id3_port) + ",\n"
                             "            \"Relevant configs\": [\n"
                             "                \"non updated capability\",\n"
                             "                \"l4_firewall\"\n"
@@ -573,7 +594,8 @@ TEST_F(ServiceControllerTest, readRegisteredServicesFromFile)
     service_controller.init();
 
     auto services_to_port_map = i_service_controller->getServiceToPortMap();
-    EXPECT_EQ(services_to_port_map.find("family1_id3")->second, family1_id3_port);
+    vector<PortNumber> ports = {l4_firewall_service_port, family1_id3_port};
+    EXPECT_EQ(services_to_port_map.find("mock access control")->second, ports);
 }
 
 TEST_F(ServiceControllerTest, noPolicyUpdate)
@@ -1589,7 +1611,7 @@ TEST_F(ServiceControllerTest, testPortsRest)
     empty_json << "{}";
     auto res = get_services_ports->performRestCall(empty_json);
     ASSERT_TRUE(res.ok());
-    EXPECT_THAT(res.unpack(), HasSubstr("family1_id2:8888"));
+    EXPECT_THAT(res.unpack(), HasSubstr("mock-access-control:8888;"));
 }
 
 TEST_F(ServiceControllerTest, testMultitenantConfFiles)

@@ -1516,6 +1516,7 @@ Waf2Transaction::decideAfterHeaders()
     return finalizeDecision(sitePolicy, shouldBlock);
 }
 
+
 // Note: the only user of the transactionResult structure filled by this method is waap_automation.
 // TODO: Consider removing this parameter (and provide access to this information by other means)
 int

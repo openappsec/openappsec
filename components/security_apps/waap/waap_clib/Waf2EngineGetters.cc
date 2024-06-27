@@ -567,12 +567,11 @@ Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
 
     extractEnvSourceIdentifier();
 
-    Waap::Override::State overrideStateResponse;
     if (overridePolicy) { // later we will run response overrides
-        overrideStateResponse.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, false);
+        m_overrideState.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, false);
     }
     m_isHeaderOverrideScanRequired = false;
-    return overrideStateResponse;
+    return m_overrideState;
 }
 
 Waf2TransactionFlags &Waf2Transaction::getTransactionFlags()

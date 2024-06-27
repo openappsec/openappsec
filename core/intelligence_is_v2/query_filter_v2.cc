@@ -65,6 +65,11 @@ SerializableQueryFilter::SerializableQueryFilter(
     condition_operands.emplace_back(condition_type, key, value);
 }
 
+SerializableQueryFilter::SerializableQueryFilter(const SerializableQueryCondition &condition)
+{
+    condition_operands.push_back(condition);
+}
+
 
 SerializableQueryFilter::SerializableQueryFilter(
     Condition condition_type,
@@ -159,31 +164,38 @@ SerializableQueryFilter::calcOperator(const SerializableQueryFilter &other_query
 
     query_filter_res.operator_type = oper;
 
-    if (isOperatorComp(oper) && other_query.isOperatorComp(oper)) {
-        size_t queries_size = queries_operands.size() + other_query.queries_operands.size();
-        size_t conditions_size = condition_operands.size() + other_query.condition_operands.size();
-        query_filter_res.queries_operands.reserve(queries_size);
-        query_filter_res.condition_operands.reserve(conditions_size);
-
-        for (const auto &subquery : queries_operands) {
-            query_filter_res.queries_operands.push_back(subquery);
-        }
-
-        for (const auto &condition : condition_operands) {
-            query_filter_res.condition_operands.push_back(condition);
-        }
-
-        for (const auto &subquery : other_query.queries_operands) {
-            query_filter_res.queries_operands.push_back(subquery);
-        }
-
-        for (const auto &condition : other_query.condition_operands) {
-            query_filter_res.condition_operands.push_back(condition);
-        }
-    } else {
+    if (!isOperatorComp(oper) || !other_query.isOperatorComp(oper)) {
         query_filter_res.queries_operands.reserve(2);
         query_filter_res.queries_operands.push_back(*this);
         query_filter_res.queries_operands.push_back(other_query);
+        return query_filter_res;
+    }
+
+    if (!condition_operands.empty() && !other_query.condition_operands.empty()) {
+        query_filter_res.condition_operands.reserve(queries_operands.size() + other_query.queries_operands.size());
+        for (const auto &condition : condition_operands) {
+            query_filter_res.condition_operands.push_back(condition);
+        }
+        for (const auto &condition : other_query.condition_operands) {
+            query_filter_res.condition_operands.push_back(condition);
+        }
+        return query_filter_res;
+    }
+
+    size_t queries_size = queries_operands.size() + other_query.queries_operands.size();
+    size_t conditions_size = condition_operands.size() + other_query.condition_operands.size();
+    query_filter_res.queries_operands.reserve(queries_size + conditions_size);
+    for (const auto &subquery : queries_operands) {
+        query_filter_res.queries_operands.push_back(subquery);
+    }
+    for (const auto &condition : condition_operands) {
+        query_filter_res.queries_operands.emplace_back(condition);
+    }
+    for (const auto &subquery : other_query.queries_operands) {
+        query_filter_res.queries_operands.push_back(subquery);
+    }
+    for (const auto &condition : other_query.condition_operands) {
+        query_filter_res.queries_operands.emplace_back(condition);
     }
 
     return query_filter_res;

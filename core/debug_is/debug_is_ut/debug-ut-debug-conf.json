@@ -1,0 +1,13 @@
+{
+    "Debug": [
+      {
+        "Streams": [
+          {
+            "D_ALL": "Info",
+            "D_FW": "Debug",
+            "Output": "/var/log/nano_agent/cp-nano-orchestration.dbg"
+          }
+        ]
+      }
+    ]
+}

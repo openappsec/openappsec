@@ -46,11 +46,17 @@ public:
         const std::vector<QueryRequest> &query_requests,
         bool is_pretty,
         bool is_bulk,
+        bool is_proxy,
         const MessageMetadata &req_md
     ) const = 0;
 
     virtual Maybe<Intelligence::Response>
-    getResponse(const QueryRequest &query_request, bool is_pretty, const MessageMetadata &req_md) const = 0;
+    getResponse(
+        const QueryRequest &query_request,
+        bool is_pretty,
+        bool is_proxy,
+        const MessageMetadata &req_md
+    ) const = 0;
 
     template<typename Data>
     Maybe<std::vector<AssetReply<Data>>>
@@ -58,6 +64,7 @@ public:
         QueryRequest &query_request,
         bool ignore_in_progress = false,
         bool is_pretty = true,
+        bool is_proxy = false,
         MessageMetadata req_md = MessageMetadata("", 0)
     );
 
@@ -66,6 +73,7 @@ public:
     queryIntelligence(
         std::vector<QueryRequest> &query_requests,
         bool is_pretty = true,
+        bool is_proxy = false,
         MessageMetadata req_md = MessageMetadata("", 0)
     );
 

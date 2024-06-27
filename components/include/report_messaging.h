@@ -36,7 +36,6 @@ public:
             title,
             audience_team,
             obj,
-            false,
             MessageCategory::GENERIC,
             std::forward<Args>(args)...
         )
@@ -48,26 +47,6 @@ public:
         const std::string &title,
         const ReportIS::AudienceTeam &audience_team,
         const T &obj,
-        bool is_async_message,
-        Args ...args)
-            :
-        ReportMessaging(
-            title,
-            audience_team,
-            obj,
-            is_async_message,
-            MessageCategory::GENERIC,
-            std::forward<Args>(args)...
-        )
-    {
-    }
-
-    template <typename ...Args, typename T>
-    ReportMessaging(
-        const std::string &title,
-        const ReportIS::AudienceTeam &audience_team,
-        const T &obj,
-        bool is_async_message,
         const MessageCategory &message_type,
         Args ...args)
             :
@@ -77,7 +56,6 @@ public:
             ReportIS::Severity::INFO,
             ReportIS::Priority::LOW,
             obj,
-            is_async_message,
             message_type,
             std::forward<Args>(args)...
         )
@@ -99,7 +77,6 @@ public:
             severity,
             priority,
             obj,
-            false,
             MessageCategory::GENERIC,
             std::forward<Args>(args)...
         )
@@ -114,7 +91,6 @@ public:
         const ReportIS::Severity &severity,
         const ReportIS::Priority &priority,
         const T &obj,
-        bool _is_async_message,
         const MessageCategory &message_type,
         Args ...args)
             :
@@ -131,7 +107,6 @@ public:
             std::chrono::seconds(0),
             std::forward<Args>(args)...
         ),
-        is_async_message(_is_async_message),
         message_type_tag(message_type)
     {
         report << LogField("eventObject", obj);
@@ -141,11 +116,13 @@ public:
 
     ReportMessaging & operator<<(const LogField &field);
 
+    Maybe<void, HTTPResponse> sendReportSynchronously();
+
     void setForceBuffering(bool _force_buffering);
 
 private:
     Report report;
-    bool is_async_message;
+    bool is_async_message = true;
     bool force_buffering = false;
     MessageCategory message_type_tag;
 };

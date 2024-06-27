@@ -21,6 +21,7 @@
 #include "version.h"
 #include "log_generator.h"
 #include "orchestration_comp.h"
+#include "updates_process_event.h"
 
 using namespace std;
 using namespace ReportIS;
@@ -219,6 +220,13 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
     if (isIgnoreFile(new_manifest_file)) {
         if (!orchestration_tools->copyFile(new_manifest_file, manifest_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new manifest file";
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::MANIFEST,
+                UpdatesFailureReason::HANDLE_FILE,
+                new_manifest_file,
+                "Failed to copy a new manifest file"
+            ).notify();
             return false;
         }
         return true;
@@ -237,6 +245,13 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
 
         if (!orchestration_tools->copyFile(new_manifest_file, manifest_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new manifest file";
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::MANIFEST,
+                UpdatesFailureReason::HANDLE_FILE,
+                new_manifest_file,
+                "Failed to copy a new manifest file"
+            ).notify();
             return false;
         }
         return true;
@@ -245,6 +260,13 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
     Maybe<map<string, Package>> parsed_manifest = orchestration_tools->loadPackagesFromJson(new_manifest_file);
     if (!parsed_manifest.ok()) {
         dbgWarning(D_ORCHESTRATOR) << "Failed to parse the new manifest file. File: " << new_manifest_file;
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::MANIFEST,
+            UpdatesFailureReason::HANDLE_FILE,
+            new_manifest_file,
+            "Failed to parse the new manifest file"
+        ).notify();
         return false;
     }
 
@@ -332,6 +354,13 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
         dbgWarning(D_ORCHESTRATOR)
             << "Failed building installation queue. Error: "
             << installation_queue_res.getErr();
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::MANIFEST,
+            UpdatesFailureReason::INSTALLATION_QUEUE,
+            "",
+            installation_queue_res.getErr()
+        ).notify();
         return false;
     }
     const vector<Package> &installation_queue = installation_queue_res.unpack();
@@ -447,11 +476,25 @@ ManifestController::Impl::changeManifestFile(const string &new_manifest_file)
     dbgDebug(D_ORCHESTRATOR) << "Writing new manifest to file";
     if (!orchestration_tools->copyFile(new_manifest_file, manifest_file_path)) {
         dbgWarning(D_ORCHESTRATOR) << "Failed write new manifest to file";
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::MANIFEST,
+            UpdatesFailureReason::HANDLE_FILE,
+            new_manifest_file,
+            "Failed write new manifest to file"
+        ).notify();
         return false;
     }
 
     if (!orchestration_tools->isNonEmptyFile(manifest_file_path)) {
         dbgWarning(D_ORCHESTRATOR) << "Failed to get manifest file data";
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::MANIFEST,
+            UpdatesFailureReason::HANDLE_FILE,
+            manifest_file_path,
+            "Failed to get manifest file data"
+        ).notify();
         return false;
     }
 

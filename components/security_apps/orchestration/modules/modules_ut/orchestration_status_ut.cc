@@ -13,6 +13,7 @@
 #include "mock/mock_agent_details.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_rest_api.h"
+#include "updates_process_event.h"
 
 using namespace testing;
 using namespace std;
@@ -197,6 +198,19 @@ TEST_F(OrchestrationStatusTest, checkUpdateStatus)
         OrchestrationStatusFieldType::LAST_UPDATE,
         OrchestrationStatusResult::SUCCESS
     );
+    auto result = orchestrationStatusFileToString();
+    EXPECT_EQ(buildOrchestrationStatusJSON("attempt time", "Succeeded ", "current time"), result);
+}
+TEST_F(OrchestrationStatusTest, checkUpdateStatusByRaiseEvent)
+{
+    init();
+    EXPECT_CALL(time, getLocalTimeStr())
+        .WillOnce(Return(string("attempt time")))
+        .WillOnce(Return(string("current time")));
+
+    i_orchestration_status->setLastUpdateAttempt();
+
+    UpdatesProcessEvent(UpdatesProcessResult::SUCCESS, UpdatesConfigType::GENERAL).notify();
     auto result = orchestrationStatusFileToString();
     EXPECT_EQ(buildOrchestrationStatusJSON("attempt time", "Succeeded ", "current time"), result);
 }
@@ -481,4 +495,70 @@ TEST_F(OrchestrationStatusTest, setAllFields)
     EXPECT_EQ(i_orchestration_status->getServicePolicies(), service_map_b);
     EXPECT_EQ(i_orchestration_status->getServiceSettings(), service_map_a);
     EXPECT_EQ(i_orchestration_status->getRegistrationDetails(), agent_details);
+}
+
+TEST_F(OrchestrationStatusTest, checkErrorByRaiseEvent)
+{
+    init();
+    string fog_address = "http://fog.address";
+    string registar_error = "Fail to registar";
+    string manifest_error = "Fail to achieve manifest";
+    string last_update_error = "Fail to update";
+
+    EXPECT_CALL(time, getLocalTimeStr()).Times(3).WillRepeatedly(Return(string("Time")));
+
+    UpdatesProcessEvent(UpdatesProcessResult::SUCCESS, UpdatesConfigType::GENERAL).notify();
+    i_orchestration_status->setIsConfigurationUpdated(
+        EnumArray<OrchestrationStatusConfigType, bool>(true, true, true)
+    );
+    UpdatesProcessEvent(
+        UpdatesProcessResult::FAILED,
+        UpdatesConfigType::GENERAL,
+        UpdatesFailureReason::NONE,
+        "",
+        last_update_error
+    ).notify();
+    i_orchestration_status->setIsConfigurationUpdated(
+        EnumArray<OrchestrationStatusConfigType, bool>(false, false, false)
+    );
+
+    i_orchestration_status->setUpgradeMode("Online upgrades");
+    i_orchestration_status->setFogAddress(fog_address);
+
+    i_orchestration_status->setUpgradeMode("Online upgrades");
+    i_orchestration_status->setFogAddress(fog_address);
+
+    UpdatesProcessEvent(
+        UpdatesProcessResult::FAILED,
+        UpdatesConfigType::GENERAL,
+        UpdatesFailureReason::REGISTRATION,
+        "",
+        registar_error
+    ).notify();
+    UpdatesProcessEvent(
+        UpdatesProcessResult::FAILED,
+        UpdatesConfigType::MANIFEST,
+        UpdatesFailureReason::NONE,
+        "",
+        manifest_error
+    ).notify();
+    EXPECT_EQ(i_orchestration_status->getManifestError(), manifest_error);
+
+    auto result = orchestrationStatusFileToString();
+    EXPECT_EQ(
+        buildOrchestrationStatusJSON(
+            "None",
+            "Failed. Reason: " + last_update_error,
+            "Time",
+            "Time",
+            "",
+            "Time",
+            "Time",
+            "Online upgrades",
+            fog_address,
+            "Failed. Reason: Registration failed. Error: " + registar_error,
+            "Failed. Reason: " + manifest_error
+        ),
+        result
+    );
 }

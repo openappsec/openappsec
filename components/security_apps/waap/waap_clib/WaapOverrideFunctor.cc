@@ -145,6 +145,6 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
     }
 
     // Unknown tag: should not occur
-    dbgWarning(D_WAAP) << "Invalid override tag: " << tag;
+    dbgDebug(D_WAAP) << "Invalid override tag: " << tag;
     return false;
 }

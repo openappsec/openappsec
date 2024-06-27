@@ -348,14 +348,12 @@ ConfigComponent::Impl::init()
     if (!Singleton::exists<I_MainLoop>()) return;
     auto mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
 
-    if (executable_name != "cp-nano-orchestration") {
-        mainloop->addOneTimeRoutine(
-            I_MainLoop::RoutineType::System,
-            [this] () { periodicRegistrationRefresh(); },
-            "Configuration update registration",
-            false
-        );
-    }
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::System,
+        [this] () { periodicRegistrationRefresh(); },
+        "Configuration update registration",
+        false
+    );
 }
 
 static bool

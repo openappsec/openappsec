@@ -361,19 +361,10 @@ private:
             << ", source ip address: "
             << source;
 
-            unordered_map<string, set<string>> exception_value_source_ip = {{"sourceIP", {source}}};
-            auto matched_behavior_maybe = getBehaviorsVerdict(exception_value_source_ip, geo_location_data);
-            if (matched_behavior_maybe.ok()) {
-                curr_matched_behavior = matched_behavior_maybe.unpack();
-                verdict = curr_matched_behavior.first;
-                dbgDebug(D_GEO_FILTER) << "found sourceIP exception, return verdict";
-                break;
-            }
-
             unordered_map<string, set<string>> exception_value_country_code = {
                 {"countryCode", {country_code}}
             };
-            matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_code, geo_location_data);
+            auto matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_code, geo_location_data);
             if (matched_behavior_maybe.ok()) {
                 curr_matched_behavior = matched_behavior_maybe.unpack();
                 verdict = curr_matched_behavior.first;
@@ -430,8 +421,11 @@ private:
             ReportIS::Tags::HTTP_GEO_FILTER
         );
         auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
-        auto source_ip = env->get<string>(HttpTransactionData::client_ip_ctx);
-        if (source_ip.ok()) log << LogField("sourceIP", source_ip.unpack());
+        auto source_ip = env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
+        if (source_ip.ok()) log << LogField("sourceIP", convertIpAddrToString(source_ip.unpack()));
+
+        auto source_identifier = env->get<string>(HttpTransactionData::source_identifier);
+        if (source_identifier.ok()) log << LogField("httpSourceId", source_identifier.unpack());
 
         auto source_port = env->get<string>(HttpTransactionData::client_port_ctx);
         if (source_port.ok()) log << LogField("sourcePort", source_port.unpack());
@@ -445,7 +439,7 @@ private:
         log << LogField("securityAction", is_prevent ? "Prevent" : "Detect");
 
         if (is_default_action) log << LogField("isDefaultSecurityAction", true);
-        auto xff = env->get<std::string>(HttpTransactionData::xff_vals_ctx);
+        auto xff = env->get<string>(HttpTransactionData::xff_vals_ctx);
         if (xff.ok()) log << LogField("proxyIP", xff.unpack());
 
         log

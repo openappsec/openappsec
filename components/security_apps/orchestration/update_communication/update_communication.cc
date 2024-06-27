@@ -32,6 +32,7 @@
 using namespace std;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
+
 class UpdateCommunication::Impl
         :
     public ServerRest,

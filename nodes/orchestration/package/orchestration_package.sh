@@ -418,9 +418,9 @@ cp_print()
         printf "%b\n" "$1"
     fi
     if [ "$is_smb" != "1" ]; then
-        printf "%b\n" "$1" >> ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
+        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
     else
-        printf "%b\n" "$1" >> ${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
+        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> ${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
     fi
 }
 
@@ -897,7 +897,7 @@ uninstall_messaging_proxy_if_needed()
 
 get_status_content()
 {
-    gsc_temp_old_status=$(sed -e 's/{\|}\|,\|"//g' -e '/^\s*$/d' -e 's/^    //' ${FILESYSTEM_PATH}/conf/orchestration_status.json)
+    gsc_temp_old_status=$(sed -e 's/{\|}\|,\|"//g' -e '/^\s*$/d' -e 's/^    //' ${FILESYSTEM_PATH}/conf/orchestration_status.json 2>1)
 
     echo ${gsc_temp_old_status}
 }
@@ -956,9 +956,16 @@ install_orchestration()
         add_uninstall_script
         cp_exec "cp -f certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem"
 
-        if [ -n ${OTP_TOKEN} ]; then
+        if [ -n "${OTP_TOKEN}" ]; then
             cp_print "Saving authentication token to file"
             printf '{\n   "registration type": "token",\n   "registration data": "%b"\n}' "$OTP_TOKEN" | ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_BASE64} -e > ${FILESYSTEM_PATH}/${CONF_PATH}/registration-data.json
+            rm ${FILESYSTEM_PATH}/${CONF_PATH}/agent_details.json
+            rm ${FILESYSTEM_PATH}/${CONF_PATH}/orchestration_status.json
+            echo '{}'>${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+
+            if [ -f ${FILESYSTEM_PATH}/data/data5.a ]; then
+                rm ${FILESYSTEM_PATH}/data/data5.a
+            fi
         fi
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"

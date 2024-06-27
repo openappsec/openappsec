@@ -131,7 +131,7 @@ TEST_F(IntelligenceComponentMockTest, getResponseErrorTest)
     QueryRequest request(Condition::EQUALS, "category", "cloud", true);
 
     Maybe<Intelligence::Response> res_error = genError("Test error");
-    EXPECT_CALL(intelligence_mock, getResponse(_, _, _)
+    EXPECT_CALL(intelligence_mock, getResponse(_, _, _, _)
     ).WillOnce(Return(res_error));
 
     auto maybe_ans = intell->queryIntelligence<Profile>(request);
@@ -185,7 +185,7 @@ TEST_F(IntelligenceComponentMockTest, getResponseTest)
 
     Intelligence::Response response(response_str, 1, false);
 
-    EXPECT_CALL(intelligence_mock, getResponse(_, _, _)
+    EXPECT_CALL(intelligence_mock, getResponse(_, _, _, _)
     ).WillOnce(Return(response));
 
     auto maybe_ans = intell->queryIntelligence<Profile>(request);
@@ -346,7 +346,7 @@ TEST_F(IntelligenceComponentMockTest, bulkOnlineIntelligenceMockTest)
     );
     Intelligence::Response response(response_str, 4, true);
 
-    EXPECT_CALL(intelligence_mock, getResponse(_, _, _, _)
+    EXPECT_CALL(intelligence_mock, getResponse(_, _, _, _, _)
     ).WillOnce(Return(response));
 
     auto maybe_ans = intell->queryIntelligence<Profile>(requests);

@@ -30,6 +30,7 @@ class I_Environment;
 class I_InstanceAwareness;
 class I_Encryptor;
 class I_AgentDetails;
+class I_RestApi;
 class I_SignalHandler;
 
 namespace Config { enum class Errors; }
@@ -44,6 +45,7 @@ class Debug
     Singleton::Consume<I_Environment>,
     Singleton::Consume<I_Encryptor>,
     Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_SignalHandler>
 {
 public:
@@ -178,6 +180,7 @@ public:
     static void setUnitTestFlag(DebugFlags flag, DebugLevel level);
 
     static std::string findDebugFilePrefix(const std::string &file_name);
+    static std::string getExecutableName();
 
 private:
     template <typename T, typename... Args>

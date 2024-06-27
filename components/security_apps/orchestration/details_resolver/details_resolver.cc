@@ -45,7 +45,7 @@ public:
     bool isVersionAboveR8110() override;
     bool isReverseProxy() override;
     bool isCloudStorageEnabled() override;
-    Maybe<tuple<string, string, string>> readCloudMetadata() override;
+    Maybe<tuple<string, string, string, string, string>> readCloudMetadata() override;
     Maybe<tuple<string, string, string>> parseNginxMetadata() override;
 #if defined(gaia) || defined(smb)
     bool compareCheckpointVersion(int cp_version, std::function<bool(int, int)> compare_operator) const override;
@@ -300,19 +300,26 @@ DetailsResolver::Impl::parseNginxMetadata()
     return make_tuple(config_opt, cc_opt, nginx_version);
 }
 
-Maybe<tuple<string, string, string>>
+Maybe<tuple<string, string, string, string, string>>
 DetailsResolver::Impl::readCloudMetadata()
 {
-    auto env_read_cloud_metadata = []() -> Maybe<tuple<string, string, string>> {
+    auto env_read_cloud_metadata = []() -> Maybe<tuple<string, string, string, string, string>> {
             string account_id = getenv("CLOUD_ACCOUNT_ID") ? getenv("CLOUD_ACCOUNT_ID") : "";
             string vpc_id = getenv("CLOUD_VPC_ID") ? getenv("CLOUD_VPC_ID") : "";
             string instance_id = getenv("CLOUD_INSTANCE_ID") ? getenv("CLOUD_INSTANCE_ID") : "";
+            string instance_local_ip = getenv("CLOUD_INSTANCE_LOCAL_IP") ? getenv("CLOUD_INSTANCE_LOCAL_IP") : "";
+            string region = getenv("CLOUD_REGION") ? getenv("CLOUD_REGION") : "";
 
-        if (account_id.empty() || vpc_id.empty() || instance_id.empty()) {
+        if (
+            account_id.empty() ||
+            vpc_id.empty() ||
+            instance_id.empty() ||
+            instance_local_ip.empty() ||
+            region.empty()) {
             return genError("Could not read cloud metadata");
         }
 
-        return make_tuple(account_id, vpc_id, instance_id);
+        return make_tuple(account_id, vpc_id, instance_id, instance_local_ip, region);
     };
 
     auto cloud_metadata = env_read_cloud_metadata();
@@ -347,9 +354,11 @@ DetailsResolver::Impl::readCloudMetadata()
         << "Successfully fetched cloud metadata: "
         << ::get<0>(cloud_metadata.unpack()) << ", "
         << ::get<1>(cloud_metadata.unpack()) << ", "
-        << ::get<2>(cloud_metadata.unpack());
+        << ::get<2>(cloud_metadata.unpack()) << ", "
+        << ::get<3>(cloud_metadata.unpack()) << ", "
+        << ::get<4>(cloud_metadata.unpack());
 
-    return cloud_metadata.unpack();
+    return cloud_metadata;
 }
 
 DetailsResolver::DetailsResolver() : Component("DetailsResolver"), pimpl(make_unique<Impl>()) {}

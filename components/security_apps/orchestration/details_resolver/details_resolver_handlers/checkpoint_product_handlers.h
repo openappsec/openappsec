@@ -58,27 +58,20 @@ checkSAMLPortal(const string &command_output)
 Maybe<string>
 checkPepIdaIdnStatus(const string &command_output)
 {
-    if (command_output.find("ida_idn_nano_service_enabled=1") != string::npos) {
+    if (command_output.find("nac_pep_scaled_sharing_enabled = 1") != string::npos) {
         return string("true");
     }
-
-    return genError("Current host does not have PEP control IDA IDN enabled");
-}
-
-Maybe<string>
-checkAgentIntelligence(const string &command_output)
-{
-    if (command_output.find("is registered") != string::npos) {
-        return string("true");
-    }
-
-    return genError("Current host does not have agent intelligence installed");
+    return genError("Current host does not have PEP control scaled_sharing enabled");
 }
 
 Maybe<string>
 getIDAGaiaPackages(const string &command_output)
 {
-    return string("idaSaml_gaia;idaIdn_gaia;idaIdnBg_gaia;");
+    string result = "idaSaml_gaia;idaIdn_gaia;idaIdnBg_gaia;";
+    if (command_output.find("nac_pep_scaled_sharing_enabled = 1") != string::npos) {
+        result += "agentIntelligenceService_gaia;";
+    }
+    return result;
 }
 
 Maybe<string>
