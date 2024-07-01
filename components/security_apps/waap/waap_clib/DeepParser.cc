@@ -273,55 +273,58 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     // Detect and decode potential base64 chunks in the value before further processing
 
     bool base64ParamFound = false;
-    dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
-    std::string decoded_val, decoded_key;
     Waap::Util::BinaryFileType base64BinaryFileType = Waap::Util::BinaryFileType::FILE_TYPE_NONE;
-    base64_variants base64_status = Waap::Util::b64Test(cur_val, decoded_key, decoded_val, base64BinaryFileType);
+    if (m_depth == 1 && flags == BUFFERED_RECEIVER_F_MIDDLE && m_key.depth() == 1 && m_key.first() != "#base64"){
+        dbgTrace(D_WAAP_DEEP_PARSER) << " === will not check base64 since prev data block was not b64-encoded ===";
+    } else {
+        dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
+        std::string decoded_val, decoded_key;
+        base64_variants base64_status = Waap::Util::b64Test(cur_val, decoded_key, decoded_val, base64BinaryFileType);
 
-    dbgTrace(D_WAAP_DEEP_PARSER)
-        << " status = "
-        << base64_status
-        << " key = "
-        << decoded_key
-        << " value = "
-        << decoded_val;
+        dbgTrace(D_WAAP_DEEP_PARSER)
+            << " status = "
+            << base64_status
+            << " key = "
+            << decoded_key
+            << " value = "
+            << decoded_val;
 
-    switch (base64_status) {
-        case SINGLE_B64_CHUNK_CONVERT:
-            cur_val = decoded_val;
-            base64ParamFound = true;
-            break;
-        case KEY_VALUE_B64_PAIR:
-            // going deep with new pair in case value is not empty
-            if (decoded_val.size() > 0) {
+        switch (base64_status) {
+            case SINGLE_B64_CHUNK_CONVERT:
                 cur_val = decoded_val;
                 base64ParamFound = true;
-                rc = onKv(
-                    decoded_key.c_str(),
-                    decoded_key.size(),
-                    cur_val.data(),
-                    cur_val.size(),
-                    flags,
-                    parser_depth
+                break;
+            case KEY_VALUE_B64_PAIR:
+                // going deep with new pair in case value is not empty
+                if (decoded_val.size() > 0) {
+                    cur_val = decoded_val;
+                    base64ParamFound = true;
+                    rc = onKv(
+                        decoded_key.c_str(),
+                        decoded_key.size(),
+                        cur_val.data(),
+                        cur_val.size(),
+                        flags,
+                        parser_depth
                     );
 
-                dbgTrace(D_WAAP_DEEP_PARSER) << " rc = " << rc;
-                if (rc != CONTINUE_PARSING) {
-                    return rc;
+                    dbgTrace(D_WAAP_DEEP_PARSER) << " rc = " << rc;
+                    if (rc != CONTINUE_PARSING) {
+                        return rc;
+                    }
                 }
-            }
-            break;
-        case CONTINUE_AS_IS:
-            break;
-        default:
-            break;
-    }
+                break;
+            case CONTINUE_AS_IS:
+                break;
+            default:
+                break;
+        }
 
-    if (base64ParamFound) {
-        dbgTrace(D_WAAP_DEEP_PARSER) << "DeepParser::onKv(): pushing #base64 prefix to the key.";
-        m_key.push("#base64", 7, false);
+        if (base64ParamFound) {
+            dbgTrace(D_WAAP_DEEP_PARSER) << "DeepParser::onKv(): pushing #base64 prefix to the key.";
+            m_key.push("#base64", 7, false);
+        }
     }
-
     // cur_val is later passed through some filters (such as urldecode) before JSON, XML or HTML is detected/decoded
     std::string orig_val = cur_val;
 
@@ -472,19 +475,19 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     if (rc != CONTINUE_PARSING) {
         return rc;
     }
-
-    if (Waap::Util::detectJSONasParameter(cur_val, decoded_key, decoded_val)) {
+    std::string json_decoded_val, json_decoded_key;
+    if (Waap::Util::detectJSONasParameter(cur_val, json_decoded_key, json_decoded_val)) {
         dbgTrace(D_WAAP_DEEP_PARSER)
             << " detectJSONasParameter was  true: key = "
-            << decoded_key
+            << json_decoded_key
             << " value = "
-            << decoded_val;
+            << json_decoded_val;
 
         rc = onKv(
-            decoded_key.c_str(),
-            decoded_key.size(),
-            decoded_val.data(),
-            decoded_val.size(),
+            json_decoded_key.c_str(),
+            json_decoded_key.size(),
+            json_decoded_val.data(),
+            json_decoded_val.size(),
             flags,
             parser_depth
             );

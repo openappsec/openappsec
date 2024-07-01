@@ -103,7 +103,48 @@ TEST_F(ReportMessagingTest, title_only)
             _
         )
     ).Times(1);
-    ReportMessaging("test", ReportIS::AudienceTeam::AGENT_CORE, 1, true, ReportIS::Tags::ACCESS_CONTROL);
+    ReportMessaging("test", ReportIS::AudienceTeam::AGENT_CORE, 1, ReportIS::Tags::ACCESS_CONTROL);
+}
+
+TEST_F(ReportMessagingTest, sync_sending)
+{
+    EXPECT_CALL(
+        mock_messaging,
+        sendSyncMessage(
+            _,
+            _,
+            "{\n"
+            "    \"log\": {\n"
+            "        \"eventTime\": \"Best Time ever\",\n"
+            "        \"eventName\": \"test\",\n"
+            "        \"eventSeverity\": \"Info\",\n"
+            "        \"eventPriority\": \"Low\",\n"
+            "        \"eventType\": \"Event Driven\",\n"
+            "        \"eventLevel\": \"Log\",\n"
+            "        \"eventLogLevel\": \"info\",\n"
+            "        \"eventAudience\": \"Internal\",\n"
+            "        \"eventAudienceTeam\": \"Agent Core\",\n"
+            "        \"eventFrequency\": 0,\n"
+            "        \"eventTags\": [\n"
+            "            \"Access Control\"\n"
+            "        ],\n"
+            "        \"eventSource\": {\n"
+            "            \"eventTraceId\": \"\",\n"
+            "            \"eventSpanId\": \"\",\n"
+            "            \"issuingEngineVersion\": \"\",\n"
+            "            \"serviceName\": \"Unnamed Nano Service\"\n"
+            "        },\n"
+            "        \"eventData\": {\n"
+            "            \"eventObject\": 1\n"
+            "        }\n"
+            "    }\n"
+            "}",
+            _,
+            _
+        )
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "response!!")));
+    ReportMessaging report("test", ReportIS::AudienceTeam::AGENT_CORE, 1, ReportIS::Tags::ACCESS_CONTROL);
+    EXPECT_TRUE(report.sendReportSynchronously().ok());
 }
 
 TEST_F(ReportMessagingTest, with_buffering)
@@ -144,7 +185,7 @@ TEST_F(ReportMessagingTest, with_buffering)
             true
         )
     ).Times(1);
-    ReportMessaging report("test", ReportIS::AudienceTeam::AGENT_CORE, 1, true, ReportIS::Tags::ACCESS_CONTROL);
+    ReportMessaging report("test", ReportIS::AudienceTeam::AGENT_CORE, 1, ReportIS::Tags::ACCESS_CONTROL);
     report.setForceBuffering(true);
 }
 

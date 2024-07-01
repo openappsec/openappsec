@@ -234,6 +234,55 @@ public:
 
 static DebugConfiguration default_config;
 
+class ChangeDebugConfiguration : public ServerRest
+{
+public:
+    void
+    doCall() override
+    {
+        string debug_config_file_name = Debug::getExecutableName();
+        if (debug_config_file_name == "") {
+            output = "Error. Cannot get debug config file path";
+            return;
+        }
+        string debug_config_file_path = getConfigurationWithDefault<string>(
+            getFilesystemPathConfig() + "/conf/" + debug_config_file_name + "-debug-conf.json",
+            "Debug I/S",
+            "Debug conf file path"
+        );
+        try {
+            ifstream input_stream(debug_config_file_path);
+            if (!input_stream) {
+                output = "Error. Cannot open the debug conf file: " + debug_config_file_path;
+                return;
+            }
+            cereal::JSONInputArchive ar(input_stream);
+            Debug::prepareConfig();
+            vector<DebugConfiguration> debug_config;
+            try {
+                ar(cereal::make_nvp("Debug", debug_config));
+            } catch (cereal::Exception &e) {
+                output = "Error. Failed loading debug conf file, error: " + string(e.what());
+                Debug::abortConfig();
+                return;
+            }
+            input_stream.close();
+            setConfiguration(debug_config[0], "Debug");
+            Debug::commitConfig();
+            output = "New debug configuration set succesfully";
+        } catch (ifstream::failure &f) {
+            output =
+                "Error. Cannot open the debug conf file " +
+                debug_config_file_path +
+                ", error: " +
+                string(f.what());
+        }
+    }
+
+private:
+    S2C_PARAM(string, output);
+};
+
 // LCOV_EXCL_START - function is covered in unit-test, but not detected bt gcov
 Debug::Debug(
     const string &file_name,
@@ -446,6 +495,7 @@ Debug::preload()
 {
     registerExpectedConfiguration<DebugConfiguration>("Debug");
     registerExpectedConfiguration<string>("Debug I/S", "Fog Debug URI");
+    registerExpectedConfiguration<string>("Debug I/S", "Debug conf file path");
     registerExpectedConfiguration<bool>("Debug I/S", "Enable bulk of debugs");
     registerExpectedConfiguration<uint>("Debug I/S", "Debug bulk size");
     registerExpectedConfiguration<uint>("Debug I/S", "Debug bulk sending interval in msec");
@@ -467,21 +517,17 @@ Debug::init()
     mainloop = Singleton::Consume<I_MainLoop>::by<Debug>();
     env = Singleton::Consume<I_Environment>::by<Debug>();
 
-    auto executable = env->get<string>("Executable Name");
-
-    if (executable.ok() && *executable != "") {
-        string default_debug_output_file_path = *executable;
-        auto file_path_end = default_debug_output_file_path.find_last_of("/");
-        if (file_path_end != string::npos) {
-            default_debug_file_stream_path = default_debug_output_file_path.substr(file_path_end + 1);
-        }
-        auto file_sufix_start = default_debug_file_stream_path.find_first_of(".");
-        if (file_sufix_start != string::npos) {
-            default_debug_file_stream_path = default_debug_file_stream_path.substr(0, file_sufix_start);
-        }
-
+    default_debug_file_stream_path = getExecutableName();
+    if (default_debug_file_stream_path != "") {
         string log_files_prefix = getLogFilesPathConfig();
         default_debug_file_stream_path = log_files_prefix + "/nano_agent/" + default_debug_file_stream_path + ".dbg";
+    }
+
+    if (Singleton::exists<I_RestApi>()) {
+        Singleton::Consume<I_RestApi>::by<Debug>()->addRestCall<ChangeDebugConfiguration>(
+            RestAction::SET,
+            "change-debug-config"
+        );
     }
 }
 
@@ -704,6 +750,27 @@ Debug::findDebugFilePrefix(const string &file_name)
     }
 
     return "";
+}
+
+string
+Debug::getExecutableName()
+{
+    auto executable = env->get<string>("Executable Name");
+    if (!executable.ok() || *executable == "") {
+        return "";
+    }
+
+    string executable_name = *executable;
+    auto file_path_end = executable_name.find_last_of("/");
+    if (file_path_end != string::npos) {
+        executable_name = executable_name.substr(file_path_end + 1);
+    }
+    auto file_sufix_start = executable_name.find_first_of(".");
+    if (file_sufix_start != string::npos) {
+        executable_name = executable_name.substr(0, file_sufix_start);
+    }
+
+    return executable_name;
 }
 
 void

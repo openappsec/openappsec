@@ -705,3 +705,59 @@ TEST(QueryRequestTestV2, UninitializedObjectTypeTest)
     EXPECT_THAT(debug_output.str(), HasSubstr(debug_str));
     Debug::setNewDefaultStdout(&cout);
 }
+
+TEST(QueryRequestTestV2, Bug40968)
+{
+    QueryRequest request(Intelligence_IS_V2::Condition::EQUALS, "field1", "123", false);
+    QueryRequest filter1(Intelligence_IS_V2::Condition::EQUALS, "field2", "123", false);
+    request = request || filter1;
+
+    QueryRequest filter2(Intelligence_IS_V2::Condition::NOT_EQUALS, "field3", "123", false);
+    request = request && filter2;
+
+    QueryRequest filter3(Intelligence_IS_V2::Condition::EQUALS, "field3", "234", false);
+    request = request && filter3;
+
+    stringstream out2;
+    {
+        cereal::JSONOutputArchive out_ar2(out2);
+        request.saveToJson(out_ar2);
+    }
+    string req =
+        "{\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": false,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"and\",\n"
+        "        \"operands\": [\n"
+        "            {\n"
+        "                \"operator\": \"or\",\n"
+        "                \"operands\": [\n"
+        "                    {\n"
+        "                        \"operator\": \"equals\",\n"
+        "                        \"key\": \"mainAttributes.field1\",\n"
+        "                        \"value\": \"123\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"operator\": \"equals\",\n"
+        "                        \"key\": \"mainAttributes.field2\",\n"
+        "                        \"value\": \"123\"\n"
+        "                    }\n"
+        "                ]\n"
+        "            },\n"
+        "            {\n"
+        "                \"operator\": \"notEquals\",\n"
+        "                \"key\": \"mainAttributes.field3\",\n"
+        "                \"value\": \"123\"\n"
+        "            },\n"
+        "            {\n"
+        "                \"operator\": \"equals\",\n"
+        "                \"key\": \"mainAttributes.field3\",\n"
+        "                \"value\": \"234\"\n"
+        "            }\n"
+        "        ]\n"
+        "    }\n"
+        "}";
+
+    EXPECT_EQ(out2.str(), req);
+}

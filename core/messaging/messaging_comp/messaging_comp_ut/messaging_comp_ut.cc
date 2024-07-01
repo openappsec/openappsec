@@ -15,6 +15,8 @@
 #include "mocks/mock_messaging_connection.h"
 #include "rest.h"
 #include "rest_server.h"
+#include "mock/mock_messaging.h"
+#include "mock/mock_rest_api.h"
 #include "dummy_socket.h"
 
 using namespace std;
@@ -22,12 +24,6 @@ using namespace testing;
 
 static ostream &
 operator<<(ostream &os, const Maybe<BufferedMessage> &)
-{
-    return os;
-}
-
-static std::ostream &
-operator<<(std::ostream &os, const HTTPResponse &)
 {
     return os;
 }
@@ -51,6 +47,9 @@ public:
     {
         Debug::setUnitTestFlag(D_MESSAGING, Debug::DebugLevel::TRACE);
         EXPECT_CALL(mock_time_get, getMonotonicTime()).WillRepeatedly(Return(chrono::microseconds(0)));
+        EXPECT_CALL(mock_rest, mockRestCall(RestAction::SHOW, "check-fog-connection", _))
+            .WillOnce(WithArg<2>(Invoke(this, &TestMessagingComp::showFogConnection))
+        );
 
         ON_CALL(mock_agent_details, getFogDomain()).WillByDefault(Return(Maybe<string>(fog_addr)));
         ON_CALL(mock_agent_details, getFogPort()).WillByDefault(Return(Maybe<uint16_t>(fog_port)));
@@ -73,6 +72,13 @@ public:
         EXPECT_CALL(mock_proxy_conf, getProxyAuthentication(_)).WillRepeatedly(Return(string("cred")));
     }
 
+    bool
+    showFogConnection(const unique_ptr<RestInit> &p)
+    {
+        show_fog_connection = p->getRest();
+        return true;
+    }
+
     const string fog_addr = "127.0.0.1";
     int fog_port = 8080;
     CPTestTempfile agent_details_file;
@@ -85,16 +91,37 @@ public:
     NiceMock<MockTimeGet> mock_time_get;
     NiceMock<MockAgentDetails> mock_agent_details;
     NiceMock<MockProxyConfiguration> mock_proxy_conf;
+    NiceMock<MockRestApi> mock_rest;
+    NiceMock<MockMessaging> mock_message;
+    unique_ptr<ServerRest> show_fog_connection;
     DummySocket dummy_socket;
 };
 
-TEST_F(TestMessagingComp, testInitComp)
+TEST_F(TestMessagingComp, testCheckFogConnectivity)
 {
-    EXPECT_CALL(
-        mock_mainloop, addRecurringRoutine(I_MainLoop::RoutineType::Timer, _, _, "Delete expired cache entries", _)
-    )
-        .WillOnce(Return(0));
-    messaging_comp.init();
+    setAgentDetails();
+    HTTPResponse res(
+        HTTPStatusCode::HTTP_OK,
+        string(
+            "{"
+            "    \"up\": true,"
+            "    \"timestamp\":\"\""
+            "}"
+        )
+    );
+
+    EXPECT_CALL(mock_message, sendSyncMessage(HTTPMethod::GET, "/access-manager/health/live", "", _, _))
+        .WillOnce(Return(res));
+
+    stringstream ss("{}");
+    Maybe<string> maybe_res = show_fog_connection->performRestCall(ss);
+    EXPECT_TRUE(maybe_res.ok());
+    EXPECT_EQ(maybe_res.unpack(),
+        "{\n"
+        "    \"connected_to_fog\": true,\n"
+        "    \"error\": \"\"\n"
+        "}"
+    );
 }
 
 TEST_F(TestMessagingComp, testSendSyncMessage)

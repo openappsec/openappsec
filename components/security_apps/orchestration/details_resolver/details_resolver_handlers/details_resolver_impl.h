@@ -49,6 +49,9 @@ SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
 SHELL_CMD_HANDLER("QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo ''",
     getQUID)
+SHELL_CMD_HANDLER("SMO_QUID", "[ -d /opt/CPquid ] "
+    "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_smo_quid.json | jq -r .message || echo ''",
+    getQUID)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
@@ -99,14 +102,8 @@ SHELL_CMD_HANDLER(
 SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
 SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
-SHELL_CMD_HANDLER(
-    "hasAgentIntelligenceInstalled",
-    "<FILESYSTEM-PREFIX>/watchdog/cp-nano-watchdog "
-    "--status --service <FILESYSTEM-PREFIX>/agentIntelligence/cp-nano-agent-intelligence-service",
-    checkAgentIntelligence
-)
-SHELL_CMD_HANDLER("hasIdaIdnEnabled", "pep control IDN_nano_Srv_support status", checkPepIdaIdnStatus)
-SHELL_CMD_HANDLER("requiredNanoServices", "ida_packages", getIDAGaiaPackages)
+SHELL_CMD_HANDLER("hasIdaIdnEnabled", "fw ctl get int nac_pep_scaled_sharing_enabled", checkPepIdaIdnStatus)
+SHELL_CMD_HANDLER("requiredNanoServices", "fw ctl get int nac_pep_scaled_sharing_enabled", getIDAGaiaPackages)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "cat $FWDIR/database/myself_objects.C "

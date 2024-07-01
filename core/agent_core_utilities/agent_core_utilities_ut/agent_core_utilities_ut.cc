@@ -37,8 +37,11 @@ TEST_F(AgentCoreUtilUT, filesTest)
     EXPECT_FALSE(NGEN::Filesystem::exists("/i/am/not/a/real/path"));
 
     const vector<string> lines{"i am a line in the text file", "i am iron man"};
+    const vector<string> lines_b{"i am a line 2 in the text file", "i am iron man 2", "hello again"};
     CPTestTempfile test_file(lines);
+    CPTestTempfile test_file_b(lines_b);
     ASSERT_TRUE(NGEN::Filesystem::exists(test_file.fname));
+    ASSERT_TRUE(NGEN::Filesystem::exists(test_file_b.fname));
 
     string output_orig = test_file.readFile();
     string new_path = test_file.fname + ".new";
@@ -46,6 +49,7 @@ TEST_F(AgentCoreUtilUT, filesTest)
     ASSERT_TRUE(NGEN::Filesystem::exists(new_path));
     ASSERT_FALSE(NGEN::Filesystem::copyFile(test_file.fname, new_path, false));
     ASSERT_TRUE(NGEN::Filesystem::copyFile(test_file.fname, new_path, true));
+    ASSERT_TRUE(NGEN::Filesystem::copyFile(test_file.fname, test_file_b.fname, true));
     string output_new;
     {
         ifstream new_file_stream(new_path);
@@ -55,11 +59,20 @@ TEST_F(AgentCoreUtilUT, filesTest)
         output_new = buffer.str();
     }
 
+    string output_test_b;
+    ifstream new_file_stream(test_file_b.fname);
+    ASSERT_TRUE(new_file_stream.good());
+    stringstream buffer;
+    buffer << new_file_stream.rdbuf();
+    output_test_b = buffer.str();
+
     EXPECT_EQ(output_orig, output_new);
+    EXPECT_EQ(output_orig, output_test_b);
     EXPECT_THAT(output_new, HasSubstr("i am a line in the text file"));
     EXPECT_THAT(output_new, HasSubstr("i am iron man"));
     EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file.fname));
     EXPECT_TRUE(NGEN::Filesystem::deleteFile(new_path));
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_b.fname));
     EXPECT_FALSE(NGEN::Filesystem::exists(test_file.fname));
     EXPECT_FALSE(NGEN::Filesystem::exists(new_path));
 }

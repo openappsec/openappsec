@@ -13,41 +13,12 @@
 #include "mock/mock_mainloop.h"
 #include "mock/mock_messaging.h"
 #include "mock/mock_rest_api.h"
+#include "updates_process_event.h"
 
 using namespace std;
 using namespace testing;
 
 USE_DEBUG_FLAG(D_HEALTH_CHECK);
-
-class TestHealthCheckStatusListener : public Listener<HealthCheckStatusEvent>
-{
-public:
-    void upon(const HealthCheckStatusEvent &) override {}
-
-    HealthCheckStatusReply
-    respond(const HealthCheckStatusEvent &) override
-    {
-        map<string, string> extended_status;
-        extended_status["team"] = team;
-        extended_status["city"] = city;
-        HealthCheckStatusReply reply(comp_name, status, extended_status);
-        return reply;
-    }
-
-    void setStatus(HealthCheckStatus new_status) { status = new_status; }
-
-    string getListenerName() const { return "TestHealthCheckStatusListener"; }
-
-private:
-    static const string comp_name;
-    HealthCheckStatus status = HealthCheckStatus::HEALTHY;
-    static const string team;
-    static const string city;
-};
-
-const string TestHealthCheckStatusListener::comp_name = "Test";
-const string TestHealthCheckStatusListener::team = "Hapoel";
-const string TestHealthCheckStatusListener::city = "Tel-Aviv";
 
 class TestEnd {};
 
@@ -56,8 +27,7 @@ class HealthCheckManagerTest : public Test
 public:
     HealthCheckManagerTest()
     {
-        Debug::setNewDefaultStdout(&debug_output);
-        Debug::setUnitTestFlag(D_HEALTH_CHECK, Debug::DebugLevel::INFO);
+        Debug::setUnitTestFlag(D_HEALTH_CHECK, Debug::DebugLevel::NOISE);
 
         EXPECT_CALL(mock_ml, addRecurringRoutine(_, _, _, _, _)).WillRepeatedly(
             DoAll(SaveArg<2>(&health_check_periodic_routine), Return(1))
@@ -70,7 +40,6 @@ public:
         );
 
         env.preload();
-        event_listener.registerListener();
 
         env.init();
 
@@ -98,14 +67,12 @@ public:
     StrictMock<MockMainLoop>        mock_ml;
     StrictMock<MockRestApi>         mock_rest;
     StrictMock<MockMessaging>       mock_message;
-    stringstream                    debug_output;
     ConfigComponent                 config;
     Config::I_Config                *i_config = nullptr;
     ::Environment                   env;
     HealthCheckManager              health_check_manager;
     I_Health_Check_Manager          *i_health_check_manager;
     unique_ptr<ServerRest>          health_check_server;
-    TestHealthCheckStatusListener   event_listener;
 };
 
 TEST_F(HealthCheckManagerTest, runPeriodicHealthCheckTest)
@@ -142,7 +109,20 @@ TEST_F(HealthCheckManagerTest, runPeriodicHealthCheckTest)
     EXPECT_EQ(actual_body, expected_healthy_body);
     EXPECT_EQ("Healthy", aggregated_status_str);
 
-    event_listener.setStatus(HealthCheckStatus::DEGRADED);
+    UpdatesProcessEvent(
+        UpdatesProcessResult::DEGRADED,
+        UpdatesConfigType::SETTINGS,
+        UpdatesFailureReason::DOWNLOAD_FILE,
+        "setting.json",
+        "File not found"
+    ).notify();
+    UpdatesProcessEvent(
+        UpdatesProcessResult::DEGRADED,
+        UpdatesConfigType::MANIFEST,
+        UpdatesFailureReason::DOWNLOAD_FILE,
+        "manifest.json",
+        "File not found"
+    ).notify();
     try {
         health_check_periodic_routine();
     } catch (const TestEnd &t) {}
@@ -156,16 +136,16 @@ TEST_F(HealthCheckManagerTest, runPeriodicHealthCheckTest)
         "        \"status\": \"Degraded\",\n"
         "        \"errors\": [\n"
         "            {\n"
-        "                \"code\": \"Test city\",\n"
+        "                \"code\": \"Orchestration Last Update\",\n"
         "                \"message\": [\n"
-        "                    \"Tel-Aviv\"\n"
+        "                    \"Failed to download the file setting.json. Error: File not found\"\n"
         "                ],\n"
         "                \"internal\": true\n"
         "            },\n"
         "            {\n"
-        "                \"code\": \"Test team\",\n"
+        "                \"code\": \"Orchestration Manifest\",\n"
         "                \"message\": [\n"
-        "                    \"Hapoel\"\n"
+        "                    \"Failed to download the file manifest.json. Error: File not found\"\n"
         "                ],\n"
         "                \"internal\": true\n"
         "            }\n"
@@ -196,19 +176,24 @@ TEST_F(HealthCheckManagerTest, runOnDemandHealthCheckTest)
     config.preload();
     Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss);
 
+    UpdatesProcessEvent(
+        UpdatesProcessResult::FAILED,
+        UpdatesConfigType::MANIFEST,
+        UpdatesFailureReason::DOWNLOAD_FILE,
+        "manifest.json",
+        "File not found"
+    ).notify();
+
     stringstream is;
     is << "{}";
     health_check_server->performRestCall(is);
 
     string expected_status =
         "{\n"
-        "    \"allComponentsHealthCheckReplies\": {\n"
-        "        \"Test\": {\n"
-        "            \"status\": \"Healthy\",\n"
-        "            \"extendedStatus\": {\n"
-        "                \"city\": \"Tel-Aviv\",\n"
-        "                \"team\": \"Hapoel\"\n"
-        "            }\n"
+        "    \"Orchestration\": {\n"
+        "        \"status\": \"Unhealthy\",\n"
+        "        \"extendedStatus\": {\n"
+        "            \"Manifest\": \"Failed to download the file manifest.json. Error: File not found\"\n"
         "        }\n"
         "    }\n"
         "}";

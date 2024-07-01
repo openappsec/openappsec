@@ -58,7 +58,6 @@ public:
 
     string getCurrentTrace() const override;
     string getCurrentSpan() const override;
-    string getCurrentHeaders() override;
     map<string, string> getCurrentHeadersMap() override;
 
     void startNewTrace(bool new_span, const string &_trace_id) override;
@@ -239,34 +238,6 @@ Environment::Impl::getCurrentSpan() const
     return "";
 }
 
-string
-Environment::Impl::getCurrentHeaders()
-{
-    string tracing_headers;
-    auto trace_id = getCurrentTrace();
-    if (!trace_id.empty()) {
-        tracing_headers += "X-Trace-Id: " + trace_id + "\r\n";
-    } else {
-        string correlation_id_string = "00000000-0000-0000-0000-000000000000";
-        try {
-            boost::uuids::random_generator uuid_random_gen;
-            correlation_id_string = boost::uuids::to_string(uuid_random_gen());
-        } catch (const boost::uuids::entropy_error &e) {
-            dbgTrace(D_ENVIRONMENT)
-                << "Failed to generate random correlation id - entropy exception. Exception: "
-                << e.what();
-            tracing_status = TracingStatus::DISABLED;
-        }
-        tracing_headers += "X-Trace-Id: " + correlation_id_string + "\r\n";
-    }
-
-    auto span_id = getCurrentSpan();
-    if (!span_id.empty()) {
-        tracing_headers += "X-Span-Id: " + span_id + "\r\n";
-    }
-    return tracing_headers;
-}
-
 map<string, string>
 Environment::Impl::getCurrentHeadersMap()
 {
@@ -292,6 +263,21 @@ Environment::Impl::getCurrentHeadersMap()
     if (!span_id.empty()) {
         tracing_headers["X-Span-Id"] = span_id;
     }
+
+    auto exec_name = get<string>("Executable Name");
+    if (exec_name.ok() && *exec_name != "") {
+        string executable_name = *exec_name;
+        auto file_path_end = executable_name.find_last_of("/");
+        if (file_path_end != string::npos) {
+            executable_name = executable_name.substr(file_path_end + 1);
+        }
+        auto file_sufix_start = executable_name.find_first_of(".");
+        if (file_sufix_start != string::npos) {
+            executable_name = executable_name.substr(0, file_sufix_start);
+        }
+        tracing_headers["X-Calling-Service"] = executable_name;
+    }
+
     return tracing_headers;
 }
 

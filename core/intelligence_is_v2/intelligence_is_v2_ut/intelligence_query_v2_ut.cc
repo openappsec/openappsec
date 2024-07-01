@@ -24,9 +24,33 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
     vector<QueryRequest> requests = {request};
-    Intelligence::IntelligenceRequest query(requests, true, false, MessageMetadata("", 0));
+    Intelligence::IntelligenceRequest query(requests, true, false, false, MessageMetadata("", 0));
 
     std::string expected = "{\n"
+        "    \"queryTypes\": {\n"
+        "        \"proxyToCloud\": false\n"
+        "    },\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"equals\",\n"
+        "        \"key\": \"mainAttributes.phase\",\n"
+        "        \"value\": \"testing\"\n"
+        "    }\n"
+        "}";
+
+    EXPECT_EQ(*query.genJson(), expected);
+}
+
+TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequestProxied) {
+    QueryRequest request(Condition::EQUALS, "phase", "testing", true);
+    vector<QueryRequest> requests = {request};
+    Intelligence::IntelligenceRequest query(requests, true, false, true, MessageMetadata("", 0));
+
+    std::string expected = "{\n"
+        "    \"queryTypes\": {\n"
+        "        \"proxyToCloud\": true\n"
+        "    },\n"
         "    \"limit\": 20,\n"
         "    \"fullResponse\": true,\n"
         "    \"query\": {\n"
@@ -42,9 +66,12 @@ TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequest) {
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
     vector<QueryRequest> requests = {request};
-    Intelligence::IntelligenceRequest query(requests, false, false, MessageMetadata("", 0));
+    Intelligence::IntelligenceRequest query(requests, false, false, false, MessageMetadata("", 0));
 
     std::string expected = "{"
+        "\"queryTypes\":{"
+        "\"proxyToCloud\":false"
+        "},"
         "\"limit\":20,"
         "\"fullResponse\":true,"
         "\"query\":{"
@@ -59,8 +86,11 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequestSpaces) {
     QueryRequest request(Condition::EQUALS, "ph ase", "te sti\" n g\\", true);
     vector<QueryRequest> requests = {request};
-    Intelligence::IntelligenceRequest query(requests, false, false, MessageMetadata("", 0));
+    Intelligence::IntelligenceRequest query(requests, false, false, false, MessageMetadata("", 0));
     std::string expected = "{"
+        "\"queryTypes\":{"
+        "\"proxyToCloud\":false"
+        "},"
         "\"limit\":20,"
         "\"fullResponse\":true,"
         "\"query\":{"
@@ -76,9 +106,53 @@ TEST(IntelligenceQueryTestV2, genJsonPrettyBulkRequests) {
     QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
     QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
     std::vector<QueryRequest> requests = {request1, request2};
-    Intelligence::IntelligenceRequest query(requests, true, true, MessageMetadata("", 0));
+    Intelligence::IntelligenceRequest query(requests, true, true, false, MessageMetadata("", 0));
 
     std::string expected = "{\n"
+        "    \"queryTypes\": {\n"
+        "        \"proxyToCloud\": false\n"
+        "    },\n"
+        "    \"queries\": [\n"
+        "        {\n"
+        "            \"query\": {\n"
+        "                \"limit\": 20,\n"
+        "                \"fullResponse\": true,\n"
+        "                \"query\": {\n"
+        "                    \"operator\": \"equals\",\n"
+        "                    \"key\": \"mainAttributes.phase\",\n"
+        "                    \"value\": \"testing\"\n"
+        "                }\n"
+        "            },\n"
+        "            \"index\": 0\n"
+        "        },\n"
+        "        {\n"
+        "            \"query\": {\n"
+        "                \"limit\": 20,\n"
+        "                \"fullResponse\": true,\n"
+        "                \"query\": {\n"
+        "                    \"operator\": \"equals\",\n"
+        "                    \"key\": \"mainAttributes.height\",\n"
+        "                    \"value\": \"testing\"\n"
+        "                }\n"
+        "            },\n"
+        "            \"index\": 1\n"
+        "        }\n"
+        "    ]\n"
+        "}";
+
+    EXPECT_EQ(*query.genJson(), expected);
+}
+
+TEST(IntelligenceQueryTestV2, genJsonPrettyBulkRequestsProxied) {
+    QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
+    QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
+    std::vector<QueryRequest> requests = {request1, request2};
+    Intelligence::IntelligenceRequest query(requests, true, true, true, MessageMetadata("", 0));
+
+    std::string expected = "{\n"
+        "    \"queryTypes\": {\n"
+        "        \"proxyToCloud\": true\n"
+        "    },\n"
         "    \"queries\": [\n"
         "        {\n"
         "            \"query\": {\n"
@@ -114,9 +188,12 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettyBulkRequest) {
     QueryRequest request1(Condition::EQUALS, "phase", "testing", true);
     QueryRequest request2(Condition::EQUALS, "height", "testing", 25);
     std::vector<QueryRequest> requests = {request1, request2};
-    Intelligence::IntelligenceRequest query(requests, false, true, MessageMetadata("", 0));
+    Intelligence::IntelligenceRequest query(requests, false, true, false, MessageMetadata("", 0));
 
     std::string expected = "{"
+            "\"queryTypes\":{"
+            "\"proxyToCloud\":false"
+            "},"
             "\"queries\":[{"
             "\"query\":{"
             "\"limit\":20,"

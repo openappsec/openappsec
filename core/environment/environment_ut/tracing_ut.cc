@@ -345,12 +345,16 @@ public:
 TEST_F(TracingCompRoutinesTest, 2SpansDifFlow)
 {
     I_MainLoop::Routine routine = [&] () {
+        string service_name = "test-service-name";
+        i_env->registerValue("Executable Name", service_name);
+
         i_env->startNewTrace(true, "a687b388-1108-4083-9852-07c33b1074e9");
         trace_id = i_env->getCurrentTrace();
         span_id = i_env->getCurrentSpan();
-        string headers = i_env->getCurrentHeaders();
-        EXPECT_THAT(headers, HasSubstr("X-Trace-Id: " + trace_id));
-        EXPECT_THAT(headers, HasSubstr("X-Span-Id: " + span_id));
+        auto headers = i_env->getCurrentHeadersMap();
+        EXPECT_THAT(headers["X-Trace-Id"], trace_id);
+        EXPECT_THAT(headers["X-Span-Id"], span_id);
+        EXPECT_THAT(headers["X-Calling-Service"], service_name);
 
         EXPECT_EQ(trace_id, "a687b388-1108-4083-9852-07c33b1074e9");
         EXPECT_NE("", i_env->getCurrentSpan());

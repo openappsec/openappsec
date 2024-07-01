@@ -73,6 +73,7 @@ public:
     SerializableQueryFilter(Condition condition_type, const std::string &key, const std::string &value);
     SerializableQueryFilter(Condition condition_type, const std::string &key, const int64_t &value);
     SerializableQueryFilter(Condition condition_type, const std::string &key, const std::vector<std::string> &value);
+    SerializableQueryFilter(const SerializableQueryCondition &condition);
 
     void save(cereal::JSONOutputArchive &ar) const;
 

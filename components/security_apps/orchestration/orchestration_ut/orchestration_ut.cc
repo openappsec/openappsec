@@ -22,6 +22,7 @@
 #include "agent_details.h"
 #include "customized_cereal_map.h"
 #include "health_check_status/health_check_status.h"
+#include "updates_process_event.h"
 #include "declarative_policy_utils.h"
 
 using namespace testing;
@@ -99,7 +100,7 @@ public:
             )
         );
 
-        map<string, PortNumber> empty_service_to_port_map;
+        map<string, vector<PortNumber>> empty_service_to_port_map;
         EXPECT_CALL(mock_service_controller, getServiceToPortMap()).WillRepeatedly(Return(empty_service_to_port_map));
 
         EXPECT_CALL(rest, mockRestCall(RestAction::SHOW, "orchestration-status", _)).WillOnce(
@@ -171,7 +172,7 @@ public:
         map<string, string> resolved_mgmt_details({{"kernel_version", "4.4.0-87-generic"}});
         EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_mgmt_details));
         EXPECT_CALL(mock_details_resolver, readCloudMetadata()).WillRepeatedly(
-            Return(Maybe<tuple<string, string, string>>(genError("No cloud metadata")))
+            Return(Maybe<tuple<string, string, string, string, string>>(genError("No cloud metadata")))
         );
     }
 
@@ -358,6 +359,7 @@ private:
 TEST_F(OrchestrationTest, hybridModeRegisterLocalAgentRoutine)
 {
     EXPECT_CALL(rest, mockRestCall(_, _, _)).WillRepeatedly(Return(true));
+
     Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(
         vector<string>{"--orchestration-mode=hybrid_mode"}
     );
@@ -376,7 +378,6 @@ TEST_F(OrchestrationTest, hybridModeRegisterLocalAgentRoutine)
     expectDetailsResolver();
     EXPECT_CALL(mock_update_communication, getUpdate(_));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(mock_status, setFieldStatus(_, _, _));
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(_));
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
@@ -584,7 +585,6 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
     expectDetailsResolver();
     EXPECT_CALL(mock_update_communication, getUpdate(_));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(mock_status, setFieldStatus(_, _, _));
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(_));
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
@@ -761,10 +761,6 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdatRollback)
     ).WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion("/test"));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    );
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
     ).WillOnce(
         Invoke(
@@ -940,10 +936,6 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
     ).WillOnce(Return(true));
     EXPECT_CALL(mock_update_communication, setAddressExtenesion("/test"));
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    );
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
     ).WillOnce(
         Invoke(
@@ -1013,7 +1005,7 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
         )
     );
 
-    map<string, PortNumber> empty_service_to_port_map;
+    map<string, vector<PortNumber>> empty_service_to_port_map;
     EXPECT_CALL(mock_service_controller, getServiceToPortMap()).WillRepeatedly(Return(empty_service_to_port_map));
 
     EXPECT_CALL(rest, mockRestCall(RestAction::SHOW, "orchestration-status", _));
@@ -1108,14 +1100,6 @@ TEST_F(OrchestrationTest, manifestUpdate)
     );
 
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    );
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::MANIFEST, OrchestrationStatusResult::SUCCESS, "")
-    );
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
     ).WillOnce(
         Invoke(
@@ -1237,10 +1221,6 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
         .WillOnce(ReturnRef(second_val)
     );
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    );
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
     ).WillOnce(
         Invoke(
@@ -1271,7 +1251,7 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     EXPECT_CALL(
         mock_service_controller,
         updateServiceConfiguration(string("policy path"), "", expected_data_types, "", "", _)
-    ).WillOnce(Return(Maybe<void>(genError(string("")))));
+    ).WillOnce(Return(Maybe<void>(genError(string("Fail to load policy")))));
 
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
         .WillOnce(
@@ -1328,6 +1308,7 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
 
     EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
     expectDetailsResolver();
+
     EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
     EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
         .WillOnce(Return(manifest_checksum));
@@ -1359,22 +1340,10 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
     );
 
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    ).Times(1);
 
     string manifest_err =
         "Critical Error: Agent/Gateway was not fully deployed on host 'hostname' "
         "and is not enforcing a security policy. Retry installation or contact Check Point support.";
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(
-            OrchestrationStatusFieldType::MANIFEST,
-            OrchestrationStatusResult::FAILED,
-            manifest_err
-        )
-    ).Times(1);
     EXPECT_CALL(mock_status, getManifestError()).WillOnce(ReturnRef(manifest_err));
 
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
@@ -1475,10 +1444,6 @@ TEST_P(OrchestrationTest, orchestrationFirstRun)
         .WillOnce(Return(data_checksum));
 
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    );
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
     ).WillOnce(
         Invoke(
@@ -1536,23 +1501,6 @@ TEST_P(OrchestrationTest, orchestrationFirstRun)
         runRoutine();
     } catch (const invalid_argument& e) {}
     EXPECT_CALL(mock_status, writeStatusToFile());
-
-    vector<HealthCheckStatusReply> reply;
-    bool is_named_query = GetParam();
-    if (is_named_query) {
-        auto all_comps_status_reply = HealthCheckStatusEvent().performNamedQuery();
-        for (auto &elem : all_comps_status_reply) {
-            reply.push_back(elem.second);
-        }
-    } else {
-        reply = HealthCheckStatusEvent().query();
-    }
-
-    ASSERT_EQ(reply.size(), 1);
-    EXPECT_EQ(reply[0].getCompName(), "Orchestration");
-    EXPECT_EQ(reply[0].getStatus(), HealthCheckStatus::HEALTHY);
-
-    HealthCheckStatusEvent().notify();
 
     orchestration_comp.fini();
 }
@@ -1721,10 +1669,6 @@ TEST_F(OrchestrationTest, dataUpdate)
     );
 
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
-    EXPECT_CALL(
-        mock_status,
-        setFieldStatus(OrchestrationStatusFieldType::LAST_UPDATE, OrchestrationStatusResult::SUCCESS, "")
-    );
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
     ).WillOnce(
         Invoke(

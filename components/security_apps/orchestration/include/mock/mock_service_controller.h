@@ -64,7 +64,7 @@ public:
         )
     );
 
-    typedef std::map<std::string, PortNumber> ServicePortMap;
+    typedef std::map<std::string, std::vector<PortNumber>> ServicePortMap;
     MOCK_METHOD0(getServiceToPortMap, ServicePortMap());
     MOCK_METHOD3(updateReconfStatus, void(int id, const std::string &service_name, ReconfStatus status));
     MOCK_METHOD4(

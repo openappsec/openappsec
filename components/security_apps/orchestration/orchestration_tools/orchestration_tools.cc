@@ -20,6 +20,7 @@
 #include "cereal/types/set.hpp"
 #include "agent_core_utilities.h"
 #include "namespace_data.h"
+#include "updates_process_event.h"
 
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -469,6 +470,13 @@ OrchestrationTools::Impl::packagesToJsonFile(const map<packageName, Package> &pa
         archive_out(cereal::make_nvp("packages", packges_vector));
     } catch (cereal::Exception &e) {
         dbgDebug(D_ORCHESTRATOR) << "Failed to write vector of packages to JSON file " << path << ", " << e.what();
+        UpdatesProcessEvent(
+            UpdatesProcessResult::FAILED,
+            UpdatesConfigType::MANIFEST,
+            UpdatesFailureReason::HANDLE_FILE,
+            path,
+            string("Failed to write vector of packages to JSON file. Error: ") + e.what()
+        ).notify();
         return false;
     }
     return true;

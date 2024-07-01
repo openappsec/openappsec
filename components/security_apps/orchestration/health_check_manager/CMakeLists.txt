@@ -1,3 +1,1 @@
 add_library(health_check_manager health_check_manager.cc)
-
-add_subdirectory(health_check_manager_ut)

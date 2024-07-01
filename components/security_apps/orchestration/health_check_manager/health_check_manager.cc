@@ -21,6 +21,7 @@
 #include "config.h"
 #include "cereal/archives/json.hpp"
 #include "customized_cereal_map.h"
+#include "updates_process_event.h"
 
 using namespace std;
 
@@ -79,19 +80,22 @@ class HealthCheckValue
 public:
     HealthCheckValue() = default;
 
-    HealthCheckValue(HealthCheckStatus raw_status, const map<string, HealthCheckStatusReply> &descriptions)
+    HealthCheckValue(HealthCheckStatus raw_status, const HealthCheckStatusReply &description)
             :
         status(raw_status)
     {
-        for (const auto &single_stat : descriptions) {
-            if (single_stat.second.getStatus() == HealthCheckStatus::HEALTHY) {
-                dbgTrace(D_HEALTH_CHECK_MANAGER) << "Ignoring healthy status reply. Comp name: " << single_stat.first;
-                continue;
-            }
+        if (description.getStatus() == HealthCheckStatus::HEALTHY) {
+            dbgTrace(D_HEALTH_CHECK_MANAGER)
+                << "Ignoring healthy status reply. Comp name: "
+                << description.getCompName();
+            return;
+        }
 
-            for (const auto &status : single_stat.second.getExtendedStatus()) {
-                errors.push_back(HealthCheckError(single_stat.first + " " + status.first, status.second));
-            }
+        for (const auto &extended_status : description.getExtendedStatus()) {
+            errors.push_back(
+                HealthCheckError(description.getCompName() + " " + extended_status.first,
+                extended_status.second
+            ));
         }
     }
 
@@ -113,9 +117,9 @@ private:
 class HealthCheckPatch : public ClientRest
 {
 public:
-    HealthCheckPatch(HealthCheckStatus raw_status, const map<string, HealthCheckStatusReply> &descriptions)
+    HealthCheckPatch(HealthCheckStatus raw_status, const HealthCheckStatusReply &description)
     {
-        health_check = HealthCheckValue(raw_status, descriptions);
+        health_check = HealthCheckValue(raw_status, description);
     }
 
     C2S_LABEL_PARAM(HealthCheckValue, health_check, "healthCheck");
@@ -123,7 +127,8 @@ public:
 
 class HealthCheckManager::Impl
         :
-    Singleton::Provide<I_Health_Check_Manager>::From<HealthCheckManager>
+    Singleton::Provide<I_Health_Check_Manager>::From<HealthCheckManager>,
+    public Listener<UpdatesProcessEvent>
 {
 public:
     void
@@ -132,6 +137,7 @@ public:
         auto rest = Singleton::Consume<I_RestApi>::by<HealthCheckManager>();
         rest->addRestCall<HealthCheckOnDemand>(RestAction::SHOW, "health-check-on-demand");
 
+        registerListener();
         int interval_in_seconds =
             getProfileAgentSettingWithDefault<int>(30, "agent.healthCheck.intervalInSeconds");
 
@@ -157,9 +163,62 @@ public:
     void
     printRepliesHealthStatus(ofstream &oputput_file)
     {
-        getRegisteredComponentsHealthStatus();
         cereal::JSONOutputArchive ar(oputput_file);
-        ar(cereal::make_nvp("allComponentsHealthCheckReplies", all_comps_health_status));
+        ar(cereal::make_nvp(health_check_reply.getCompName(), health_check_reply));
+    }
+
+    void
+    upon(const UpdatesProcessEvent &event)
+    {
+
+        OrchestrationStatusFieldType status_field_type = event.getStatusFieldType();
+        HealthCheckStatus _status = convertResultToHealthCheckStatus(event.getResult());
+        string status_field_type_str = convertOrchestrationStatusFieldTypeToStr(status_field_type);
+
+        extended_status[status_field_type_str] =
+            _status == HealthCheckStatus::HEALTHY ?
+            "Success" :
+            event.parseDescription();
+        field_types_status[status_field_type_str] = _status;
+
+        switch(_status) {
+            case HealthCheckStatus::UNHEALTHY: {
+                general_health_aggregated_status = HealthCheckStatus::UNHEALTHY;
+                break;
+            }
+            case HealthCheckStatus::DEGRADED: {
+                for (const auto &type_status : field_types_status) {
+                    if ((type_status.first != status_field_type_str)
+                            && (type_status.second == HealthCheckStatus::UNHEALTHY))
+                    {
+                        break;
+                    }
+                }
+                general_health_aggregated_status = HealthCheckStatus::DEGRADED;
+                break;
+            }
+            case HealthCheckStatus::HEALTHY: {
+                for (const auto &type_status : field_types_status) {
+                    if ((type_status.first != status_field_type_str)
+                            && (type_status.second == HealthCheckStatus::UNHEALTHY
+                                || type_status.second == HealthCheckStatus::DEGRADED)
+                        )
+                    {
+                        break;
+                    }
+                    general_health_aggregated_status = HealthCheckStatus::HEALTHY;
+                }
+                break;
+            }
+            case HealthCheckStatus::IGNORED: {
+                break;
+            }
+        }
+        health_check_reply = HealthCheckStatusReply(
+            "Orchestration",
+            general_health_aggregated_status,
+            extended_status
+        );
     }
 
 private:
@@ -168,9 +227,10 @@ private:
     {
         dbgFlow(D_HEALTH_CHECK_MANAGER) << "Sending a health check patch";
 
-        HealthCheckPatch patch_to_send(general_health_aggregated_status, all_comps_health_status);
-        auto messaging = Singleton::Consume<I_Messaging>::by<HealthCheckManager>();
-        return messaging->sendSyncMessageWithoutResponse(
+        HealthCheckPatch patch_to_send(general_health_aggregated_status, health_check_reply);
+        extended_status.clear();
+        field_types_status.clear();
+        return Singleton::Consume<I_Messaging>::by<HealthCheckManager>()->sendSyncMessageWithoutResponse(
             HTTPMethod::PATCH,
             "/agents",
             patch_to_send,
@@ -179,57 +239,9 @@ private:
     }
 
     void
-    getRegisteredComponentsHealthStatus()
-    {
-        vector<HealthCheckStatusReply> health_check_event_reply = HealthCheckStatusEvent().query();
-        all_comps_health_status.clear();
-        for (const auto &reply : health_check_event_reply) {
-            if (reply.getStatus() != HealthCheckStatus::IGNORED) {
-                all_comps_health_status.emplace(reply.getCompName(), reply);
-            }
-        }
-    }
-
-    void
-    calcGeneralHealthAggregatedStatus()
-    {
-        general_health_aggregated_status = HealthCheckStatus::HEALTHY;
-
-        for (const auto &reply : all_comps_health_status) {
-            HealthCheckStatus status = reply.second.getStatus();
-
-            dbgTrace(D_HEALTH_CHECK_MANAGER)
-                << "Current aggregated status is: "
-                << HealthCheckStatusReply::convertHealthCheckStatusToStr(
-                        general_health_aggregated_status
-                    )
-                << ". Got health status: "
-                << HealthCheckStatusReply::convertHealthCheckStatusToStr(status)
-                << "for component: "
-                << reply.first;
-
-            switch (status) {
-                case HealthCheckStatus::UNHEALTHY : {
-                    general_health_aggregated_status = HealthCheckStatus::UNHEALTHY;
-                    return;
-                }
-                case HealthCheckStatus::DEGRADED : {
-                    general_health_aggregated_status = HealthCheckStatus::DEGRADED;
-                    break;
-                }
-                case HealthCheckStatus::IGNORED : break;
-                case HealthCheckStatus::HEALTHY : break;
-            }
-        }
-    }
-
-    void
     executeHealthCheck()
     {
         dbgFlow(D_HEALTH_CHECK_MANAGER) << "Collecting health status from all registered components.";
-
-        getRegisteredComponentsHealthStatus();
-        calcGeneralHealthAggregatedStatus();
 
         dbgTrace(D_HEALTH_CHECK_MANAGER)
             << "Aggregated status: "
@@ -244,9 +256,43 @@ private:
         };
     }
 
-    HealthCheckStatus general_health_aggregated_status;
-    map<string, HealthCheckStatusReply> all_comps_health_status;
+    string
+    convertOrchestrationStatusFieldTypeToStr(OrchestrationStatusFieldType type)
+    {
+        switch (type) {
+            case OrchestrationStatusFieldType::REGISTRATION : return "Registration";
+            case OrchestrationStatusFieldType::MANIFEST : return "Manifest";
+            case OrchestrationStatusFieldType::LAST_UPDATE : return "Last Update";
+            case OrchestrationStatusFieldType::COUNT : return "Count";
+        }
+
+        dbgAssert(false) << "Trying to convert unknown orchestration status field to string.";
+        return "";
+    }
+
+    HealthCheckStatus
+    convertResultToHealthCheckStatus(UpdatesProcessResult result)
+    {
+        switch (result) {
+            case UpdatesProcessResult::SUCCESS : return HealthCheckStatus::HEALTHY;
+            case UpdatesProcessResult::UNSET : return HealthCheckStatus::IGNORED;
+            case UpdatesProcessResult::FAILED : return HealthCheckStatus::UNHEALTHY;
+            case UpdatesProcessResult::DEGRADED : return HealthCheckStatus::DEGRADED;
+        }
+
+        dbgAssert(false) << "Trying to convert unknown update process result field to health check status.";
+        return HealthCheckStatus::IGNORED;
+    }
+
+    HealthCheckStatus general_health_aggregated_status = HealthCheckStatus::HEALTHY;
+    HealthCheckStatusReply health_check_reply = HealthCheckStatusReply(
+        "Orchestration",
+        HealthCheckStatus::HEALTHY,
+        {}
+    );
     bool should_patch_report;
+    map<string, string> extended_status;
+    map<string, HealthCheckStatus> field_types_status;
 };
 
 HealthCheckManager::HealthCheckManager() : Component("HealthCheckManager"), pimpl(make_unique<Impl>()) {}

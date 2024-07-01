@@ -340,10 +340,11 @@ public:
         const vector<QueryRequest> &query_requests,
         bool is_pretty,
         bool is_bulk,
+        bool is_proxy,
         const MessageMetadata &req_md
     ) const override
     {
-        IntelligenceRequest intelligence_req(query_requests, is_pretty, is_bulk, req_md);
+        IntelligenceRequest intelligence_req(query_requests, is_pretty, is_bulk, is_proxy, req_md);
         if (!intelligence_req.checkAssetsLimit().ok()) return intelligence_req.checkAssetsLimit().passErr();
         if (!intelligence_req.checkMinConfidence().ok()) return intelligence_req.checkMinConfidence().passErr();
         if (intelligence_req.isPagingActivated()) {
@@ -357,10 +358,15 @@ public:
     }
 
     Maybe<Intelligence::Response>
-    getResponse(const QueryRequest &query_request, bool is_pretty, const MessageMetadata &req_md) const override
+    getResponse(
+        const QueryRequest &query_request,
+        bool is_pretty,
+        bool is_proxy,
+        const MessageMetadata &req_md
+    ) const override
     {
         vector<QueryRequest> queries = {query_request};
-        return getResponse(queries, is_pretty, false, req_md);
+        return getResponse(queries, is_pretty, false, is_proxy, req_md);
     }
 
 private:

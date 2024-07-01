@@ -144,7 +144,7 @@ public:
         map<string, string> resolved_mgmt_details({{"kernel_version", "4.4.0-87-generic"}});
         EXPECT_CALL(mock_details_resolver, getResolvedDetails()).WillRepeatedly(Return(resolved_mgmt_details));
         EXPECT_CALL(mock_details_resolver, readCloudMetadata()).WillRepeatedly(
-            Return(Maybe<tuple<string, string, string>>(genError("No cloud metadata")))
+            Return(Maybe<tuple<string, string, string, string, string>>(genError("No cloud metadata")))
         );
     }
 
@@ -284,7 +284,7 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(3).WillRepeatedly(ReturnRef(first_policy_version));
 
-    map<string, PortNumber> empty_service_to_port_map;
+    map<string, vector<PortNumber>> empty_service_to_port_map;
     EXPECT_CALL(mock_service_controller, getServiceToPortMap()).WillRepeatedly(Return(empty_service_to_port_map));
 
 

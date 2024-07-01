@@ -64,7 +64,7 @@ public:
         const std::string &service_id
     ) = 0;
 
-    virtual std::map<std::string, PortNumber> getServiceToPortMap() = 0;
+    virtual std::map<std::string, std::vector<PortNumber>> getServiceToPortMap() = 0;
 
 protected:
     virtual ~I_ServiceController() {}

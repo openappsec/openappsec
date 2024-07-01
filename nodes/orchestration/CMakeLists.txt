@@ -18,6 +18,7 @@ target_link_libraries(
     orchestration
     health_check
     health_check_manager
+    updates_process_reporter
     service_controller
     manifest_controller
     package_handler

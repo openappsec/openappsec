@@ -13,7 +13,6 @@ DEFAULT_PORT_INDEX=2
 DISPLAY_NAME_INDEX=3
 
 SERVICE_PORTS_LIST_INDEX=4
-PACKAGE_LIST_LINE_OFFSET=5
 
 cp_nano_conf_location="conf"
 
@@ -150,17 +149,21 @@ fi
 
 all_services=""
 
-lines_to_skip=$((PACKAGE_LIST_LINE_OFFSET))
-{
-    while [ $lines_to_skip -ne 0 ]; do
-        read -r line
-        lines_to_skip=$((lines_to_skip - 1))
-    done
-    while read -r line; do
-        service_name="$(echo "$line" | cut -d "=" -f1 | tr "_" "-")"
-        all_services="${all_services} $service_name"
-    done
-} <"${FILESYSTEM_PATH}/${CP_SCRIPTS_PATH}/${CP_NANO_PACKAGE_LIST_NAME}"
+while IFS= read -r line; do
+    # Skip empty lines and lines that start with #
+    if [ -z "$(echo "${line}" | tr -d '[:space:]')" ]; then
+        continue
+    fi
+    if [ "${line#"#"}" != "$line" ]; then
+        continue
+    fi
+
+    service_name=$(echo "$line" | cut -d "=" -f1 | tr "_" "-")
+    # Check if the service name already exists in the list
+    if ! echo "$all_services" | grep -q "\<$service_name\>"; then
+        all_services="$all_services $service_name"
+    fi
+done <"${FILESYSTEM_PATH}/${CP_SCRIPTS_PATH}/${CP_NANO_PACKAGE_LIST_NAME}"
 
 is_valid_var_name() # Initials - ivvn
 {
@@ -392,7 +395,7 @@ extract_default_api_port() # Initials - edap
 is_requested_service() # Initials - irs
 {
     irs_requested_service=$(echo "$1" | sed 's/-//g' | tr '[:upper:]' '[:lower:]')
-    irs_possible_service=$(echo "$2" | sed 's/-//g' | tr '[:upper:]' '[:lower:]')
+    irs_possible_service=$(echo "$2" | sed 's/^cp-nano-//' | sed 's/-//g' | tr '[:upper:]' '[:lower:]')
     if [ "$irs_requested_service" = "$irs_possible_service" ]; then
         echo true
         return
@@ -409,10 +412,10 @@ extract_api_port() # Initials - eap
         return
     fi
 
-    for pair in $(get_registered_services_ports | tr "," " "); do
+    for pair in $(get_registered_services_ports | tr ";" " "); do
         eap_service="$(echo "$pair" | cut -d ':' -f1)"
         if [ "$(is_requested_service "$eap_service_name" "$eap_service")" = true ]; then
-            echo "$pair" | cut -d ':' -f2
+            echo "$pair" | cut -d ':' -f2 | tr "," " "
             return
         fi
     done
@@ -638,7 +641,9 @@ run_update_gradual_policy() # Initials - rugp
     rugp_service_api_port=$(extract_api_port "$rugp_service_name")
 
     # Load gradual policy configuration
-    rugp_errors=$(curl_func "${rugp_service_api_port}" "set-gradual-deployment-policy" "${rugp_data}")
+    for port in $rugp_service_api_port; do
+        rugp_errors=$(curl_func "$port" "set-gradual-deployment-policy" "${rugp_data}")
+    done
     sleep 1
     if [ -n "$(echo "$rugp_errors" | sed "s/$(printf '\r')//g")" ]; then
         echo "Failed to set gradual policy. Error: $rugp_errors"
@@ -674,11 +679,9 @@ run_set_traffic_recording_policy() # Initials - rstrp
 
     # Send signal to http_manager to update the traffic recording policy
     rstrp_data='{"traffic_recording_flags":["'$1'"]}'
-    if [ "${remove_curl_ld_path}" = "true" ]; then
-        LD_LIBRARY_PATH="" ${curl_cmd} --noproxy "*" --header "Content-Type: application/json" --request POST --data "$rstrp_data" http://127.0.0.1:"$(extract_api_port 'http-manager')"/set-traffic-recording-policy
-    else
-    ${curl_cmd} --noproxy "*" --header "Content-Type: application/json" --request POST --data "$rstrp_data" http://127.0.0.1:"$(extract_api_port 'http-manager')"/set-traffic-recording-policy
-    fi
+    for port in $(extract_api_port 'http-manager'); do
+        curl_func "$port" "set-traffic-recording-policy" "${rugp_data}"
+    done
     sleep 1
 }
 
@@ -809,16 +812,20 @@ run_print_metrics() # Initials - rpm
 
     if [ -z "$rpm_service_name" ]; then
         print_metrics "Orchestration"
-        rpm_list=$(get_registered_services_ports | tr "," " ")
+        rpm_list=$(get_registered_services_ports | tr ";" " ")
         for pair in ${rpm_list}; do
             rpm_service=$(echo "$pair" | cut -d ':' -f1)
-            print_metrics "$rpm_service" "$(echo "$pair" | cut -d ':' -f2)"
+            rpm_port=$(echo "$pair" | cut -d ':' -f2)
+            for port in $(echo $rpm_port | tr "," " "); do
+                print_metrics "$rpm_service" "$port"
+            done
         done
     elif [ "$rpm_service_name" = "orchestration" ]; then
         print_metrics "Orchestration"
     else
-        rpm_port=$(extract_api_port "$rpm_service_name")
-        print_metrics "$rpm_service_name" "$rpm_port"
+        for port in $(extract_api_port "$rpm_service_name"); do
+            print_metrics "$rpm_service_name" "$port"
+        done
     fi
 }
 
@@ -886,7 +893,7 @@ print_single_service_status() # Initials - psss
     psss_is_userspace_process_running=$(is_userspace_running "$psss_service_name")
 
     psss_maybe_version=$(LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$USR_LIB_PATH/cpnano"$LD_LIBRARY_PATH_ADD" $psss_service_full_path --version 2>&1)
-    if echo "$psss_maybe_version" | grep -q "error"; then
+    if echo "$psss_maybe_version" | grep -iq "error"; then
         echo "Version: Temporarily unavailable"
         format_colored_status_line "Status: Not Available"
         echo ""
@@ -1008,7 +1015,8 @@ run_status() # Initials - rs
         fi
     fi
 
-    if [ -n "$(cat ${FILESYSTEM_PATH}/conf/agent_details.json | grep "hybrid_mode")" ]; then
+    hybrid_mode=$(cat ${FILESYSTEM_PATH}/conf/agent_details.json | grep "hybrid_mode")
+    if [ -n "$hybrid_mode" ]; then
         add_policy_file=true
         rs_mgmt_mode_text="Local management"
     else
@@ -1019,8 +1027,16 @@ run_status() # Initials - rs
             add_policy_file=true
             rs_mgmt_mode_text="Cloud management (Visibility mode)"
         fi
+        rs_profile_id=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/agent_details.json | grep "Profile ID" | cut -d '"' -f4)
     fi
+
+    rs_agent_id=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/agent_details.json | grep "Agent ID" | cut -d '"' -f4)
+
     echo "Management mode: ${rs_mgmt_mode_text}"
+    echo "Agent ID: ${rs_agent_id}"
+    if [ -z "$hybrid_mode" ]; then
+        echo "Profile ID: ${rs_profile_id}"
+    fi
 
     if [ "${add_policy_file}" = "true" ]; then
         echo "Policy files: "
@@ -1189,6 +1205,7 @@ run_cpnano_debug() # Initials - rcd
 {
     CP_ENV_FILESYSTEM=${FILESYSTEM_PATH} CP_ENV_LOG_FILE=${LOG_FILE_PATH} ${FILESYSTEM_PATH}/${CP_SCRIPTS_PATH}/${CP_NANO_DEBUG_NAME} "${@}"
     rcd_script_exit_code=$?
+    rcd_set_config_res=
     # exit code of -1 from the script becomes 255 here
     if [ $rcd_script_exit_code -eq 0 ]; then
         exit 0
@@ -1212,7 +1229,20 @@ run_cpnano_debug() # Initials - rcd
     if [ "$rcd_load_all_settings" = "true" ]; then
         for service in $all_services; do
             if [ "$(is_userspace_running "${service}")" = "true" ]; then
-                run_load_settings "$service"
+                if [ "$service" = "orchestration" ]; then
+                    rcd_set_config_res=$(curl_to_orchestration "set-change-debug-config")
+                else
+                    for port in $(extract_api_port "$service"); do
+                        rcd_set_config_res=$(curl_func $port "set-change-debug-config")
+                    done
+                fi
+                rcd_service_formatted=$(format_nano_service_name "$service")
+                if echo "$rcd_set_config_res" | grep -q "Error"; then
+                    echo "Failed to load debug configuration for $rcd_service_formatted service."
+                    echo "$rcd_set_config_res"
+                else
+                    echo "$rcd_service_formatted debug configuration updated successfully"
+                fi
             fi
         done
 
@@ -1223,7 +1253,20 @@ run_cpnano_debug() # Initials - rcd
         if [ -z "$1" ]; then
             return
         elif [ -n "$(get_nano_service_location_and_port "$1")" ]; then
-            run_load_settings "$1"
+            if [ "$1" = "orchestration" ]; then
+                rcd_set_config_res=$(curl_to_orchestration "set-change-debug-config")
+            else
+                for port in $(extract_api_port "$1"); do
+                    rcd_set_config_res=$(curl_func $port "set-change-debug-config")
+                done
+            fi
+            rcd_service_formatted=$(format_nano_service_name "$1")
+            if echo "$rcd_set_config_res" | grep -q "Error"; then
+                echo "Failed to load debug configuration for $rcd_service_formatted service."
+                echo "$rcd_set_config_res"
+            else
+                echo "$rcd_service_formatted debug configuration updated successfully"
+            fi
         fi
         shift
     done
