@@ -24,14 +24,16 @@
 Maybe<string>
 checkSAMLSupportedBlade(const string &command_output)
 {
-    string supportedBlades[3] = {"identityServer", "vpn", "cvpn"};
+    // uncomment when vpn will support SAML authentication
+    // string supportedBlades[3] = {"identityServer", "vpn", "cvpn"};
+    string supportedBlades[1] = {"identityServer"};
     for(const string &blade : supportedBlades) {
         if (command_output.find(blade) != string::npos) {
             return string("true");
         }
     }
 
-    return genError("Current host does not have SAML capability");
+    return string("false");
 }
 
 Maybe<string>
@@ -42,7 +44,7 @@ checkIDABlade(const string &command_output)
         return string("true");
     }
 
-    return genError("Current host does not have IDA installed");
+    return string("false");
 }
 
 Maybe<string>
@@ -52,7 +54,7 @@ checkSAMLPortal(const string &command_output)
         return string("true");
     }
 
-    return genError("Current host does not have SAML Portal configured");
+    return string("false");
 }
 
 Maybe<string>
@@ -61,7 +63,7 @@ checkPepIdaIdnStatus(const string &command_output)
     if (command_output.find("nac_pep_scaled_sharing_enabled = 1") != string::npos) {
         return string("true");
     }
-    return genError("Current host does not have PEP control scaled_sharing enabled");
+    return string("false");
 }
 
 Maybe<string>
@@ -87,7 +89,7 @@ checkIDP(shared_ptr<istream> file_stream)
         }
     }
 
-    return genError("Identity Provider was not found");
+    return string("false");
 }
 
 #endif // gaia

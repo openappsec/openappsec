@@ -3,6 +3,7 @@
 POLICY_TEMP_PATH="/tmp/policy_temp.json"
 DECLARATIVE_CONFIG_PATH="/etc/cp/conf/declarative_config.cfg"
 CHANGE_AGENT_MODE=true
+UPLOAD_AGENT_POLICY=false
 ra_token=
 tenant_id=
 agent_id=
@@ -10,15 +11,16 @@ profile_id=
 
 load_agent_details()
 {
-    tenant_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Tenant ID|TenantID|g" | /etc/cp/bin/yq -P '.TenantID')
-    profile_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Profile ID|ProfileID|g" | /etc/cp/bin/yq -P '.ProfileID')
+    tenant_id=$(awk -F\" '/Tenant ID/{print $4}' /etc/cp/conf/agent_details.json)
+    profile_id=$(awk -F\" '/Profile ID/{print $4}' /etc/cp/conf/agent_details.json)
+    agent_id=$(awk -F\" '/Agent ID/{print $4}' /etc/cp/conf/agent_details.json)
 }
 
 generate_policy()
 {
     cp -f /etc/cp/conf/local_policy.yaml /tmp/tmp_local_policy.yaml
     sed -i "s|\"\*\"|\"Any\"|g" /tmp/tmp_local_policy.yaml
-    POLICY=$(/etc/cp/bin/yq /tmp/tmp_local_policy.yaml -o json)
+    POLICY=$(/etc/cp/bin/yq eval /tmp/tmp_local_policy.yaml -o json)
     echo $POLICY > $POLICY_TEMP_PATH
     rm -f /tmp/tmp_local_policy.yaml
 }
@@ -193,6 +195,7 @@ upload_policy_to_the_cloud()
         fi
     fi
 
+
     upload_the_policy_to_s3
     if [ "$?" = "1" ]; then
         echo "Failed uploading the policy to S3"
@@ -228,7 +231,8 @@ usage()
     echo "Options:"
     echo "    --namespace <namespace> : Namespace with the relevant Helm Chart"
     echo "    --fog <fog address>     : Namespace with the relevant Helm Chart"
-    echo "    --upload_policy_only    : Upload policy to the fog, withput changing agent mode"
+    echo "    --config-upload         : Upload policy to the fog"
+    echo "    --config-upload-only    : Upload policy to the fog, withput changing agent mode"
     exit 255
 }
 
@@ -254,7 +258,10 @@ while true; do
         validate_arg_value_exists "$1" "$#"
         shift
         var_fog="$1"
-    elif [ "$1" = "--upload_policy_only" ]; then
+    elif [ "$1" = "--config-upload" ]; then
+        UPLOAD_AGENT_POLICY=true
+    elif [ "$1" = "--config-upload-only" ]; then
+        UPLOAD_AGENT_POLICY=true
         CHANGE_AGENT_MODE=false
         source $DECLARATIVE_CONFIG_PATH
     elif [ "$1" = "--access_token" ] || [ "$1" = "-at" ]; then
@@ -271,6 +278,9 @@ while true; do
         profile_id="$1"
     elif [ -z "$1" ]; then
         break
+    else
+        usage
+        exit 1
     fi
     shift
 done
@@ -279,7 +289,11 @@ if [ -z "$var_fog" ]; then
     var_fog="https://inext-agents.cloud.ngen.checkpoint.com"
 fi
 
-upload_policy_to_the_cloud
+if [ $UPLOAD_AGENT_POLICY = true ]; then
+    upload_policy_to_the_cloud
+else
+    open-appsec-ctl --set-mode --online_mode --token $var_token --fog $var_fog
+fi
 if [ "$?" = "0" ]; then
     echo "SUCCESS"
 fi

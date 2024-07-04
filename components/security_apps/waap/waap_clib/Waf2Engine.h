@@ -293,6 +293,9 @@ private:
     // Matched override IDs
     std::set<std::string> m_matchedOverrideIds;
     std::set<std::string> m_effectiveOverrideIds;
+    std::set<std::string> m_exceptionLearned;
+    std::map<std::string, double> m_overrideOriginalMaxScore;
+    std::map<std::string, double> m_overridePostFilterMaxScore;
 
     //csrf state
     Waap::CSRF::State m_csrfState;

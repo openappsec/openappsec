@@ -20,7 +20,7 @@
 namespace Waap {
 namespace Conversions {
     ThreatLevel convertFinalScoreToThreatLevel(double finalScore);
-    bool shouldDoWafBlocking(const IWaapConfig* pSitePolicy, ThreatLevel threatLevel);
+    bool shouldDoWafBlocking(const IWaapConfig* const pSitePolicy, ThreatLevel threatLevel);
 }
 }
 

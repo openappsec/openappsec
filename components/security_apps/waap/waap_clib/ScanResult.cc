@@ -23,6 +23,7 @@ unescaped_line(),
 param_name(),
 location(),
 score(0.0f),
+scoreNoFilter(0.0f),
 scoreArray(),
 keywordCombinations(),
 attack_types(),
@@ -40,6 +41,7 @@ void Waf2ScanResult::clear()
     param_name.clear();
     location.clear();
     score = 0;
+    scoreNoFilter = 0;
     scoreArray.clear();
     keywordCombinations.clear();
     attack_types.clear();

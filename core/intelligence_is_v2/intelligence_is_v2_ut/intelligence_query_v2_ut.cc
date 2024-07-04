@@ -109,7 +109,7 @@ TEST(IntelligenceQueryTestV2, genJsonPrettyBulkRequests) {
     Intelligence::IntelligenceRequest query(requests, true, true, false, MessageMetadata("", 0));
 
     std::string expected = "{\n"
-        "    \"queryTypes\": {\n"
+        "    \"queriesTypes\": {\n"
         "        \"proxyToCloud\": false\n"
         "    },\n"
         "    \"queries\": [\n"
@@ -150,7 +150,7 @@ TEST(IntelligenceQueryTestV2, genJsonPrettyBulkRequestsProxied) {
     Intelligence::IntelligenceRequest query(requests, true, true, true, MessageMetadata("", 0));
 
     std::string expected = "{\n"
-        "    \"queryTypes\": {\n"
+        "    \"queriesTypes\": {\n"
         "        \"proxyToCloud\": true\n"
         "    },\n"
         "    \"queries\": [\n"
@@ -191,7 +191,7 @@ TEST(IntelligenceQueryTestV2, genJsonUnprettyBulkRequest) {
     Intelligence::IntelligenceRequest query(requests, false, true, false, MessageMetadata("", 0));
 
     std::string expected = "{"
-            "\"queryTypes\":{"
+            "\"queriesTypes\":{"
             "\"proxyToCloud\":false"
             "},"
             "\"queries\":[{"

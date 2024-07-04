@@ -459,9 +459,15 @@ Waf2Transaction::getUserLimitVerdict()
     }
     else if (mode == AttackMitigationMode::PREVENT) {
         decision->setLog(true);
-        decision->setBlock(true);
-        dbgInfo(D_WAAP_ULIMITS) << msg << "BLOCK" << reason;
-        verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        if (!m_overrideState.bForceException) {
+            decision->setBlock(true);
+            dbgInfo(D_WAAP_ULIMITS) << msg << "BLOCK" << reason;
+            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        } else {
+            decision->setBlock(true);
+            dbgInfo(D_WAAP_ULIMITS) << msg << "Override Accept" << reason;
+            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+        }
     }
 
     return verdict;

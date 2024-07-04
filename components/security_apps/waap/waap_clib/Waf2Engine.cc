@@ -329,6 +329,7 @@ Waf2Transaction::Waf2Transaction() :
     is_schema_validation(false),
     m_waf2TransactionFlags()
 {
+    m_overrideOriginalMaxScore[OVERRIDE_ACCEPT] = 0;
     I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
     m_entry_time = chrono::duration_cast<chrono::milliseconds>(timeGet->getMonotonicTime());
 }
@@ -1729,6 +1730,11 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
             std::copy(m_effectiveOverrideIds.begin(), m_effectiveOverrideIds.end(), vEffectiveOverrideIds.begin());
             waapLog.addToOrigin(LogField("effectiveExceptionIdList", vEffectiveOverrideIds));
         }
+        if (!m_exceptionLearned.empty()) {
+            std::vector<std::string> vLearningAffected(m_exceptionLearned.size());
+            std::copy(m_exceptionLearned.begin(), m_exceptionLearned.end(), vLearningAffected.begin());
+            waapLog.addToOrigin(LogField("redundantExceptionIdList", vLearningAffected));
+        }
     }
 }
 
@@ -1808,12 +1814,6 @@ Waf2Transaction::sendLog()
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: override is to ignore log - not sending a log";
         return;
     }
-
-    dbgTrace(D_WAAP) << "force exception: " << m_overrideState.bForceException <<
-        " force block: " << m_overrideState.bForceBlock <<
-        " matched overrides count: " << m_matchedOverrideIds.size() <<
-        " effective overrides count: " << m_effectiveOverrideIds.size();
-
 
     bool shouldBlock = false;
     if (m_overrideState.bForceBlock) {
@@ -2091,7 +2091,30 @@ Waf2Transaction::decideAutonomousSecurity(
         transactionResult.threatLevel = threat;
     }
 
+    dbgTrace(D_WAAP_OVERRIDE) << "override ids count: " << m_matchedOverrideIds.size();
     // Apply overrides
+    for (auto it = m_overridePostFilterMaxScore.begin(); it != m_overridePostFilterMaxScore.end(); it++) {
+        const string id = it->first;
+        if (m_overrideState.forceBlockIds.find(id) != m_overrideState.forceBlockIds.end()) {
+            // blocked effectivness is calculates later from the force block exception ids list
+            continue;
+        }
+        ThreatLevel threat = Waap::Conversions::convertFinalScoreToThreatLevel(it->second);
+        bool shouldBlock = Waap::Conversions::shouldDoWafBlocking(m_siteConfig, threat);
+        dbgTrace(D_WAAP_OVERRIDE) << "checking effectivness of override: " << id << ", should have blocked: " << shouldBlock
+            << ", scores: " << m_overridePostFilterMaxScore[id] << ", " << m_overrideOriginalMaxScore[id];
+        if (shouldBlock) {
+            m_effectiveOverrideIds.insert(id);
+        } else {
+            ThreatLevel threatNoFilter = Waap::Conversions::convertFinalScoreToThreatLevel(
+                m_overrideOriginalMaxScore[id]
+            );
+            if (Waap::Conversions::shouldDoWafBlocking(m_siteConfig, threatNoFilter)) {
+                m_exceptionLearned.insert(id);
+            }
+        }
+    }
+
     if (m_overrideState.bForceBlock) {
         dbgTrace(D_WAAP) << "decideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
             " and override forces REJECT ...";
@@ -2105,25 +2128,25 @@ Waf2Transaction::decideAutonomousSecurity(
         }
     }
     else if (m_overrideState.bForceException) {
-        dbgTrace(D_WAAP) << "decideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
+        dbgTrace(D_WAAP) << "de cideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
             " and override forces ALLOW ...";
-        if (m_scanResult) {
-            // on accept exception the decision is not set and needs to be calculated to determine effectivness
-            ThreatLevel threat = Waap::Conversions::convertFinalScoreToThreatLevel(m_scanResult->score);
-            bool shouldBlock = Waap::Conversions::shouldDoWafBlocking(&sitePolicy, threat);
-            if (shouldBlock) {
-                m_effectiveOverrideIds.insert(
-                    m_overrideState.forceExceptionIds.begin(), m_overrideState.forceExceptionIds.end()
-                );
-            }
-        }
-
         decision->setBlock(false);
         if (!m_overrideState.bIgnoreLog)
         {
             decision->setOverridesLog(true);
         }
+    } else if (!m_matchedOverrideIds.empty()) {
+        if (!m_overrideState.bIgnoreLog)
+        {
+            decision->setOverridesLog(true);
+        }
     }
+    dbgTrace(D_WAAP_OVERRIDE) << "force exception: " << m_overrideState.bForceException <<
+    " force block: " << m_overrideState.bForceBlock <<
+    " matched overrides count: " << m_matchedOverrideIds.size() <<
+    " effective overrides count: " << m_effectiveOverrideIds.size() <<
+    " learned overrides count: " << m_exceptionLearned.size();
+
 
 
     bool log_all = false;
@@ -2262,7 +2285,7 @@ bool
 Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
     if (!exceptions.ok()) {
-        dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions error:" << exceptions.getErr();
+        dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions error: " << exceptions.getErr();
         return false;
     }
     dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions";
@@ -2305,18 +2328,30 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
         auto behaviors = exceptions.unpack().getBehavior(exceptions_dict,
                 getAssetState()->m_filtersMngr->getMatchedOverrideKeywords());
         for (const auto &behavior : behaviors) {
+            if (!res.filtered_keywords.empty() || res.score > 0) {
+                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for " << res.param_name << " with filtered indicators";
+                std::string overrideId = behavior.getId();
+                if (m_overrideOriginalMaxScore.find(overrideId) == m_overrideOriginalMaxScore.end()){
+                    m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
+                    m_overridePostFilterMaxScore[overrideId] = res.score;
+                } else {
+                    if (res.scoreNoFilter > m_overrideOriginalMaxScore[overrideId]) {
+                        m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
+                    }
+                    if (res.score > m_overridePostFilterMaxScore[overrideId]) {
+                        m_overridePostFilterMaxScore[overrideId] = res.score;
+                    }
+                }
+                if (res.scoreNoFilter > m_overrideOriginalMaxScore[OVERRIDE_ACCEPT]) {
+                    m_overrideOriginalMaxScore[OVERRIDE_ACCEPT] = res.scoreNoFilter;
+                }
+            }
             if (behavior == action_ignore)
             {
                 dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for " << res.param_name << " should ignore.";
                 std::string overrideId = behavior.getId();
                 if (!overrideId.empty()) {
                     m_matchedOverrideIds.insert(overrideId);
-                }
-                if (!res.keyword_matches.empty() || res.unescaped_line == Waap::Scanner::xmlEntityAttributeId)
-                {
-                    if (!overrideId.empty()) {
-                        m_effectiveOverrideIds.insert(overrideId);
-                    }
                 }
                 return true;
             }
