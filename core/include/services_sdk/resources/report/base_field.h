@@ -120,8 +120,6 @@ class LogField : Singleton::Consume<I_Environment>
                         break;
                     }
                     case '\n': {
-                        encoded_value.push_back('\\');
-                        encoded_value.push_back('n');
                         break;
                     }
                     case '\r': {
