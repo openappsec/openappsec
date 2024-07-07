@@ -141,7 +141,7 @@ DeclarativePolicyUtils::sendUpdatesToFog(
     auto shell_cmd = Singleton::Consume<I_ShellCmd>::by<DeclarativePolicyUtils>();
     string exec_command =
         getFilesystemPathConfig()
-        + "/scripts/open-appsec-cloud-mgmt --upload_policy_only"
+        + "/scripts/open-appsec-cloud-mgmt --config-upload-only"
         + " --access_token " + access_token
         + " --tenant_id " + tenant_id
         + " --profile_id " + profile_id;

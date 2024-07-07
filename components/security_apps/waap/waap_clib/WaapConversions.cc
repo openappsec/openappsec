@@ -39,7 +39,7 @@ namespace Conversions {
         return HIGH_THREAT;
     }
 
-    bool shouldDoWafBlocking(const IWaapConfig* pWaapConfig, ThreatLevel threatLevel)
+    bool shouldDoWafBlocking(const IWaapConfig* const pWaapConfig, ThreatLevel threatLevel)
     {
         if (pWaapConfig == NULL)
         {

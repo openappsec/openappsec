@@ -90,7 +90,7 @@ IntelligenceRequest::genJson() const
     {
         cereal::JSONOutputArchive out_ar(json_stream);
 
-        out_ar.setNextName("queryTypes");
+        out_ar.setNextName(isBulk() ? "queriesTypes" : "queryTypes");
         out_ar.startNode();
         out_ar(cereal::make_nvp("proxyToCloud", is_proxy));
         out_ar.finishNode();

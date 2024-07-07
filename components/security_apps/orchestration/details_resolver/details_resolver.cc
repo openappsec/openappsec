@@ -152,6 +152,7 @@ DetailsResolver::Impl::isCloudStorageEnabled()
 bool
 DetailsResolver::Impl::isKernelVersion3OrHigher()
 {
+#if defined(gaia) || defined(smb)
     static const string cmd =
         "clish -c 'show version os kernel' | awk '{print $4}' "
         "| cut -d '.' -f 1 | awk -F: '{ if ( $1 >= 3 ) {print 1} else {print 0}}'";
@@ -160,12 +161,14 @@ DetailsResolver::Impl::isKernelVersion3OrHigher()
     if (is_gogo.ok() && !is_gogo.unpack().empty()) {
         return is_gogo.unpack().front() == '1';
     }
+#endif
     return false;
 }
 
 bool
 DetailsResolver::Impl::isGwNotVsx()
 {
+#if defined(gaia) || defined(smb)
     static const string is_gw_cmd = "cpprod_util FwIsFirewallModule";
     static const string is_vsx_cmd = "cpprod_util FWisVSX";
     auto is_gw = DetailsResolvingHanlder::getCommandOutput(is_gw_cmd);
@@ -173,6 +176,7 @@ DetailsResolver::Impl::isGwNotVsx()
     if (is_gw.ok() && is_vsx.ok() && !is_gw.unpack().empty() && !is_vsx.unpack().empty()) {
         return is_gw.unpack().front() == '1' && is_vsx.unpack().front() == '0';
     }
+#endif
     return false;
 }
 

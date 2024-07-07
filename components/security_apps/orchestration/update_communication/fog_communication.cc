@@ -32,6 +32,7 @@ FogCommunication::init()
 {
     FogAuthenticator::init();
     i_declarative_policy = Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>();
+    profile_mode = getSettingWithDefault<string>("management", "profileManagedMode");
 }
 
 Maybe<void>
@@ -65,6 +66,16 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
 
         Maybe<string> maybe_new_data = request.getData();
         string data_checksum = maybe_new_data.ok() ? maybe_new_data.unpack() : "";
+
+        if (profile_mode != policy_mgmt_mode) {
+            dbgTrace(D_ORCHESTRATOR)
+                << "The profile managed mode was changed from: "
+                << profile_mode
+                << " to: "
+                << policy_mgmt_mode;
+            profile_mode = policy_mgmt_mode;
+            i_declarative_policy->turnOnApplyPolicyFlag();
+        }
 
         if (i_declarative_policy->shouldApplyPolicy()) {
             string policy_response = i_declarative_policy->getUpdate(request);
