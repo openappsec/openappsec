@@ -42,6 +42,7 @@ HttpAttachmentConfig::init()
     setNumOfNginxIpcElements();
     setDebugByContextValues();
     setKeepAliveIntervalMsec();
+    setRetriesForVerdict();
 }
 
 bool
@@ -213,6 +214,31 @@ HttpAttachmentConfig::setFailOpenTimeout()
         inspection_mode = ngx_http_inspection_mode_e::NON_BLOCKING_THREAD;
     }
     conf_data.setNumericalValue("nginx_inspection_mode", inspection_mode);
+}
+
+void
+HttpAttachmentConfig::setRetriesForVerdict()
+{
+    conf_data.setNumericalValue("min_retries_for_verdict", getAttachmentConf<uint>(
+        3,
+        "agent.minRetriesForVerdict.nginxModule",
+        "HTTP manager",
+        "Min retries for verdict"
+    ));
+
+    conf_data.setNumericalValue("max_retries_for_verdict", getAttachmentConf<uint>(
+        15,
+        "agent.maxRetriesForVerdict.nginxModule",
+        "HTTP manager",
+        "Max retries for verdict"
+    ));
+
+    conf_data.setNumericalValue("body_size_trigger", getAttachmentConf<uint>(
+        200000,
+        "agent.reqBodySizeTrigger.nginxModule",
+        "HTTP manager",
+        "Request body size trigger"
+    ));
 }
 
 void

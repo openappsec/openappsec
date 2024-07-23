@@ -302,13 +302,15 @@ while true; do
         echo "Filesystem paths: ${FILESYSTEM_PATH}"
     elif [ "$1" = "--vs_id" ]; then
         shift
-        VS_ID=$1
-        export FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
-        NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
-        NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
-        VS_LIB_SUB_FOLDER="/vs${VS_ID}"
-        LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
-        TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
+        if [ "$1" != "0" ]; then
+            VS_ID=$1
+            export FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
+            NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
+            NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
+            VS_LIB_SUB_FOLDER="/vs${VS_ID}"
+            LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
+            TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
+        fi
     elif [ "$1" = "--log_files_path" ]; then
         shift
         var=$1
@@ -358,6 +360,16 @@ if [ -z "$VS_ID" ]; then
         LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
         TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
     fi
+fi
+
+if [ -n "${VS_ID}" ]; then
+    if [ "$VS_ID" != "$INSTANCE_VSID" ]; then
+        echo "Error: Incorrect context, switch to VS${VS_ID} context first."
+        exit 1
+    fi
+elif [ -n "$INSTANCE_VSID" ] && [ "$INSTANCE_VSID" != "0" ]; then
+    echo "Error: Incorrect context, exit vs${INSTANCE_VSID} first."
+    exit 1
 fi
 
 if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
@@ -846,7 +858,7 @@ install_public_key()
 
     fog_address=${var_fog_address}
     if [ -n "${var_upgrade_mode}" ]; then
-        # Upgradde - look in policy.json
+        # Upgrade - look in policy.json
         fog_address=$(cat ${FILESYSTEM_PATH}/${CONF_PATH}/${SERVICE_PATH}/orchestration.policy)
     fi
 

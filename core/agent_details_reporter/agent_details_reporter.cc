@@ -71,6 +71,7 @@ public:
     bool addAttr(const string &key, const string &val, bool allow_override = false) override;
     bool addAttr(const map<string, string> &attr, bool allow_override = false) override;
     void deleteAttr(const string &key) override;
+    bool isPersistantAttr(const string &key) override;
 
     bool sendAttributes() override;
 
@@ -130,6 +131,7 @@ private:
     map<string, string> persistant_attributes;
     map<string, string> new_attributes;
     map<string, string> attributes;
+    bool is_attr_deleted = false;
 
     I_Messaging *messaging = nullptr;
     bool is_server;
@@ -207,6 +209,13 @@ AgentDetailsReporter::Impl::deleteAttr(const string &key)
     attributes.erase(key);
     new_attributes.erase(key);
     persistant_attributes.erase(key);
+    is_attr_deleted = true;
+}
+
+bool
+AgentDetailsReporter::Impl::isPersistantAttr(const std::string &key)
+{
+    return persistant_attributes.count(key) > 0;
 }
 
 bool
@@ -214,7 +223,7 @@ AgentDetailsReporter::Impl::sendAttributes()
 {
     dbgDebug(D_AGENT_DETAILS) << "Trying to send attributes";
 
-    if (new_attributes.empty()) {
+    if (new_attributes.empty() && !is_attr_deleted) {
         dbgDebug(D_AGENT_DETAILS) << "Skipping current attempt since no new attributes were added";
         return true;
     }
@@ -261,6 +270,7 @@ AgentDetailsReporter::Impl::sendAttributes()
         if (add_agent_details_status.ok()) {
             dbgDebug(D_AGENT_DETAILS) << "Successfully sent attributes to the Orchestrator";
             new_attributes.clear();
+            is_attr_deleted = false;
             return true;
         }
 

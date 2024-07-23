@@ -63,7 +63,10 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"waiting_for_verdict_thread_timeout_msec\": 75,\n"
             "\"req_header_thread_timeout_msec\": 10,\n"
             "\"ip_ranges\": " + createIPRangesString(ip_ranges) + ",\n"
-            "\"static_resources_path\": \"" + static_resources_path + "\""
+            "\"static_resources_path\": \"" + static_resources_path + "\",\n"
+            "\"min_retries_for_verdict\": 1,\n"
+            "\"max_retries_for_verdict\": 3,\n"
+            "\"body_size_trigger\": 777\n"
         "}\n";
     ofstream valid_configuration_file(attachment_configuration_file_name);
     valid_configuration_file << valid_configuration;
@@ -87,6 +90,9 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(getReqBodyThreadTimeout(), 155);
     EXPECT_EQ(getResHeaderThreadTimeout(), 1);
     EXPECT_EQ(getResBodyThreadTimeout(), 0);
+    EXPECT_EQ(getMinRetriesForVerdict(), 1);
+    EXPECT_EQ(getMaxRetriesForVerdict(), 3);
+    EXPECT_EQ(getReqBodySizeTrigger(), 777);
     EXPECT_EQ(getWaitingForVerdictThreadTimeout(), 75);
     EXPECT_EQ(getInspectionMode(), ngx_http_inspection_mode::BLOCKING_THREAD);
 

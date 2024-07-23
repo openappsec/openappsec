@@ -1363,9 +1363,12 @@ run_ai() # Initials - ra
         exit 1
     fi
     if [ "$ra_upload_to_fog" = "true" ]; then
-        ra_token_data=$(curl_to_orchestration "show-access-token")
-        ra_token_hex=$(echo "$ra_token_data" | grep "token" | cut -d '"' -f4 | base64 -d | od -t x1 -An)
-        ra_token_hex_formatted=$(echo $ra_token_hex | tr -d ' ')
+        ra_token_data=$(curl_to_orchestration "show-access-token" | grep "token" | cut -d '"' -f4)
+        if [ -z "${ra_token_data}" ]; then
+            echo "Failed to get crediantials to upload the file to the cloud."
+            exit 1;
+        fi
+        ra_token_hex_formatted=$(echo $ra_token_data | base64 -d | od -t x1 -An | tr -d '[:space:]')
         ra_token="$(xor_decrypt "${ra_token_hex_formatted}")"
 
         ra_proxy_val=""

@@ -70,6 +70,8 @@ private:
 
     void setDebugByContextValues();
 
+    void setRetriesForVerdict();
+
     WebTriggerConf web_trigger_conf;
     HttpAttachmentConfiguration conf_data;
 };

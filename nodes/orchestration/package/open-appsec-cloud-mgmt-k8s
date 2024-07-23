@@ -15,11 +15,13 @@ latest_policy_version=1
 
 load_agent_details()
 {
-    tenant_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Tenant ID|TenantID|g" | /etc/cp/bin/yq -P '.TenantID')
-    agent_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Agent ID|AgentID|g" | /etc/cp/bin/yq -P '.AgentID')
-    profile_id=$(cat /etc/cp/conf/agent_details.json | sed "s|Profile ID|ProfileID|g" | /etc/cp/bin/yq -P '.ProfileID')
+    tenant_id=$(awk -F\" '/Tenant ID/{print $4}' /etc/cp/conf/agent_details.json)
+    agent_id=$(awk -F\" '/Agent ID/{print $4}' /etc/cp/conf/agent_details.json)
+    profile_id=$(awk -F\" '/Profile ID/{print $4}' /etc/cp/conf/agent_details.json)
     cluster_id=$(echo $(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -X GET ${APISERVER}/api/v1/namespaces/ ) \
-        | /etc/cp/bin/yq .items | /etc/cp/bin/yq  '.[] | select(.metadata.name  | contains("kube-system"))' | /etc/cp/bin/yq .metadata.uid)
+        | /etc/cp/bin/yq eval '.items' - \
+        | /etc/cp/bin/yq eval '.[] | select(.metadata.name | contains("kube-system"))' - \
+        | /etc/cp/bin/yq eval '.metadata.uid' -)
 }
 
 get_latest_policy_version()
@@ -44,15 +46,16 @@ get_latest_policy_version()
 
 concat_to_policy()
 {
-    crd_to_concat="$1"
-    is_first=$2
+    api_version="$1"
+    crd_to_concat="$2"
+    is_first=$3
     if [ ! -z $is_first ]; then
-        POLICY="$POLICY \"$1\": "
+        POLICY="$POLICY \"$crd_to_concat\": "
     else
-        POLICY="$POLICY, \"$1\": "
+        POLICY="$POLICY, \"$crd_to_concat\": "
     fi
     CRD=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
-        -X GET ${APISERVER}/apis/openappsec.io/v1beta1/$crd_to_concat)
+        -X GET ${APISERVER}/apis/openappsec.io/$api_version/$crd_to_concat)
     CRD=$(echo $CRD|tr -d '\n')
     if [ -z "$CRD" ]; then
         CRD="{}"
@@ -60,28 +63,49 @@ concat_to_policy()
     POLICY="$POLICY $CRD"
 }
 
+get_api_version()
+{
+    CRD=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+        -X GET ${APISERVER}/apis/openappsec.io/v1beta2/policies)
+    CRD=$(echo $CRD|tr -d '\n')
+    # if CRD is not empty and does not contain "page not found" then it is v1beta2
+    if [ ! -z "$CRD" ] && ! echo "$CRD" | grep -q "page not found"; then
+        echo "v1beta2"
+    else
+        echo "v1beta1"
+    fi
+}
+
 generate_policy()
 {
     POLICY="{ \"Policy\": {"
-    concat_to_policy policies true
-    concat_to_policy practices
-    concat_to_policy logtriggers
-    concat_to_policy customresponses
-    concat_to_policy exceptions
-    concat_to_policy sourcesidentifiers
-    concat_to_policy trustedsources
+
+    api_version=$(get_api_version)
+
+    concat_to_policy $api_version "policies" true
+    if [ "$api_version" = "v1beta2" ]; then
+        concat_to_policy $api_version "threatpreventionpractices"
+        concat_to_policy $api_version "accesscontrolpractices"
+    else
+        concat_to_policy $api_version "practices"
+    fi
+    concat_to_policy $api_version "logtriggers"
+    concat_to_policy $api_version "customresponses"
+    concat_to_policy $api_version "exceptions"
+    concat_to_policy $api_version "sourcesidentifiers"
+    concat_to_policy $api_version "trustedsources"
 
     POLICY="$POLICY, \"assets\": { \"items\":[ "
 
     FIRST="1"
     all_ingresses=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
         -X GET ${APISERVER}/apis/networking.k8s.io/v1/ingresses)
-    namespaces=$(echo $all_ingresses | /etc/cp/bin/yq -P '.items[].metadata.namespace')
+    namespaces=$(echo $all_ingresses | /etc/cp/bin/yq eval '.items[].metadata.namespace' -)
 
     for ns in ${namespaces}; do
         ingress_in_ns=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
             -X GET ${APISERVER}/apis/networking.k8s.io/v1/namespaces/${ns}/ingresses)
-        ingress_list=$(echo $ingress_in_ns | /etc/cp/bin/yq -P '.items[].metadata.name')
+        ingress_list=$(echo $ingress_in_ns | /etc/cp/bin/yq eval '.items[].metadata.name' -)
         for ingress_name in ${ingress_list}; do
             ingress_crd=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
                 -X GET ${APISERVER}/apis/networking.k8s.io/v1/namespaces/${ns}/ingresses/${ingress_name})
@@ -273,7 +297,7 @@ while true; do
 done
 
 if [ -z "$var_fog" ]; then
-    var_fog=$(cat /etc/cp/conf/agent_details.json | sed "s|Fog domain|Fogdomain|g" | /etc/cp/bin/yq -P '.Fogdomain')
+    var_fog=$(awk -F\" '/Fog domain/{print $4}' /etc/cp/conf/agent_details.json)
     var_fog="https://$var_fog"
 fi
 

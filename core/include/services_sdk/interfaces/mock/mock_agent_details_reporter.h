@@ -26,6 +26,7 @@ public:
     MOCK_METHOD3(addAttr, bool(const std::string &key, const std::string &val, bool allow_override));
     MOCK_METHOD2(addAttr, bool(const std::map<std::string, std::string> &attr, bool allow_override));
     MOCK_METHOD1(deleteAttr, void(const std::string &key));
+    MOCK_METHOD1(isPersistantAttr, bool(const std::string &key));
     MOCK_METHOD0(sendAttributes, bool());
 };
 
