@@ -155,6 +155,24 @@ getWaitingForVerdictThreadTimeout()
     return conf_data.getNumericalValue("waiting_for_verdict_thread_timeout_msec");
 }
 
+unsigned int
+getMinRetriesForVerdict()
+{
+    return conf_data.getNumericalValue("min_retries_for_verdict");
+}
+
+unsigned int
+getMaxRetriesForVerdict()
+{
+    return conf_data.getNumericalValue("max_retries_for_verdict");
+}
+
+unsigned int
+getReqBodySizeTrigger()
+{
+    return conf_data.getNumericalValue("body_size_trigger");
+}
+
 int
 isIPAddress(c_str ip_str)
 {

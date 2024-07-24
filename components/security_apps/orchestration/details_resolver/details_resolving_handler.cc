@@ -99,6 +99,7 @@ map<string, string>
 DetailsResolvingHanlder::Impl::getResolvedDetails() const
 {
     I_ShellCmd *shell = Singleton::Consume<I_ShellCmd>::by<DetailsResolvingHanlder>();
+    I_AgentDetailsReporter *reporter = Singleton::Consume<I_AgentDetailsReporter>::by<DetailsResolvingHanlder>();
     uint32_t timeout = getConfigurationWithDefault<uint32_t>(5000, "orchestration", "Details resolver time out");
 
     for (auto &shell_pre_command : shell_pre_commands) {
@@ -122,7 +123,15 @@ DetailsResolvingHanlder::Impl::getResolvedDetails() const
         Maybe<string> shell_command_output = getCommandOutput(command);
         if (!shell_command_output.ok()) continue;
         Maybe<string> handler_ret = handler(*shell_command_output);
-        if (handler_ret.ok()) resolved_details[attr] = *handler_ret;
+
+        if (handler_ret.ok()) {
+            resolved_details[attr] = *handler_ret;
+        } else {
+            if (reporter->isPersistantAttr(attr)) {
+                dbgTrace(D_AGENT_DETAILS)<< "Persistent attribute changed, removing old value";
+                reporter->deleteAttr(attr);
+            }
+        }
     }
 
     for (auto file_handler : file_content_handlers) {
@@ -157,7 +166,6 @@ DetailsResolvingHanlder::Impl::getResolvedDetails() const
         }
     }
 
-    I_AgentDetailsReporter *reporter = Singleton::Consume<I_AgentDetailsReporter>::by<DetailsResolvingHanlder>();
     reporter->addAttr(resolved_details, true);
 
     return resolved_details;

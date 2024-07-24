@@ -213,6 +213,7 @@ TEST_F(AgentReporterTest, basicAttrTest)
     EXPECT_TRUE(report->addAttr({{"c", "d"}, {"1", "2"}, {"delete", "me"}}));
     EXPECT_FALSE(report->addAttr("a", "d"));
     EXPECT_TRUE(report->addAttr("a", "1", true));
+    EXPECT_TRUE(report->isPersistantAttr("a"));
     report->deleteAttr("delete");
     {
         AgentDataReport agent_data;

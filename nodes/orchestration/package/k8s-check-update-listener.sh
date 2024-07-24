@@ -69,7 +69,7 @@ while true; do
         exception_pid=$!
         saveRuningPids
     fi
-        if [ ! -d /proc/${exception_pid} ]; then
+    if [ ! -d /proc/${policy_pid} ]; then
         runGetResourceListener policies
         policy_pid=$!
         saveRuningPids

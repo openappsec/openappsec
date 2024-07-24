@@ -48,6 +48,7 @@ public:
     virtual bool addAttr(const std::map<std::string, std::string> &attr, bool allow_override = false) = 0;
     virtual void deleteAttr(const std::string &key) = 0;
     virtual bool sendAttributes() = 0;
+    virtual bool isPersistantAttr(const std::string &key) = 0;
 
 protected:
     ~I_AgentDetailsReporter() = default;
