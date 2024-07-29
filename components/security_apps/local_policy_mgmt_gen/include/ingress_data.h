@@ -79,6 +79,7 @@ class DefaultBackend
 {
 public:
     void load(cereal::JSONInputArchive &);
+    bool doesExist() const;
 
 private:
     bool is_exists = false;
@@ -90,6 +91,7 @@ public:
     void load(cereal::JSONInputArchive &archive_in);
 
     const std::vector<IngressDefinedRule> & getRules() const;
+    bool doesDefaultBackendExist() const;
 
 private:
     std::string ingress_class_name;

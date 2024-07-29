@@ -532,6 +532,16 @@ K8sPolicyUtils::createPolicy(
     map<AnnotationKeys, string> &annotations_values,
     const SingleIngressData &item) const
 {
+    if (policies.find(annotations_values[AnnotationKeys::PolicyKey]) == policies.end()) {
+        policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
+    }
+    if (item.getSpec().doesDefaultBackendExist()) {
+        dbgTrace(D_LOCAL_POLICY)
+            << "Inserting Any host rule to the specific asset set";
+        K ingress_rule = K("*");
+        policies[annotations_values[AnnotationKeys::PolicyKey]].addSpecificRule(ingress_rule);
+    }
+
     for (const IngressDefinedRule &rule : item.getSpec().getRules()) {
         string url = rule.getHost();
         for (const IngressRulePath &uri : rule.getPathsWrapper().getRulePaths()) {
@@ -544,13 +554,11 @@ K8sPolicyUtils::createPolicy(
                     << uri.getPath()
                     << "'";
                 K ingress_rule = K(url + uri.getPath());
-                appsec_policy.addSpecificRule(ingress_rule);
+                policies[annotations_values[AnnotationKeys::PolicyKey]].addSpecificRule(ingress_rule);
             }
         }
     }
-    policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
 }
-
 
 std::tuple<map<string, AppsecLinuxPolicy>, map<string, V1beta2AppsecLinuxPolicy>>
 K8sPolicyUtils::createAppsecPoliciesFromIngresses()

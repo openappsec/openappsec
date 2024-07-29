@@ -86,6 +86,12 @@ DefaultBackend::load(cereal::JSONInputArchive &)
     is_exists = true;
 }
 
+bool
+DefaultBackend::doesExist() const
+{
+    return is_exists;
+}
+
 void
 IngressSpec::load(cereal::JSONInputArchive &archive_in)
 {
@@ -99,6 +105,12 @@ const vector<IngressDefinedRule> &
 IngressSpec::getRules() const
 {
     return rules;
+}
+
+bool
+IngressSpec::doesDefaultBackendExist() const
+{
+    return default_backend.doesExist();
 }
 
 void

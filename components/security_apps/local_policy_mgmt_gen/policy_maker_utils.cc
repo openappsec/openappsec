@@ -1636,7 +1636,9 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy(const string &policy_name, c
     createPolicyElements<T, R>(specific_rules, default_rule, appsec_policy, policy_name);
 
     // add default rule to policy
-    createPolicyElementsByRule<T, R>(default_rule, default_rule, appsec_policy, policy_name);
+    if (Singleton::Consume<I_EnvDetails>::by<PolicyMakerUtils>()->getEnvType() != EnvType::K8S) {
+        createPolicyElementsByRule<T, R>(default_rule, default_rule, appsec_policy, policy_name);
+    }
 }
 
 // LCOV_EXCL_START Reason: no test exist
@@ -1659,11 +1661,13 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, Ne
     );
 
     // add default rule to policy
-    createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsedRule>(
-        default_rule,
-        default_rule,
-        appsec_policy,
-        policy_name);
+    if (Singleton::Consume<I_EnvDetails>::by<PolicyMakerUtils>()->getEnvType() != EnvType::K8S) {
+        createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+            default_rule,
+            default_rule,
+            appsec_policy,
+            policy_name);
+    }
 }
 // LCOV_EXCL_STOP
 
