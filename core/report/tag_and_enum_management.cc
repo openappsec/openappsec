@@ -150,7 +150,7 @@ TagAndEnumManagement::convertToString(const StreamType &stream_type)
         case StreamType::JSON_DEBUG:    return "JSON Debug stream";
         case StreamType::JSON_FOG:      return "JSON FOG stream";
         case StreamType::JSON_LOG_FILE: return "JSON File stream";
-        case StreamType::JSON_K8S_SVC:  return "JSON K8S service stream";
+        case StreamType::JSON_CONTAINER_SVC:  return "JSON K8S service stream";
         case StreamType::SYSLOG:        return "Syslog stream";
         case StreamType::CEF:           return "CEF stream";
 

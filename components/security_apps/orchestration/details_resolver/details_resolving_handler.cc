@@ -142,7 +142,7 @@ DetailsResolvingHanlder::Impl::getResolvedDetails() const
         shared_ptr<ifstream> in_file =
             Singleton::Consume<I_OrchestrationTools>::by<DetailsResolvingHanlder>()->fileStreamWrapper(path);
         if (!in_file->is_open()) {
-            dbgWarning(D_AGENT_DETAILS) << "Could not open file for processing. Path: " << path;
+            dbgDebug(D_AGENT_DETAILS) << "Could not open file for processing. Path: " << path;
             continue;
         }
 

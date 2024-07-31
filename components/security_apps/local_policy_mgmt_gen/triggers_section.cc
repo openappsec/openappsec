@@ -30,7 +30,7 @@ LogTriggerSection::LogTriggerSection(
     bool _logToAgent,
     bool _logToCef,
     bool _logToCloud,
-    bool _logToK8sService,
+    bool _logToContainerService,
     bool _logToSyslog,
     bool _responseBody,
     bool _tpDetect,
@@ -55,7 +55,7 @@ LogTriggerSection::LogTriggerSection(
     logToAgent(_logToAgent),
     logToCef(_logToCef),
     logToCloud(_logToCloud),
-    logToK8sService(_logToK8sService),
+    logToContainerService(_logToContainerService),
     logToSyslog(_logToSyslog),
     responseBody(_responseBody),
     tpDetect(_tpDetect),
@@ -101,7 +101,7 @@ LogTriggerSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("logToAgent",               logToAgent),
         cereal::make_nvp("logToCef",                 logToCef),
         cereal::make_nvp("logToCloud",               logToCloud),
-        cereal::make_nvp("logToK8sService",          logToK8sService),
+        cereal::make_nvp("logToContainerService",    logToContainerService),
         cereal::make_nvp("logToSyslog",              logToSyslog),
         cereal::make_nvp("responseBody",             responseBody),
         cereal::make_nvp("responseCode",             false),
@@ -396,7 +396,9 @@ AppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
     auto mode = Singleton::Consume<I_AgentDetails>::by<AppsecTriggerLogDestination>()->getOrchestrationMode();
     auto env_type = Singleton::Consume<I_EnvDetails>::by<AppsecTriggerLogDestination>()->getEnvType();
     bool k8s_service_default = (mode == OrchestrationMode::HYBRID && env_type == EnvType::K8S);
-    parseAppsecJSONKey<bool>("k8s-service", k8s_service, archive_in, k8s_service_default);
+    // BC try load previous name. TODO: update CRD
+    parseAppsecJSONKey<bool>("k8s-service", container_service, archive_in, k8s_service_default);
+    parseAppsecJSONKey<bool>("container-service", container_service, archive_in, container_service);
 
     StdoutLogging stdout_log;
     parseAppsecJSONKey<StdoutLogging>("stdout", stdout_log, archive_in);
@@ -437,9 +439,9 @@ AppsecTriggerLogDestination::getCloud() const
 }
 
 bool
-AppsecTriggerLogDestination::isK8SNeeded() const
+AppsecTriggerLogDestination::isContainerNeeded() const
 {
-    return k8s_service;
+    return container_service;
 }
 
 bool

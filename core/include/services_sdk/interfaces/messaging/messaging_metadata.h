@@ -5,6 +5,7 @@
 #include <string>
 
 #include "flags.h"
+#include "config.h"
 #include "singleton.h"
 #include "i_agent_details.h"
 
@@ -118,6 +119,29 @@ public:
         return headers;
     }
 
+    std::string
+    getCaPath() const
+    {
+        if (!ca_path.empty()) return ca_path;
+        return getConfigurationWithDefault(
+            getFilesystemPathConfig() + "/certs/fog.pem",
+            "message",
+            "Certificate chain file path"
+        );
+    }
+
+    const std::string &
+    getClientCertPath() const
+    {
+        return client_cert_path;
+    }
+
+    const std::string &
+    getClientKeyPath() const
+    {
+        return client_key_path;
+    }
+
     void
     insertHeader(const std::string &header_key, const std::string &header_val)
     {
@@ -135,6 +159,24 @@ public:
     {
         proxy_settings = _proxy_settings;
         is_proxy_set = true;
+    }
+
+    void
+    setCAPath (const std::string &_ca_path)
+    {
+        ca_path = _ca_path;
+    }
+
+    void
+    setDualAuthenticationSettings
+    (
+        const std::string &_client_cert_path,
+        const std::string &_client_key_path
+    )
+    {
+        client_cert_path = _client_cert_path;
+        client_key_path = _client_key_path;
+        is_dual_auth = true;
     }
 
     void
@@ -162,6 +204,12 @@ public:
     }
 
     bool
+    isDualAuth() const
+    {
+        return is_dual_auth;
+    }
+
+    bool
     isToFog() const
     {
         return is_to_fog;
@@ -175,18 +223,26 @@ public:
             cereal::make_nvp("host_name", host_name),
             cereal::make_nvp("port_num", port_num),
             cereal::make_nvp("is_proxy_set", is_proxy_set),
+            cereal::make_nvp("is_dual_auth", is_dual_auth),
             cereal::make_nvp("headers", headers),
             cereal::make_nvp("conn_flags", conn_flags),
             cereal::make_nvp("external_certificate", external_certificate),
             cereal::make_nvp("should_buffer", should_buffer),
-            cereal::make_nvp("is_to_fog", is_to_fog)
+            cereal::make_nvp("is_to_fog", is_to_fog),
+            cereal::make_nvp("ca_path", ca_path),
+            cereal::make_nvp("client_cert_path", client_cert_path),
+            cereal::make_nvp("client_key_path", client_key_path)
         );
     }
 
 private:
     std::string host_name = "";
+    std::string ca_path = "";
+    std::string client_cert_path = "";
+    std::string client_key_path = "";
     uint16_t port_num = 0;
     bool is_proxy_set = false;
+    bool is_dual_auth = false;
     std::map<std::string, std::string> headers;
     Flags<MessageConnectionConfig> conn_flags;
     MessageProxySettings proxy_settings;

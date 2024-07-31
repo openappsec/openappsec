@@ -142,7 +142,7 @@ DetailsResolver::Impl::isCloudStorageEnabled()
 {
     auto cloud_storage_mode_override = getProfileAgentSetting<bool>("agent.cloudStorage.enabled");
     if (cloud_storage_mode_override.ok()) {
-        dbgInfo(D_ORCHESTRATOR) << "Received cloud-storage mode override: " << *cloud_storage_mode_override;
+        dbgDebug(D_ORCHESTRATOR) << "Received cloud-storage mode override: " << *cloud_storage_mode_override;
         return *cloud_storage_mode_override;
     }
 

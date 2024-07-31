@@ -183,7 +183,9 @@ NewAppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
     auto mode = Singleton::Consume<I_AgentDetails>::by<NewAppsecTriggerLogDestination>()->getOrchestrationMode();
     auto env_type = Singleton::Consume<I_EnvDetails>::by<NewAppsecTriggerLogDestination>()->getEnvType();
     bool k8s_service_default = (mode == OrchestrationMode::HYBRID && env_type == EnvType::K8S);
-    parseAppsecJSONKey<bool>("k8s-service", k8s_service, archive_in, k8s_service_default);
+    // BC try load previous name. TODO: update CRD
+    parseAppsecJSONKey<bool>("k8s-service", container_service, archive_in, k8s_service_default);
+    parseAppsecJSONKey<bool>("container-service", container_service, archive_in, container_service);
 
     NewStdoutLogging stdout_log;
     parseAppsecJSONKey<NewStdoutLogging>("stdout", stdout_log, archive_in);
@@ -224,9 +226,9 @@ NewAppsecTriggerLogDestination::getCloud() const
 }
 
 bool
-NewAppsecTriggerLogDestination::isK8SNeeded() const
+NewAppsecTriggerLogDestination::isContainerNeeded() const
 {
-    return k8s_service;
+    return container_service;
 }
 
 bool

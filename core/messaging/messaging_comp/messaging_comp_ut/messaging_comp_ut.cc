@@ -253,9 +253,13 @@ operator==(const MessageMetadata &one, const MessageMetadata &two)
         one.getConnectionFlags() == two.getConnectionFlags() &&
         one.getProxySettings() == two.getProxySettings() &&
         one.getExternalCertificate() == two.getExternalCertificate() &&
+        one.getCaPath() == two.getCaPath() &&
+        one.getClientCertPath() == two.getClientCertPath() &&
+        one.getClientKeyPath() == two.getClientKeyPath() &&
         one.getHeaders() == two.getHeaders() &&
         one.shouldBufferMessage() == two.shouldBufferMessage() &&
-        one.isProxySet() == two.isProxySet();
+        one.isProxySet() == two.isProxySet() &&
+        one.isDualAuth() == two.isDualAuth();
 }
 
 TEST_F(TestMessagingComp, testSetFogConnection)

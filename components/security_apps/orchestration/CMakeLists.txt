@@ -15,5 +15,6 @@ add_subdirectory(health_check)
 add_subdirectory(health_check_manager)
 add_subdirectory(updates_process_reporter)
 add_subdirectory(env_details)
+add_subdirectory(external_sdk_server)
 
 #add_subdirectory(orchestration_ut)

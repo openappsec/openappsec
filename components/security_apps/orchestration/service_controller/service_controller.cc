@@ -413,7 +413,7 @@ ServiceController::Impl::getUpdatedReconfStatus()
         }
 
         if (!maybe_service.unpack().isServiceActive()) {
-            dbgInfo(D_SERVICE_CONTROLLER)
+            dbgDebug(D_SERVICE_CONTROLLER)
                 << "Service is not active, removing from registered services list. Service: "
                 << services_reconf_names[service_and_reconf_status.first]
                 << "ID: "
@@ -508,7 +508,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
     ar(cereal::make_nvp("Registered Services", pending_services));
     pending_services.erase("cp-nano-orchestration");
 
-    dbgInfo(D_SERVICE_CONTROLLER)
+    dbgDebug(D_SERVICE_CONTROLLER)
         << "Orchestration pending services loaded from file."
         << " File: "
         << registered_services_file
@@ -516,7 +516,7 @@ ServiceController::Impl::loadRegisteredServicesFromFile()
 
     for (const auto &id_service_pair : pending_services) {
         const auto &service = id_service_pair.second;
-        dbgInfo(D_SERVICE_CONTROLLER)
+        dbgDebug(D_SERVICE_CONTROLLER)
             << "Service name: "
             << service.getServiceName()
             << ", Service ID: "
@@ -548,14 +548,14 @@ ServiceController::Impl::writeRegisteredServicesToFile()
     cereal::JSONOutputArchive ar(ss);
     ar(cereal::make_nvp("Registered Services", registered_services_with_orch));
 
-    dbgInfo(D_SERVICE_CONTROLLER)
+    dbgDebug(D_SERVICE_CONTROLLER)
         << "Orchestration registered services file has been updated. File: "
         << registered_services_file
         << ". Registered Services:";
 
     for (const auto &id_service_pair : registered_services_with_orch) {
         const auto &service = id_service_pair.second;
-        dbgInfo(D_SERVICE_CONTROLLER)
+        dbgDebug(D_SERVICE_CONTROLLER)
             << "Service name: "
             << service.getServiceName()
             << ", Service ID: "

@@ -383,6 +383,11 @@ private:
         }
 
         if (getProfileAgentSettingWithDefault<bool>(false, "agent.config.supportInvalidation")) return true;
+
+        if (getSetting<string>("intelligence", "local intelligence server ip").ok()) {
+            return getProfileAgentSettingWithDefault<bool>(true, "agent.config.useLocalIntelligence");
+        }
+
         dbgTrace(D_INTELLIGENCE) << "Local intelligence not supported";
 
         return false;

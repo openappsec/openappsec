@@ -111,7 +111,7 @@ private:
     SecurityAppsWrapper security_apps;
 };
 
-class PolicyMakerUtils
+class PolicyMakerUtils : Singleton::Consume<I_EnvDetails>
 {
 public:
     std::string proccesSingleAppsecPolicy(

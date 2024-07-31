@@ -23,7 +23,7 @@ enum class StreamType {
     JSON_DEBUG,
     JSON_FOG,
     JSON_LOG_FILE,
-    JSON_K8S_SVC,
+    JSON_CONTAINER_SVC,
     SYSLOG,
     CEF,
 

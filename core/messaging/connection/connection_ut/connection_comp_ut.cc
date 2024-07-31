@@ -89,6 +89,8 @@ TEST_F(TestConnectionComp, testSetAndGetConnection)
     Flags<MessageConnectionConfig> conn_flags;
     conn_flags.setFlag(MessageConnectionConfig::UNSECURE_CONN);
     MessageMetadata conn_metadata("127.0.0.1", 8080, conn_flags);
+    conn_metadata.setCAPath("ca.pem");
+    conn_metadata.setDualAuthenticationSettings("ca_client.pem", "private_client.key");
     auto maybe_connection = i_conn->establishConnection(conn_metadata, MessageCategory::LOG);
     ASSERT_TRUE(maybe_connection.ok());
 

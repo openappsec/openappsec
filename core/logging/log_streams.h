@@ -80,11 +80,11 @@ private:
     I_Messaging *i_msg = nullptr;
 };
 
-class K8sSvcStream : public Stream
+class ContainerSvcStream : public Stream
 {
 public:
-    K8sSvcStream();
-    ~K8sSvcStream();
+    ContainerSvcStream();
+    ~ContainerSvcStream();
 
     void sendLog(const Report &log) override;
     void sendLog(const LogBulkRest &logs, bool persistance_only) override;

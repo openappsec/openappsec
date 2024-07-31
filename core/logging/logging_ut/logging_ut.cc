@@ -68,7 +68,7 @@ public:
             return;
         }
         if (should_load_k8s_stream) {
-            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_K8S_SVC);
+            Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_CONTAINER_SVC);
             return;
         }
         Singleton::Consume<I_Logging>::by<fakeConfig>()->addStream(ReportIS::StreamType::JSON_DEBUG);

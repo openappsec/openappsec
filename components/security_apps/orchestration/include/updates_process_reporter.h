@@ -34,6 +34,7 @@ private:
     void sendReoprt();
 
     static std::vector<UpdatesProcessReport> reports;
+    uint report_failure_count = 0;
 };
 
 #endif // __UPDATES_PROCESS_REPORTER_H__

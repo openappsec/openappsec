@@ -129,7 +129,7 @@ public:
     bool shouldBeautifyLogs() const;
 
     bool getCloud() const;
-    bool isK8SNeeded() const;
+    bool isContainerNeeded() const;
     bool isCefNeeded() const;
     bool isSyslogNeeded() const;
     const std::string & getSyslogServerIpv4Address() const;
@@ -140,7 +140,7 @@ private:
     const NewLoggingService & getCefServiceData() const;
 
     bool cloud = false;
-    bool k8s_service = false;
+    bool container_service = false;
     bool agent_local = true;
     bool beautify_logs = true;
     NewLoggingService syslog_service;

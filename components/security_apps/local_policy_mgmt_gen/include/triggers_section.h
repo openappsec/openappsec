@@ -39,7 +39,7 @@ public:
         bool _logToAgent,
         bool _logToCef,
         bool _logToCloud,
-        bool _logToK8sService,
+        bool _logToContainerService,
         bool _logToSyslog,
         bool _responseBody,
         bool _tpDetect,
@@ -73,7 +73,7 @@ private:
     bool logToAgent;
     bool logToCef;
     bool logToCloud;
-    bool logToK8sService;
+    bool logToContainerService;
     bool logToSyslog;
     bool responseBody;
     bool tpDetect;
@@ -258,7 +258,7 @@ public:
     bool shouldBeautifyLogs() const;
 
     bool getCloud() const;
-    bool isK8SNeeded() const;
+    bool isContainerNeeded() const;
     bool isCefNeeded() const;
     bool isSyslogNeeded() const;
     const std::string & getSyslogServerIpv4Address() const;
@@ -269,7 +269,7 @@ private:
     const LoggingService & getCefServiceData() const;
 
     bool cloud = false;
-    bool k8s_service = false;
+    bool container_service = false;
     bool agent_local = true;
     bool beautify_logs = true;
     LoggingService syslog_service;

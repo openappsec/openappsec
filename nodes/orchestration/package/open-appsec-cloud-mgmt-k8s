@@ -13,6 +13,10 @@ profile_id=
 cluster_id=
 latest_policy_version=1
 
+if [ -f $POLICY_CRDS_PATH ]; then
+    chmod 644 $POLICY_CRDS_PATH
+fi
+
 load_agent_details()
 {
     tenant_id=$(awk -F\" '/Tenant ID/{print $4}' /etc/cp/conf/agent_details.json)
@@ -29,7 +33,7 @@ get_latest_policy_version()
     bucket_list=$(curl -s -w "%{http_code}\n" --request GET \
         -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Authorization: Bearer ${ra_token}" \
         "$var_fog/agents-core/storage/?list-type=2&prefix=${tenant_id}/${profile_id}")
-    paths_list=$(echo $bucket_list  | /etc/cp/bin/yq -p xml | grep "/policy")
+    paths_list=$(echo $bucket_list  | awk -F'<Key>|</Key>' '/policy-/ {for (i = 1; i <= NF; i++) if ($i ~ /policy/) print $i}')
 
     prefix="${tenant_id}/${profile_id}"
     paths=$(echo $paths_list | tr " " "\n" | grep / )
@@ -257,6 +261,7 @@ usage()
     echo "Options:"
     echo "    --fog       <fog address>          : Namespace with the relevant Helm Chart"
     echo "    --upload_policy_only               : Upload policy to the fog, withput changing agent mode"
+    echo "    --debug                            : Keep the debuging files"
     exit 255
 }
 
@@ -277,6 +282,8 @@ validate_arg_value_exists()
     fi
 }
 
+debug_mode="false"
+
 while true; do
     if [ "$1" = "--token" ]; then
         validate_arg_value_exists "$1" "$#"
@@ -290,6 +297,8 @@ while true; do
         validate_arg_value_exists "$1" "$#"
         shift
         ra_token="$1"
+    elif [ "$1" = "--debug" ]; then
+        debug_mode="true"
     elif [ -z "$1" ]; then
         break
     fi
@@ -304,6 +313,9 @@ fi
 upload_crds_to_the_cloud
 if [ "$?" = "0" ]; then
     echo "SUCCESS"
+fi
+if [ "$debug_mode" = "false" ]; then
+    rm $POLICY_CRDS_PATH
 fi
 
 exit 0
