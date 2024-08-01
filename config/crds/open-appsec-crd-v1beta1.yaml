@@ -1,0 +1,525 @@
+Enter file contents hereapiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : customresponses.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum:
+                    - block-page
+                    #- redirect
+                    - response-code-only
+                message-title:
+                  type: string
+                message-body:
+                  type: string
+                http-response-code:
+                  type: integer
+                  minimum: 100
+                  maximum: 599
+
+  scope: Cluster
+  names:
+    plural: customresponses
+    singular: customresponse
+    kind: CustomResponse
+    shortNames:
+    - customresponse
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: exceptions.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: array
+              items:
+                type: object
+                required:
+                  - action
+                properties:
+                  action:
+                    type: string
+                    enum:
+                      - skip
+                      - accept
+                      - drop
+                      - suppressLog
+                  sourceIp:
+                    type: array
+                    items:
+                      type: string
+                  url:
+                    type: array
+                    items:
+                      type: string
+                  sourceIdentifier:
+                    type: array
+                    items:
+                      type: string
+                  protectionName:
+                    type: array
+                    items:
+                      type: string
+                  paramValue:
+                    type: array
+                    items:
+                      type: string
+                  paramName:
+                    type: array
+                    items:
+                      type: string
+                  hostName:
+                    type: array
+                    items:
+                      type: string
+                  countryCode:
+                    type: array
+                    items:
+                      type: string
+                  countryName:
+                    type: array
+                    items:
+                      type: string
+                  comment:
+                    type: string
+
+  scope: Cluster
+  names:
+    plural: exceptions
+    singular: exception
+    kind: Exception
+    shortNames:
+      - exception
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : logtriggers.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                access-control-logging:
+                  type: object
+                  properties:
+                    allow-events:
+                      type: boolean
+                    drop-events:
+                      type: boolean
+                appsec-logging:
+                  type: object
+                  properties:
+                    detect-events:
+                      type: boolean
+                    prevent-events:
+                      type: boolean
+                    all-web-requests:
+                      type: boolean
+                additional-suspicious-events-logging:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                    minimum-severity:
+                      type: string
+                      enum:
+                        - high
+                        - critical
+                    response-body:
+                      type: boolean
+                    response-code:
+                      type: boolean
+                extended-logging:
+                  type: object
+                  properties:
+                    url-path:
+                      type: boolean
+                    url-query:
+                      type: boolean
+                    http-headers:
+                      type: boolean
+                    request-body:
+                      type: boolean
+                log-destination:
+                  type: object
+                  properties:
+                    cloud:
+                      type: boolean
+                    syslog-service: #change to object array
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                    file:
+                      type: string
+                    stdout:
+                      type: object
+                      properties:
+                        format:
+                          type: string
+                          enum:
+                            - json
+                            - json-formatted
+                    cef-service:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                          proto:
+                            type: string
+                            enum:
+                              - tcp
+                              - udp
+
+  scope: Cluster
+  names:
+    plural: logtriggers
+    singular: logtrigger
+    kind: LogTrigger
+    shortNames:
+    - logtrigger
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : policies.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                default:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    practices:
+                      type: array
+                      items:
+                        type: string
+                    triggers:
+                      type: array
+                      items:
+                        type: string
+                    custom-response:
+                      type: string
+                    source-identifiers:
+                      type: string
+                    trusted-sources:
+                      type: string
+                    exceptions:
+                      type: array
+                      items:
+                        type: string
+                specific-rules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      host:
+                        type: string
+                      mode:
+                        type: string
+                        enum:
+                          - prevent-learn
+                          - detect-learn
+                          - prevent
+                          - detect
+                          - inactive
+                      practices:
+                        type: array
+                        items:
+                          type: string
+                      triggers:
+                        type: array
+                        items:
+                          type: string
+                      custom-response:
+                        type: string
+                      source-identifiers:
+                        type: string
+                      trusted-sources:
+                        type: string
+                      exceptions:
+                        type: array
+                        items:
+                          type: string
+
+  scope: Cluster
+  names:
+    plural: policies
+    singular: policy
+    kind: Policy
+    shortNames:
+    - policy
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : practices.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                web-attacks:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    minimum-confidence:
+                      type: string
+                      enum:
+                        - medium
+                        - high
+                        - critical
+                    max-url-size-bytes:
+                      type: integer
+                    max-object-depth:
+                      type: integer
+                    max-body-size-kb:
+                      type: integer
+                    max-header-size-bytes:
+                      type: integer
+                    protections:
+                      type: object
+                      properties:
+                        csrf-enabled:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                        error-disclosure-enabled:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                        open-redirect-enabled:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                        non-valid-http-methods:
+                          type: boolean
+                anti-bot:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    injected-URIs:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          uri:
+                            type: string
+                    validated-URIs:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          uri:
+                            type: string
+                snort-signatures:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    configmap:
+                      type: array
+                      items:
+                        type: string
+                openapi-schema-validation:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    configmap:
+                      type: array
+                      items:
+                        type: string
+
+  scope: Cluster
+  names:
+    plural: practices
+    singular: practice
+    kind: Practice
+    shortNames:
+    - practice
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : sourcesidentifiers.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: array
+              items:
+                type: object
+                properties:
+                  sourceIdentifier:
+                    type: string
+                    enum:
+                      - headerkey
+                      - JWTKey
+                      - cookie
+                      - sourceip
+                      - x-forwarded-for
+                  value:
+                    type: array
+                    items:
+                      type: string
+
+  scope: Cluster
+  names:
+    plural: sourcesidentifiers
+    singular: sourcesidentifier
+    kind: SourcesIdentifier
+    shortNames:
+    - sourcesidentifier
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : trustedsources.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                minNumOfSources:
+                  type: integer
+                sourcesIdentifiers:
+                  type: array
+                  items:
+                    type: string
+
+  scope: Cluster
+  names:
+    plural: trustedsources
+    singular: trustedsource
+    kind: TrustedSource
+    shortNames:
+    - trustedsource

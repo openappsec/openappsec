@@ -1,0 +1,1321 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : policies.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                default:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    practices:
+                      type: array
+                      items:
+                        type: string
+                    triggers:
+                      type: array
+                      items:
+                        type: string
+                    custom-response:
+                      type: string
+                    source-identifiers:
+                      type: string
+                    trusted-sources:
+                      type: string
+                    exceptions:
+                      type: array
+                      items:
+                        type: string
+                specific-rules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      host:
+                        type: string
+                      mode:
+                        type: string
+                        enum:
+                          - prevent-learn
+                          - detect-learn
+                          - prevent
+                          - detect
+                          - inactive
+                      practices:
+                        type: array
+                        items:
+                          type: string
+                      triggers:
+                        type: array
+                        items:
+                          type: string
+                      custom-response:
+                        type: string
+                      source-identifiers:
+                        type: string
+                      trusted-sources:
+                        type: string
+                      exceptions:
+                        type: array
+                        items:
+                          type: string
+    - name: v1beta2
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                appsecClassName:
+                  type: string
+                default:
+                  type: object
+                  required:
+                    - mode
+                    - threatPreventionPractices
+                    - accessControlPractices
+                  properties:
+                    mode: # Mode of the policy, required
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                      default: detect-learn
+                    threatPreventionPractices: # Threat prevention practices, required (min 0 items)
+                      type: array
+                      items:
+                        type: string
+                    accessControlPractices: # Access control practices, required (min 0 items)
+                      type: array
+                      items:
+                        type: string
+                    customResponse: # Custom response configuration, optional, default 403 (forbidden)
+                      type: string
+                      default: "403"
+                    triggers: # Optional triggers
+                      type: array
+                      items:
+                        type: string
+                    sourceIdentifiers:
+                      type: string
+                    trustedSources:
+                      type: string
+                    exceptions:
+                      type: array
+                      items:
+                        type: string
+                specificRules: # Specific rules, optional
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      host:
+                        type: string
+                      mode:
+                        type: string
+                        enum:
+                          - prevent-learn
+                          - detect-learn
+                          - prevent
+                          - detect
+                          - inactive
+                        default: detect-learn
+                      threatPreventionPractices:
+                        type: array
+                        items:
+                          type: string
+                      accessControlPractices:
+                        type: array
+                        items:
+                          type: string
+                      triggers:
+                        type: array
+                        items:
+                          type: string
+                      customResponse:
+                        type: string
+                      sourceIdentifiers:
+                        type: string
+                      trustedSources:
+                        type: string
+                      exceptions:
+                        type: array
+                        items:
+                          type: string
+
+  scope: Cluster
+  names:
+    plural: policies
+    singular: policy
+    kind: Policy
+    shortNames:
+      - policy
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : practices.openappsec.io
+
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                web-attacks:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    minimum-confidence:
+                      type: string
+                      enum:
+                        - medium
+                        - high
+                        - critical
+                    max-url-size-bytes:
+                      type: integer
+                    max-object-depth:
+                      type: integer
+                    max-body-size-kb:
+                      type: integer
+                    max-header-size-bytes:
+                      type: integer
+                    protections:
+                      type: object
+                      properties:
+                        csrf-enabled:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                        error-disclosure-enabled:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                        open-redirect-enabled:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                        non-valid-http-methods:
+                          type: boolean
+                anti-bot:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    injected-URIs:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          uri:
+                            type: string
+                    validated-URIs:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          uri:
+                            type: string
+                snort-signatures:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    configmap:
+                      type: array
+                      items:
+                        type: string
+                openapi-schema-validation:
+                  type: object
+                  properties:
+                    override-mode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                    configmap:
+                      type: array
+                      items:
+                        type: string
+
+  scope: Cluster
+  names:
+    plural: practices
+    singular: practice
+    kind: Practice
+    shortNames:
+      - practice
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : accesscontrolpractices.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - rateLimit
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                practiceMode:
+                  type: string
+                  enum:
+                    - inherited #inherited from mode set in policy
+                    - prevent
+                    - detect
+                    - inactive
+                  default: inherited
+                rateLimit:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited
+                      default: inactive
+                    rules:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          action: # currently not supported
+                            type: string
+                            enum:
+                              - inherited
+                              - prevent
+                              - detect
+                            default: inherited
+                          condition: # currently not supported
+                            type: array
+                            items:
+                              type: object
+                              required:
+                                - key
+                                - value
+                              properties:
+                                key:
+                                  type: string
+                                value:
+                                  type: string
+                          uri:
+                            type: string
+                          limit:
+                            type: integer
+                          unit:
+                            type: string
+                            enum:
+                              - minute
+                              - second
+                            default: minute
+                          triggers:
+                            type: array
+                            items:
+                              type: string
+                          comment:
+                            type: string
+  scope: Cluster
+  names:
+    plural: accesscontrolpractices
+    singular: accesscontrolpractice
+    kind: AccessControlPractice
+    shortNames:
+      - acp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : customresponses.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum:
+                    - block-page
+                    #- redirect
+                    - response-code-only
+                message-title:
+                  type: string
+                message-body:
+                  type: string
+                http-response-code:
+                  type: integer
+                  minimum: 100
+                  maximum: 599
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - mode
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                mode:
+                  type: string
+                  enum:
+                    - block-page
+                    - redirect
+                    - response-code-only
+                  default: response-code-only
+                messageTitle:
+                  type: string
+                messageBody:
+                  type: string
+                httpResponseCode:
+                  type: integer
+                  minimum: 100
+                  maximum: 599
+                  default: 403
+                redirectUrl:
+                  type: string
+                redirectAddXEventId:
+                  type: boolean
+                  default: false
+              required:
+                - mode
+  scope: Cluster
+  names:
+    plural: customresponses
+    singular: customresponse
+    kind: CustomResponse
+    shortNames:
+      - customresponse
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: exceptions.openappsec.io
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: array
+              items:
+                type: object
+                required:
+                  - action
+                properties:
+                  action:
+                    type: string
+                    enum:
+                      - skip
+                      - accept
+                      - drop
+                      - suppressLog
+                  sourceIp:
+                    type: array
+                    items:
+                      type: string
+                  url:
+                    type: array
+                    items:
+                      type: string
+                  sourceIdentifier:
+                    type: array
+                    items:
+                      type: string
+                  protectionName:
+                    type: array
+                    items:
+                      type: string
+                  paramValue:
+                    type: array
+                    items:
+                      type: string
+                  paramName:
+                    type: array
+                    items:
+                      type: string
+                  hostName:
+                    type: array
+                    items:
+                      type: string
+                  countryCode:
+                    type: array
+                    items:
+                      type: string
+                  countryName:
+                    type: array
+                    items:
+                      type: string
+                  comment:
+                    type: string
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - action
+                - condition
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                action:
+                  type: string
+                  enum:
+                    - skip
+                    - accept
+                    - drop
+                    - suppressLog
+                  default: accept
+                condition: # required minItems:1
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - key
+                      - value
+                    properties:
+                      key:
+                        type: string
+                      value:
+                        type: string
+  scope: Cluster
+  names:
+    plural: exceptions
+    singular: exception
+    kind: Exception
+    shortNames:
+      - exception
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : logtriggers.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                access-control-logging:
+                  type: object
+                  properties:
+                    allow-events:
+                      type: boolean
+                    drop-events:
+                      type: boolean
+                appsec-logging:
+                  type: object
+                  properties:
+                    detect-events:
+                      type: boolean
+                    prevent-events:
+                      type: boolean
+                    all-web-requests:
+                      type: boolean
+                additional-suspicious-events-logging:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                    minimum-severity:
+                      type: string
+                      enum:
+                        - high
+                        - critical
+                    response-body:
+                      type: boolean
+                    response-code:
+                      type: boolean
+                extended-logging:
+                  type: object
+                  properties:
+                    url-path:
+                      type: boolean
+                    url-query:
+                      type: boolean
+                    http-headers:
+                      type: boolean
+                    request-body:
+                      type: boolean
+                log-destination:
+                  type: object
+                  properties:
+                    cloud:
+                      type: boolean
+                    syslog-service: #change to object array
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                    file:
+                      type: string
+                    stdout:
+                      type: object
+                      properties:
+                        format:
+                          type: string
+                          enum:
+                            - json
+                            - json-formatted
+                    cef-service:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                          proto:
+                            type: string
+                            enum:
+                              - tcp
+                              - udp
+    - name: v1beta2
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - accessControlLogging
+                - appsecLogging
+                - additionalSuspiciousEventsLogging
+                - extendedLogging
+                - logDestination
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                accessControlLogging:
+                  type: object
+                  properties:
+                    allowEvents:
+                      type: boolean
+                      default: false
+                    dropEvents:
+                      type: boolean
+                      default: true
+                appsecLogging:
+                  type: object
+                  properties:
+                    detectEvents:
+                      type: boolean
+                      default: true
+                    preventEvents:
+                      type: boolean
+                      default: true
+                    allWebRequests:
+                      type: boolean
+                      default: false
+                additionalSuspiciousEventsLogging:
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                    minSeverity:
+                      type: string
+                      enum:
+                        - high
+                        - critical
+                      default: high
+                    responseBody:
+                      type: boolean
+                      default: false
+                    responseCode:
+                      type: boolean
+                      default: true
+                extendedLogging:
+                  type: object
+                  properties:
+                    urlPath:
+                      type: boolean
+                      default: false
+                    urlQuery:
+                      type: boolean
+                      default: false
+                    httpHeaders:
+                      type: boolean
+                      default: false
+                    requestBody:
+                      type: boolean
+                      default: false
+                logDestination:
+                  type: object
+                  properties:
+                    cloud:
+                      type: boolean
+                      default: false
+                    syslogService:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                    logToAgent:
+                      type: boolean
+                      default: true
+                    stdout:
+                      type: object
+                      properties:
+                        format:
+                          type: string
+                          enum:
+                            - json
+                            - json-formatted
+                          default: json
+                    k8s-service:
+                      type: boolean # Default value is dependant on the environment type
+                    cefService:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                          port:
+                            type: integer
+                          proto:
+                            type: string
+                            enum:
+                              - tcp
+                              - udp
+  scope: Cluster
+  names:
+    plural: logtriggers
+    singular: logtrigger
+    kind: LogTrigger
+    shortNames:
+      - logtrigger
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : sourcesidentifiers.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: array
+              items:
+                type: object
+                properties:
+                  sourceIdentifier:
+                    type: string
+                    enum:
+                      - headerkey
+                      - JWTKey
+                      - cookie
+                      - sourceip
+                      - x-forwarded-for
+                  value:
+                    type: array
+                    items:
+                      type: string
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+              type: object
+              required:
+                - sourcesIdentifiers
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                sourcesIdentifiers: # required, minItems: 1
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - identifier
+                      - value
+                    properties:
+                      identifier:
+                        type: string
+                        enum:
+                          - headerkey
+                          - JWTKey
+                          - cookie
+                          - sourceip
+                          - x-forwarded-for
+                        default: sourceip
+                      value:
+                        type: array
+                        items:
+                          type: string
+  scope: Cluster
+  names:
+    plural: sourcesidentifiers
+    singular: sourcesidentifier
+    kind: SourcesIdentifier
+    shortNames:
+      - sourcesidentifier
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : threatpreventionpractices.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - webAttacks
+                - intrusionPrevention
+                - fileSecurity
+                - snortSignatures
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                practiceMode:
+                  type: string
+                  enum:
+                    - inherited #inherited from mode set in policy
+                    - prevent-learn
+                    - detect-learn
+                    - prevent
+                    - detect
+                    - inactive
+                  default: inherited
+                webAttacks:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #inherited from threatPreventionPractice mode set in policy
+                      default: inactive
+                    minimumConfidence:
+                      type: string
+                      enum:
+                        - medium
+                        - high
+                        - critical
+                      default: high
+                    maxUrlSizeBytes:
+                      type: integer
+                      default: 32768
+                    maxObjectDepth:
+                      type: integer
+                      default: 40
+                    maxBodySizeKb:
+                      type: integer
+                      default: 1000000
+                    maxHeaderSizeBytes:
+                      type: integer
+                      default: 102400
+                    protections:
+                      type: object
+                      properties:
+                        csrfProtection:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                            - inherited #inherited from overrideMode
+                          default: inactive
+                        errorDisclosure:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                            - inherited #inherited from overrideMode
+                          default: inactive
+                        openRedirect:
+                          type: string
+                          enum:
+                            - prevent-learn
+                            - detect-learn
+                            - prevent
+                            - detect
+                            - inactive
+                            - inherited #inherited from overrideMode
+                          default: inactive
+                        nonValidHttpMethods:
+                          type: boolean
+                          default: false
+                antiBot:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #inherited from threatPreventionPractice mode set in policy
+                      default: inactive
+                    injectedUris:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          uri:
+                            type: string
+                    validatedUris:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          uri:
+                            type: string
+                snortSignatures:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #inherited from threatPreventionPractice mode set in policy
+                      default: inactive
+                    configmap:
+                      type: array
+                      items:
+                        type: string
+                    files:
+                      type: array
+                      items:
+                        type: string
+                schemaValidation:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #inherited from threatPreventionPractice mode set in policy
+                      default: inactive
+                    configmap:
+                      type: array
+                      items:
+                        type: string
+                    files:
+                      type: array
+                      items:
+                        type: string
+                intrusionPrevention:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #inherited from threatPreventionPractice mode set in policy
+                      default: inactive
+                    maxPerformanceImpact:
+                      type: string
+                      enum:
+                        - low
+                        - medium
+                        - high
+                      default: medium
+                    minSeverityLevel:
+                      type: string
+                      enum:
+                        - low
+                        - medium
+                        - high
+                        - critical
+                      default: medium
+                    minCveYear:
+                      type: integer
+                      default: 2016
+                    highConfidenceEventAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for intrusionPrevention
+                      default: inherited
+                    mediumConfidenceEventAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for intrusionPrevention
+                      default: inherited
+                    lowConfidenceEventAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for intrusionPrevention
+                      default: detect
+                fileSecurity:
+                  type: object
+                  required:
+                    - overrideMode
+                  properties:
+                    overrideMode:
+                      type: string
+                      enum:
+                        - prevent-learn
+                        - detect-learn
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #inherited from threatPreventionPractice mode set in policy
+                      default: inactive
+                    minSeverityLevel:
+                      type: string
+                      enum:
+                        - low
+                        - medium
+                        - high
+                        - critical
+                      default: medium
+                    highConfidenceEventAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for fileSecurity
+                      default: inherited
+                    mediumConfidenceEventAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for fileSecurity
+                      default: inherited
+                    lowConfidenceEventAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for fileSecurity
+                      default: detect
+                    archiveInspection:
+                      type: object
+                      properties:
+                        extractArchiveFiles:
+                          type: boolean
+                          default: false
+                        scanMaxFileSize:
+                          type: integer
+                          default: 10
+                        scanMaxFileSizeUnit:
+                          type: string
+                          enum:
+                            - bytes
+                            - KB
+                            - MB
+                            - GB
+                          default: MB
+                        archivedFilesWithinArchivedFiles:
+                          type: string
+                          enum:
+                            - prevent
+                            - detect
+                            - inactive
+                            - inherited #as set in overrideMode for fileSecurity
+                          default: inherited
+                        archivedFilesWhereContentExtractionFailed:
+                          type: string
+                          enum:
+                            - prevent
+                            - detect
+                            - inactive
+                            - inherited #as set in overrideMode for fileSecurity
+                          default: inherited
+                    largeFileInspection:
+                      type: object
+                      properties:
+                        fileSizeLimit:
+                          type: integer
+                          default: 10
+                        fileSizeLimitUnit:
+                          type: string
+                          enum:
+                            - bytes
+                            - KB
+                            - MB
+                            - GB
+                          default: MB
+                        filesExceedingSizeLimitAction:
+                          type: string
+                          enum:
+                            - prevent
+                            - detect
+                            - inactive
+                            - inherited #as set in overrideMode for fileSecurity
+                          default: inherited
+                    unnamedFilesAction:
+                      type: string
+                      enum:
+                        - prevent
+                        - detect
+                        - inactive
+                        - inherited #as set in overrideMode for fileSecurity
+                      default: inherited
+                    threatEmulationEnabled:
+                      type: boolean
+                      default: false
+  scope: Cluster
+  names:
+    plural: threatpreventionpractices
+    singular: threatpreventionpractice
+    kind: ThreatPreventionPractice
+    shortNames:
+      - tpp
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name : trustedsources.openappsec.io
+  creationTimestamp: null
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta1
+      served: true
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                minNumOfSources:
+                  type: integer
+                sourcesIdentifiers:
+                  type: array
+                  items:
+                    type: string
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - minNumOfSources
+                - sourcesIdentifiers
+              properties:
+                appsecClassName:
+                  type: string
+                name:
+                  type: string
+                minNumOfSources:
+                  type: integer
+                  default: 3
+                sourcesIdentifiers:
+                  type: array
+                  items:
+                    type: string
+  scope: Cluster
+  names:
+    plural: trustedsources
+    singular: trustedsource
+    kind: TrustedSource
+    shortNames:
+      - trustedsource
