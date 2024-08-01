@@ -90,6 +90,12 @@ public:
         if (metadata_flags.isSet(MessageConnectionConfig::IGNORE_SSL_VALIDATION)) {
             flags.setFlag(ConnectionFlags::IGNORE_SSL_VALIDATION);
         }
+        ca_path = metadata.getCaPath();
+        if (metadata.isDualAuth()) {
+            client_cert_path = metadata.getClientCertPath();
+            client_key_path = metadata.getClientKeyPath();
+            is_dual_auth = true;
+        }
     }
 
     void
@@ -263,20 +269,33 @@ private:
 
         SSL_CTX_set_verify(ssl_ctx.get(), SSL_VERIFY_PEER, nullptr);
 
-        auto defualt_cert_path = getFilesystemPathConfig() + "/certs/fog.pem";
-        auto cert_path = getConfigurationWithDefault(defualt_cert_path, "message", "Certificate chain file path");
-        const char *cert = cert_path.c_str();
+        if (is_dual_auth) {
+            dbgTrace(D_CONNECTION)
+                << "Setting dual authentication."
+                << "Client cert path: " << client_cert_path
+                << ", client key path: " << client_key_path;
+            if (SSL_CTX_use_certificate_file(ssl_ctx.get(), client_cert_path.c_str(), SSL_FILETYPE_PEM) <= 0) {
+                string error = ERR_error_string(ERR_get_error(), nullptr);
+                return genError("Error in setting client cert: " + error);
+            }
 
+            if (SSL_CTX_use_PrivateKey_file(ssl_ctx.get(), client_key_path.c_str(), SSL_FILETYPE_PEM) <= 0) {
+                string error = ERR_error_string(ERR_get_error(), nullptr);
+                return genError("Error in setting client key: " + error);
+            }
+        }
+
+        dbgTrace(D_CONNECTION) << "Setting CA authentication";
         auto details_ssl_dir = Singleton::Consume<I_AgentDetails>::by<Messaging>()->getOpenSSLDir();
         auto openssl_dir = details_ssl_dir.ok() ? *details_ssl_dir : "/usr/lib/ssl/certs/";
         auto configured_ssl_dir = getConfigurationWithDefault(openssl_dir, "message", "Trusted CA directory");
         const char *ca_dir = configured_ssl_dir.empty() ? nullptr : configured_ssl_dir.c_str();
 
-        if (SSL_CTX_load_verify_locations(ssl_ctx.get(), cert, ca_dir) != 1) {
+        if (SSL_CTX_load_verify_locations(ssl_ctx.get(), ca_path.c_str(), ca_dir) != 1) {
             return genError("Failed to load certificate locations");
         }
 
-        dbgDebug(D_CONNECTION) << "SSL context set successfully. Certificate: " << cert << ", CA dir: " << ca_dir;
+        dbgDebug(D_CONNECTION) << "SSL context set successfully. Certificate: " << ca_path << ", CA dir: " << ca_dir;
         return Maybe<void>();
     }
 
@@ -456,7 +475,6 @@ private:
             << bio_error;
         return BioConnectionStatus::SHOULD_NOT_RETRY;
     }
-
 
     Maybe<void>
     connectToHost()
@@ -654,6 +672,10 @@ private:
     Flags<ConnectionFlags> flags;
 
     MessageProxySettings settings;
+    string ca_path = "";
+    string client_cert_path = "";
+    string client_key_path = "";
+
     string connect_message;
     string certificate;
 
@@ -666,6 +688,7 @@ private:
 
     bool lock = false;
     bool should_close_connection = false;
+    bool is_dual_auth = false;
 };
 
 Connection::Connection(const MessageConnectionKey &key, const MessageMetadata &metadata)

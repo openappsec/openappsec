@@ -1499,7 +1499,7 @@ private:
                 << " minutes from now.";
             upgrade_delay_time += chrono::minutes(upgrade_delay_interval);
         } catch (const exception& err) {
-            dbgInfo(D_ORCHESTRATOR) << "Failed to parse upgrade delay interval.";
+            dbgWarning(D_ORCHESTRATOR) << "Failed to parse upgrade delay interval.";
         }
     }
 

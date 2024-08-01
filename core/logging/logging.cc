@@ -270,7 +270,7 @@ private:
             case StreamType::JSON_DEBUG: return make_shared<DebugStream>();
             case StreamType::JSON_FOG: return make_shared<FogStream>();
             case StreamType::JSON_LOG_FILE: return make_shared<LogFileStream>();
-            case StreamType::JSON_K8S_SVC: return make_shared<K8sSvcStream>();
+            case StreamType::JSON_CONTAINER_SVC: return make_shared<ContainerSvcStream>();
             case StreamType::SYSLOG: return nullptr;
             case StreamType::CEF: return nullptr;
             case StreamType::NONE: return nullptr;
@@ -319,7 +319,9 @@ LoggingComp::preload()
     registerExpectedConfiguration<string>("Logging", "Log file name");
     registerExpectedConfiguration<string>("Logging", "Log file line separator");
     registerExpectedConfiguration<string>("Logging", "Fog Log URI");
-    registerExpectedConfiguration<string>("Logging", "K8sSvc Log host");
+    registerExpectedConfiguration<string>("Logging", "Container Log host");
+    registerExpectedConfiguration<string>("Logging", "Container Log URI");
+    registerExpectedConfiguration<string>("Logging", "Container Bulk Log URI");
     registerExpectedConfiguration<string>("Logging", "Syslog IP");
     registerExpectedConfiguration<uint>("Logging", "Syslog port");
     registerExpectedConfiguration<string>("Logging", "CEF IP");

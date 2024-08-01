@@ -50,6 +50,8 @@ public:
         return report.str();
     }
 
+    UpdatesFailureReason getReason() const { return reason; }
+
 private:
     UpdatesProcessResult result;
     UpdatesConfigType type;

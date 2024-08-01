@@ -538,7 +538,7 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
     bool webHeaders = trigger_spec.getAppsecTriggerExtendedLogging().isHttpHeaders();
     bool webBody = trigger_spec.getAppsecTriggerExtendedLogging().isRequestBody();
     bool logToCloud = trigger_spec.getAppsecTriggerLogDestination().getCloud();
-    bool logToK8sService = trigger_spec.getAppsecTriggerLogDestination().isK8SNeeded();
+    bool logToContainerService = trigger_spec.getAppsecTriggerLogDestination().isContainerNeeded();
     bool logToAgent = trigger_spec.getAppsecTriggerLogDestination().isAgentLocal();
     bool beautify_logs = trigger_spec.getAppsecTriggerLogDestination().shouldBeautifyLogs();
     bool logToCef = trigger_spec.getAppsecTriggerLogDestination().isCefNeeded();
@@ -565,7 +565,7 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
         logToAgent,
         logToCef,
         logToCloud,
-        logToK8sService,
+        logToContainerService,
         logToSyslog,
         responseBody,
         tpDetect,
@@ -1636,7 +1636,9 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy(const string &policy_name, c
     createPolicyElements<T, R>(specific_rules, default_rule, appsec_policy, policy_name);
 
     // add default rule to policy
-    createPolicyElementsByRule<T, R>(default_rule, default_rule, appsec_policy, policy_name);
+    if (Singleton::Consume<I_EnvDetails>::by<PolicyMakerUtils>()->getEnvType() != EnvType::K8S) {
+        createPolicyElementsByRule<T, R>(default_rule, default_rule, appsec_policy, policy_name);
+    }
 }
 
 // LCOV_EXCL_START Reason: no test exist
@@ -1659,11 +1661,13 @@ PolicyMakerUtils::createAgentPolicyFromAppsecPolicy<V1beta2AppsecLinuxPolicy, Ne
     );
 
     // add default rule to policy
-    createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsedRule>(
-        default_rule,
-        default_rule,
-        appsec_policy,
-        policy_name);
+    if (Singleton::Consume<I_EnvDetails>::by<PolicyMakerUtils>()->getEnvType() != EnvType::K8S) {
+        createPolicyElementsByRule<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+            default_rule,
+            default_rule,
+            appsec_policy,
+            policy_name);
+    }
 }
 // LCOV_EXCL_STOP
 

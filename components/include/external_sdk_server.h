@@ -24,7 +24,8 @@ class ExternalSdkServer
         :
     public Component,
     Singleton::Provide<I_ExternalSdkServer>,
-    Singleton::Consume<I_RestApi>
+    Singleton::Consume<I_RestApi>,
+    Singleton::Consume<I_Messaging>
 {
 public:
     ExternalSdkServer();

@@ -22,21 +22,21 @@ const static string default_log_uri = "/api/v1/agents/events";
 
 USE_DEBUG_FLAG(D_REPORT);
 
-K8sSvcStream::K8sSvcStream()
+ContainerSvcStream::ContainerSvcStream()
         :
     i_msg(Singleton::Consume<I_Messaging>::by<LoggingComp>())
 {
 }
 
-K8sSvcStream::~K8sSvcStream()
+ContainerSvcStream::~ContainerSvcStream()
 {
 }
 
 void
-K8sSvcStream::sendLog(const Report &log)
+ContainerSvcStream::sendLog(const Report &log)
 {
-    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
-    auto K8sSvc_log_uri = getConfigurationWithDefault(default_log_uri, "Logging", "K8sSvc Log URI");
+    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "Container Log host");
+    auto svc_log_uri = getConfigurationWithDefault(default_log_uri, "Logging", "Container Log URI");
     LogRest rest(log);
 
     MessageMetadata rest_req_md(svc_host, 80);
@@ -45,7 +45,7 @@ K8sSvcStream::sendLog(const Report &log)
 
     bool ok = i_msg->sendSyncMessageWithoutResponse(
         HTTPMethod::POST,
-        K8sSvc_log_uri,
+        svc_log_uri,
         rest,
         MessageCategory::LOG,
         rest_req_md
@@ -57,7 +57,7 @@ K8sSvcStream::sendLog(const Report &log)
 }
 
 void
-K8sSvcStream::sendLog(const LogBulkRest &logs, bool persistence_only)
+ContainerSvcStream::sendLog(const LogBulkRest &logs, bool persistence_only)
 {
     dbgFlow(D_REPORT) << "send bulk logs";
 
@@ -66,15 +66,15 @@ K8sSvcStream::sendLog(const LogBulkRest &logs, bool persistence_only)
         return;
     }
 
-    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
-    auto K8sSvc_log_uri = getConfigurationWithDefault(default_bulk_uri, "Logging", "K8sSvc Bulk Log URI");
+    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "Container Log host");
+    auto svc_log_uri = getConfigurationWithDefault(default_bulk_uri, "Logging", "Container Bulk Log URI");
 
     MessageMetadata rest_req_md(svc_host, 80);
     rest_req_md.insertHeader("X-Tenant-Id", Singleton::Consume<I_AgentDetails>::by<LoggingComp>()->getTenantId());
     rest_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     bool ok = i_msg->sendSyncMessageWithoutResponse(
         HTTPMethod::POST,
-        K8sSvc_log_uri,
+        svc_log_uri,
         logs,
         MessageCategory::LOG,
         rest_req_md

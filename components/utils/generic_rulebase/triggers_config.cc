@@ -173,7 +173,7 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
         setTriggersFlag("webUrlQuery", archive_in, WebLogFields::webUrlQuery, log_web_fields);
         setTriggersFlag("logToAgent", archive_in, ReportIS::StreamType::JSON_LOG_FILE, active_streams);
         setTriggersFlag("logToCloud", archive_in, ReportIS::StreamType::JSON_FOG, active_streams);
-        setTriggersFlag("logToK8sService", archive_in, ReportIS::StreamType::JSON_K8S_SVC, active_streams);
+        setTriggersFlag("logToContainerService", archive_in, ReportIS::StreamType::JSON_CONTAINER_SVC, active_streams);
         setTriggersFlag("logToSyslog", archive_in, ReportIS::StreamType::SYSLOG, active_streams);
         setTriggersFlag("logToCef", archive_in, ReportIS::StreamType::CEF, active_streams);
         setTriggersFlag("acAllow", archive_in, SecurityType::AccessControl, should_log_on_detect);
@@ -221,8 +221,8 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
                 case ReportIS::StreamType::JSON_LOG_FILE:
                     setLogConfiguration(ReportIS::StreamType::JSON_LOG_FILE);
                     break;
-                case ReportIS::StreamType::JSON_K8S_SVC:
-                    setLogConfiguration(ReportIS::StreamType::JSON_K8S_SVC);
+                case ReportIS::StreamType::JSON_CONTAINER_SVC:
+                    setLogConfiguration(ReportIS::StreamType::JSON_CONTAINER_SVC);
                     break;
                 case ReportIS::StreamType::SYSLOG:
                     setLogConfiguration(ReportIS::StreamType::SYSLOG, getUrlForSyslog(), syslog_protocol);

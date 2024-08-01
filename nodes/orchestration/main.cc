@@ -51,6 +51,7 @@
 #include "generic_metric.h"
 #include "tenant_manager.h"
 #include "local_policy_mgmt_gen.h"
+#include "external_sdk_server.h"
 
 using namespace std;
 
@@ -72,7 +73,8 @@ main(int argc, char **argv)
         OrchestrationTools,
         HealthChecker,
         HealthCheckManager,
-        LocalPolicyMgmtGenerator
+        LocalPolicyMgmtGenerator,
+        ExternalSdkServer
     > comps;
 
     comps.registerGlobalValue<uint>("Nano service API Port Primary", 7777);

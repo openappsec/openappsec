@@ -31,9 +31,15 @@ UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
     if (event.getReason() == UpdatesFailureReason::CHECK_UPDATE) {
         if (event.getResult() == UpdatesProcessResult::SUCCESS && reports.empty()) {
             dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Update proccess finished successfully";
+            report_failure_count = 0;
             return;
         }
         dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Update proccess finished with errors";
+        report_failure_count++;
+        if (report_failure_count <= 1) {
+            reports.clear();
+            return;
+        }
         reports.emplace_back(
             UpdatesProcessReport(
                 event.getResult(),
@@ -54,18 +60,27 @@ UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
 void
 UpdatesProcessReporter::sendReoprt()
 {
-    stringstream all_reports;
-    all_reports << "Updates process reports:" << endl;
+    stringstream full_reports;
+    UpdatesFailureReason failure_reason = UpdatesFailureReason::NONE;
+    full_reports << "Updates process reports:" << endl;
+    full_reports << "report failure count:" << report_failure_count << endl;
     for (const auto &report : reports) {
-        all_reports << report.toString() << endl;
+        if (report.getReason() != UpdatesFailureReason::CHECK_UPDATE) {
+            failure_reason = report.getReason();
+        }
+        full_reports << report.toString() << endl;
     }
     reports.clear();
-    dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Sending updates process report: " << endl << all_reports.str();
-    LogGen(
+    dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Sending updates process report: " << endl << full_reports.str();
+    LogGen log (
         "Updates process report",
         ReportIS::Audience::INTERNAL,
         ReportIS::Severity::HIGH,
         ReportIS::Priority::HIGH,
         ReportIS::Tags::ORCHESTRATOR
-    ) << LogField("eventMessage", all_reports.str());
+    );
+    log << LogField("eventMessage", full_reports.str());
+    if (failure_reason != UpdatesFailureReason::NONE) {
+        log.addToOrigin(LogField("eventCategory", convertUpdatesFailureReasonToStr(failure_reason)));
+    }
 }

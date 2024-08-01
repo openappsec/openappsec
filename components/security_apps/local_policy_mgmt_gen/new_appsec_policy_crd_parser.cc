@@ -126,6 +126,7 @@ NewAppsecPolicySpec::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec policy spec";
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
     parseAppsecJSONKey<NewParsedRule>("default", default_rule, archive_in);
+    default_rule.setHost("*");
     parseAppsecJSONKey<vector<NewParsedRule>>("specificRules", specific_rules, archive_in);
 }
 

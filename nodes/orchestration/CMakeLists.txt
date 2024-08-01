@@ -30,7 +30,7 @@ target_link_libraries(
     env_details
     local_policy_mgmt_gen
     curl
-
+    external_sdk_server
     -Wl,--end-group
 )
 
