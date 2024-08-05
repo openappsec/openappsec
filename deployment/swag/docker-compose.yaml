@@ -1,0 +1,48 @@
+services:
+  swag-attachment:
+    image: ghcr.io/openappsec/swag-attachment:latest
+    ipc: service:appsec-agent
+    restart: unless-stopped
+    container_name: swag-attachment
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - URL=yourdomain.url # replace yourdomain.url with your own domain
+      # make sure your domain's public IP resolves to
+      # the docker host for Let's Encrypt cert generation to succeed
+      - VALIDATION=http
+      # see https://docs.linuxserver.io/images/docker-swag/ for
+      # more cert generation/validation options
+      - STAGING=true # switch to 'false' after successful testing
+    volumes:
+      - ./swag-config:/config
+    ports:
+      - 443:443
+      - 80:80 #optional
+
+  appsec-agent:
+    container_name: appsec-agent
+    image: ghcr.io/openappsec/agent:latest
+    network_mode: service:swag-attachment
+    ipc: shareable
+    restart: unless-stopped
+    environment:
+      - user_email=user@email.com # adjust with your own email
+      - registered_server='SWAG'
+      # if autoPolicyLoad is set to true, open-appsec will apply
+      # changes in local_policy.yaml automatically
+      - autoPolicyLoad=true
+      # To connect to open-appsec central management WebUI 
+      ## create your WebUI profile at https://my.openappsec.io,
+      ## enforce policy, copy the profile token from WebUI and add it below 
+      - AGENT_TOKEN=
+
+    volumes:
+      - ./appsec-config:/etc/cp/conf
+      - ./appsec-data:/etc/cp/data
+      - ./appsec-logs:/var/log/nano_agent
+      - ./appsec-localconfig:/ext/appsec
+    command: /cp-nano-agent
