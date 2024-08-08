@@ -642,6 +642,7 @@ void unescapeUnicode(string& text) {
     for (; it != text.end(); ++it) {
         const char ch = *it;
 
+    START:
         switch (state) {
         case STATE_FLUSH: {
             // flush any accumulated left-overs into output buffer
@@ -693,6 +694,7 @@ void unescapeUnicode(string& text) {
             else {
                 // this is invalid escape sequence: rollback and copy this character too
                 state = STATE_FLUSH;
+                goto START;
             }
             break;
         }
@@ -766,16 +768,8 @@ void unescapeUnicode(string& text) {
                         pAcc = NULL; // throw away the accumulated source (escaped) sequence.
                     }
 
-                    if (ch == '\\') {
-                        // start accumulating characters instead of copying them
-                        pAcc = acc;
-                        state = STATE_ESCAPE;
-                        break;
-                    }
-
-                    // STATE_COPY will cause current character (sequence terminator)
-                    // to be output verbatim.
-                    state = STATE_COPY;
+                    state = STATE_FLUSH;
+                    goto START;
                 }
             }
 
@@ -802,21 +796,7 @@ void unescapeUnicode(string& text) {
     dbgTrace(D_WAAP) << " - LOOP FINISHED with state=" << state << "; digitsAnticipated=" <<
         digitsAnticipated << ", acc='" << string(acc, pAcc ? (int)(pAcc - acc) : 0) << "'";
 
-    // Output code if we just finished decoding an escape sequence succesully and reached end of string
-    if (state == STATE_ESCAPE_U && digitsAnticipated == 0) {
-        // only output ASCII codes <= 127. "swallow" all unicode.
-        if (code <= 127) {
-            *result++ = (char)code;
-        }
-        else if (isSpecialUnicode(code)) {
-            *result++ = convertSpecialUnicode(code);
-        }
-
-        if (pAcc) {
-            pAcc = NULL; // throw away the accumulated source (escaped) sequencec.
-        }
-    }
-    else if (state == STATE_ESCAPE_X) {
+    if (state == STATE_ESCAPE_X) {
         if (isSpecialUnicode(code)) {
             *result++ = convertSpecialUnicode(code);
         }
