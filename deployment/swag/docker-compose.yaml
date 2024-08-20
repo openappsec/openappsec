@@ -1,7 +1,7 @@
 services:
   swag-attachment:
     image: ghcr.io/openappsec/swag-attachment:latest
-    ipc: service:appsec-agent
+    ipc: host
     restart: unless-stopped
     container_name: swag-attachment
     cap_add:
@@ -27,7 +27,7 @@ services:
     container_name: appsec-agent
     image: ghcr.io/openappsec/agent:latest
     network_mode: service:swag-attachment
-    ipc: shareable
+    ipc: host
     restart: unless-stopped
     environment:
       - user_email=user@email.com # adjust with your own email
