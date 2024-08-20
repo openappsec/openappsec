@@ -26,7 +26,6 @@ services:
   appsec-agent:
     container_name: appsec-agent
     image: ghcr.io/openappsec/agent:latest
-    network_mode: service:swag-attachment
     ipc: shareable
     restart: unless-stopped
     environment:
@@ -39,7 +38,6 @@ services:
       ## create your WebUI profile at https://my.openappsec.io,
       ## enforce policy, copy the profile token from WebUI and add it below 
       - AGENT_TOKEN=
-
     volumes:
       - ./appsec-config:/etc/cp/conf
       - ./appsec-data:/etc/cp/data
