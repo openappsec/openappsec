@@ -385,8 +385,29 @@ Layer7AccessControl::Impl::init()
     i_intelligence = Singleton::Consume<I_Intelligence_IS_V2>::by<Layer7AccessControl>();
     i_mainloop = Singleton::Consume<I_MainLoop>::by<Layer7AccessControl>();
 
-    chrono::minutes expiration(
-        getProfileAgentSettingWithDefault<uint>(60u, "layer7AccessControl.crowdsec.cacheExpiration")
+    int cache_expiration_in_seconds = 30;
+    string cache_expiration_env = getenv("CROWDSEC_CACHE_EXPIRATION") ? getenv("CROWDSEC_CACHE_EXPIRATION") : "";
+    if (!cache_expiration_env.empty()) {
+        if (
+            all_of(cache_expiration_env.begin(), cache_expiration_env.end(), ::isdigit)
+            && stoi(cache_expiration_env) > 0
+        ) {
+            cache_expiration_in_seconds = stoi(cache_expiration_env);
+            dbgInfo(D_L7_ACCESS_CONTROL)
+                << "Successfully read cache expiration value from env: "
+                << cache_expiration_env;
+        } else {
+            dbgWarning(D_L7_ACCESS_CONTROL)
+                << "An invalid cache expiration value was provided in env: "
+                << cache_expiration_env;
+        }
+    }
+
+    chrono::seconds expiration(
+        getProfileAgentSettingWithDefault<uint>(
+            cache_expiration_in_seconds,
+            "layer7AccessControl.crowdsec.cacheExpiration"
+        )
     );
 
     ip_reputation_cache.startExpiration(

@@ -15,6 +15,7 @@
 #include "i_mainloop.h"
 #include "i_serialize.h"
 #include "waap.h"
+#include "Waf2Util.h"
 
 using namespace std;
 
@@ -25,7 +26,7 @@ USE_DEBUG_FLAG(D_WAAP);
 
 TuningDecision::TuningDecision(const string& remotePath)
         :
-    m_remotePath(remotePath + "/tuning"),
+    m_remotePath(replaceAllCopy(remotePath + "/tuning", "//", "/")),
     m_baseUri()
 {
     if (remotePath == "")

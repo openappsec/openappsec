@@ -473,7 +473,11 @@ public:
     void
     upon(const UpdatesProcessEvent &event) override
     {
-        setFieldStatus(event.getStatusFieldType(), event.getOrchestrationStatusResult(), event.parseDescription());
+        setFieldStatus(
+            event.getStatusFieldType(),
+            event.getOrchestrationStatusResult(),
+            event.getDescriptionWithoutErrors()
+        );
     }
 
 private:

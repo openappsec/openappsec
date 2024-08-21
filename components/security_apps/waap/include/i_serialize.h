@@ -57,7 +57,6 @@ private:
     std::vector<std::string> filesPathsList;
 };
 
-
 class I_Serializable {
 public:
     virtual void serialize(std::ostream& stream) = 0;
