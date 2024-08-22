@@ -44,8 +44,11 @@ while true; do
 done
 
 if [ -z $var_token ] && [ $var_mode != "--hybrid_mode" ]; then
-    echo "Error: Token was not provided as input argument."
-    exit 1
+    var_token=$(env | grep 'AGENT_TOKEN=' | cut -d'=' -f2-)
+    if  [ -z $var_token ]; then
+        echo "Error: Token was not provided as input argument."
+        exit 1
+    fi
 fi
 
 orchestration_service_installation_flags="--container_mode --skip_registration"
