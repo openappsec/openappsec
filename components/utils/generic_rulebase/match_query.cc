@@ -299,7 +299,16 @@ MatchQuery::matchAttributes(
 {
     auto &type = condition_type;
     bool negate = type == MatchQuery::Conditions::NotEquals || type == MatchQuery::Conditions::NotIn;
-    bool match = isRegEx() ? matchAttributesRegEx(values, matched_override_keywords) : matchAttributesString(values);
+    bool match = false;
+
+    if (isIP()) {
+        match = matchAttributesIp(values);
+    } else if (isRegEx()) {
+        match = matchAttributesRegEx(values, matched_override_keywords);
+    } else {
+        match = matchAttributesString(values);
+    }
+
     return negate ? !match : match;
 }
 
@@ -341,7 +350,25 @@ MatchQuery::matchAttributesString(const set<string> &values) const
 }
 
 bool
+MatchQuery::matchAttributesIp(const set<string> &values) const
+{
+    for (const IPRange &rule_ip_range : ip_addr_value) {
+        for (const string &requested_value : values) {
+            IpAddress ip_addr = IPUtilities::createIpFromString(requested_value);
+            if (IPUtilities::isIpAddrInRange(rule_ip_range, ip_addr)) return true;
+        }
+    }
+    return false;
+}
+
+bool
 MatchQuery::isRegEx() const
 {
     return key != "protectionName";
+}
+
+bool
+MatchQuery::isIP() const
+{
+    return key == "sourceIP" || key == "destinationIP";
 }

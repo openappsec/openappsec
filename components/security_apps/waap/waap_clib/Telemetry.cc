@@ -37,7 +37,14 @@ WaapTelemetryBase::sendLog(const LogRest &metric_client_rest) const
     if (mode == OrchestrationMode::ONLINE) {
         return;
     }
-    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "K8sSvc Log host");
+    const char* host_env_var = getenv("TUNING_HOST");
+    string host;
+    if (host_env_var != nullptr && strlen(host_env_var) > 0) {
+        host = string(host_env_var);
+    } else {
+        host = default_host;
+    }
+    auto svc_host = getConfigurationWithDefault(host, "Logging", "Container Log host");
     string fog_metric_uri = getConfigurationWithDefault<string>("/api/v1/agents/events", "metric", "fogMetricUri");
     MessageMetadata req_md(svc_host, 80);
     req_md.insertHeader(

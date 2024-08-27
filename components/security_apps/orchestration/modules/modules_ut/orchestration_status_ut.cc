@@ -556,7 +556,7 @@ TEST_F(OrchestrationStatusTest, checkErrorByRaiseEvent)
             "Time",
             "Online upgrades",
             fog_address,
-            "Failed. Reason: Registration failed. Error: " + registar_error,
+            "Failed. Reason: Registration failed.",
             "Failed. Reason: " + manifest_error
         ),
         result

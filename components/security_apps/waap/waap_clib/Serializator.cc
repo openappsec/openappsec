@@ -397,7 +397,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     const string &owner
 ) :
     SerializeToFileBase(filePath),
-    m_remotePath(remotePath),
+    m_remotePath(replaceAllCopy(remotePath, "//", "/")),
     m_interval(0),
     m_owner(owner),
     m_pMainLoop(nullptr),
@@ -407,7 +407,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     m_windowsCount(0),
     m_intervalsCounter(0),
     m_remoteSyncEnabled(true),
-    m_assetId(assetId),
+    m_assetId(replaceAllCopy(assetId, "/", "")),
     m_isAssetIdUuid(Waap::Util::isUuid(assetId)),
     m_shared_storage_host(genError("not set")),
     m_learning_host(genError("not set"))
@@ -439,7 +439,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     }
     if (remotePath != "") {
         // remote path is /<tenantId>/<assetId>/<type>
-        auto parts = split(remotePath, '/');
+        auto parts = split(m_remotePath, '/');
         if (parts.size() > 2) {
             size_t offset = 0;
             if (parts[0].empty()) {
@@ -656,8 +656,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
-    if (mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase() ||
-        (mode == OrchestrationMode::ONLINE && !m_isAssetIdUuid) || !postData()) {
+    if (mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase() || !postData()) {
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR)
             << "Did not synchronize the data. for asset: "
             << m_assetId

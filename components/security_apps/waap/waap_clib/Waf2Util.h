@@ -733,6 +733,12 @@ inline void replaceAll(std::string& str, const std::string& from, const std::str
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
 }
+
+inline std::string replaceAllCopy(std::string str, const std::string& from, const std::string& to) {
+    replaceAll(str, from, to);
+    return str;
+}
+
 inline void alignBase64Chunk (std::string &chunk)
 {
     size_t len = chunk.length() % 4;

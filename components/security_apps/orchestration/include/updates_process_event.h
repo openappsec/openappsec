@@ -117,6 +117,7 @@ public:
     OrchestrationStatusResult getOrchestrationStatusResult() const;
 
     std::string parseDescription() const;
+    std::string getDescriptionWithoutErrors() const;
 
 private:
     UpdatesProcessResult result;

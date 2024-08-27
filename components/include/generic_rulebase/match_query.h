@@ -89,7 +89,9 @@ private:
     bool matchAttributesRegEx(const std::set<std::string> &values,
             std::set<std::string> &matched_override_keywords) const;
     bool matchAttributesString(const std::set<std::string> &values) const;
+    bool matchAttributesIp(const std::set<std::string> &values) const;
     bool isRegEx() const;
+    bool isIP() const;
 
     MatchType type;
     Operators operator_type;

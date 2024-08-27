@@ -35,7 +35,14 @@ ContainerSvcStream::~ContainerSvcStream()
 void
 ContainerSvcStream::sendLog(const Report &log)
 {
-    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "Container Log host");
+    const char* host_env_var = getenv("TUNING_HOST");
+    string host;
+    if (host_env_var != nullptr && strlen(host_env_var) > 0) {
+        host = string(host_env_var);
+    } else {
+        host = default_host;
+    }
+    auto svc_host = getConfigurationWithDefault(host, "Logging", "Container Log host");
     auto svc_log_uri = getConfigurationWithDefault(default_log_uri, "Logging", "Container Log URI");
     LogRest rest(log);
 
@@ -66,7 +73,14 @@ ContainerSvcStream::sendLog(const LogBulkRest &logs, bool persistence_only)
         return;
     }
 
-    auto svc_host = getConfigurationWithDefault(default_host, "Logging", "Container Log host");
+    const char* host_env_var = getenv("TUNING_HOST");
+    string host;
+    if (host_env_var != nullptr && strlen(host_env_var) > 0) {
+        host = string(host_env_var);
+    } else {
+        host = default_host;
+    }
+    auto svc_host = getConfigurationWithDefault(host, "Logging", "Container Log host");
     auto svc_log_uri = getConfigurationWithDefault(default_bulk_uri, "Logging", "Container Bulk Log URI");
 
     MessageMetadata rest_req_md(svc_host, 80);

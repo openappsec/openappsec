@@ -122,3 +122,62 @@ UpdatesProcessEvent::parseDescription() const
     }
     return err.str();
 }
+
+string
+UpdatesProcessEvent::getDescriptionWithoutErrors() const
+{
+    stringstream err;
+    if (description.empty() || result == UpdatesProcessResult::SUCCESS) return "";
+
+    switch (reason) {
+        case UpdatesFailureReason::CHECK_UPDATE: {
+            err << description;
+            break;
+        }
+        case UpdatesFailureReason::REGISTRATION: {
+            err << "Registration failed.";
+            break;
+        }
+        case UpdatesFailureReason::GET_UPDATE_REQUEST: {
+            err << "Failed to get update request.";
+            break;
+        }
+        case UpdatesFailureReason::DOWNLOAD_FILE : {
+            err << "Failed to download the file " << detail;
+            break;
+        }
+        case UpdatesFailureReason::HANDLE_FILE : {
+            err << "Failed to handle the file " << detail;
+            break;
+        }
+        case UpdatesFailureReason::INSTALLATION_QUEUE : {
+            err << "Installation queue creation failed.";
+            break;
+        }
+        case UpdatesFailureReason::INSTALL_PACKAGE : {
+            err << "Failed to install the package " << detail;
+            break;
+        }
+        case UpdatesFailureReason::CHECKSUM_UNMATCHED : {
+            err << "Checksums do not match for the file: " << detail;
+            break;
+        }
+        case UpdatesFailureReason::POLICY_CONFIGURATION : {
+            err << "Failed to configure policy version: " << detail;
+            break;
+        }
+        case UpdatesFailureReason::POLICY_FOG_CONFIGURATION : {
+            err << "Failed to configure the fog address: " << detail;
+            break;
+        }
+        case UpdatesFailureReason::ORCHESTRATION_SELF_UPDATE : {
+            err << description;
+            break;
+        }
+        case UpdatesFailureReason::NONE : {
+            err << description;
+            break;
+        }
+    }
+    return err.str();
+}
