@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     environment:
       - user_email=user@email.com # adjust with your own email
-      - registered_server='SWAG'
+      - registered_server='SWAG Server'
       # if autoPolicyLoad is set to true, open-appsec will apply
       # changes in local_policy.yaml automatically
       - autoPolicyLoad=true
