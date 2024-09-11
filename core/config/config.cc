@@ -306,6 +306,7 @@ private:
     string log_files_prefix = "/var/log";
     string default_config_directory_path = "/conf/";
     string config_directory_path = "";
+    string error_to_report = "";
 
     TypeWrapper empty;
 };
@@ -802,6 +803,7 @@ bool
 ConfigComponent::Impl::commitFailure(const string &error)
 {
     dbgError(D_CONFIG) << error;
+    error_to_report = error;
     new_resource_nodes.clear();
     new_configuration_nodes.clear();
     new_settings_nodes.clear();
@@ -937,7 +939,7 @@ ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version
 
     mainloop->stop(routine_id);
     LoadNewConfigurationStatus finished(id, service_name, !res, true);
-    if (!res) finished.setError("Failed to reload configuration");
+    if (!res) finished.setError(error_to_report);
     I_TimeGet *time = Singleton::Consume<I_TimeGet>::by<ConfigComponent>();
     auto send_status_time_out = time->getMonotonicTime() + chrono::seconds(180);
     while (time->getMonotonicTime() < send_status_time_out) {

@@ -111,6 +111,18 @@ UpdatesProcessEvent::parseDescription() const
             err << "Failed to configure the fog address: " << detail << ". Error: " << description;
             break;
         }
+        case UpdatesFailureReason::SERVISE_CONFIGURATION : {
+            err
+                << "Request for service reconfiguration failed to complete. Service name: "
+                << detail
+                << ". Error: "
+                << description;
+            break;
+        }
+        case UpdatesFailureReason::SERVISE_CONFIGURATION_TIMEOUT : {
+            err << detail;
+            break;
+        }
         case UpdatesFailureReason::ORCHESTRATION_SELF_UPDATE : {
             err << description;
             break;
@@ -168,6 +180,14 @@ UpdatesProcessEvent::getDescriptionWithoutErrors() const
         }
         case UpdatesFailureReason::POLICY_FOG_CONFIGURATION : {
             err << "Failed to configure the fog address: " << detail;
+            break;
+        }
+        case UpdatesFailureReason::SERVISE_CONFIGURATION : {
+            err << "Request for service reconfiguration failed to complete. Service name: " << detail;
+            break;
+        }
+        case UpdatesFailureReason::SERVISE_CONFIGURATION_TIMEOUT : {
+            err << detail;
             break;
         }
         case UpdatesFailureReason::ORCHESTRATION_SELF_UPDATE : {

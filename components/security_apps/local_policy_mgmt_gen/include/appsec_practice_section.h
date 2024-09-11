@@ -275,7 +275,7 @@ public:
         const LogTriggerSection &parsed_log_trigger,
         const std::string &default_mode,
         const AppSecTrustedSources &parsed_trusted_sources,
-        const std::vector<InnerException> &parsed_exceptions
+        const std::map<std::string, std::vector<InnerException>> &exceptions
     );
 
     // used for V1beta2

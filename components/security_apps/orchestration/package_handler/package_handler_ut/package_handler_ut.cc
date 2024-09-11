@@ -1,3 +1,7 @@
+#include <sstream>
+class Package;
+static std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
+
 #include "package_handler.h"
 
 #include "cptest.h"

@@ -543,21 +543,25 @@ K8sPolicyUtils::createPolicy(
     }
 
     for (const IngressDefinedRule &rule : item.getSpec().getRules()) {
-        string url = rule.getHost();
+        string host = rule.getHost();
         for (const IngressRulePath &uri : rule.getPathsWrapper().getRulePaths()) {
-            if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(url + uri.getPath())) {
+            if (uri.getPath() != "/") {
+                host = host + uri.getPath();
+            }
+            if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(host)) {
                 dbgTrace(D_LOCAL_POLICY)
                     << "Inserting Host data to the specific asset set:"
                     << "URL: '"
-                    << url
+                    << rule.getHost()
                     << "' uri: '"
                     << uri.getPath()
                     << "'";
-                K ingress_rule = K(url + uri.getPath());
+                K ingress_rule = K(host);
                 policies[annotations_values[AnnotationKeys::PolicyKey]].addSpecificRule(ingress_rule);
             }
         }
     }
+
 }
 
 std::tuple<map<string, AppsecLinuxPolicy>, map<string, V1beta2AppsecLinuxPolicy>>

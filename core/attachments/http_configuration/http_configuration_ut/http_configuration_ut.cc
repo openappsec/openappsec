@@ -71,24 +71,24 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
 
     HttpAttachmentConfiguration conf_data_out;
     EXPECT_EQ(conf_data_out.init(attachment_configuration_file_name), 1);
-    EXPECT_EQ(conf_data_out.getNumericalValue("is_fail_open_mode_enabled"), 0);
-    EXPECT_EQ(conf_data_out.getNumericalValue("fail_open_timeout"), 1234);
-    EXPECT_EQ(conf_data_out.getNumericalValue("is_fail_open_mode_hold_enabled"), 0);
-    EXPECT_EQ(conf_data_out.getNumericalValue("fail_open_hold_timeout"), 4321);
+    EXPECT_EQ(conf_data_out.getNumericalValue("is_fail_open_mode_enabled"), 0u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("fail_open_timeout"), 1234u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("is_fail_open_mode_hold_enabled"), 0u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("fail_open_hold_timeout"), 4321u);
     EXPECT_EQ(conf_data_out.getStringValue("sessions_per_minute_limit_verdict"), "Accept");
-    EXPECT_EQ(conf_data_out.getNumericalValue("max_sessions_per_minute"), 0);
-    EXPECT_EQ(conf_data_out.getNumericalValue("num_of_nginx_ipc_elements"), 200);
-    EXPECT_EQ(conf_data_out.getNumericalValue("keep_alive_interval_msec"), 10000);
+    EXPECT_EQ(conf_data_out.getNumericalValue("max_sessions_per_minute"), 0u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("num_of_nginx_ipc_elements"), 200u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("keep_alive_interval_msec"), 10000u);
     EXPECT_EQ(conf_data_out.getNumericalValue("dbg_level"), 2u);
-    EXPECT_EQ(conf_data_out.getNumericalValue("res_proccessing_timeout_msec"), 420);
-    EXPECT_EQ(conf_data_out.getNumericalValue("req_proccessing_timeout_msec"), 42);
-    EXPECT_EQ(conf_data_out.getNumericalValue("registration_thread_timeout_msec"), 101);
-    EXPECT_EQ(conf_data_out.getNumericalValue("req_header_thread_timeout_msec"), 10);
-    EXPECT_EQ(conf_data_out.getNumericalValue("req_body_thread_timeout_msec"), 155);
-    EXPECT_EQ(conf_data_out.getNumericalValue("res_header_thread_timeout_msec"), 1);
-    EXPECT_EQ(conf_data_out.getNumericalValue("res_body_thread_timeout_msec"), 80);
-    EXPECT_EQ(conf_data_out.getNumericalValue("waiting_for_verdict_thread_timeout_msec"), 60);
-    EXPECT_EQ(conf_data_out.getNumericalValue("nginx_inspection_mode"), 1);
+    EXPECT_EQ(conf_data_out.getNumericalValue("res_proccessing_timeout_msec"), 420u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("req_proccessing_timeout_msec"), 42u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("registration_thread_timeout_msec"), 101u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("req_header_thread_timeout_msec"), 10u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("req_body_thread_timeout_msec"), 155u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("res_header_thread_timeout_msec"), 1u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("res_body_thread_timeout_msec"), 80u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("waiting_for_verdict_thread_timeout_msec"), 60u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("nginx_inspection_mode"), 1u);
 }
 
 TEST_F(HttpAttachmentUtilTest, GetMalformedAttachmentConfiguration)

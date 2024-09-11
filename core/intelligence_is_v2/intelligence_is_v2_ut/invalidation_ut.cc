@@ -609,7 +609,7 @@ TEST_F(IntelligenceInvalidation, invalidation_callback)
     json << invalidation2.genObject();
     mock_invalidation->performRestCall(json);
 
-    EXPECT_EQ(recieved_invalidations.size(), 1);
+    EXPECT_EQ(recieved_invalidations.size(), 1u);
     EXPECT_EQ(recieved_invalidations[0].getMainAttributes().begin()->getStringSetAttr("attr2").unpack(), vals);
 }
 
@@ -653,7 +653,7 @@ TEST_F(IntelligenceInvalidation, delete_invalidation_callback)
     json << invalidation2.genObject();
     mock_invalidation->performRestCall(json);
 
-    EXPECT_EQ(recieved_invalidations.size(), 0);
+    EXPECT_EQ(recieved_invalidations.size(), 0u);
 }
 
 TEST_F(IntelligenceInvalidation, invalidation_short_handling)
@@ -697,7 +697,7 @@ TEST_F(IntelligenceInvalidation, invalidation_short_handling)
     json << invalidation2.genObject();
     mock_invalidation->performRestCall(json);
 
-    EXPECT_EQ(recieved_invalidations.size(), 0);
+    EXPECT_EQ(recieved_invalidations.size(), 0u);
 }
 
 TEST_F(IntelligenceInvalidation, routine_registration)
@@ -792,7 +792,7 @@ TEST_F(IntelligenceInvalidation, invalidation_flow_with_multiple_assets)
     json1 << not_matching_invalidation.genObject();
     mock_invalidation->performRestCall(json1);
 
-    EXPECT_EQ(recieved_invalidations.size(), 0);
+    EXPECT_EQ(recieved_invalidations.size(), 0u);
 
     auto matching_second_main_attribute = StrAttributes()
         .addStringAttr("attr3", "3");
@@ -808,7 +808,7 @@ TEST_F(IntelligenceInvalidation, invalidation_flow_with_multiple_assets)
     json2 << matching_invalidation.genObject();
     mock_invalidation->performRestCall(json2);
 
-    EXPECT_EQ(recieved_invalidations.size(), 1);
+    EXPECT_EQ(recieved_invalidations.size(), 1u);
 }
 
 TEST_F(IntelligenceInvalidation, invalidation_cb_match_2_registred_assets)
@@ -868,7 +868,7 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_2_registred_assets)
     json << matching_invalidation.genObject();
     mock_invalidation->performRestCall(json);
 
-    EXPECT_EQ(recieved_invalidations.size(), 2);
+    EXPECT_EQ(recieved_invalidations.size(), 2u);
 }
 
 TEST_F(IntelligenceInvalidation, invalidation_cb_match_by_registration_id)
@@ -931,5 +931,5 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_by_registration_id)
     cout << json.str() << endl;
     mock_invalidation->performRestCall(json);
 
-    EXPECT_EQ(recieved_invalidations.size(), 1);
+    EXPECT_EQ(recieved_invalidations.size(), 1u);
 }

@@ -87,7 +87,7 @@ TEST(TagTest, TagStringTest)
     set<string> tags_string;
     for (Tags tag : makeRange<Tags>()) {
         tags_string = TagAndEnumManagement::convertToString({tag});
-        ASSERT_EQ(tags_string.size(), 1);
+        ASSERT_EQ(tags_string.size(), 1u);
         Maybe<Tags> tag_from_string = TagAndEnumManagement::convertStringToTag(*tags_string.begin());
         ASSERT_TRUE(tag_from_string.ok());
         EXPECT_EQ(tag_from_string.unpack(), tag);
@@ -571,7 +571,8 @@ TEST_F(ReportTest, testSyslogWithoutServiceName)
         report.getSyslog(),
         "<133>1 0:0:0.123Z cpnano-agent-001 UnnamedNanoService - 0 - "
         "title='Log Test' agent=\"Secret\" eventTraceId=\"\" eventSpanId=\"\" "
-        "issuingEngineVersion=\"\" serviceName=\"Unnamed Nano Service\" serviceId=\"\" serviceFamilyId=\"\""
+        "issuingEngineVersion=\"\" serviceName=\"Unnamed Nano Service\" serviceId=\"\" serviceFamilyId=\"\" "
+        "eventSeverity=\"Info\""
     );
 }
 
@@ -612,6 +613,7 @@ TEST_F(ReportTest, testSyslog)
         "title='Log Test' agent=\"Secret\"") +
         " eventTraceId=\"\" eventSpanId=\"\" issuingEngineVersion=\"\"" +
         " serviceName=\"Access Control App\" serviceId=\"\" serviceFamilyId=\"\"" +
+        " eventSeverity=\"Info\"" +
         string(" ArrayOfArraies=\"[ [ a, b \\], [ 1, 2 \\] \\]\"") +
         string(" DataWithNewLine=\"new\\r\\nline\"") +
         string(" DataWithQuote=\"data\\'bla\"");
@@ -654,7 +656,9 @@ TEST_F(ReportTest, testCef)
         "CEF:0|Check Point|AccessControlApp||Event Driven|Log Test|Low|"
         "eventTime=0:0:0.123 agent=\"Secret\" eventTraceId=\"\" eventSpanId=\"\" issuingEngineVersion=\"\""
         " serviceName=\"Access Control App\" serviceId=\"\""
-        " serviceFamilyId=\"\" Bond=\"1\" DataWithQuote=\"data\\'bla\""
+        " serviceFamilyId=\"\" Bond=\"1\""
+        " eventSeverity=\"Info\""
+        " DataWithQuote=\"data\\'bla\""
     );
 }
 

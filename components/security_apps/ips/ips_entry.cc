@@ -26,6 +26,8 @@ static const map<string, IPSConfiguration::Context> default_conf_mapping = {
 };
 
 static const IPSConfiguration default_conf(default_conf_mapping);
+static const IPSSignatures default_ips_sigs;
+static const SnortSignatures default_snort_sigs;
 
 IPSEntry::IPSEntry() : TableOpaqueSerialize<IPSEntry>(this) {}
 
@@ -51,9 +53,9 @@ IPSEntry::respond(const ParsedContext &parsed)
     ctx.registerValue(name, buf);
 
     ctx.activate();
-    auto &signatures = getConfigurationWithDefault(IPSSignatures(), "IPS", "IpsProtections");
+    auto &signatures = getConfigurationWithDefault(default_ips_sigs, "IPS", "IpsProtections");
     bool should_drop = signatures.isMatchedPrevent(parsed.getName(), buf);
-    auto &snort_signatures = getConfigurationWithDefault(SnortSignatures(), "IPSSnortSigs", "SnortProtections");
+    auto &snort_signatures = getConfigurationWithDefault(default_snort_sigs, "IPSSnortSigs", "SnortProtections");
     should_drop |= snort_signatures.isMatchedPrevent(parsed.getName(), buf);
     ctx.deactivate();
 

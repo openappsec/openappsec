@@ -76,7 +76,7 @@ public:
     writeToSocket(const std::string &msg)
     {
         acceptSocket();
-        EXPECT_EQ(write(connection_fd, msg.data(), msg.size()), msg.size());
+        EXPECT_EQ(write(connection_fd, msg.data(), msg.size()), static_cast<int>(msg.size()));
     }
 
 private:
