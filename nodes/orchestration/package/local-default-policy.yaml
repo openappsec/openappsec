@@ -1,15 +1,16 @@
 policies:
   default:
-    triggers:
-    - appsec-default-log-trigger
     mode: detect-learn
-    practices:
-    - webapp-default-practice
-    custom-response: appsec-default-web-user-response
+    practices: [appsec-best-practice]
+    triggers: [appsec-log-trigger]
+    custom-response: 403-forbidden
+    source-identifiers: ""
+    trusted-sources: ""
+    exceptions: []
   specific-rules: []
 
 practices:
-  - name: webapp-default-practice
+  - name: appsec-best-practice
     openapi-schema-validation:
       configmap: []
       override-mode: detect-learn
@@ -34,7 +35,7 @@ practices:
       override-mode: detect-learn
 
 log-triggers:
-  - name: appsec-default-log-trigger
+  - name: appsec-log-trigger
     access-control-logging:
       allow-events: false
       drop-events: true
@@ -57,7 +58,7 @@ log-triggers:
         format: json
 
 custom-responses:
-  - name: appsec-default-web-user-response
+  - name: 403-forbidden
     mode: response-code-only
     http-response-code: 403
 

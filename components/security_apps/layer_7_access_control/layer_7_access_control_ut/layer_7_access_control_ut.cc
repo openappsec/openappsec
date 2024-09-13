@@ -247,7 +247,9 @@ Layer7AccessControlTest::verifyReport(
     string log = reportToStr(report);
     dbgTrace(D_L7_ACCESS_CONTROL) << "Report: " << log;
 
-    if (!source_identifier.empty()) EXPECT_THAT(log, HasSubstr("\"httpSourceId\": \"" + source_identifier + "\""));
+    if (!source_identifier.empty()) {
+        EXPECT_THAT(log, HasSubstr("\"httpSourceId\": \"" + source_identifier + "\""));
+    }
     EXPECT_THAT(log, HasSubstr("\"securityAction\": \"" + security_action + "\""));
     EXPECT_THAT(log, HasSubstr("\"eventName\": \"Access Control External Vendor Reputation\""));
     EXPECT_THAT(log, HasSubstr("\"httpHostName\": \"juice-shop.checkpoint.com\""));

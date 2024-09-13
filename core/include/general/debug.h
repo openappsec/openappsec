@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "common.h"
+#include "time_print.h"
 #include "singleton.h"
 #include "scope_exit.h"
 

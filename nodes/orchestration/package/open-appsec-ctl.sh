@@ -1710,7 +1710,7 @@ is_apply_policy_needed()
         return 0
     fi
     local_policy_modification_time=$(stat -c %Y ${var_policy_file})
-    if [ "${local_policy_modification_time}" -eq "${last_local_policy_modification_time}" ] || [ -z ${last_local_policy_modification_time} ]; then
+    if [ "${local_policy_modification_time}" == "${last_local_policy_modification_time}" ]; then
         return 1
     fi
     return 0

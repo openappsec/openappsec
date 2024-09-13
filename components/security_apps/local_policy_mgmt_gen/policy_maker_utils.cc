@@ -21,6 +21,7 @@
 using namespace std;
 
 USE_DEBUG_FLAG(D_NGINX_POLICY);
+USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 void
 SecurityAppsWrapper::save(cereal::JSONOutputArchive &out_ar) const
@@ -186,6 +187,33 @@ PolicyMakerUtils::dumpPolicyToFile(
 }
 
 template<class R>
+vector<string>
+extractExceptionAnnotationNames(
+    const R &parsed_rule,
+    const R &default_rule,
+    const string &policy_name)
+{
+    vector<string> annotation_names;
+
+    const R &rule = (!parsed_rule.getExceptions().empty() ? parsed_rule : default_rule);
+    for (const string &exception_name : rule.getExceptions()) {
+        if (exception_name.empty()) {
+            continue;
+        }
+
+        const auto policy_exception = policy_name + "/" + exception_name;
+
+        dbgTrace(D_NGINX_POLICY) << "Adding " << policy_exception << " to exception vector";
+
+        annotation_names.push_back(policy_exception);
+    }
+
+    dbgTrace(D_NGINX_POLICY) << "Number of exceptions related to rule: " << annotation_names.size();
+
+    return annotation_names;
+}
+
+template<class R>
 map<AnnotationTypes, string>
 extractAnnotationsNames(
     const R &parsed_rule,
@@ -215,18 +243,6 @@ extractAnnotationsNames(
 
     if (!trigger_annotation_name.empty()) {
         rule_annotation[AnnotationTypes::TRIGGER] = policy_name + "/" + trigger_annotation_name;
-    }
-
-    string exception_annotation_name;
-    // TBD: support multiple exceptions
-    if (!parsed_rule.getExceptions().empty() && !parsed_rule.getExceptions()[0].empty()) {
-        exception_annotation_name = parsed_rule.getExceptions()[0];
-    } else if (!default_rule.getExceptions().empty() && !default_rule.getExceptions()[0].empty()) {
-        exception_annotation_name = default_rule.getExceptions()[0];
-    }
-
-    if (!exception_annotation_name.empty()) {
-        rule_annotation[AnnotationTypes::EXCEPTION] = policy_name + "/" + exception_annotation_name;
     }
 
     string web_user_res_annotation_name =
@@ -444,6 +460,7 @@ template<class T, class R>
 R
 getAppsecExceptionSpec(const string &exception_annotation_name, const T &policy)
 {
+    dbgFlow(D_NGINX_POLICY) << "anotation name: " << exception_annotation_name;
     auto exceptions_vec = policy.getAppsecExceptions();
     auto exception_it = extractElement(exceptions_vec.begin(), exceptions_vec.end(), exception_annotation_name);
 
@@ -776,6 +793,7 @@ createExceptionSection(
     const string &exception_annotation_name,
     const T &policy)
 {
+    dbgFlow(D_NGINX_POLICY) << "exception annotation name" << exception_annotation_name;
     AppsecException exception_spec =
         getAppsecExceptionSpec<T, AppsecException>(exception_annotation_name, policy);
     vector<InnerException> res;
@@ -784,6 +802,7 @@ createExceptionSection(
         ExceptionBehavior exception_behavior(exception.getAction());
         res.push_back(InnerException(exception_behavior, exception_match));
     }
+
     return res;
 }
 
@@ -896,13 +915,16 @@ createMultiRulesSections(
     const string &web_user_res_vec_id,
     const string &web_user_res_vec_type,
     const string &asset_name,
-    const string &exception_name,
-    const vector<InnerException> &exceptions)
+    const std::map<std::string, std::vector<InnerException>> &exceptions)
 {
     PracticeSection practice = PracticeSection(practice_id, practice_type, practice_name);
     vector<ParametersSection> exceptions_result;
     for (auto exception : exceptions) {
-        exceptions_result.push_back(ParametersSection(exception.getBehaviorId(), exception_name));
+
+        const auto &exception_name = exception.first;
+        for (const auto &inner_exception : exception.second) {
+            exceptions_result.push_back(ParametersSection(inner_exception.getBehaviorId(), exception_name));
+        }
     }
 
     vector<RulesTriggerSection> triggers;
@@ -1344,6 +1366,7 @@ PolicyMakerUtils::combineElementsToPolicy(const string &policy_version)
             convertMapToVector(log_triggers), convertMapToVector(web_user_res_triggers)
         )
     );
+
     ExceptionsWrapper exceptions_section({
         ExceptionsRulebase(convertExceptionsMapToVector(inner_exceptions))
     });
@@ -1381,6 +1404,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
     const string &policy_name)
 {
     map<AnnotationTypes, string> rule_annotations = extractAnnotationsNames(rule, default_rule, policy_name);
+
     if (
         !rule_annotations[AnnotationTypes::TRIGGER].empty() &&
         !log_triggers.count(rule_annotations[AnnotationTypes::TRIGGER])
@@ -1403,15 +1427,27 @@ PolicyMakerUtils::createPolicyElementsByRule(
             );
     }
 
-    if (
-        !rule_annotations[AnnotationTypes::EXCEPTION].empty() &&
-        !inner_exceptions.count(rule_annotations[AnnotationTypes::EXCEPTION])
-    ) {
-        inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]] =
-            createExceptionSection<T>(
-                rule_annotations[AnnotationTypes::EXCEPTION],
-                policy
-            );
+    const auto exceptions_annotations = extractExceptionAnnotationNames(rule, default_rule, policy_name);
+    std::map<std::string, std::vector<InnerException>> rule_inner_exceptions;
+    if (!exceptions_annotations.empty()) {
+        for (const auto &exception_name :exceptions_annotations) {
+            dbgWarning(D_LOCAL_POLICY) << "exceptions name: " << exception_name;
+
+            if (rule_inner_exceptions.count(exception_name)) {
+                dbgWarning(D_LOCAL_POLICY) << "exception name already exists for that rule: " << exception_name;
+                continue;
+            }
+
+            if (inner_exceptions.count(exception_name)) {
+                dbgWarning(D_LOCAL_POLICY) << "exception name already exists in inner exceptions: " << exception_name;
+                rule_inner_exceptions[exception_name] = inner_exceptions[exception_name];
+                continue;
+            }
+
+            auto exception_section = createExceptionSection<T>(exception_name, policy);
+            rule_inner_exceptions[exception_name] = exception_section;
+            inner_exceptions[exception_name] = exception_section;
+        }
     }
 
     if (
@@ -1470,8 +1506,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
             web_user_res_triggers[rule_annotations[AnnotationTypes::WEB_USER_RES]].getTriggerId(),
             "WebUserResponse",
             full_url,
-            rule_annotations[AnnotationTypes::EXCEPTION],
-            inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]]
+            rule_inner_exceptions
         );
         rules_config[rule_config.getAssetName()] = rule_config;
 
@@ -1498,7 +1533,7 @@ PolicyMakerUtils::createPolicyElementsByRule(
                 log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],
                 rule.getMode(),
                 trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]],
-                inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]]
+                rule_inner_exceptions
             );
             web_apps[rule_config.getAssetName()] = web_app;
         }

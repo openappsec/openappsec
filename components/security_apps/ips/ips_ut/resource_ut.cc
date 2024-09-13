@@ -71,7 +71,7 @@ TEST(resources, basic_resource)
     Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(resource);
 
     auto loaded_resources = getSettingWithDefault(IPSSignaturesResource(), "IPS", "protections");
-    EXPECT_EQ(loaded_resources.getSignatures().size(), 2);
+    EXPECT_EQ(loaded_resources.getSignatures().size(), 2u);
     auto version = getSettingWithDefault<string>("", "IPS", "VersionId");
     EXPECT_EQ(version, "1234567");
 }

@@ -137,8 +137,8 @@ private:
 TEST_F(EntryTest, basic_inherited_functions)
 {
     EXPECT_EQ(IPSEntry::name(), "IPS");
-    EXPECT_EQ(IPSEntry::currVer(), 0);
-    EXPECT_EQ(IPSEntry::minVer(), 0);
+    EXPECT_EQ(IPSEntry::currVer(), 0u);
+    EXPECT_EQ(IPSEntry::minVer(), 0u);
     EXPECT_NE(IPSEntry::prototype(), nullptr);
     EXPECT_EQ(entry.getListenerName(), IPSEntry::name());
 

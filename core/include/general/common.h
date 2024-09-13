@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 #include <sstream>
 #include <iomanip>
 #include <sys/types.h>
@@ -142,6 +143,30 @@ operator<<(ostream &os, const vector<Printable> &obj)
         os << (first ? "" : ", ") << val;
         first = false;
     }
+    return os;
+}
+
+// LCOV_EXCL_START Reason: Currently not used in 4.8 coverage but is used in alpine.
+template <typename PrintableKey, typename PrintableValue>
+ostream &
+operator<<(ostream &os, const pair<PrintableKey, PrintableValue> &)
+{
+    // Uncomment when g++ 4.8 is no longer supported
+    // return os << obj.first << ':' << obj.second;
+    return os;
+}
+// LCOL_EXCL_STOP
+
+template <typename PrintableKey, typename PrintableValue>
+ostream &
+operator<<(ostream &os, const map<PrintableKey, PrintableValue> &)
+{
+    // Uncomment when g++ 4.8 is no longer supported
+    // bool first = true;
+    // for (const auto &pair : obj) {
+    //     os << (first ? "" : ", ") << pair;
+    //     first = false;
+    // }
     return os;
 }
 

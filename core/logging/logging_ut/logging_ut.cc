@@ -101,7 +101,7 @@ public:
     }
 };
 
-class LogTest : public testing::TestWithParam<bool>
+class LogTest : public testing::Test
 {
 public:
     LogTest()
@@ -909,7 +909,7 @@ TEST_F(LogTest, OfflineK8sSvcBulkLogs)
     EXPECT_EQ(local_body, str1);
 }
 
-TEST_P(LogTest, metrics_check)
+TEST_F(LogTest, metrics_check)
 {
     loadFakeConfiguration(true, false, "", 3);
     Tags tag1 = Tags::POLICY_INSTALLATION;
@@ -935,15 +935,9 @@ TEST_P(LogTest, metrics_check)
         "    \"sentLogsBulksSum\": 3\n"
         "}";
 
-    bool is_named_query = GetParam();
-    if (is_named_query) {
-        EXPECT_THAT(AllMetricEvent().performNamedQuery(), ElementsAre(Pair("Logging data", logging_metric_str)));
-    } else {
-        EXPECT_THAT(AllMetricEvent().query(), ElementsAre(logging_metric_str));
-    }
+    EXPECT_THAT(AllMetricEvent().performNamedQuery(), ElementsAre(Pair("Logging data", logging_metric_str)));
+    EXPECT_THAT(AllMetricEvent().query(), ElementsAre(logging_metric_str));
 }
-
-INSTANTIATE_TEST_CASE_P(metrics_check, LogTest, ::testing::Values(false, true));
 
 TEST_F(LogTest, DeleteStreamTest)
 {
@@ -1564,7 +1558,7 @@ TEST_F(LogTest, ObfuscationTest)
     EXPECT_EQ(getBodyFogMessage(), expected_obfuscated_log);
     ASSERT_NE(sysog_routine, nullptr);
     sysog_routine();
-    EXPECT_EQ(capture_syslog_cef_data.size(), 2);
+    EXPECT_EQ(capture_syslog_cef_data.size(), 2u);
     for (const string &str : capture_syslog_cef_data) {
         EXPECT_THAT(str, AnyOf(HasSubstr("String='Another string'"), HasSubstr("String=\"Another string\"")));
     }

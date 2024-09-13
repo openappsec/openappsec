@@ -161,6 +161,7 @@ public:
     public:
         MyValue(int _x) : x(_x) { addObj(this); }
         MyValue(const MyValue &other) : x(other.x) {  addObj(this); }
+        MyValue & operator=(const MyValue &other) = default;
         ~MyValue() { delObj(this); }
         bool operator==(const MyValue &other) const { return x==other.x; }
         bool operator!=(const MyValue &other) const { return x!=other.x; }
@@ -208,9 +209,9 @@ TEST_F(MaybeAssignments, ValValRval)
     Maybe<MyValue, MyValue> m(MyValue(1));
 
     // Change the value
-    EXPECT_EQ(1, m->x);
+    EXPECT_EQ(m->x, 1);
     m = 2;
-    EXPECT_EQ(2, m->x);
+    EXPECT_EQ(m->x, 2);
 }
 
 TEST_F(MaybeAssignments, ValValLval)

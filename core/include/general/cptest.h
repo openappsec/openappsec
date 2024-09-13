@@ -30,6 +30,7 @@
 #include "buffer.h"
 #include "scope_exit.h"
 #include "tostring.h"
+#include "time_print.h"
 
 std::ostream& operator<<(std::ostream &os, const Buffer &buf);
 

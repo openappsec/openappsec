@@ -44,7 +44,7 @@ public:
     bool isOneCondition() const;
 
 private:
-    int conditions_number;
+    int conditions_number = 0;
     std::string action;
     std::vector<std::string> country_code;
     std::vector<std::string> country_name;

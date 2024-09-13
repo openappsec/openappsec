@@ -42,7 +42,7 @@ addSlashesToSpecialChars(const string &input)
         case '\"':
         case '\\':
             output += '\\';
-            //no break
+            // fallthrough
         default:
             output += c;
             break;

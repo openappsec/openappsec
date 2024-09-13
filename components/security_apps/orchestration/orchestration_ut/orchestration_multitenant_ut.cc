@@ -1,3 +1,7 @@
+#include <sstream>
+class Package;
+std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
+
 #include "orchestration_comp.h"
 
 #include "cptest.h"
@@ -470,6 +474,9 @@ TEST_F(OrchestrationMultitenancyTest, handle_virtual_resource)
             false
         )
     ).WillOnce(Return(Maybe<void>()));
+
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
 
     EXPECT_CALL(
         mock_service_controller,

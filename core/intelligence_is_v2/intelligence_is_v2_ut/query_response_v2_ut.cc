@@ -155,13 +155,13 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
         obj2.loadFromJson(ss.str());
     }
 
-    EXPECT_EQ(obj.getAmountOfAssets(), 2);
-    EXPECT_EQ(obj2.getAmountOfAssets(), 2);
+    EXPECT_EQ(obj.getAmountOfAssets(), 2u);
+    EXPECT_EQ(obj2.getAmountOfAssets(), 2u);
     EXPECT_EQ(obj.getResponseStatus(), ResponseStatus::DONE);
     EXPECT_EQ(obj2.getResponseStatus(), ResponseStatus::DONE);
-    EXPECT_EQ(obj.getData().begin()->getAssetSchemaVersion(), 1);
+    EXPECT_EQ(obj.getData().begin()->getAssetSchemaVersion(), 1u);
     EXPECT_EQ(obj.getData().begin()->getAssetType(), "workload-cloud-ip");
-    EXPECT_EQ(obj.getData().begin()->getAssetTypeSchemaVersion(), 1);
+    EXPECT_EQ(obj.getData().begin()->getAssetTypeSchemaVersion(), 1u);
     EXPECT_EQ(obj.getData().begin()->getAssetPermissionGroupId(), "some-group-id");
     EXPECT_EQ(obj.getData().begin()->getAssetName(), "[1.1.1.1]");
     EXPECT_EQ(obj.getData().begin()->getAssetClass(), "workload");
@@ -188,7 +188,7 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
     EXPECT_EQ(soucres_it->getAssetId(), "50255c3172b4fb7fda93025f0bfaa7abefd1");
     EXPECT_EQ(soucres_it->getTTL(), chrono::seconds(120));
     EXPECT_EQ(soucres_it->getExpirationTime(), "2020-07-29T11:21:12.253Z");
-    EXPECT_EQ(soucres_it->getConfidence(), 500);
+    EXPECT_EQ(soucres_it->getConfidence(), 500u);
     EXPECT_EQ(soucres_it->getAttributes().begin()->getData().toString(), "red");
     EXPECT_EQ(soucres_it->getAttributes().begin()->getData1().toString(), "Omry");
 
@@ -198,15 +198,15 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
     EXPECT_EQ(soucres_it->getAssetId(), "cb068860528cb6bfb000cc35e79f11aeefed2");
     EXPECT_EQ(soucres_it->getTTL(), chrono::seconds(120));
     EXPECT_EQ(soucres_it->getExpirationTime(), "2020-07-29T11:21:12.253Z");
-    EXPECT_EQ(soucres_it->getConfidence(), 600);
+    EXPECT_EQ(soucres_it->getConfidence(), 600u);
     EXPECT_EQ(soucres_it->getAttributes().begin()->getData().toString(), "white");
     EXPECT_EQ(soucres_it->getAttributes().begin()->getData1().toString(), "Max");
 
     vector<AssetReply<stringData1>> asset_collections = obj.getData();
-    EXPECT_EQ(asset_collections.size(), 1);
+    EXPECT_EQ(asset_collections.size(), 1u);
     vector<AssetReply<stringData1>>::const_iterator asset_collections_it = asset_collections.begin();
     vector<stringData1> asset_sources = asset_collections_it->getData();
-    EXPECT_EQ(asset_sources.size(), 2);
+    EXPECT_EQ(asset_sources.size(), 2u);
     vector<stringData1>::iterator asset_sources_it = asset_sources.begin();
 
     EXPECT_EQ(asset_sources_it->getData().toString(), "red");
