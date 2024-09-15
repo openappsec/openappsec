@@ -264,8 +264,8 @@ TEST_F(SharedIPCTest, ensure_right_permissions)
         stat(queue_name, &info);
         EXPECT_EQ(info.st_uid, uid);
         EXPECT_EQ(info.st_gid, gid);
-        EXPECT_EQ(info.st_mode & S_IRUSR, S_IRUSR);
-        EXPECT_EQ(info.st_mode & S_IWUSR, S_IWUSR);
-        EXPECT_NE(info.st_mode & S_IXUSR, S_IXUSR);
+        EXPECT_EQ(info.st_mode & S_IRUSR, static_cast<uint>(S_IRUSR));
+        EXPECT_EQ(info.st_mode & S_IWUSR, static_cast<uint>(S_IWUSR));
+        EXPECT_NE(info.st_mode & S_IXUSR, static_cast<uint>(S_IXUSR));
     }
 }

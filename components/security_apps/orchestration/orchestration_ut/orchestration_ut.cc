@@ -1,3 +1,7 @@
+#include <sstream>
+class Package;
+std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
+
 #include "orchestration_comp.h"
 
 #include "cptest.h"
@@ -380,6 +384,10 @@ TEST_F(OrchestrationTest, hybridModeRegisterLocalAgentRoutine)
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(_));
 
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
         .WillOnce(Return())
         .WillOnce(Invoke([] (chrono::microseconds) { throw invalid_argument("stop while loop"); }));
@@ -587,6 +595,9 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
     EXPECT_CALL(mock_status, setIsConfigurationUpdated(_));
 
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
     EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
         .WillOnce(Return())
         .WillOnce(Invoke([] (chrono::microseconds) { throw invalid_argument("stop while loop"); }));
@@ -717,6 +728,9 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdatRollback)
     );
     EXPECT_CALL(mock_status, setPolicyVersion(third_val));
     EXPECT_CALL(mock_status, setPolicyVersion(second_val));
+
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
 
     string policy_versions;
     EXPECT_CALL(mock_service_controller, getPolicyVersions()).WillRepeatedly(ReturnRef(policy_versions));
@@ -894,6 +908,9 @@ TEST_F(OrchestrationTest, orchestrationPolicyUpdate)
         .WillOnce(ReturnRef(third_val)
     );
     EXPECT_CALL(mock_status, setPolicyVersion(third_val));
+
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
 
     string policy_versions;
     EXPECT_CALL(mock_service_controller, getPolicyVersions()).WillRepeatedly(ReturnRef(policy_versions));
@@ -1112,6 +1129,9 @@ TEST_F(OrchestrationTest, manifestUpdate)
         )
     );
 
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
     GetResourceFile manifest_file(GetResourceFile::ResourceFileType::MANIFEST);
     EXPECT_CALL(mock_downloader,
         downloadFile(
@@ -1150,6 +1170,8 @@ TEST_F(OrchestrationTest, manifestUpdate)
 
 TEST_F(OrchestrationTest, getBadPolicyUpdate)
 {
+    Debug::setUnitTestFlag(D_UPDATES_PROCESS_REPORTER, Debug::DebugLevel::NOISE);
+
     EXPECT_CALL(
         rest,
         mockRestCall(RestAction::ADD, "proxy", _)
@@ -1196,6 +1218,13 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
     EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
         .WillOnce(Return(data_checksum));
 
+    string manifest = "";
+    string policy = "111111";
+    string setting = "";
+
+    string second_val = "12";
+    string third_val = "13";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillRepeatedly(ReturnRef(third_val));
     Maybe<string> new_policy_checksum(string("111111"));
 
     GetResourceFile policy_file(GetResourceFile::ResourceFileType::POLICY);
@@ -1207,12 +1236,6 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
             policy_file
         )
     ).WillOnce(Return(Maybe<std::string>(string(new_policy_path))));
-    string manifest = "";
-    string policy = "111111";
-    string setting = "";
-
-    string second_val = "12";
-    string third_val = "13";
     EXPECT_CALL(mock_service_controller, getPolicyVersion())
         .Times(4)
         .WillOnce(ReturnRef(first_policy_version))
@@ -1245,8 +1268,6 @@ TEST_F(OrchestrationTest, getBadPolicyUpdate)
             }
         )
     );
-
-    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillRepeatedly(ReturnRef(third_val));
 
     EXPECT_CALL(
         mock_service_controller,
@@ -1340,6 +1361,9 @@ TEST_F(OrchestrationTest, failedDownloadSettings)
     );
 
     EXPECT_CALL(mock_status, setLastUpdateAttempt());
+
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
 
     string manifest_err =
         "Critical Error: Agent/Gateway was not fully deployed on host 'hostname' "
@@ -1456,6 +1480,10 @@ TEST_P(OrchestrationTest, orchestrationFirstRun)
             }
         )
     );
+
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
     EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
@@ -1654,6 +1682,10 @@ TEST_F(OrchestrationTest, dataUpdate)
         .WillOnce(Return(data_instance_checksum));
 
     EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
     EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
         Invoke(
             [&](CheckUpdateRequest &req)

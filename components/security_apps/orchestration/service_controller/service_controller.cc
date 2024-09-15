@@ -29,6 +29,7 @@
 #include "i_orchestration_tools.h"
 #include "customized_cereal_map.h"
 #include "declarative_policy_utils.h"
+#include "updates_process_event.h"
 
 using namespace std;
 using namespace ReportIS;
@@ -65,6 +66,13 @@ public:
         }
         if (error.get()) {
             service_controller->updateReconfStatus(id.get(), service_name.get(), ReconfStatus::FAILED);
+            UpdatesProcessEvent(
+                UpdatesProcessResult::FAILED,
+                UpdatesConfigType::GENERAL,
+                UpdatesFailureReason::SERVISE_CONFIGURATION,
+                string(service_name.get() + ", ID: " + to_string(id.get())),
+                (error_message.isActive() ? " Error: " + error_message.get() : "")
+            ).notify();
             dbgError(D_SERVICE_CONTROLLER)
                 << "Request for service reconfiguration failed to complete. ID: "
                 << id.get()
@@ -1028,6 +1036,12 @@ ServiceController::Impl::sendSignalForServices(
     }
 
     dbgDebug(D_SERVICE_CONTROLLER) << "The reconfiguration has reached a timeout";
+    UpdatesProcessEvent(
+        UpdatesProcessResult::FAILED,
+        UpdatesConfigType::GENERAL,
+        UpdatesFailureReason::SERVISE_CONFIGURATION_TIMEOUT,
+        "The reconfiguration has reached a timeout"
+    ).notify();
     services_reconf_status.clear();
     services_reconf_names.clear();
     return genError("The reconfiguration has reached a timeout");

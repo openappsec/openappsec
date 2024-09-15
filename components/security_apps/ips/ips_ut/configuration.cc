@@ -7,7 +7,7 @@ TEST(configuration, basic_context)
 
     IPSConfiguration::Context ctx1(IPSConfiguration::ContextType::HISTORY, 254);
     EXPECT_EQ(ctx1.getType(), IPSConfiguration::ContextType::HISTORY);
-    EXPECT_EQ(ctx1.getHistorySize(), 254);
+    EXPECT_EQ(ctx1.getHistorySize(), 254u);
 
     IPSConfiguration::Context ctx2(IPSConfiguration::ContextType::NORMAL, 0);
     EXPECT_EQ(ctx2.getType(), IPSConfiguration::ContextType::NORMAL);
@@ -42,7 +42,7 @@ TEST(configuration, read_configuration)
 
     auto body = conf.getContext("HTTP_REQUEST_BODY");
     EXPECT_EQ(body.getType(), IPSConfiguration::ContextType::HISTORY);
-    EXPECT_EQ(conf.getHistorySize("HTTP_REQUEST_BODY"), 100);
+    EXPECT_EQ(conf.getHistorySize("HTTP_REQUEST_BODY"), 100u);
 
     auto header = conf.getContext("HTTP_REQUEST_HEADER");
     EXPECT_EQ(header.getType(), IPSConfiguration::ContextType::KEEP);

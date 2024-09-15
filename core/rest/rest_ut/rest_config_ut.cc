@@ -162,7 +162,7 @@ TEST_F(RestConfigTest, basic_flow)
     I_MainLoop::Routine stop_routine = [&] () {
         EXPECT_EQ(connect(file_descriptor, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0);
         string msg = "POST /add-test HTTP/1.1\r\nContent-Length: 10\r\n\r\n{\"num\": 5}";
-        EXPECT_EQ(write(file_descriptor, msg.data(), msg.size()), msg.size());
+        EXPECT_EQ(write(file_descriptor, msg.data(), msg.size()), static_cast<int>(msg.size()));
 
         while(!TestServer::g_num) {
             mainloop->yield(true);

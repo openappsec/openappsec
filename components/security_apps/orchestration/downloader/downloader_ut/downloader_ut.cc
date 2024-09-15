@@ -1,3 +1,7 @@
+#include <sstream>
+class Package;
+static std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
+
 #include "cptest.h"
 #include "config.h"
 #include "config_component.h"

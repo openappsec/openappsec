@@ -176,6 +176,8 @@ Report::getSyslog() const
     if (!origin_syslog.empty()) {
         report.push(origin_syslog);
     }
+    auto severity_str = "eventSeverity=\"" + TagAndEnumManagement::convertToString(severity) + '"';
+    report.push(severity_str);
     if (!event_data_syslog.empty()) {
         report.push(event_data_syslog);
     }
@@ -218,6 +220,8 @@ Report::getCef() const
     if (!origin_cef.empty()) {
         report.pushExtension(origin_cef);
     }
+    auto severity_str = "eventSeverity=\"" + TagAndEnumManagement::convertToString(severity) + '"';
+    report.pushExtension(severity_str);
     if (!event_data_cef.empty()) {
         report.pushExtension(event_data_cef);
     }

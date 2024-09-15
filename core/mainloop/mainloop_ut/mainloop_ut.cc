@@ -504,7 +504,7 @@ TEST_F(MainloopTest, get_routine_id)
 {
     cptestPrepareToDie();
     auto cb = [this] () {
-        EXPECT_EQ(mainloop->getCurrentRoutineId().unpack(), 1);
+        EXPECT_EQ(mainloop->getCurrentRoutineId().unpack(), 1u);
         EXPECT_DEATH(mainloop->run(), "MainloopComponent::Impl::run was called while it was already running");
     };
     mainloop->addOneTimeRoutine(

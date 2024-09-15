@@ -1,3 +1,7 @@
+#include <sstream>
+namespace Intelligence { class Response; }
+std::ostream & operator<<(std::ostream &os, const Intelligence::Response &);
+
 #include "intelligence_comp_v2.h"
 
 #include "config.h"
@@ -642,7 +646,7 @@ TEST_F(IntelligenceComponentTestV2, multiAssetsIntelligenceTest)
     auto maybe_ans = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans.ok());
     auto vec = maybe_ans.unpack();
-    EXPECT_EQ(vec.size(), 3);
+    EXPECT_EQ(vec.size(), 3u);
 
     auto iter = vec.begin();
 
@@ -962,11 +966,11 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, paging_in_progress_response_str1)));
 
     request.setAssetsLimit(2);
-    EXPECT_EQ(request.getAssetsLimit(), 2);
+    EXPECT_EQ(request.getAssetsLimit(), 2u);
     auto maybe_ans1 = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans1.ok());
     auto vec1 = maybe_ans1.unpack();
-    EXPECT_EQ(vec1.size(), 1);
+    EXPECT_EQ(vec1.size(), 1u);
     EXPECT_EQ(request.isPagingFinished(), false);
 
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
@@ -975,7 +979,7 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     auto maybe_ans2 = intell->queryIntelligence<Profile>(request);
     EXPECT_TRUE(maybe_ans2.ok());
     auto vec2 = maybe_ans2.unpack();
-    EXPECT_EQ(vec2.size(), 2);
+    EXPECT_EQ(vec2.size(), 2u);
     EXPECT_EQ(request.isPagingFinished(), false);
 
     EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _)
@@ -985,7 +989,7 @@ TEST_F(IntelligenceComponentTestV2, pagingQueryTest)
     if (!maybe_ans3.ok()) cout << maybe_ans3.getErr() + "\n";
     EXPECT_TRUE(maybe_ans3.ok());
     auto vec3 = maybe_ans3.unpack();
-    EXPECT_EQ(vec3.size(), 1);
+    EXPECT_EQ(vec3.size(), 1u);
     EXPECT_EQ(request.isPagingFinished(), true);
 
     vector<AssetReply<Profile>>::iterator assets_iter = vec3.begin();
@@ -1316,7 +1320,6 @@ TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
     QueryRequest request(Condition::EQUALS, "category", "cloud", true, AttributeKeyType::NONE);
     request.activatePaging();
     request.setAssetsLimit(10);
-    vector<AssetReply<Profile>> objects_reply;
     vector<string> objects_ids;
     do {
         auto object_result = intell->queryIntelligence<Profile>(request, true);
@@ -1325,10 +1328,9 @@ TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
             break;
         }
 
-        objects_reply = object_result.unpack();
-        if (objects_reply.empty()) break;
+        if ((*object_result).empty()) break;
 
-        for (const AssetReply<Profile> &current_object : objects_reply) {
+        for (const AssetReply<Profile> &current_object : *object_result) {
             if (current_object.getMainAttributes().empty()) {
                 continue;
             }
@@ -1337,5 +1339,5 @@ TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
         }
     } while (!request.isPagingFinished());
 
-    EXPECT_EQ(objects_ids.size(), 2);
+    EXPECT_EQ(objects_ids.size(), 2u);
 }
