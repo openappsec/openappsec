@@ -404,6 +404,7 @@ AppsecPracticeAntiBotSection::save(cereal::JSONOutputArchive &out_ar) const
 }
 
 // LCOV_EXCL_START Reason: no test exist
+// Used for V1Beta1
 WebAppSection::WebAppSection(
     const string &_application_urls,
     const string &_asset_id,
@@ -417,7 +418,7 @@ WebAppSection::WebAppSection(
     const LogTriggerSection &parsed_log_trigger,
     const string &default_mode,
     const AppSecTrustedSources &parsed_trusted_sources,
-    const vector<InnerException> &parsed_exceptions)
+    const std::map<std::string, std::vector<InnerException>> &exceptions)
     :
     application_urls(_application_urls),
     asset_id(_asset_id),
@@ -449,8 +450,11 @@ WebAppSection::WebAppSection(
         overrides.push_back(AppSecOverride(source_ident));
     }
 
-    for (const InnerException &exception : parsed_exceptions) {
-        overrides.push_back(AppSecOverride(exception));
+    for (const auto &exception : exceptions) {
+
+        for (const auto &inner_exception : exception.second) {
+            overrides.push_back(AppSecOverride(inner_exception));
+        }
     }
 }
 

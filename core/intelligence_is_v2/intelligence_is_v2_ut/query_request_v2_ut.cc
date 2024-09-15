@@ -136,12 +136,12 @@ TEST(QueryRequestTestV2, AttributesTest)
     request.setRequestedAttr("countryName");
     SerializableAttributesMap request_attributes_map2 = request.getRequestedAttributes();
 
-    EXPECT_EQ(request_attributes_map2.getAttributeByKey("attributes.countryName"), 500);
+    EXPECT_EQ(request_attributes_map2.getAttributeByKey("attributes.countryName"), 500u);
 
     request.setRequestedAttr("reputationSeverity", 30);
     SerializableAttributesMap request_attributes_map3 = request.getRequestedAttributes();
 
-    EXPECT_EQ(request_attributes_map3.getAttributeByKey("attributes.reputationSeverity"), 30);
+    EXPECT_EQ(request_attributes_map3.getAttributeByKey("attributes.reputationSeverity"), 30u);
 
     string output_json =
     "{\n"

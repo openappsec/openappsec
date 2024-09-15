@@ -1,3 +1,7 @@
+#include <sstream>
+class Package;
+static std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
+
 #include "url_parser.h"
 
 #include "cptest.h"

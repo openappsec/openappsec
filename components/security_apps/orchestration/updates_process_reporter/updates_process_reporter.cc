@@ -29,14 +29,21 @@ void
 UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
 {
     if (event.getReason() == UpdatesFailureReason::CHECK_UPDATE) {
+        auto i_controller = Singleton::Consume<I_ServiceController>::by<UpdatesProcessReporter>();
+        string version = i_controller->getUpdatePolicyVersion();
         if (event.getResult() == UpdatesProcessResult::SUCCESS && reports.empty()) {
             dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Update proccess finished successfully";
-            report_failure_count = 0;
+            report_failure_count_map.erase(version);
             return;
         }
-        dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Update proccess finished with errors";
-        report_failure_count++;
-        if (report_failure_count <= 1) {
+        if (report_failure_count_map.find(version) == report_failure_count_map.end()) {
+            report_failure_count_map[version] = 0;
+        }
+        report_failure_count_map[version]++;
+        dbgTrace(D_UPDATES_PROCESS_REPORTER)
+            << "Update proccess finished with errors. Count: "
+            << report_failure_count_map[version];
+        if (report_failure_count_map[version] <= 1) {
             reports.clear();
             return;
         }
@@ -48,7 +55,7 @@ UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
                 event.parseDescription()
             )
         );
-        sendReoprt();
+        sendReoprt(version);
         return;
     }
     if (event.getResult() == UpdatesProcessResult::SUCCESS || event.getResult() == UpdatesProcessResult::UNSET) return;
@@ -58,12 +65,13 @@ UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
 }
 
 void
-UpdatesProcessReporter::sendReoprt()
+UpdatesProcessReporter::sendReoprt(const string &version)
 {
     stringstream full_reports;
     UpdatesFailureReason failure_reason = UpdatesFailureReason::NONE;
     full_reports << "Updates process reports:" << endl;
-    full_reports << "report failure count:" << report_failure_count << endl;
+    full_reports << "Policy version: " << version << endl;
+    full_reports << "report failure count:" << report_failure_count_map[version] << endl;
     for (const auto &report : reports) {
         if (report.getReason() != UpdatesFailureReason::CHECK_UPDATE) {
             failure_reason = report.getReason();

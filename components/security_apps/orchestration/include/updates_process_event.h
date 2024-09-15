@@ -35,6 +35,8 @@ enum class UpdatesFailureReason {
     INSTALL_PACKAGE,
     CHECKSUM_UNMATCHED,
     POLICY_CONFIGURATION,
+    SERVISE_CONFIGURATION,
+    SERVISE_CONFIGURATION_TIMEOUT,
     POLICY_FOG_CONFIGURATION,
     NONE
 
@@ -57,6 +59,8 @@ convertUpdatesFailureReasonToStr(UpdatesFailureReason reason)
         case UpdatesFailureReason::INSTALL_PACKAGE : return "INSTALL_PACKAGE";
         case UpdatesFailureReason::CHECKSUM_UNMATCHED : return "CHECKSUM_UNMATCHED";
         case UpdatesFailureReason::POLICY_CONFIGURATION : return "POLICY_CONFIGURATION";
+        case UpdatesFailureReason::SERVISE_CONFIGURATION : return "SERVISE_CONFIGURATION";
+        case UpdatesFailureReason::SERVISE_CONFIGURATION_TIMEOUT : return "SERVISE_CONFIGURATION_TIMEOUT";
         case UpdatesFailureReason::POLICY_FOG_CONFIGURATION : return "POLICY_FOG_CONFIGURATION";
         case UpdatesFailureReason::NONE : return "NONE";
     }

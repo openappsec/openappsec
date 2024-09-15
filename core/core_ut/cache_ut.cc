@@ -151,10 +151,10 @@ TEST(TempCaching, capacity)
     cache.createEntry(3);
     cache.createEntry(4);
 
-    EXPECT_EQ(cache.size(), 5);
-    EXPECT_EQ(cache.capacity(), 0);
+    EXPECT_EQ(cache.size(), 5u);
+    EXPECT_EQ(cache.capacity(), 0u);
     cache.capacity(3);
-    EXPECT_EQ(cache.size(), 3);
+    EXPECT_EQ(cache.size(), 3u);
     EXPECT_FALSE(cache.doesKeyExists(0));
     EXPECT_FALSE(cache.doesKeyExists(1));
     EXPECT_TRUE(cache.doesKeyExists(2));
@@ -162,7 +162,7 @@ TEST(TempCaching, capacity)
     EXPECT_TRUE(cache.doesKeyExists(4));
 
     cache.createEntry(5);
-    EXPECT_EQ(cache.size(), 3);
+    EXPECT_EQ(cache.size(), 3u);
     EXPECT_FALSE(cache.doesKeyExists(2));
     EXPECT_TRUE(cache.doesKeyExists(3));
     EXPECT_TRUE(cache.doesKeyExists(4));
@@ -170,7 +170,7 @@ TEST(TempCaching, capacity)
 
     cache.capacity(0);
     cache.createEntry(6);
-    EXPECT_EQ(cache.size(), 4);
+    EXPECT_EQ(cache.size(), 4u);
     EXPECT_TRUE(cache.doesKeyExists(3));
     EXPECT_TRUE(cache.doesKeyExists(4));
     EXPECT_TRUE(cache.doesKeyExists(5));
@@ -178,7 +178,7 @@ TEST(TempCaching, capacity)
 
     cache.deleteEntry(5);
     cache.capacity(2);
-    EXPECT_EQ(cache.size(), 2);
+    EXPECT_EQ(cache.size(), 2u);
     EXPECT_TRUE(cache.doesKeyExists(4));
     EXPECT_TRUE(cache.doesKeyExists(6));
 }

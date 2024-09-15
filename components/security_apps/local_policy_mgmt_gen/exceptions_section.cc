@@ -146,7 +146,9 @@ AppsecException::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec exception";
     parseAppsecJSONKey<string>("name", name, archive_in);
-    archive_in(CEREAL_NVP(exception_spec));
+    AppsecExceptionSpec single_exception_spec;
+    single_exception_spec.load(archive_in);
+    exception_spec.push_back(single_exception_spec);
 }
 
 void
@@ -174,7 +176,7 @@ ExceptionMatch::ExceptionMatch(const AppsecExceptionSpec &parsed_exception)
 {
     bool single_condition = parsed_exception.isOneCondition();
     for (auto &attrib : attributes) {
-        auto &attrib_name = attrib.first;
+        auto attrib_name = (attrib.first == "sourceIp" ? "sourceIP" : attrib.first);
         auto &attrib_getter = attrib.second;
         auto exceptions_value = attrib_getter(parsed_exception);
         if (exceptions_value.empty()) continue;
