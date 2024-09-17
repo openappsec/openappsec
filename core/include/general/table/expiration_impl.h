@@ -110,7 +110,9 @@ template <typename Key>
 const Key &
 Table<Key>::Impl::ExpList::getEarliest() const
 {
-    dbgAssert(!list.empty()) << "Cannot access the earliest member of an empty list";
+    dbgAssert(!list.empty())
+        << AlertInfo(AlertTeam::CORE, "table")
+        << "Cannot access the earliest member of an empty list";
     return list.back().getKey();
 }
 

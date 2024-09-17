@@ -183,4 +183,16 @@ class WaitTransactionEvent : public Event<WaitTransactionEvent, EventVerdict>
 {
 };
 
+class SecurityAppsDropEvent : public Event<SecurityAppsDropEvent>
+{
+public:
+    SecurityAppsDropEvent(
+        const std::set<std::string> &apps_names)
+            :
+        apps_names(apps_names) {}
+    const std::set<std::string> & getAppsNames() const { return apps_names; }
+
+private:
+    const std::set<std::string> apps_names;
+};
 #endif // __HTTP_INSPECTION_EVENTS_H__

@@ -36,6 +36,7 @@ struct ValueStatsAnalyzer
     bool isUrlEncoded;
     bool hasCharLess;
     bool hasDoubleQuote;
+    bool hasPercent;
     std::string textual;
 };
 

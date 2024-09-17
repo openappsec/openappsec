@@ -90,7 +90,7 @@ SentinelRuntimeState::getOffset(const std::string &) const
 uint
 SentinelRuntimeState::getVariable(uint var_id) const
 {
-    dbgAssert(false) << "Could not find the variable ID: " << var_id;
+    dbgAssert(false) << AlertInfo(AlertTeam::CORE, "keywords") << "Could not find the variable ID: " << var_id;
     return 0;
 }
 // LCOV_EXCL_STOP

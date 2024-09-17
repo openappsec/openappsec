@@ -429,14 +429,16 @@ public:
                 status.insertServiceSetting(service_name, path);
                 return;
             case OrchestrationStatusConfigType::MANIFEST:
-                dbgAssert(false) << "Manifest is not a service configuration file type";
+                dbgAssert(false)
+                    << AlertInfo(AlertTeam::CORE, "sesrvice configuration")
+                    << "Manifest is not a service configuration file type";
                 break;
             case OrchestrationStatusConfigType::DATA:
                 return;
             case OrchestrationStatusConfigType::COUNT:
                 break;
         }
-        dbgAssert(false) << "Unknown configuration file type";
+        dbgAssert(false) << AlertInfo(AlertTeam::CORE, "sesrvice configuration") << "Unknown configuration file type";
     }
 
     void

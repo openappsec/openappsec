@@ -40,6 +40,8 @@ public:
         i_mainloop = Singleton::Consume<I_MainLoop>::by<HealthChecker>();
         i_socket = Singleton::Consume<I_Socket>::by<HealthChecker>();
         i_orchestration_status = Singleton::Consume<I_OrchestrationStatus>::by<HealthChecker>();
+        i_service_controller = Singleton::Consume<I_ServiceController>::by<HealthChecker>();
+
         initConfig();
         initServerSocket();
 
@@ -270,18 +272,17 @@ private:
         }
 
         if (NGEN::Filesystem::exists(rpm_full_load_path)) {
-            dbgTrace(D_HEALTH_CHECK) << rpm_full_load_path << " exists, returning healthy status";
-            return HealthCheckStatus::HEALTHY;
+            dbgTrace(D_HEALTH_CHECK) << "RPM is fully loaded";
+            return i_service_controller->getServicesPolicyStatus()
+                ? HealthCheckStatus::HEALTHY
+                : HealthCheckStatus::UNHEALTHY;
         }
 
-        if (NGEN::Filesystem::exists(rpm_partial_load_path)) {
-            dbgTrace(D_HEALTH_CHECK) << rpm_partial_load_path << " exists, returning degraded status";
-            return HealthCheckStatus::DEGRADED;
-        }
-
-        if (!NGEN::Filesystem::exists(first_rpm_policy_load_path)) {
-            dbgTrace(D_HEALTH_CHECK) << "Could not load latest RPM policy, returning degraded status";
-            return HealthCheckStatus::DEGRADED;
+        if (NGEN::Filesystem::exists(rpm_partial_load_path) || !NGEN::Filesystem::exists(first_rpm_policy_load_path)) {
+            dbgTrace(D_HEALTH_CHECK) << "RPM is partially loaded";
+            return i_service_controller->getServicesPolicyStatus()
+                ? HealthCheckStatus::DEGRADED
+                : HealthCheckStatus::UNHEALTHY;
         }
 
         dbgTrace(D_HEALTH_CHECK) << "RPM is not loaded, returning unhealthy status";
@@ -442,6 +443,7 @@ private:
     I_Socket *i_socket                              = nullptr;
     I_Health_Check_Manager *i_health_check_manager  = nullptr;
     I_OrchestrationStatus *i_orchestration_status  = nullptr;
+    I_ServiceController *i_service_controller = nullptr;
 };
 
 HealthChecker::HealthChecker() : Component("HealthChecker"), pimpl(make_unique<Impl>()) {}

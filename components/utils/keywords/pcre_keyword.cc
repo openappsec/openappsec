@@ -297,7 +297,9 @@ PCREKeyword::getStartOffsetAndLength(uint buf_size, const I_KeywordRuntimeState 
 MatchStatus
 PCREKeyword::isMatch(const I_KeywordRuntimeState *prev) const
 {
-    dbgAssert(pcre_machine!=nullptr) << "Trying to run on an uninitialized keyword 'pcre'";
+    dbgAssert(pcre_machine!=nullptr)
+        << AlertInfo(AlertTeam::CORE, "keywords")
+        << "Trying to run on an uninitialized keyword 'pcre'";
 
     auto part = Singleton::Consume<I_Environment>::by<KeywordComp>()->get<Buffer>(static_cast<string>(ctx));
 

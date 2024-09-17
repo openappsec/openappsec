@@ -25,12 +25,18 @@ template <typename T>
 class Average : public MetricCalc
 {
 public:
-    Average(GenericMetric *metric, const std::string &title) : MetricCalc(metric, title), sum(0), count(0) {}
+    template <typename ... Args>
+    Average(GenericMetric *metric, const std::string &title, const Args & ... args)
+            :
+        MetricCalc(metric, title, args ...),
+        sum(0),
+        count(0)
+    {
+    }
 
     void
     report(const T &new_value)
     {
-        was_once_reported = true;
         sum += new_value;
         count++;
     }
@@ -38,7 +44,6 @@ public:
     void
     reset() override
     {
-        was_once_reported = false;
         sum = 0;
         count = 0;
     }
@@ -46,19 +51,19 @@ public:
     double
     getAverage() const
     {
-        return (was_once_reported) ? double(sum)/count : 0;
+        return (count > 0) ? double(sum)/count : 0;
     }
 
     void
     save(cereal::JSONOutputArchive &ar) const override
     {
-        ar(cereal::make_nvp(calc_title, getAverage()));
+        ar(cereal::make_nvp(getMetricName(), getAverage()));
     }
 
     LogField
     getLogField() const override
     {
-        return LogField(calc_title, static_cast<uint64_t>(getAverage()));
+        return LogField(getMetricName(), static_cast<uint64_t>(getAverage()));
     }
 
 private:

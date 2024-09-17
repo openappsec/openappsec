@@ -105,7 +105,7 @@ PMHook::prepare(const set<PMPattern> &inputs)
 set<PMPattern>
 PMHook::scanBuf(const Buffer &buf) const
 {
-    dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
+    dbgAssert(handle != nullptr) << AlertInfo(AlertTeam::CORE, "pattern matcher") << "Unusable Pattern Matcher";
     vector<pair<uint, uint>> pm_matches;
     kiss_thin_nfa_exec(handle.get(), buf, pm_matches);
     dbgTrace(D_PM) << pm_matches.size() << " raw matches found";
@@ -121,7 +121,7 @@ PMHook::scanBuf(const Buffer &buf) const
 set<pair<uint, uint>>
 PMHook::scanBufWithOffset(const Buffer &buf) const
 {
-    dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
+    dbgAssert(handle != nullptr) << AlertInfo(AlertTeam::CORE, "pattern matcher") << "Unusable Pattern Matcher";
 
     vector<pair<uint, uint>> pm_matches;
     kiss_thin_nfa_exec(handle.get(), buf, pm_matches);
@@ -135,7 +135,7 @@ PMHook::scanBufWithOffset(const Buffer &buf) const
 void
 PMHook::scanBufWithOffsetLambda(const Buffer &buf, I_PMScan::CBFunction cb) const
 {
-    dbgAssert(handle != nullptr) << "Unusable Pattern Matcher";
+    dbgAssert(handle != nullptr) << AlertInfo(AlertTeam::CORE, "pattern matcher") << "Unusable Pattern Matcher";
 
     unordered_map<uint, uint> match_counts;
     vector<pair<uint, uint>> pm_matches;

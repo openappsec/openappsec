@@ -312,8 +312,6 @@ UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, Ext
         return;
     }
     NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
-    opaque.setSavedData(HttpTransactionData::xff_vals_ctx, header.getValue());
-    dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "xff found, value from header: " << static_cast<string>(header.getValue());
     auto value = parseXForwardedFor(header.getValue());
     if (!value.ok()) {
         dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Could not extract source identifier from X-Forwarded-For header";
@@ -325,6 +323,10 @@ UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, Ext
         dbgDebug(D_NGINX_ATTACHMENT_PARSER)
             << "Added source identifir to XFF "
             <<  value.unpack();
+        opaque.setSavedData(HttpTransactionData::xff_vals_ctx, header.getValue());
+        dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+        << "XFF found, set ctx with value from header: "
+        << static_cast<string>(header.getValue());
     } else {
         opaque.setSavedData(HttpTransactionData::proxy_ip_ctx, value.unpack());
     }

@@ -30,6 +30,7 @@ add_subdirectory(version)
 add_subdirectory(tenant_manager)
 add_subdirectory(compression)
 add_subdirectory(attachments)
+add_subdirectory(report_messaging)
 
 add_library(ngen_core SHARED ".")
 target_link_libraries(
@@ -38,6 +39,7 @@ target_link_libraries(
     "table;debug_is;shell_cmd;metric;tenant_manager;messaging;encryptor;time_proxy;singleton;mainloop;environment;logging;report;rest"
     "config;intelligence_is_v2;event_is;memory_consumption;connkey"
     "instance_awareness;socket_is;agent_details;agent_details_reporter;buffers;cpu;agent_core_utilities"
+    "report_messaging"
     -Wl,-no-whole-archive
 )
 

@@ -43,7 +43,9 @@ PendingKey::print(ostream &os) const
 size_t
 PendingKey::hash() const
 {
-    dbgAssert(src.type != IPType::UNINITIALIZED) << "PendingKey::hash was called on an uninitialized object";
+    dbgAssert(src.type != IPType::UNINITIALIZED)
+        << AlertInfo(AlertTeam::CORE, "pending key")
+        << "PendingKey::hash was called on an uninitialized object";
     size_t seed = 0;
     hashCombine(seed, static_cast<u_char>(src.type));
     hashCombine(seed, src.proto);

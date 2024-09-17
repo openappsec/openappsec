@@ -25,12 +25,16 @@ template <typename T>
 class LastReportedValue : public MetricCalc
 {
 public:
-    LastReportedValue(GenericMetric *metric, const std::string &title) : MetricCalc(metric, title) {}
+    template <typename ... Args>
+    LastReportedValue(GenericMetric *metric, const std::string &title, const Args & ... args)
+            :
+        MetricCalc(metric, title, args ...)
+    {
+    }
 
     void
     reset() override
     {
-        was_once_reported = false;
         last_reported = T();
     }
 
@@ -43,24 +47,23 @@ public:
     void
     save(cereal::JSONOutputArchive &ar) const override
     {
-        ar(cereal::make_nvp(calc_title, getLastReportedValue()));
+        ar(cereal::make_nvp(getMetricName(), getLastReportedValue()));
     }
 
     void
     report(const T &new_value)
     {
-        was_once_reported = true;
         last_reported = new_value;
     }
 
     LogField
     getLogField() const override
     {
-        return LogField(calc_title, static_cast<uint64_t>(getLastReportedValue()));
+        return LogField(getMetricName(), static_cast<uint64_t>(getLastReportedValue()));
     }
 
 private:
-    T last_reported;
+    T last_reported{};
 };
 
 } // namespace MetricCalculations

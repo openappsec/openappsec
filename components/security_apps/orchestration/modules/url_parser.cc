@@ -43,7 +43,10 @@ operator<<(ostream &os, const URLProtocol &protocol)
             return os << "file://";
         }
         default: {
-            dbgAssert(false) << "Unsupported protocol " << static_cast<unsigned int>(protocol);
+            dbgAssert(false)
+                << AlertInfo(AlertTeam::CORE, "fog communication")
+                << "Unsupported protocol "
+                << static_cast<unsigned int>(protocol);
             return os;
         }
     }
@@ -91,7 +94,10 @@ URLParser::parseURL(const string &url)
             return;
         }
         default: {
-            dbgAssert(false) << "URL protocol is not supported. Protocol: " << static_cast<unsigned int>(protocol);
+            dbgAssert(false)
+                << AlertInfo(AlertTeam::CORE, "fog communication")
+                << "URL protocol is not supported. Protocol: "
+                << static_cast<unsigned int>(protocol);
             return;
         }
     }

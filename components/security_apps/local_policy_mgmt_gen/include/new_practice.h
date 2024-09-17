@@ -508,30 +508,20 @@ private:
     bool is_temporary;
 };
 
-class NewAppSecWebBotsURI
-{
-public:
-    void load(cereal::JSONInputArchive &archive_in);
-
-    const std::string & getURI() const;
-
-private:
-    std::string uri;
-};
-
 class NewAppSecPracticeAntiBot
 {
 public:
-    std::vector<std::string> getIjectedUris() const;
-    std::vector<std::string> getValidatedUris() const;
+    const std::vector<std::string> & getIjectedUris() const;
+    const std::vector<std::string> & getValidatedUris() const;
+    const std::string & getMode() const;
 
     void load(cereal::JSONInputArchive &archive_in);
     void save(cereal::JSONOutputArchive &out_ar) const;
 
 private:
     std::string override_mode;
-    std::vector<NewAppSecWebBotsURI> injected_uris;
-    std::vector<NewAppSecWebBotsURI> validated_uris;
+    std::vector<std::string> injected_uris;
+    std::vector<std::string> validated_uris;
 };
 
 class NewAppSecWebAttackProtections

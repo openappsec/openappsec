@@ -28,6 +28,7 @@
 #include "debug.h"
 
 static const uint udp_max_packet_size = 1024 * 64;
+static const AlertInfo alert(AlertTeam::CORE, "socket i/s");
 
 USE_DEBUG_FLAG(D_SOCKET);
 
@@ -174,8 +175,8 @@ public:
     Maybe<unique_ptr<SocketInternal>>
     acceptConn(bool is_blocking, const string &authorized_ip = "")
     {
-        dbgAssert(is_server_socket) << "Failed to accept new connections from a client socket";
-        dbgAssert(socket_int > 0) << "Called with uninitialized server socket";
+        dbgAssert(is_server_socket) << alert << "Failed to accept new connections from a client socket";
+        dbgAssert(socket_int > 0) << alert << "Called with uninitialized server socket";
 
         dbgDebug(D_SOCKET) << "Attempt to accept new socket. Server Socket FD: " << socket_int;
         int client_socket;

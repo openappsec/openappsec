@@ -20,6 +20,16 @@ using namespace MetricCalculations;
 
 USE_DEBUG_FLAG(D_METRICS);
 
+TEST(BaseMetric, generic_metadata)
+{
+    Max<int> test(nullptr, "cpuMax", 0, "cpu.max"_dot, "percent"_unit, "CPU utilization percentage"_desc);
+
+    EXPECT_EQ(test.getMetricName(), "cpuMax");
+    EXPECT_EQ(test.getMetricDotName(), "cpu.max");
+    EXPECT_EQ(test.getMetircUnits(), "percent");
+    EXPECT_EQ(test.getMetircDescription(), "CPU utilization percentage");
+}
+
 class CPUEvent : public Event<CPUEvent>
 {
 public:
@@ -53,6 +63,7 @@ public:
         last_report.report(event.getCPU());
         avg.report(event.getCPU());
         samples_counter.report(1);
+        total_samples_counter.report(1);
         top_usage.report(event.getCPU());
     }
 
@@ -61,6 +72,7 @@ public:
     Average<double> avg{this, "cpuAvg"};
     LastReportedValue<double> last_report{this, "cpuCurrent"};
     Counter samples_counter{this, "cpuCounter"};
+    NoResetCounter total_samples_counter{this, "cpuTotalCounter"};
     TopValues<double, 3> top_usage{this, "cpuTops"};
 };
 
@@ -129,10 +141,12 @@ public:
     upon(const HttpTransaction &event) override
     {
         avg.report(event.getUrl(), event.getBytes());
+        total.report(event.getUrl(), 1);
     }
 
 private:
     MetricMap<string, Average<double>> avg{this, "PerUrlAvg"};
+    MetricMap<string, NoResetCounter> total{this, "TotalRequests"};
 };
 
 class MetricTest : public Test
@@ -189,7 +203,6 @@ TEST_F(MetricTest, basicMetricTest)
     EXPECT_EQ(cpu_mt.getReportInterval().count(), 5);
 
     routine();
-    EXPECT_EQ(debug_output.str(), "");
 
     CPUEvent cpu_event;
     cpu_event.setProcessCPU(89);
@@ -204,6 +217,7 @@ TEST_F(MetricTest, basicMetricTest)
         "    \"cpuAvg\": 89.0,\n"
         "    \"cpuCurrent\": 89.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 1,\n"
         "    \"cpuTops\": [\n"
         "        89.0\n"
         "    ]\n"
@@ -249,6 +263,7 @@ TEST_F(MetricTest, basicMetricTest)
         "            \"cpuAvg\": 89,\n"
         "            \"cpuCurrent\": 89,\n"
         "            \"cpuCounter\": 1,\n"
+        "            \"cpuTotalCounter\": 1,\n"
         "            \"cpuTops\": [\n"
         "                89.0\n"
         "            ]\n"
@@ -273,6 +288,7 @@ TEST_F(MetricTest, basicMetricTest)
         "    \"cpuAvg\": 89.5,\n"
         "    \"cpuCurrent\": 90.0,\n"
         "    \"cpuCounter\": 2,\n"
+        "    \"cpuTotalCounter\": 2,\n"
         "    \"cpuTops\": [\n"
         "        89.0,\n"
         "        90.0\n"
@@ -318,6 +334,7 @@ TEST_F(MetricTest, basicMetricTest)
         "            \"cpuAvg\": 89,\n"
         "            \"cpuCurrent\": 90,\n"
         "            \"cpuCounter\": 2,\n"
+        "            \"cpuTotalCounter\": 2,\n"
         "            \"cpuTops\": [\n"
         "                89.0,\n"
         "                90.0\n"
@@ -343,6 +360,7 @@ TEST_F(MetricTest, basicMetricTest)
         "    \"cpuAvg\": 93.0,\n"
         "    \"cpuCurrent\": 100.0,\n"
         "    \"cpuCounter\": 3,\n"
+        "    \"cpuTotalCounter\": 3,\n"
         "    \"cpuTops\": [\n"
         "        89.0,\n"
         "        90.0,\n"
@@ -389,6 +407,7 @@ TEST_F(MetricTest, basicMetricTest)
         "            \"cpuAvg\": 93,\n"
         "            \"cpuCurrent\": 100,\n"
         "            \"cpuCounter\": 3,\n"
+        "            \"cpuTotalCounter\": 3,\n"
         "            \"cpuTops\": [\n"
         "                89.0,\n"
         "                90.0,\n"
@@ -449,6 +468,7 @@ TEST_F(MetricTest, printMetricsTest)
         "    \"cpuAvg\": 89.0,\n"
         "    \"cpuCurrent\": 89.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 1,\n"
         "    \"cpuTops\": [\n"
         "        89.0\n"
         "    ]\n"
@@ -481,7 +501,6 @@ TEST_F(MetricTest, metricTestWithReset)
     EXPECT_EQ(cpu_mt.getReportInterval().count(), 5);
 
     routine();
-    EXPECT_EQ(debug_output.str(), "");
 
     CPUEvent cpu_event;
     cpu_event.setProcessCPU(89);
@@ -496,6 +515,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "    \"cpuAvg\": 89.0,\n"
         "    \"cpuCurrent\": 89.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 1,\n"
         "    \"cpuTops\": [\n"
         "        89.0\n"
         "    ]\n"
@@ -542,6 +562,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "            \"cpuAvg\": 89,\n"
         "            \"cpuCurrent\": 89,\n"
         "            \"cpuCounter\": 1,\n"
+        "            \"cpuTotalCounter\": 1,\n"
         "            \"cpuTops\": [\n"
         "                89.0\n"
         "            ]\n"
@@ -566,6 +587,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "    \"cpuAvg\": 90.0,\n"
         "    \"cpuCurrent\": 90.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 2,\n"
         "    \"cpuTops\": [\n"
         "        90.0\n"
         "    ]\n"
@@ -610,6 +632,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "            \"cpuAvg\": 90,\n"
         "            \"cpuCurrent\": 90,\n"
         "            \"cpuCounter\": 1,\n"
+        "            \"cpuTotalCounter\": 2,\n"
         "            \"cpuTops\": [\n"
         "                90.0\n"
         "            ]\n"
@@ -634,6 +657,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "    \"cpuAvg\": 100.0,\n"
         "    \"cpuCurrent\": 100.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 3,\n"
         "    \"cpuTops\": [\n"
         "        100.0\n"
         "    ]\n"
@@ -678,6 +702,7 @@ TEST_F(MetricTest, metricTestWithReset)
         "            \"cpuAvg\": 100,\n"
         "            \"cpuCurrent\": 100,\n"
         "            \"cpuCounter\": 1,\n"
+        "            \"cpuTotalCounter\": 3,\n"
         "            \"cpuTops\": [\n"
         "                100.0\n"
         "            ]\n"
@@ -707,7 +732,17 @@ TEST_F(MetricTest, generateReportWithReset)
     EXPECT_EQ(cpu_mt.getReportInterval().count(), 5);
 
     routine();
-    EXPECT_EQ(debug_output.str(), "");
+    auto init_report = cpu_mt.generateReport();
+
+    EXPECT_NE(init_report, "");
+
+    EXPECT_THAT(init_report, HasSubstr("\"Metric\": \"CPU usage\""));
+    EXPECT_THAT(init_report, HasSubstr("\"Reporting interval\": 5,"));
+    EXPECT_THAT(init_report, HasSubstr("cpuMax"));
+    EXPECT_THAT(init_report, HasSubstr("cpuMin"));
+    EXPECT_THAT(init_report, HasSubstr("cpuAvg"));
+    EXPECT_THAT(init_report, HasSubstr("cpuCurrent"));
+    EXPECT_THAT(init_report, HasSubstr("cpuTops"));
 
     CPUEvent cpu_event;
     cpu_event.setProcessCPU(89);
@@ -722,6 +757,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "    \"cpuAvg\": 89.0,\n"
         "    \"cpuCurrent\": 89.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 1,\n"
         "    \"cpuTops\": [\n"
         "        89.0\n"
         "    ]\n"
@@ -768,6 +804,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "            \"cpuAvg\": 89,\n"
         "            \"cpuCurrent\": 89,\n"
         "            \"cpuCounter\": 1,\n"
+        "            \"cpuTotalCounter\": 1,\n"
         "            \"cpuTops\": [\n"
         "                89.0\n"
         "            ]\n"
@@ -779,13 +816,28 @@ TEST_F(MetricTest, generateReportWithReset)
     EXPECT_EQ(message_body, expected_message);
     debug_output.str("");
 
-    auto report = cpu_mt.generateReport(true);
+    auto report = cpu_mt.generateReport();
+    cpu_mt.resetMetrics();
     EXPECT_THAT(metric_str, HasSubstr(report));
-    EXPECT_EQ(message_body, expected_message);
+    debug_output.str("");
+
+    report = cpu_mt.generateReport();
+    metric_str =
+        "{\n"
+        "    \"Metric\": \"CPU usage\",\n"
+        "    \"Reporting interval\": 5,\n"
+        "    \"cpuMax\": 0.0,\n"
+        "    \"cpuMin\": 0.0,\n"
+        "    \"cpuAvg\": 0.0,\n"
+        "    \"cpuCurrent\": 0.0,\n"
+        "    \"cpuCounter\": 0,\n"
+        "    \"cpuTotalCounter\": 1,\n"
+        "    \"cpuTops\": []\n"
+        "}";
+    EXPECT_EQ(report, metric_str);
     debug_output.str("");
 
     routine();
-    EXPECT_EQ(debug_output.str(), "");
 
     cpu_event.setProcessCPU(90);
     cpu_event.notify();
@@ -799,6 +851,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "    \"cpuAvg\": 90.0,\n"
         "    \"cpuCurrent\": 90.0,\n"
         "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 2,\n"
         "    \"cpuTops\": [\n"
         "        90.0\n"
         "    ]\n"
@@ -843,6 +896,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "            \"cpuAvg\": 90,\n"
         "            \"cpuCurrent\": 90,\n"
         "            \"cpuCounter\": 1,\n"
+        "            \"cpuTotalCounter\": 2,\n"
         "            \"cpuTops\": [\n"
         "                90.0\n"
         "            ]\n"
@@ -867,6 +921,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "    \"cpuAvg\": 95.0,\n"
         "    \"cpuCurrent\": 100.0,\n"
         "    \"cpuCounter\": 2,\n"
+        "    \"cpuTotalCounter\": 3,\n"
         "    \"cpuTops\": [\n"
         "        90.0,\n"
         "        100.0\n"
@@ -912,6 +967,7 @@ TEST_F(MetricTest, generateReportWithReset)
         "            \"cpuAvg\": 95,\n"
         "            \"cpuCurrent\": 100,\n"
         "            \"cpuCounter\": 2,\n"
+        "            \"cpuTotalCounter\": 3,\n"
         "            \"cpuTops\": [\n"
         "                90.0,\n"
         "                100.0\n"
@@ -987,6 +1043,7 @@ TEST_F(MetricTest, allMetricTest)
         "    \"cpuAvg\": 93.0,\n"
         "    \"cpuCurrent\": 100.0,\n"
         "    \"cpuCounter\": 3,\n"
+        "    \"cpuTotalCounter\": 3,\n"
         "    \"cpuTops\": [\n"
         "        89.0,\n"
         "        90.0,\n"
@@ -1040,6 +1097,24 @@ TEST_F(MetricTest, testMapMetric)
         "    \"PerUrlAvg\": {\n"
         "        \"/index.html\": 25.0,\n"
         "        \"/index2.html\": 20.0\n"
+        "    },\n"
+        "    \"TotalRequests\": {\n"
+        "        \"/index.html\": 2,\n"
+        "        \"/index2.html\": 1\n"
+        "    }\n"
+        "}";
+    EXPECT_THAT(debug_output.str(), HasSubstr(msg_str));
+
+    debug_output.str("");
+    routine();
+    msg_str =
+        "{\n"
+        "    \"Metric\": \"Bytes per URL\",\n"
+        "    \"Reporting interval\": 5,\n"
+        "    \"PerUrlAvg\": {},\n"
+        "    \"TotalRequests\": {\n"
+        "        \"/index.html\": 2,\n"
+        "        \"/index2.html\": 1\n"
         "    }\n"
         "}";
     EXPECT_THAT(debug_output.str(), HasSubstr(msg_str));

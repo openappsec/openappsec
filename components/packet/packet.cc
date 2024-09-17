@@ -563,7 +563,10 @@ Packet::parsePacket(PktType type, IPType proto)
             return parseFromL3v6();
         }
         default: {
-            dbgAssert(false) << "Unknown (neither IPv4, nor IPv6), or uninitialized packet type: " << proto;
+            dbgAssert(false)
+                << AlertInfo(AlertTeam::CORE, "packet")
+                << "Unknown (neither IPv4, nor IPv6), or uninitialized packet type: "
+                << proto;
         }
     }
 

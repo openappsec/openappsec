@@ -250,7 +250,9 @@ ComparisonAttr::operator()(int first_val, int second_val) const
             return first_val >= second_val;
         }
     }
-    dbgAssert(false) << "ComparisonAttr::operator found an invalid comparison operator";
+    dbgAssert(false)
+        << AlertInfo(AlertTeam::CORE, "keywords")
+        << "ComparisonAttr::operator found an invalid comparison operator";
     return false;
 }
 

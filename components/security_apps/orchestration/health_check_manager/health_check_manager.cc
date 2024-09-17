@@ -266,7 +266,9 @@ private:
             case OrchestrationStatusFieldType::COUNT : return "Count";
         }
 
-        dbgAssert(false) << "Trying to convert unknown orchestration status field to string.";
+        dbgAssert(false)
+            << AlertInfo(AlertTeam::CORE, "orchestration health")
+            << "Trying to convert unknown orchestration status field to string.";
         return "";
     }
 
@@ -280,7 +282,9 @@ private:
             case UpdatesProcessResult::DEGRADED : return HealthCheckStatus::DEGRADED;
         }
 
-        dbgAssert(false) << "Trying to convert unknown update process result field to health check status.";
+        dbgAssert(false)
+            << AlertInfo(AlertTeam::CORE, "orchestration health")
+            << "Trying to convert unknown update process result field to health check status.";
         return HealthCheckStatus::IGNORED;
     }
 

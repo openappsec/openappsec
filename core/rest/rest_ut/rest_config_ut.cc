@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 #include "cptest.h"
 #include "environment.h"
@@ -143,9 +144,12 @@ TEST_F(RestConfigTest, basic_flow)
 
     auto i_rest = Singleton::Consume<I_RestApi>::from(rest_server);
     ASSERT_TRUE(i_rest->addRestCall<TestServer>(RestAction::ADD, "test"));
+    ASSERT_TRUE(i_rest->addGetCall("stuff", [] () { return string("blabla"); }));
 
-    int file_descriptor =  socket(AF_INET, SOCK_STREAM, 0);
-    EXPECT_NE(file_descriptor, -1);
+    int file_descriptor1 = socket(AF_INET, SOCK_STREAM, 0);
+    EXPECT_NE(file_descriptor1, -1);
+    int file_descriptor2 = socket(AF_INET, SOCK_STREAM, 0);
+    EXPECT_NE(file_descriptor2, -1);
 
     auto primary_port = getConfiguration<uint>("connection", "Nano service API Port Alternative");
     struct sockaddr_in sa;
@@ -153,20 +157,34 @@ TEST_F(RestConfigTest, basic_flow)
     sa.sin_port = htons(primary_port.unpack());
     sa.sin_addr.s_addr = inet_addr("127.0.0.1");
     int socket_enable = 1;
-    EXPECT_EQ(setsockopt(file_descriptor, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
+    EXPECT_EQ(setsockopt(file_descriptor1, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
+    EXPECT_EQ(setsockopt(file_descriptor2, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
 
     EXPECT_CALL(messaging, sendSyncMessage(_, _, _, _, _))
         .WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
 
     auto mainloop = Singleton::Consume<I_MainLoop>::from(mainloop_comp);
     I_MainLoop::Routine stop_routine = [&] () {
-        EXPECT_EQ(connect(file_descriptor, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0);
-        string msg = "POST /add-test HTTP/1.1\r\nContent-Length: 10\r\n\r\n{\"num\": 5}";
-        EXPECT_EQ(write(file_descriptor, msg.data(), msg.size()), static_cast<int>(msg.size()));
+        EXPECT_EQ(connect(file_descriptor1, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0);
+        string msg1 = "GET /stuff HTTP/1.1\r\n\r\n";
+        EXPECT_EQ(write(file_descriptor1, msg1.data(), msg1.size()), static_cast<int>(msg1.size()));
+
+        EXPECT_EQ(connect(file_descriptor2, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0);
+        string msg2 = "POST /add-test HTTP/1.1\r\nContent-Length: 10\r\n\r\n{\"num\": 5}";
+        EXPECT_EQ(write(file_descriptor2, msg2.data(), msg2.size()), static_cast<int>(msg2.size()));
 
         while(!TestServer::g_num) {
             mainloop->yield(true);
         }
+
+        struct pollfd s_poll;
+        s_poll.fd = file_descriptor1;
+        s_poll.events = POLLIN;
+        s_poll.revents = 0;
+        while(poll(&s_poll, 1, 0) <= 0) {
+            mainloop->yield(true);
+        }
+
         mainloop->stopAll();
     };
     mainloop->addOneTimeRoutine(
@@ -178,4 +196,11 @@ TEST_F(RestConfigTest, basic_flow)
     mainloop->run();
 
     EXPECT_EQ(TestServer::g_num, 5);
+
+    char respose[1000];
+    EXPECT_EQ(read(file_descriptor1, respose, 1000), 76);
+    EXPECT_EQ(
+        string(respose, 76),
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 6\r\n\r\nblabla"
+    );
 }

@@ -80,7 +80,7 @@ kiss_pmglob_string_s::kiss_pmglob_string_s(const char *buffer, size_t size, int 
 
 kiss_pmglob_string_s::kiss_pmglob_string_s(const u_char *buffer, size_t size, int _pattern_id, u_int _flags)
 {
-    dbgAssert(buffer && size > 0) << "Illegal arguments";
+    dbgAssert(buffer && size > 0) << AlertInfo(AlertTeam::CORE, "pattern matcher") << "Illegal arguments";
     buf.resize(size);
     memcpy(buf.data(), buffer, size);
     pattern_id = _pattern_id;

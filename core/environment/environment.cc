@@ -213,8 +213,9 @@ Environment::Impl::registerContext(Context *ptr)
 void
 Environment::Impl::unregisterContext(Context *ptr)
 {
-    dbgAssert(active_contexts.first.back() == ptr) <<
-        "Contexts are supposed to unregister in reverse order to their registration";
+    dbgAssert(active_contexts.first.back() == ptr)
+        << AlertInfo(AlertTeam::CORE, "environment contexts")
+        << "Contexts are supposed to unregister in reverse order to their registration";
     active_contexts.first.pop_back();
 }
 

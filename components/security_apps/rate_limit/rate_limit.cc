@@ -211,6 +211,8 @@ public:
 
             for (const auto &rule : rate_limit_config.getRateLimitRules()) {
                 string full_rule_uri = application_uri + rule.getRateLimitUri();
+                transform(full_rule_uri.begin(), full_rule_uri.end(),
+                    full_rule_uri.begin(), [](unsigned char c) { return std::tolower(c); });
                 int full_rule_uri_length = full_rule_uri.length();
 
                 dbgTrace(D_RATE_LIMIT)

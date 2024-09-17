@@ -80,7 +80,11 @@ cptestParseHex(const string &hex_text)
         size_t l = t.size();
         if (l==0) continue;
         if (t[l-1]==':') continue;    // tcpdump uses xxxx: to mark offsets, not data. So ignore it.
-        dbgAssert(t.size() %2 == 0) << "Expecting an even number of hex digits, " << t << " is invalid";
+        dbgAssert(t.size() %2 == 0)
+            << AlertInfo(AlertTeam::CORE, "testing")
+            << "Expecting an even number of hex digits, "
+            << t
+            << " is invalid";
         for (uint i=0; i<t.size()/2; i++) {
             u_char n = strtoul(t.substr(i*2, 2).c_str(), nullptr, 16);
             v.push_back(n);

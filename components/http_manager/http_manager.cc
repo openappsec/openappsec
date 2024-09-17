@@ -46,7 +46,10 @@ operator<<(ostream &os, const EventVerdict &event)
         case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT: return os << "Wait";
     }
 
-    dbgAssert(false) << "Illegal Event Verdict value: " << static_cast<uint>(event.getVerdict());
+    dbgAssert(false)
+        << AlertInfo(AlertTeam::CORE, "http manager")
+        << "Illegal Event Verdict value: "
+        << static_cast<uint>(event.getVerdict());
     return os;
 }
 
@@ -321,8 +324,11 @@ private:
 
             state.setApplicationVerdict(respond.first, respond.second.getVerdict());
         }
-
-        return state.getCurrVerdict();
+        FilterVerdict aggregated_verdict = state.getCurrVerdict();
+        if (aggregated_verdict.getVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+            SecurityAppsDropEvent(state.getCurrentDropVerdictCausers()).notify();
+        }
+        return aggregated_verdict;
     }
 
     static void

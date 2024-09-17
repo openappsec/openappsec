@@ -320,7 +320,7 @@ template <typename T, typename TErr>
 const T &
 Maybe<T, TErr>::unpack() const
 {
-    dbgAssert(set) << "Maybe value is not set";
+    dbgAssert(set) << AlertInfo(AlertTeam::CORE, "maybe i/s") << "Maybe value is not set";
     return val;
 }
 
@@ -328,7 +328,7 @@ template <typename T, typename TErr>
 T &&
 Maybe<T, TErr>::unpackMove()
 {
-    dbgAssert(set) << "No value to be moved";
+    dbgAssert(set) << AlertInfo(AlertTeam::CORE, "maybe i/s") << "No value to be moved";
     return std::move(val);
 }
 
@@ -336,7 +336,7 @@ template <typename T, typename TErr>
 TErr
 Maybe<T, TErr>::getErr() const
 {
-    dbgAssert(!set) << "Maybe value is set";
+    dbgAssert(!set) << AlertInfo(AlertTeam::CORE, "maybe i/s") << "Maybe value is set";
     return err.err;
 }
 
@@ -344,7 +344,7 @@ template <typename T, typename TErr>
 const Error<TErr> &
 Maybe<T, TErr>::passErr() const
 {
-    dbgAssert(!set) << "Maybe value is set";
+    dbgAssert(!set) << AlertInfo(AlertTeam::CORE, "maybe i/s") << "Maybe value is set";
     return err;
 }
 

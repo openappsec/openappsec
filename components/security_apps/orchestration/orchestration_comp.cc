@@ -1631,6 +1631,7 @@ private:
 
         string server_name = getAttribute("registered-server", "registered_server");
         auto server = TagAndEnumManagement::convertStringToTag(server_name);
+        if (server_name == "'SWAG'") server = Tags::WEB_SERVER_SWAG;
         if (server.ok()) tags.insert(*server);
 
         if (getAttribute("no-setting", "CROWDSEC_ENABLED") == "true") tags.insert(Tags::CROWDSEC);
@@ -1651,6 +1652,8 @@ private:
             LogField("agentId", Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getAgentId()),
             tags
         );
+
+        if (server_name != "") registration_report.addToOrigin(LogField("eventCategory", server_name));
 
         auto email = getAttribute("email-address", "user_email");
         if (email != "") registration_report << LogField("userDefinedId", email);
@@ -1694,9 +1697,11 @@ private:
         auto temp_ext = getConfigurationWithDefault<string>("_temp", "orchestration", "Temp file extension");
 
         dbgAssert(i_orchestration_tools->doesFileExist(backup_installation_file))
+            << AlertInfo(AlertTeam::CORE, "orchestration backup")
             << "There is no backup installation package";
 
         dbgAssert(i_orchestration_tools->copyFile(backup_installation_file, current_installation_file))
+            << AlertInfo(AlertTeam::CORE, "orchestration backup")
             << "Failed to copy backup installation package";
 
         // Copy the backup manifest file to the default manifest file path.
@@ -1713,8 +1718,10 @@ private:
         auto package_handler = Singleton::Consume<I_PackageHandler>::by<OrchestrationComp>();
         // Install the backup orchestration service installation package.
         dbgAssert(package_handler->preInstallPackage(service_name, current_installation_file))
+            << AlertInfo(AlertTeam::CORE, "orchestration backup")
             << "Failed to restore from backup, pre install test failed";
         dbgAssert(package_handler->installPackage(service_name, current_installation_file, true))
+            << AlertInfo(AlertTeam::CORE, "orchestration backup")
             << "Failed to restore from backup, installation failed";
     }
     // LCOV_EXCL_STOP

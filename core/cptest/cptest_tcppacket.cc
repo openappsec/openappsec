@@ -415,7 +415,7 @@ TCPPacket::Impl::emit_tcp_options(vector<u_char> &pkt) const
     while (optbuf.size()%4 != 0) {
         vec_append(optbuf, TCPOption::NOP);
     }
-    dbgAssert(optbuf.size() <= 40) << "too many tcp options. max is 40 bytes";
+    dbgAssert(optbuf.size() <= 40) << AlertInfo(AlertTeam::CORE, "testing") << "too many tcp options. max is 40 bytes";
 
     vec_append(pkt, optbuf);
 }

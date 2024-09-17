@@ -67,10 +67,11 @@ Buffer::CharIterator::operator==(const CharIterator &other) const
     return (cur_seg == other.cur_seg) && (offset == other.offset);
 }
 
+static const AlertInfo alert(AlertTeam::CORE, "buffer i/s");
 const u_char &
 Buffer::CharIterator::operator*() const
 {
-    dbgAssert(ptr != nullptr) << "Buffer::CharIterator is not pointing to a real value";
+    dbgAssert(ptr != nullptr) << alert << "Buffer::CharIterator is not pointing to a real value";
     return ptr[offset];
 }
 

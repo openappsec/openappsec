@@ -21,6 +21,7 @@
 #include "i_shell_cmd.h"
 #include "i_orchestration_status.h"
 #include "component.h"
+#include "i_service_controller.h"
 
 class HealthChecker
         :
@@ -29,7 +30,8 @@ class HealthChecker
     Singleton::Consume<I_Socket>,
     Singleton::Consume<I_Health_Check_Manager>,
     Singleton::Consume<I_ShellCmd>,
-    Singleton::Consume<I_OrchestrationStatus>
+    Singleton::Consume<I_OrchestrationStatus>,
+    Singleton::Consume<I_ServiceController>
 {
 public:
     HealthChecker();

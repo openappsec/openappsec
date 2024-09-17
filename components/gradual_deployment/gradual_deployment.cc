@@ -128,7 +128,7 @@ private:
                 break;
             }
             default:
-                dbgAssert(false) << "Unsupported IP type";
+                dbgAssert(false) << AlertInfo(AlertTeam::CORE, "gradual deployment") << "Unsupported IP type";
         }
         return address;
     }

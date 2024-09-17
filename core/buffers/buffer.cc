@@ -17,6 +17,8 @@
 
 using namespace std;
 
+static const AlertInfo alert(AlertTeam::CORE, "buffer i/s");
+
 Buffer::Buffer(vector<u_char> &&vec)
         :
     len(vec.size())
@@ -142,7 +144,7 @@ Buffer::operator+(const Buffer &other) const
 Buffer
 Buffer::getSubBuffer(uint start, uint end) const
 {
-    dbgAssert(start<=end && end<=len) << "Buffer::getSubBuffer() returned: Illegal scoping of buffer";
+    dbgAssert(start<=end && end<=len) << alert << "Buffer::getSubBuffer() returned: Illegal scoping of buffer";
     if (start == end) return Buffer();
 
     Buffer res;
@@ -176,7 +178,7 @@ Buffer::getSubBuffer(uint start, uint end) const
 Maybe<uint>
 Buffer::findFirstOf(char ch, uint start) const
 {
-    dbgAssert(start <= len) << "Buffer::findFirstOf() returned: Cannot set a start point after buffer's end";
+    dbgAssert(start <= len) << alert << "Buffer::findFirstOf() returned: Cannot set a start point after buffer's end";
 
     for (; start < len; ++start) {
         if ((*this)[start] == ch) return start;
@@ -187,7 +189,7 @@ Buffer::findFirstOf(char ch, uint start) const
 Maybe<uint>
 Buffer::findFirstOf(const Buffer &buf, uint start) const
 {
-    dbgAssert(start <= len) << "Buffer::findFirstOf() returned: Cannot set a start point after buffer's end";
+    dbgAssert(start <= len) << alert << "Buffer::findFirstOf() returned: Cannot set a start point after buffer's end";
 
     for (; start + buf.size() <= len; ++start) {
         auto sub_buffer = getSubBuffer(start, start + buf.size());
@@ -199,7 +201,9 @@ Buffer::findFirstOf(const Buffer &buf, uint start) const
 Maybe<uint>
 Buffer::findFirstNotOf(char ch, uint start) const
 {
-    dbgAssert(start <= len) << "Buffer::findFirstNotOf() returned: Cannot set a start point after buffer's end";
+    dbgAssert(start <= len)
+        << alert
+        << "Buffer::findFirstNotOf() returned: Cannot set a start point after buffer's end";
     for (; start < len; ++start) {
         if ((*this)[start] != ch) return start;
     }
@@ -209,7 +213,7 @@ Buffer::findFirstNotOf(char ch, uint start) const
 Maybe<uint>
 Buffer::findLastOf(char ch, uint start) const
 {
-    dbgAssert(start <= len) << "Buffer::findLastOf() returned: Cannot set a start point after buffer's end";
+    dbgAssert(start <= len) << alert << "Buffer::findLastOf() returned: Cannot set a start point after buffer's end";
     for (; 0 < start; --start) {
         if ((*this)[start - 1] == ch) return start - 1;
     }
@@ -219,7 +223,9 @@ Buffer::findLastOf(char ch, uint start) const
 Maybe<uint>
 Buffer::findLastNotOf(char ch, uint start) const
 {
-    dbgAssert(start <= len) << "Buffer::findLastNotOf() returned: Cannot set a start point after buffer's end";
+    dbgAssert(start <= len)
+        << alert
+        << "Buffer::findLastNotOf() returned: Cannot set a start point after buffer's end";
     for (; 0 < start; --start) {
         if ((*this)[start - 1] != ch) return start - 1;
     }
@@ -229,7 +235,7 @@ Buffer::findLastNotOf(char ch, uint start) const
 void
 Buffer::truncateHead(uint size)
 {
-    dbgAssert(size <= len) << "Cannot set a new start of buffer after the buffer's end";
+    dbgAssert(size <= len) << alert << "Cannot set a new start of buffer after the buffer's end";
     if (size == 0) return;
     if (size == len) {
         clear();
@@ -255,7 +261,7 @@ Buffer::truncateHead(uint size)
 void
 Buffer::truncateTail(uint size)
 {
-    dbgAssert(size <= len) << "Cannot set a new end of buffer after the buffer's end";
+    dbgAssert(size <= len) << alert << "Cannot set a new end of buffer after the buffer's end";
     if (size == 0) return;
     if (size == len) {
         clear();
@@ -279,14 +285,14 @@ Buffer::truncateTail(uint size)
 void
 Buffer::keepHead(uint size)
 {
-    dbgAssert(size <= len) << "Cannot set a new end of buffer before the buffer's start";
+    dbgAssert(size <= len) << alert << "Cannot set a new end of buffer before the buffer's start";
     truncateTail(len - size);
 }
 
 void
 Buffer::keepTail(uint size)
 {
-    dbgAssert(size <= len) << "Cannot set a new start of buffer after the buffer's end";
+    dbgAssert(size <= len) << alert << "Cannot set a new start of buffer after the buffer's end";
     truncateHead(len - size);
 }
 
@@ -376,7 +382,7 @@ Buffer::operator[](uint offset) const
         }
         return fast_path_ptr[offset];
     }
-    dbgAssert(offset < len) << "Buffer::operator returned: attempted an access outside the buffer";
+    dbgAssert(offset < len) << alert << "Buffer::operator returned: attempted an access outside the buffer";
     return *(begin() + offset);
 }
 

@@ -69,12 +69,32 @@ HttpManagerOpaque::getCurrVerdict() const
                 break;
             default:
                 dbgAssert(false)
+                    << AlertInfo(AlertTeam::CORE, "http manager")
                     << "Received unknown verdict "
                     << static_cast<int>(app_verdic_pair.second);
         }
     }
 
     return accepted_apps == applications_verdicts.size() ? ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT : verdict;
+}
+
+std::set<std::string>
+HttpManagerOpaque::getCurrentDropVerdictCausers() const
+{
+    std::set<std::string> causers;
+    if (manager_verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+        causers.insert(HTTP_MANAGER_NAME);
+    }
+    for (const auto &app_verdic_pair : applications_verdicts) {
+        bool was_dropped = app_verdic_pair.second == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        dbgTrace(D_HTTP_MANAGER)
+            << "The verdict from: " << app_verdic_pair.first
+            << (was_dropped ? " is \"drop\"" : " is not \"drop\" ");
+        if (was_dropped) {
+            causers.insert(app_verdic_pair.first);
+        }
+    }
+    return causers;
 }
 
 void

@@ -20,6 +20,8 @@
 #include "table_opaque.h"
 #include "nginx_attachment_common.h"
 
+static const std::string HTTP_MANAGER_NAME = "HTTP Manager";
+
 class HttpManagerOpaque : public TableOpaqueSerialize<HttpManagerOpaque>
 {
 public:
@@ -30,6 +32,7 @@ public:
     void setManagerVerdict(ngx_http_cp_verdict_e verdict) { manager_verdict = verdict; }
     ngx_http_cp_verdict_e getManagerVerdict() const { return manager_verdict; }
     ngx_http_cp_verdict_e getCurrVerdict() const;
+    std::set<std::string> getCurrentDropVerdictCausers() const;
     void saveCurrentDataToCache(const Buffer &full_data);
     void setUserDefinedValue(const std::string &value) { user_defined_value = value; }
     Maybe<std::string> getUserDefinedValue() const { return user_defined_value; }

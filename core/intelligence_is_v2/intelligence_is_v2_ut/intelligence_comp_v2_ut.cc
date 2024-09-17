@@ -1341,3 +1341,59 @@ TEST_F(IntelligenceComponentTestV2, ignoreInProgressQueryTest_2)
 
     EXPECT_EQ(objects_ids.size(), 2u);
 }
+
+TEST_F(IntelligenceComponentTestV2, foghealthy)
+{
+    Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+
+    HTTPResponse fog_res(
+        HTTPStatusCode::HTTP_OK,
+        string(
+            "{"
+            "    \"up\": true,"
+            "    \"timestamp\":\"\""
+            "}"
+        )
+    );
+
+    EXPECT_CALL(
+        messaging_mock,
+        sendSyncMessage(HTTPMethod::GET, "/access-manager/health/live", _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(fog_res));
+
+    EXPECT_TRUE(intell->isIntelligenceHealthy());
+}
+
+TEST_F(IntelligenceComponentTestV2, localIntelligenceHealthy)
+{
+    Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
+    stringstream configuration;
+    configuration << "{";
+    configuration << "  \"agentSettings\":[";
+    configuration << "    {\"key\":\"agent.config.useLocalIntelligence\",\"id\":\"id1\",\"value\":\"true\"}";
+    configuration << "  ],";
+    configuration << "  \"intelligence\":{";
+    configuration << "    \"local intelligence server ip\":\"127.0.0.1\",";
+    configuration << "    \"local intelligence server primary port\":9090";
+    configuration << "  }";
+    configuration << "}";
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
+
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+
+    string localHealthy(
+            "{\n"
+            "  \"healthy\": true\n"
+            "}\n"
+    );
+
+    EXPECT_CALL(
+        messaging_mock,
+        sendSyncMessage(HTTPMethod::GET, "/show-health", _, MessageCategory::INTELLIGENCE, _)
+    ).WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, localHealthy)));
+
+    EXPECT_CALL(mock_rest, getListeningPort()).Times(1).WillRepeatedly(Return(8888));
+
+    EXPECT_TRUE(intell->isIntelligenceHealthy());
+}

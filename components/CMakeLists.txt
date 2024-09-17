@@ -1,4 +1,3 @@
-add_subdirectory(report_messaging)
 add_subdirectory(http_manager)
 add_subdirectory(signal_handler)
 add_subdirectory(gradual_deployment)

@@ -92,6 +92,7 @@ enum class Service {
     HTTP_TRANSACTION_HANDLER,
     DEDICATED_NETWORK_HANDLER,
     HELLO_WORLD,
+    PROMETHEUS,
     IDA_SAML,
     IDA_IDN,
     IDA_IDN_BG,
@@ -170,6 +171,7 @@ getServiceString(const Service service)
         case (Service::LOGGER_SDWAN): return "logger-sdwan";
         case (Service::IOT_WLP): return "workload-protection";
         case (Service::HELLO_WORLD): return "hello-world";
+        case (Service::PROMETHEUS): return "prometheus";
         case (Service::IDA_SAML): return "ida-saml";
         case (Service::IDA_IDN): return "ida-idn";
         case (Service::IDA_IDN_BG): return "ida-idn-bg";
@@ -362,6 +364,11 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-hello-world-conf.json",
                 log_files_path + "/nano_agent/cp-nano-hello-world.dbg"
+            );
+        case (Service::PROMETHEUS):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-prometheus-debug-conf.json",
+                log_files_path + "/nano_agent/cp-nano-prometheus.dbg"
             );
         case (Service::IOT_ACCESS_CONTROL):
             return ServiceConfig(
@@ -1308,6 +1315,8 @@ extractServices(const vector<string> &args)
             services.push_back(Service::IOT_ACCESS_CONTROL);
         } else if (getServiceString(Service::HORIZON_TELEMETRY).find(maybe_service) == 0) {
             services.push_back(Service::HORIZON_TELEMETRY);
+        } else if (getServiceString(Service::PROMETHEUS).find(maybe_service) == 0) {
+            services.push_back(Service::PROMETHEUS);
         } else {
             break;
         }

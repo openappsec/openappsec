@@ -39,6 +39,8 @@ USE_DEBUG_FLAG(D_ATTACHMENT_REGISTRATION);
 
 using namespace std;
 
+static const AlertInfo alert(AlertTeam::CORE, "attachment registrator");
+
 class AttachmentRegistrator::Impl
 {
 public:
@@ -163,7 +165,7 @@ private:
                 break;
             }
             default:
-                dbgAssert(false) << "Unsupported Attachment " << static_cast<int>(type);
+                dbgAssert(false) << alert << "Unsupported Attachment " << static_cast<int>(type);
         }
 
         if (!family_id.empty()) handler_path << family_id << "_";
@@ -175,7 +177,9 @@ private:
     string
     genRegCommand(const string &family_id, const uint num_of_members, const AttachmentType type) const
     {
-        dbgAssert(num_of_members > 0) << "Failed to generate a registration command for an empty group of attachments";
+        dbgAssert(num_of_members > 0)
+            << alert
+            << "Failed to generate a registration command for an empty group of attachments";
 
         static const string registration_format = "/etc/cp/watchdog/cp-nano-watchdog --register ";
         stringstream registration_command;
@@ -187,7 +191,7 @@ private:
                 break;
             }
             default:
-                dbgAssert(false) << "Unsupported Attachment " << static_cast<int>(type);
+                dbgAssert(false) << alert << "Unsupported Attachment " << static_cast<int>(type);
         }
 
         if (!family_id.empty()) registration_command << " --family " << family_id;
@@ -265,7 +269,7 @@ private:
             return -1;
         }
 
-        dbgAssert(new_socket.unpack() > 0) << "Generated socket is OK yet negative";
+        dbgAssert(new_socket.unpack() > 0) << alert << "Generated socket is OK yet negative";
         return new_socket.unpack();
     }
 
@@ -281,7 +285,7 @@ private:
         }
 
         I_Socket::socketFd client_socket = accepted_socket.unpack();
-        dbgAssert(client_socket > 0) << "Generated client socket is OK yet negative";
+        dbgAssert(client_socket > 0) << alert << "Generated client socket is OK yet negative";
         auto close_socket_on_exit = make_scope_exit([&]() { i_socket->closeSocket(client_socket); });
 
         Maybe<uint8_t> attachment_id = readNumericParam(client_socket);
@@ -375,7 +379,7 @@ private:
         }
 
         I_Socket::socketFd client_socket = accepted_socket.unpack();
-        dbgAssert(client_socket > 0) << "Generated client socket is OK yet negative";
+        dbgAssert(client_socket > 0) << alert << "Generated client socket is OK yet negative";
         auto close_socket_on_exit = make_scope_exit([&]() { i_socket->closeSocket(client_socket); });
 
         Maybe<AttachmentType> attachment_type = readAttachmentType(client_socket);

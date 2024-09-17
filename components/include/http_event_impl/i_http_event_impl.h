@@ -50,9 +50,11 @@ public:
         position(mod_position)
     {
         dbgAssert(mod_type != ModificationType::APPEND || position == injection_pos_irrelevant)
+            << AlertInfo(AlertTeam::CORE, "http manager")
             << "Injection position is not applicable to a modification of type \"Append\"";
 
         dbgAssert(mod_type != ModificationType::INJECT || position >= 0)
+            << AlertInfo(AlertTeam::CORE, "http manager")
             << "Invalid injection position: must be non-negative. Position: "
             << position;
     }
@@ -166,6 +168,7 @@ private:
             }
             default:
                 dbgAssert(false)
+                    << AlertInfo(AlertTeam::CORE, "http manager")
                     << "Unknown type of ModificationType: "
                     << static_cast<int>(modification_type);
         }

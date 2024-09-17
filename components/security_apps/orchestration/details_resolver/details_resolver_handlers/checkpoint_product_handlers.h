@@ -60,20 +60,16 @@ checkSAMLPortal(const string &command_output)
 Maybe<string>
 checkPepIdaIdnStatus(const string &command_output)
 {
-    if (command_output.find("nac_pep_scaled_sharing_enabled = 1") != string::npos) {
+    if (command_output.find("nac_pep_identity_next_enabled = 1") != string::npos) {
         return string("true");
     }
     return string("false");
 }
 
 Maybe<string>
-getIDAGaiaPackages(const string &command_output)
+getRequiredNanoServices(const string &command_output)
 {
-    string result = "idaSaml_gaia;idaIdn_gaia;idaIdnBg_gaia;";
-    if (command_output.find("nac_pep_scaled_sharing_enabled = 1") != string::npos) {
-        result += "agentIntelligenceService_gaia;";
-    }
-    return result;
+    return command_output;
 }
 
 Maybe<string>
@@ -191,26 +187,44 @@ getMgmtObjAttr(shared_ptr<istream> file_stream, const string &attr)
 }
 
 Maybe<string>
-getMgmtObjUid(shared_ptr<istream> file_stream)
+getMgmtObjUid(const string &command_output)
 {
+    if (!command_output.empty()) {
+        return command_output;
+    }
+
+    static const string obj_path = (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C";
+    auto file_stream = std::make_shared<std::ifstream>(obj_path);
+    if (!file_stream->is_open()) {
+        return genError("Failed to open the object file");
+    }
     return getMgmtObjAttr(file_stream, "uuid ");
 }
 
 Maybe<string>
-getMgmtObjName(shared_ptr<istream> file_stream)
+getMgmtObjName(const string &command_output)
 {
+    if (!command_output.empty()) {
+        return command_output;
+    }
+
+    static const string obj_path = (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C";
+    auto file_stream = std::make_shared<std::ifstream>(obj_path);
+    if (!file_stream->is_open()) {
+        return genError("Failed to open the object file");
+    }
     return getMgmtObjAttr(file_stream, "name ");
 }
 
 Maybe<string>
-getGWHardware(const string &command_output)
+getHardware(const string &command_output)
 {
     if (!command_output.empty()) {
         if (command_output == "software") return string("Open server");
         if (command_output == "Maestro Gateway") return string("Maestro");
         return string(command_output);
     }
-    return genError("GW Hardware was not found");
+    return genError("Hardware was not found");
 }
 
 Maybe<string>

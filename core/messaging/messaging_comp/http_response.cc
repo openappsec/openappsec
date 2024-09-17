@@ -92,7 +92,10 @@ string
 HTTPResponse::toString() const
 {
     auto code = status_code_to_string.find(status_code);
-    dbgAssert(code != status_code_to_string.end()) << "Unknown status code " << int(status_code);
+    dbgAssert(code != status_code_to_string.end())
+        << AlertInfo(AlertTeam::CORE, "messaging i/s")
+        << "Unknown status code "
+        << int(status_code);
 
     return "[Status-code]: " + code->second + ", [Body]: " + (body.empty() ? "{}" : body);
 }

@@ -28,12 +28,17 @@ template <typename T, uint N>
 class TopValues : public MetricCalc
 {
 public:
-    TopValues(GenericMetric *metric, const std::string &title) : MetricCalc(metric, title) { values.reserve(N); }
+    template <typename ... Args>
+    TopValues(GenericMetric *metric, const std::string &title, const Args & ... args)
+            :
+        MetricCalc(metric, title, args ...)
+    {
+        values.reserve(N);
+    }
 
     void
     report(const T &new_value)
     {
-        was_once_reported = true;
         if (values.size() < N) {
             values.push_back(new_value);
             return;
@@ -51,7 +56,6 @@ public:
     void
     reset() override
     {
-        was_once_reported = false;
         values.clear();
     }
 
@@ -66,13 +70,13 @@ public:
     void
     save(cereal::JSONOutputArchive &ar) const override
     {
-        ar(cereal::make_nvp(calc_title, getTopValues()));
+        ar(cereal::make_nvp(getMetricName(), getTopValues()));
     }
 
     LogField
     getLogField() const override
     {
-        return LogField(calc_title, getTopValues());
+        return LogField(getMetricName(), getTopValues());
     }
 
 private:

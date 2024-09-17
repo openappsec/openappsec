@@ -971,12 +971,15 @@ install_orchestration()
         if [ -n "${OTP_TOKEN}" ]; then
             cp_print "Saving authentication token to file"
             printf '{\n   "registration type": "token",\n   "registration data": "%b"\n}' "$OTP_TOKEN" | ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_BASE64} -e > ${FILESYSTEM_PATH}/${CONF_PATH}/registration-data.json
-            rm ${FILESYSTEM_PATH}/${CONF_PATH}/agent_details.json
-            rm ${FILESYSTEM_PATH}/${CONF_PATH}/orchestration_status.json
-            echo '{}'>${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
+            previous_mode=$(awk -F\" '/Orchestration mode/{print $4}' /etc/cp/conf/agent_details.json)
+            if [ "$previous_mode" = "hybrid_mode" ]; then
+                rm ${FILESYSTEM_PATH}/${CONF_PATH}/agent_details.json
+                rm ${FILESYSTEM_PATH}/${CONF_PATH}/orchestration_status.json
+                echo '{}'>${FILESYSTEM_PATH}/${CONF_PATH}/policy.json
 
-            if [ -f ${FILESYSTEM_PATH}/data/data5.a ]; then
-                rm ${FILESYSTEM_PATH}/data/data5.a
+                if [ -f ${FILESYSTEM_PATH}/data/data5.a ]; then
+                    rm ${FILESYSTEM_PATH}/data/data5.a
+                fi
             fi
         fi
 

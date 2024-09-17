@@ -301,7 +301,7 @@ ConvertToIpAddress(const IPAddr &addr) {
             break;
         }
         default:
-            dbgAssert(false) << "Unsupported IP type";
+            dbgAssert(false) << AlertInfo(AlertTeam::CORE, "ip utilities") << "Unsupported IP type";
     }
     return address;
 }

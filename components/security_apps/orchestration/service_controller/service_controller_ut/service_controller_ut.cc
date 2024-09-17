@@ -790,6 +790,7 @@ TEST_F(ServiceControllerTest, SettingsAndPolicyUpdateCombinations)
 
     EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
+    EXPECT_EQ(i_service_controller->getServicesPolicyStatus(), true);
 }
 
 TEST_F(ServiceControllerTest, backup)

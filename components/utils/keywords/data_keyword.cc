@@ -74,7 +74,9 @@ private:
     uint
     moveOnNoMatch(uint offset_from_end, unsigned char first_unmatched_byte) const
     {
-        dbgAssert(shift.size() > offset_from_end) << "Shift table of the 'data' keyword is shorter than the offset";
+        dbgAssert(shift.size() > offset_from_end)
+            << AlertInfo(AlertTeam::CORE, "keywords")
+            << "Shift table of the 'data' keyword is shorter than the offset";
 
         uint skip_size;
         if (skip[first_unmatched_byte]>offset_from_end) {
@@ -350,7 +352,9 @@ DataKeyword::bytesMatched(const Buffer &buf, uint offset) const
 MatchStatus
 DataKeyword::isMatch(const I_KeywordRuntimeState *prev) const
 {
-    dbgAssert(pattern.size()>0) << "Trying to run on an uninitialized keyword data";
+    dbgAssert(pattern.size()>0)
+        << AlertInfo(AlertTeam::CORE, "keywords")
+        << "Trying to run on an uninitialized keyword data";
 
     dbgDebug(D_KEYWORD) << "Searching for " << dumpHex(pattern);
 

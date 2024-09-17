@@ -97,6 +97,10 @@ RestConn::parseConn() const
         stop();
     }
 
+    if (method=="GET" && invoke->isGetCall(identifier)) {
+        return sendResponse("200 OK", invoke->invokeGet(identifier), false);
+    }
+
     stringstream body;
     body.str(readSize(len));
 
@@ -152,15 +156,16 @@ RestConn::readSize(int len) const
 }
 
 void
-RestConn::sendResponse(const string &status, const string &body) const
+RestConn::sendResponse(const string &status, const string &body, bool add_newline) const
 {
     stringstream stream;
     stream <<
         "HTTP/1.1 " << status << "\r\n" <<
         "Content-Type: application/json\r\n" <<
-        "Content-Length: " << (body.size() + 2) << "\r\n" <<
+        "Content-Length: " << (body.size() + (add_newline ? 2 : 0)) << "\r\n" <<
         "\r\n" <<
-        body << "\r\n";
+        body;
+    if (add_newline) stream << "\r\n";
 
 
     string res = stream.str();

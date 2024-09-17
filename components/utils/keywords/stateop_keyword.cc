@@ -131,7 +131,7 @@ StateopKeyword::isMatch(const I_KeywordRuntimeState *prev) const
         if (table->hasState<KeywordStateop>()) table->getState<KeywordStateop>().removeVariable(var_name);
         return runNext(prev);
     } else {
-        dbgAssert(false) << "Impossible 'stateop' keyword without operation";
+        dbgAssert(false) << AlertInfo(AlertTeam::CORE, "keywords") << "Impossible 'stateop' keyword without operation";
     }
 
     // If there was no matches and the keyword is effected by other keywords, then we know that the rule won't match

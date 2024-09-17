@@ -43,7 +43,10 @@ CompoundProtection::Impl::getMatch(const set<PMPattern> &matched) const
         case Operation::ORDERED_AND: return getMatchOrderedAnd(matched);
     }
 
-    dbgAssert(false) << "Unknown compound operation: " << static_cast<uint>(operation);
+    dbgAssert(false)
+        << AlertInfo(AlertTeam::CORE, "ips")
+        << "Unknown compound operation: "
+        << static_cast<uint>(operation);
     return MatchType::NO_MATCH;
 }
 
