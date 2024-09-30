@@ -46,6 +46,14 @@ class MetricMap : public MetricCalc
 
         void clear() { inner_map.clear(); }
 
+        MetricType
+        getMetricType() const
+        {
+            auto first = begin();
+            if (first == end()) return MetricType::GAUGE;
+            return first->second.getMetricType();
+        }
+
         typename std::map<std::string, Metric>::const_iterator begin() const { return inner_map.begin(); }
         typename std::map<std::string, Metric>::const_iterator end() const { return inner_map.end(); }
 
@@ -54,27 +62,31 @@ class MetricMap : public MetricCalc
     };
 
 public:
-    MetricMap(GenericMetric *metric, const std::string &title) : MetricCalc(metric, title) {}
+    template <typename ... Args>
+    MetricMap(GenericMetric *metric, const std::string &title, const Args & ... args)
+            :
+        MetricCalc(metric, title, args ...)
+    {
+    }
 
     void
     reset() override
     {
-        was_once_reported = false;
-        metric_map.clear();
+        if (getMetricType() == MetricType::GAUGE) metric_map.clear();
     }
 
     void
     save(cereal::JSONOutputArchive &ar) const override
     {
-        ar(cereal::make_nvp(calc_title, metric_map));
+        ar(cereal::make_nvp(getMetricName(), metric_map));
     }
 
+    MetricType getMetricType() const override { return metric_map.getMetricType(); }
 
     template <typename ... Values>
     void
     report(const PrintableKey &key, const Values & ... new_values)
     {
-        was_once_reported = true;
         std::stringstream string_key;
         string_key << key;
         auto metric = metric_map.emplace(string_key.str(), Metric(nullptr, string_key.str())).first;
@@ -84,7 +96,7 @@ public:
     LogField
     getLogField() const override
     {
-        LogField field(calc_title);
+        LogField field(getMetricName());
 
         for (auto &metric : metric_map) {
             field.addFields(metric.second.getLogField());

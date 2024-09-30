@@ -103,6 +103,9 @@ ParserUrlEncode::push(const char *buf, size_t len)
         }
         case s_key_start: {
             dbgTrace(D_WAAP_PARSER_URLENCODE) << "ParserUrlEncode::push(): s_key_start";
+            if (isspace(c)){
+                break;
+            }
             mark = i;
             m_state = s_key;
 
@@ -111,12 +114,6 @@ ParserUrlEncode::push(const char *buf, size_t len)
         }
         case s_key: {
             dbgTrace(D_WAAP_PARSER_URLENCODE) << "ParserUrlEncode::push(): s_key";
-
-            // skip leading spaces in the key
-            if (isspace(c)) {
-                m_state = s_key_start; // skip the space character without including it in the output
-                break;
-            }
 
             if (c == '%' && should_decode_percent) {
                 if (i - mark > 0) {

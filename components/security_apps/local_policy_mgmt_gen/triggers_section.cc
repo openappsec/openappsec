@@ -30,7 +30,7 @@ LogTriggerSection::LogTriggerSection(
     bool _logToAgent,
     bool _logToCef,
     bool _logToCloud,
-    bool _logToContainerService,
+    bool _logTolocalTuning,
     bool _logToSyslog,
     bool _responseBody,
     bool _tpDetect,
@@ -55,7 +55,7 @@ LogTriggerSection::LogTriggerSection(
     logToAgent(_logToAgent),
     logToCef(_logToCef),
     logToCloud(_logToCloud),
-    logToContainerService(_logToContainerService),
+    logTolocalTuning(_logTolocalTuning),
     logToSyslog(_logToSyslog),
     responseBody(_responseBody),
     tpDetect(_tpDetect),
@@ -101,7 +101,7 @@ LogTriggerSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("logToAgent",               logToAgent),
         cereal::make_nvp("logToCef",                 logToCef),
         cereal::make_nvp("logToCloud",               logToCloud),
-        cereal::make_nvp("logToContainerService",    logToContainerService),
+        cereal::make_nvp("logTolocalTuning",    logTolocalTuning),
         cereal::make_nvp("logToSyslog",              logToSyslog),
         cereal::make_nvp("responseBody",             responseBody),
         cereal::make_nvp("responseCode",             false),
@@ -393,12 +393,16 @@ AppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
     } else {
         cloud = false;
     }
-    auto mode = Singleton::Consume<I_AgentDetails>::by<AppsecTriggerLogDestination>()->getOrchestrationMode();
-    auto env_type = Singleton::Consume<I_EnvDetails>::by<AppsecTriggerLogDestination>()->getEnvType();
-    bool k8s_service_default = (mode == OrchestrationMode::HYBRID && env_type == EnvType::K8S);
-    // BC try load previous name. TODO: update CRD
-    parseAppsecJSONKey<bool>("k8s-service", container_service, archive_in, k8s_service_default);
-    parseAppsecJSONKey<bool>("container-service", container_service, archive_in, container_service);
+    // check ENV VAR LOCAL_TUNING_ENABLED
+    char * tuning_enabled = getenv("LOCAL_TUNING_ENABLED");
+    if (tuning_enabled != NULL) {
+        for (unsigned int i = 0; i < strlen(tuning_enabled); i++) {
+            tuning_enabled[i] = tolower(tuning_enabled[i]);
+        }
+        container_service = string(tuning_enabled) == "true";
+    } else {
+        container_service = false;
+    }
 
     StdoutLogging stdout_log;
     parseAppsecJSONKey<StdoutLogging>("stdout", stdout_log, archive_in);

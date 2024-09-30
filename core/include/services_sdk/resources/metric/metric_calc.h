@@ -24,19 +24,53 @@
 
 class GenericMetric;
 
+enum class MetricType { GAUGE, COUNTER };
+
 class MetricCalc
 {
 public:
-    MetricCalc(GenericMetric *metric, const std::string &calc_title);
+    template<typename ... Args>
+    MetricCalc(GenericMetric *metric, const std::string &calc_title, const Args & ... args)
+    {
+        setMetadata("BaseName", calc_title);
+        addMetric(metric);
+        parseMetadata(args ...);
+    }
+
     virtual void reset() = 0;
     virtual void save(cereal::JSONOutputArchive &) const = 0;
     virtual LogField getLogField() const = 0;
 
-    bool wasOnceReported() const { return was_once_reported; }
+    std::string getMetricName() const { return getMetadata("BaseName"); }
+    std::string getMetricDotName() const { return getMetadata("DotName"); }
+    std::string getMetircUnits() const { return getMetadata("Units"); }
+    std::string getMetircDescription() const { return getMetadata("Description"); }
+    std::string getMetadata(const std::string &metadata) const;
+    virtual MetricType getMetricType() const { return MetricType::GAUGE; }
+
+    void setMetricDotName(const std::string &name) { setMetadata("DotName", name); }
+    void setMetircUnits(const std::string &units) { setMetadata("Units", units); }
+    void setMetircDescription(const std::string &description) { setMetadata("Description", description); }
+    void setMetadata(const std::string &metadata, const std::string &value);
 
 protected:
-    bool was_once_reported = false;
-    std::string calc_title;
+    void addMetric(GenericMetric *metric);
+
+    template <typename Metadata, typename ... OtherMetadata>
+    void
+    parseMetadata(const Metadata &metadata, const OtherMetadata & ... other_metadata)
+    {
+        parseMetadata(metadata);
+        parseMetadata(other_metadata ...);
+    }
+
+    void parseMetadata(const MetricMetadata::DotName &name) { setMetricDotName(name.val); }
+    void parseMetadata(const MetricMetadata::Units &units) { setMetircUnits(units.val); }
+    void parseMetadata(const MetricMetadata::Description &description) { setMetircDescription(description.val); }
+    void parseMetadata() {}
+
+private:
+    std::map<std::string, std::string> metadata;
 };
 
 #endif // __METRIC_CALC_H__

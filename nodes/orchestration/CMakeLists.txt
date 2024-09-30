@@ -31,6 +31,7 @@ target_link_libraries(
     local_policy_mgmt_gen
     curl
     external_sdk_server
+	service_health_status
     -Wl,--end-group
 )
 

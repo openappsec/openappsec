@@ -24,6 +24,7 @@ public:
     using Response = Intelligence::Response;
 
     MOCK_CONST_METHOD1(sendInvalidation, bool(const Invalidation &invalidation));
+    MOCK_CONST_METHOD0(isIntelligenceHealthy, bool(void));
     MOCK_METHOD2(registerInvalidation, Maybe<uint>(const Invalidation &invalidation, const InvalidationCb &callback));
     MOCK_METHOD1(unregisterInvalidation, void(uint id));
     MOCK_CONST_METHOD5(

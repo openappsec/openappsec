@@ -18,6 +18,7 @@
 
 #include "debug.h"
 #include "log_generator.h"
+#include "service_health_update_event.h"
 
 using namespace std;
 
@@ -34,6 +35,7 @@ UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
         if (event.getResult() == UpdatesProcessResult::SUCCESS && reports.empty()) {
             dbgTrace(D_UPDATES_PROCESS_REPORTER) << "Update proccess finished successfully";
             report_failure_count_map.erase(version);
+            ServiceHealthUpdateEvent().notify();
             return;
         }
         if (report_failure_count_map.find(version) == report_failure_count_map.end()) {
@@ -62,6 +64,7 @@ UpdatesProcessReporter::upon(const UpdatesProcessEvent &event)
     reports.emplace_back(
         UpdatesProcessReport(event.getResult(), event.getType(), event.getReason(), event.parseDescription())
     );
+    ServiceHealthUpdateEvent(convertUpdatesConfigTypeToStr(event.getType()), event.parseDescription()).notify();
 }
 
 void

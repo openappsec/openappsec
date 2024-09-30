@@ -867,7 +867,7 @@ void Waf2Transaction::parseCookie(const char* value, int value_len)
     if (value_len > 0) {
         dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] scanning the cookie value";
         m_deepParser.m_key.push("cookie", 6);
-        ParserUrlEncode cookieValueParser(m_deepParserReceiver, 0, ';');
+        ParserUrlEncode cookieValueParser(m_deepParserReceiver, 0, ';', false);
         cookieValueParser.push(value, value_len);
         cookieValueParser.finish();
         m_deepParser.m_key.pop("cookie");
@@ -1077,6 +1077,9 @@ void Waf2Transaction::add_request_hdr(const char* name, int name_len, const char
     std::string header_name(name, name_len);
     boost::algorithm::to_lower(header_name);
     hdrs_map[header_name] = std::string(value, value_len);
+    if (header_name == "host") {
+        m_hostStr = hdrs_map[header_name];
+    }
 }
 
 void Waf2Transaction::end_request_hdrs() {

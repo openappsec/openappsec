@@ -26,6 +26,7 @@
 #include "config.h"
 #include "i_instance_awareness.h"
 #include "i_signal_handler.h"
+#include "hash_combine.h"
 
 using namespace std;
 
@@ -282,6 +283,16 @@ public:
 private:
     S2C_PARAM(string, output);
 };
+
+void
+AlertInfo::evalParams()
+{
+    id = 0;
+    hashCombine(id, family_id);
+    hashCombine(id, functionality);
+    hashCombine(id, description);
+    hashCombine(id, static_cast<size_t>(team));
+}
 
 // LCOV_EXCL_START - function is covered in unit-test, but not detected bt gcov
 Debug::Debug(
@@ -828,6 +839,14 @@ Debug::isCommunicationFlag(const DebugFlags &flag)
         flag == D_MESSAGING_BUFFER ||
         flag == D_HTTP_REQUEST
     );
+}
+
+void
+Debug::sendAlert(const AlertInfo &alert)
+{
+    for (auto &added_stream : current_active_streams) {
+        added_stream->sendAlert(alert);
+    }
 }
 
 Debug::DebugLevel Debug::lowest_global_level = default_level;

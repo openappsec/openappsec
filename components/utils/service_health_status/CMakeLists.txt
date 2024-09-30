@@ -1,0 +1,2 @@
+add_library(service_health_status service_health_status.cc)
+add_subdirectory(service_health_status_ut)

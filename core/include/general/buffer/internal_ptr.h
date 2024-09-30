@@ -32,7 +32,14 @@ public:
     }
 
     operator const T *() const { return ptr; }
-    const T & operator*() const { dbgAssert(ptr != nullptr) << "Accessing a moved pointer"; return *ptr; }
+
+    const T &
+    operator*() const
+    {
+        dbgAssert(ptr != nullptr) << AlertInfo(AlertTeam::CORE, "buffer i/s") << "Accessing a moved pointer";
+        return *ptr;
+    }
+
     const T * operator->() const { return ptr; }
 
 private:

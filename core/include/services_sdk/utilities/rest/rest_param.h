@@ -27,13 +27,13 @@ public:
 
     operator T &()
     {
-        dbgAssert(is_active) << "Tried to access a non-existing variable";
+        dbgAssert(is_active) << AlertInfo(AlertTeam::CORE, "rest i/s") << "Tried to access a non-existing variable";
         return val;
     }
 
     operator const T &() const
     {
-        dbgAssert(is_active) << "Tried to access a non-existing variable";
+        dbgAssert(is_active) << AlertInfo(AlertTeam::CORE, "rest i/s") << "Tried to access a non-existing variable";
         return val;
     }
 

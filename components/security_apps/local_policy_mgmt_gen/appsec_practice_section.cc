@@ -19,7 +19,14 @@ using namespace std;
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 // LCOV_EXCL_START Reason: no test exist
 
-static const set<string> valid_modes = {"prevent-learn", "detect-learn", "prevent", "detect", "inactive"};
+static const set<string> valid_modes = {
+    "prevent-learn",
+    "detect-learn",
+    "prevent",
+    "detect",
+    "inactive",
+    "as-top-level"
+};
 static const set<string> valid_confidences = {"medium", "high", "critical"};
 
 void
@@ -138,15 +145,11 @@ AppSecPracticeWebAttacks::load(cereal::JSONInputArchive &archive_in)
         dbgWarning(D_LOCAL_POLICY) << "AppSec practice override mode invalid: " << mode;
     }
 
-    if (getMode() == "Prevent") {
-        parseAppsecJSONKey<string>("minimum-confidence", minimum_confidence, archive_in, "critical");
-        if (valid_confidences.count(minimum_confidence) == 0) {
-            dbgWarning(D_LOCAL_POLICY)
-                << "AppSec practice override minimum confidence invalid: "
-                << minimum_confidence;
-        }
-    } else {
-        minimum_confidence = "Transparent";
+    parseAppsecJSONKey<string>("minimum-confidence", minimum_confidence, archive_in, "critical");
+    if (valid_confidences.count(minimum_confidence) == 0) {
+        dbgWarning(D_LOCAL_POLICY)
+            << "AppSec practice override minimum confidence invalid: "
+            << minimum_confidence;
     }
     parseAppsecJSONKey<int>("max-body-size-kb", max_body_size_kb, archive_in, 1000000);
     parseAppsecJSONKey<int>("max-header-size-bytes", max_header_size_bytes, archive_in, 102400);
@@ -189,7 +192,10 @@ AppSecPracticeWebAttacks::getMode(const string &default_mode) const
 {
     if (isModeInherited(mode) || (key_to_practices_val2.find(mode) == key_to_practices_val2.end())) {
         dbgError(D_LOCAL_POLICY) << "Couldn't find a value for key: " << mode << ". Returning " << default_mode;
-        return default_mode;
+        if(key_to_practices_val2.find(default_mode) == key_to_practices_val2.end()) {
+            return default_mode;
+        }
+        return key_to_practices_val2.at(default_mode);
     }
     return key_to_practices_val2.at(mode);
 }
@@ -428,7 +434,6 @@ WebAppSection::WebAppSection(
     practice_id(_practice_id),
     practice_name(_practice_name),
     context(_context),
-    web_attack_mitigation_severity(parsed_appsec_spec.getWebAttacks().getMinimumConfidence()),
     web_attack_mitigation_mode(parsed_appsec_spec.getWebAttacks().getMode(default_mode)),
     csrf_protection_mode("Disabled"),
     open_redirect_mode("Disabled"),
@@ -438,6 +443,9 @@ WebAppSection::WebAppSection(
     trusted_sources({ parsed_trusted_sources })
 {
     web_attack_mitigation = web_attack_mitigation_mode != "Disabled";
+    web_attack_mitigation_severity =
+        web_attack_mitigation_mode != "Prevent" ? "Transparent" :
+        parsed_appsec_spec.getWebAttacks().getMinimumConfidence();
     web_attack_mitigation_action =
         web_attack_mitigation_mode != "Prevent" ? "Transparent" :
         web_attack_mitigation_severity == "critical" ? "low" :
@@ -470,6 +478,7 @@ WebAppSection::WebAppSection(
     const string &_context,
     const string &_web_attack_mitigation_severity,
     const string &_web_attack_mitigation_mode,
+    const string &_bot_protection,
     const PracticeAdvancedConfig &_practice_advanced_config,
     const AppsecPracticeAntiBotSection &_anti_bots,
     const LogTriggerSection &parsed_log_trigger,
@@ -486,6 +495,7 @@ WebAppSection::WebAppSection(
     context(_context),
     web_attack_mitigation_severity(_web_attack_mitigation_severity),
     web_attack_mitigation_mode(_web_attack_mitigation_mode),
+    bot_protection(_bot_protection),
     practice_advanced_config(_practice_advanced_config),
     anti_bots(_anti_bots),
     trusted_sources({ parsed_trusted_sources })
@@ -514,7 +524,6 @@ void
 WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
 {
     string disabled_str = "Disabled";
-    string detect_str = "Detect";
     vector<string> empty_list;
     out_ar(
         cereal::make_nvp("context",                     context),
@@ -542,7 +551,7 @@ WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("waapParameters",              empty_list),
         cereal::make_nvp("botProtection",               false),
         cereal::make_nvp("antiBot",                     anti_bots),
-        cereal::make_nvp("botProtection_v2",            detect_str)
+        cereal::make_nvp("botProtection_v2",            bot_protection != "" ? bot_protection : string("Detect"))
     );
 }
 

@@ -40,6 +40,8 @@ public:
 
     MOCK_CONST_METHOD0(getPolicyVersions, const std::string &());
 
+    MOCK_CONST_METHOD0(getServicesPolicyStatus, bool());
+
     MOCK_METHOD6(
         updateServiceConfiguration,
         Maybe<void>(

@@ -8,7 +8,9 @@ IPSConfiguration::Context::Context(ContextType _type, uint history) : type(_type
 uint
 IPSConfiguration::Context::getHistorySize() const
 {
-    dbgAssert(type == ContextType::HISTORY) << "Try to access history size for non-history context";
+    dbgAssert(type == ContextType::HISTORY)
+        << AlertInfo(AlertTeam::CORE, "ips")
+        << "Try to access history size for non-history context";
     return history_size;
 }
 
@@ -69,6 +71,8 @@ uint
 IPSConfiguration::getHistorySize(const string &name) const
 {
     auto context = context_config.find(name);
-    dbgAssert(context != context_config.end()) << "Try to access history size for non-exiting context";
+    dbgAssert(context != context_config.end())
+        << AlertInfo(AlertTeam::CORE, "ips")
+        << "Try to access history size for non-exiting context";
     return context->second.getHistorySize();
 }

@@ -24,12 +24,17 @@ namespace MetricCalculations
 class Counter : public MetricCalc
 {
 public:
-    Counter(GenericMetric *metric, const std::string &title) : MetricCalc(metric, title), counter(0) {}
+    template <typename ... Args>
+    Counter(GenericMetric *metric, const std::string &title, const Args & ... args)
+            :
+        MetricCalc(metric, title, args ...),
+        counter(0)
+    {
+    }
 
     void
     reset() override
     {
-        was_once_reported = false;
         counter = 0;
     }
 
@@ -42,20 +47,19 @@ public:
     void
     save(cereal::JSONOutputArchive &ar) const override
     {
-        ar(cereal::make_nvp(calc_title, getCounter()));
+        ar(cereal::make_nvp(getMetricName(), getCounter()));
     }
 
     void
     report(const uint64_t &new_value)
     {
-        was_once_reported = true;
         counter += new_value;
     }
 
     LogField
     getLogField() const override
     {
-        return LogField(calc_title, static_cast<uint64_t>(getCounter()));
+        return LogField(getMetricName(), static_cast<uint64_t>(getCounter()));
     }
 
 private:

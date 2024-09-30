@@ -42,6 +42,8 @@ Context::getAllStrings(const EnvKeyAttr::ParamAttr &param) const
     return result;
 }
 
+static const AlertInfo alert(AlertTeam::CORE, "environment contexts");
+
 const std::string
 Context::convertToString(MetaDataType type)
 {
@@ -58,9 +60,9 @@ Context::convertToString(MetaDataType type)
         case MetaDataType::Direction: return "direction";
         case MetaDataType::Email: return "email";
         case MetaDataType::COUNT:
-            dbgAssert(false) << "COUNT is not a valid meta data type";
+            dbgAssert(false) << alert << "COUNT is not a valid meta data type";
     }
-    dbgAssert(false) << "Reached impossible case with type=" << static_cast<int>(type);
+    dbgAssert(false) << alert << "Reached impossible case with type=" << static_cast<int>(type);
     return "";
 }
 

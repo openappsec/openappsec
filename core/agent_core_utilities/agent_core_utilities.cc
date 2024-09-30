@@ -183,6 +183,8 @@ copyFile(const string &src, const string &dest, bool overide_if_exists, mode_t p
     }
 
     dbgTrace(D_INFRA_UTILS) << "Finished attempt to copy file. Res: " << (bytes_copied != -1 ? "Success" : "Error");
+    close(source_fd);
+    close(dest_fd);
     return bytes_copied != -1;
 }
 
@@ -258,6 +260,66 @@ touchFile(const string &path)
 
     t_file.close();
     dbgTrace(D_INFRA_UTILS) << "Successfully touched file, path: " << path;
+    return true;
+}
+
+bool
+copyDirectory(const string &src_dir_path, const string &dst_dir_path)
+{
+    dbgFlow(D_INFRA_UTILS)
+        << "Trying to copy directory. Source: "
+        << src_dir_path
+        << ", Destination: "
+        << dst_dir_path;
+
+    if (!exists(src_dir_path) || !isDirectory(src_dir_path)) {
+        dbgDebug(D_INFRA_UTILS) << "Failed to copy directory. Error: source directory does not exist";
+        return false;
+    }
+
+    if (!exists(dst_dir_path)) {
+        if (!makeDir(dst_dir_path, 0755)) {
+            dbgDebug(D_INFRA_UTILS) << "Failed to copy directory. Error: failed to create destination directory";
+            return false;
+        }
+    }
+
+    if (!isDirectory(dst_dir_path)) {
+        dbgDebug(D_INFRA_UTILS) << "Failed to copy directory. Error: destination path is not a directory";
+        return false;
+    }
+
+    struct dirent *entry = nullptr;
+    DIR *directory = opendir(src_dir_path.c_str());
+
+    if (!directory) {
+        dbgWarning(D_INFRA_UTILS) << "Fail to open directory. Path: " << src_dir_path;
+        return false;
+    }
+
+    while ((entry = readdir(directory))) {
+        string entry_name = entry->d_name;
+        static const string curr_dir(".");
+        static const string parent_dir("..");
+        if (entry_name == curr_dir || entry_name == parent_dir) {
+            dbgTrace(D_INFRA_UTILS) << "Skipping irrelevant directory entries. Entry name: " << entry_name;
+            continue;
+        }
+
+        string src_entry_path = src_dir_path + (src_dir_path.back() == '/' ? "" : "/") + entry_name;
+        string dst_entry_path = dst_dir_path + (dst_dir_path.back() == '/' ? "" : "/") + entry_name;
+        struct stat statbuf;
+        if (!stat(src_entry_path.c_str(), &statbuf)) {
+            if (S_ISDIR(statbuf.st_mode)) {
+                copyDirectory(src_entry_path, dst_entry_path);
+            } else {
+                copyFile(src_entry_path, dst_entry_path, true);
+            }
+        }
+    }
+
+    closedir(directory);
+
     return true;
 }
 

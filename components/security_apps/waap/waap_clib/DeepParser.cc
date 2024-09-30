@@ -390,6 +390,38 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
         }
     }
 
+    if (flags & BUFFERED_RECEIVER_F_FIRST && offset < 0 && valueStats.hasPercent &&
+        m_key.first().size() == 6 && m_key.first() == "cookie") {
+        dbgTrace(D_WAAP_DEEP_PARSER)
+            << "1st pass of createInternalParser() failed. "
+            << "Will try to decode percent-encoded data and repeate search for parser";
+        orig_val.erase(unquote_plus(orig_val.begin(), orig_val.end()), orig_val.end());
+        cur_val_html_escaped = orig_val;
+        cur_val_html_escaped.erase(
+            escape_html(cur_val_html_escaped.begin(), cur_val_html_escaped.end()), cur_val_html_escaped.end()
+        );
+        offset = createInternalParser(
+            k,
+            k_len,
+            orig_val,
+            valueStats,
+            isBodyPayload,
+            isRefererPayload,
+            isRefererParamPayload,
+            isUrlPayload,
+            isUrlParamPayload,
+            flags,
+            parser_depth,
+            base64BinaryFileType
+        );
+        if (offset >= 0) {
+            dbgTrace(D_WAAP_DEEP_PARSER) << "2nd pass of createInternalParser succeeded. Update values and proceed";
+            ValueStatsAnalyzer valueStatsUpdated(cur_val_html_escaped);
+            cur_val.erase(unquote_plus(cur_val.begin(), cur_val.end()), cur_val.end());
+            Waap::Util::decodeUtf16Value(valueStatsUpdated, cur_val);
+        }
+    }
+
     // If there's a parser in parsers stack, push the value to the top parser
     if (!m_parsersDeque.empty()
         && offset >= 0
@@ -1183,6 +1215,7 @@ DeepParser::createInternalParser(
             offset = 0;
         }
     }
+    bool isCockiePapameter = m_key.depth() == 2 && m_key.first().size() == 6 && m_key.first() == "cookie";
     if (offset < 0) {
         if (isPipesType) {
             dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse pipes, positional: " << isKeyValDelimited;
@@ -1279,7 +1312,7 @@ DeepParser::createInternalParser(
                 );
             } else if (!Waap::Util::testUrlBareUtf8Evasion(cur_val)) {
                 dbgTrace(D_WAAP_DEEP_PARSER) << "!Waap::Util::testUrlBareUtf8Evasion(cur_val)";
-                if (!valueStats.hasSpace
+                if ((!valueStats.hasSpace || (valueStats.hasSpace && isCockiePapameter))
                     && valueStats.hasCharAmpersand
                     && valueStats.hasTwoCharsEqual
                     && !isBinaryData()
@@ -1305,7 +1338,7 @@ DeepParser::createInternalParser(
             }
         } else if (!Waap::Util::testUrlBareUtf8Evasion(cur_val)) {
             dbgTrace(D_WAAP_DEEP_PARSER) << "!Waap::Util::testUrlBareUtf8Evasion(cur_val)";
-            if (!valueStats.hasSpace
+            if ((!valueStats.hasSpace || (valueStats.hasSpace && isCockiePapameter))
                 && valueStats.hasCharAmpersand
                 && valueStats.hasTwoCharsEqual
                 && !isBinaryData()

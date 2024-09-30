@@ -71,7 +71,7 @@ public:
                 UpdatesConfigType::GENERAL,
                 UpdatesFailureReason::SERVISE_CONFIGURATION,
                 string(service_name.get() + ", ID: " + to_string(id.get())),
-                (error_message.isActive() ? " Error: " + error_message.get() : "")
+                (error_message.isActive() ? " " + error_message.get() : "")
             ).notify();
             dbgError(D_SERVICE_CONTROLLER)
                 << "Request for service reconfiguration failed to complete. ID: "
@@ -327,6 +327,8 @@ public:
 
     set<string> && moveChangedPolicies() override;
 
+    bool getServicesPolicyStatus() const override;
+
 private:
     void cleanUpVirtualFiles();
 
@@ -365,6 +367,7 @@ private:
     map<int, string> services_reconf_ids;
     string filesystem_prefix;
     bool is_multi_tenant_env = false;
+    bool total_services_status = false;
     set<string> changed_policy_files;
     ServiceDetails orchestration_service_details;
 
@@ -457,6 +460,12 @@ set<string> &&
 ServiceController::Impl::moveChangedPolicies()
 {
     return move(changed_policy_files);
+}
+
+bool
+ServiceController::Impl::getServicesPolicyStatus() const
+{
+    return total_services_status;
 }
 
 void
@@ -960,6 +969,8 @@ ServiceController::Impl::sendSignalForServices(
     const string &policy_version_to_update)
 {
     dbgFlow(D_SERVICE_CONTROLLER) << "Policy version to update: " << policy_version_to_update;
+
+    total_services_status = false;
     for (auto &service_id : nano_services_to_update) {
         auto nano_service = registered_services.find(service_id);
         if (nano_service == registered_services.end()) {
@@ -1002,6 +1013,7 @@ ServiceController::Impl::sendSignalForServices(
                     << "The reconfiguration was successfully completed for all the services";
                 services_reconf_status.clear();
                 services_reconf_names.clear();
+                total_services_status = true;
                 return Maybe<void>();
             }
             case ReconfStatus::IN_PROGRESS: {

@@ -290,6 +290,7 @@ public:
         const std::string &_context,
         const std::string &_web_attack_mitigation_severity,
         const std::string &_web_attack_mitigation_mode,
+        const std::string &_bot_protection,
         const PracticeAdvancedConfig &_practice_advanced_config,
         const AppsecPracticeAntiBotSection &_anti_bots,
         const LogTriggerSection &parsed_log_trigger,
@@ -315,6 +316,7 @@ private:
     std::string csrf_protection_mode;
     std::string open_redirect_mode;
     std::string error_disclosure_mode;
+    std::string bot_protection;
     bool web_attack_mitigation;
     std::vector<TriggersInWaapSection> triggers;
     PracticeAdvancedConfig practice_advanced_config;

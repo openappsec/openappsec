@@ -56,7 +56,7 @@ private:
             if (mapped_type.second == type) return mapped_type.first;
         }
 
-        dbgAssert(false) << "Unsupported type " << static_cast<int>(type);
+        dbgAssert(false) << AlertInfo(AlertTeam::CORE, "packaging") << "Unsupported type " << static_cast<int>(type);
         // Just satisfying the compiler, this return never reached
         return std::string();
     }

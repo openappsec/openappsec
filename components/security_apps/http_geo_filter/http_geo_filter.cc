@@ -67,18 +67,18 @@ public:
         dbgTrace(D_GEO_FILTER) << getListenerName() << " new transaction event";
 
         if (!event.isLastHeader()) return EventVerdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
-        std::set<std::string> xff_set;
+        std::set<std::string> ip_set;
         auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
         auto maybe_xff = env->get<std::string>(HttpTransactionData::xff_vals_ctx);
         if (!maybe_xff.ok()) {
             dbgTrace(D_GEO_FILTER) << "failed to get xff vals from env";
         } else {
-            xff_set = split(maybe_xff.unpack(), ',');
+            ip_set = split(maybe_xff.unpack(), ',');
         }
         dbgDebug(D_GEO_FILTER) << getListenerName() << " last header, start lookup";
 
-        if (xff_set.size() > 0) {
-            removeTrustedIpsFromXff(xff_set);
+        if (ip_set.size() > 0) {
+            removeTrustedIpsFromXff(ip_set);
         } else {
             dbgDebug(D_GEO_FILTER) << "xff not found in headers";
         }
@@ -90,14 +90,14 @@ public:
         }
 
         auto source_ip = convertIpAddrToString(maybe_source_ip.unpack());
-        xff_set.insert(source_ip);
+        ip_set.insert(source_ip);
 
-        ngx_http_cp_verdict_e exception_verdict = getExceptionVerdict(xff_set);
+        ngx_http_cp_verdict_e exception_verdict = getExceptionVerdict(ip_set);
         if (exception_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
             return EventVerdict(exception_verdict);
         }
 
-        ngx_http_cp_verdict_e geo_lookup_verdict = getGeoLookupVerdict(xff_set);
+        ngx_http_cp_verdict_e geo_lookup_verdict = getGeoLookupVerdict(ip_set);
         if (geo_lookup_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
             return EventVerdict(geo_lookup_verdict);
         }
@@ -469,5 +469,6 @@ void
 HttpGeoFilter::preload()
 {
     registerExpectedConfiguration<GeoConfig>("rulebase", "httpGeoFilter");
+    registerExpectedConfiguration<UsersAllIdentifiersConfig>("rulebase", "usersIdentifiers");
     registerConfigLoadCb([this]() { pimpl->loadDefaultAction(); });
 }

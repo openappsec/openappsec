@@ -39,7 +39,7 @@ public:
         bool _logToAgent,
         bool _logToCef,
         bool _logToCloud,
-        bool _logToContainerService,
+        bool _logTolocalTuning,
         bool _logToSyslog,
         bool _responseBody,
         bool _tpDetect,
@@ -73,7 +73,7 @@ private:
     bool logToAgent;
     bool logToCef;
     bool logToCloud;
-    bool logToContainerService;
+    bool logTolocalTuning;
     bool logToSyslog;
     bool responseBody;
     bool tpDetect;

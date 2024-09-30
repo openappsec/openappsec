@@ -25,6 +25,9 @@ public:
     virtual Maybe<std::string> getSchema(const std::string &uri) const = 0;
     virtual Maybe<std::string> invokeRest(const std::string &uri, std::istream &in) const = 0;
 
+    virtual bool isGetCall(const std::string &uri) const = 0;
+    virtual std::string invokeGet(const std::string &uri) const = 0;
+
 protected:
     ~I_RestInvoke() {}
 };

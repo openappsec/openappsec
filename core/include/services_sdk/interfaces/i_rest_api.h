@@ -48,6 +48,8 @@ public:
         return addRestCall(oper, uri, std::make_unique<SpecificRestInit<T>>());
     }
 
+    virtual bool addGetCall(const std::string &uri, const std::function<std::string()> &callback) = 0;
+
     virtual uint16_t getListeningPort() const = 0;
 
 protected:

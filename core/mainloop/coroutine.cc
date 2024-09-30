@@ -76,7 +76,10 @@ RoutineWrapper::resume()
 void
 RoutineWrapper::invoke(pull_type &pull, I_MainLoop::Routine func)
 {
-    dbgAssert(active != nullptr) << "Trying to invoke without an active routine";
+    dbgAssert(active != nullptr)
+        << AlertInfo(AlertTeam::CORE, "mainloop i/s")
+        << "Trying to invoke without an active routine";
+
     active->pull = move(pull); // First invokation (other invokaction will start inside `func`), set the `pull` object
     func();
 }

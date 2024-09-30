@@ -29,8 +29,13 @@ Singleton::unregisterSingleton(std::type_index type, void *ptr)
 void *
 Singleton::get(const std::type_index &type)
 {
-    dbgAssert(singles[type].size() == 1) << "There is no single element from type '" << type.name() << "', "
-        "number of elements is " << singles[type].size();
+    dbgAssert(singles[type].size() == 1)
+        << AlertInfo(AlertTeam::CORE, "singleton i/s")
+        << "There is no single element from type '"
+        << type.name()
+        << "', number of elements is "
+        << singles[type].size();
+
     return *(singles[type].begin());
 }
 

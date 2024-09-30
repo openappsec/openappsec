@@ -51,7 +51,10 @@ bool WaapOverrideFunctor::operator()(const std::string& tag, const boost::regex&
     std::string tagLower = tag;
     std::transform(tagLower.begin(), tagLower.end(), tagLower.begin(), ::tolower);
     try {
-        if (tagLower == "url") {
+        if (tagLower == "method") {
+            return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getMethod().c_str(), what, rx);
+        }
+        else if (tagLower == "url") {
             return NGEN::Regex::regexMatch(__FILE__, __LINE__, waf2Transaction.getUriStr().c_str(), what, rx);
         }
         else if (tagLower == "hostname") {

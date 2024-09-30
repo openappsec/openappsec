@@ -31,6 +31,7 @@ USE_DEBUG_FLAG(D_API);
 
 static const int listen_limit = 100;
 static const chrono::milliseconds bind_retry_interval_msec = chrono::milliseconds(500);
+static const AlertInfo alert(AlertTeam::CORE, "rest i/s");
 
 #include <iostream>
 
@@ -47,9 +48,12 @@ public:
 
     bool bindRestServerSocket(struct sockaddr_in &addr, vector<uint16_t> port_range);
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
+    bool addGetCall(const string &uri, const function<string()> &cb) override;
     uint16_t getListeningPort() const override { return listening_port; }
-    Maybe<std::string> getSchema(const std::string &uri) const override;
-    Maybe<std::string> invokeRest(const std::string &uri, istream &in) const override;
+    Maybe<string> getSchema(const string &uri) const override;
+    Maybe<string> invokeRest(const string &uri, istream &in) const override;
+    bool isGetCall(const string &uri) const override;
+    string invokeGet(const string &uri) const override;
 
 private:
     void prepareConfiguration();
@@ -61,6 +65,7 @@ private:
     I_MainLoop::RoutineID id;
     I_MainLoop *mainloop;
     map<string, unique_ptr<RestInit>> rest_calls;
+    map<string, function<string()>> get_calls;
     uint16_t listening_port = 0;
     vector<uint16_t> port_range;
 };
@@ -96,8 +101,10 @@ RestServer::Impl::prepareConfiguration()
     } else {
         auto range_start = getPortConfig("Nano service API Port Range start");
         auto range_end = getPortConfig("Nano service API Port Range end");
-        dbgAssert(range_start.ok() && range_end.ok()) << "Rest port configuration was not provided";
-        dbgAssert(*range_start < *range_end) << "Rest port range corrupted (lower bound higher then upper bound)";
+        dbgAssert(range_start.ok() && range_end.ok()) << alert << "Rest port configuration was not provided";
+        dbgAssert(*range_start < *range_end)
+            << alert
+            << "Rest port range corrupted (lower bound higher then upper bound)";
 
         port_range.resize(*range_end - *range_start);
         for (uint16_t i = 0, port = *range_start; i < port_range.size(); i++, port++) {
@@ -113,7 +120,7 @@ RestServer::Impl::init()
 
     auto init_connection = [this] () {
         fd = socket(AF_INET, SOCK_STREAM, 0);
-        dbgAssert(fd >= 0) << "Failed to open a socket";
+        dbgAssert(fd >= 0) << alert << "Failed to open a socket";
         int socket_enable = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)) < 0) {
             dbgWarning(D_API) << "Could not set the socket options";
@@ -185,11 +192,19 @@ bool
 RestServer::Impl::addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&rest)
 {
     string full_uri = changeActionToString(oper) + uri;
+    if (get_calls.find(full_uri) != get_calls.end()) return false;
     return rest_calls.emplace(make_pair(full_uri, move(rest))).second;
 }
 
-Maybe<std::string>
-RestServer::Impl::getSchema(const std::string &uri) const
+bool
+RestServer::Impl::addGetCall(const string &uri, const function<string()> &callback)
+{
+    if (rest_calls.find(uri) != rest_calls.end()) return false;
+    return get_calls.emplace(uri, callback).second;
+}
+
+Maybe<string>
+RestServer::Impl::getSchema(const string &uri) const
 {
     auto iter = rest_calls.find(uri);
     if (iter == rest_calls.end()) return genError("No matching REST call was found");
@@ -200,13 +215,26 @@ RestServer::Impl::getSchema(const std::string &uri) const
     return out.str();
 }
 
-Maybe<std::string>
-RestServer::Impl::invokeRest(const std::string &uri, istream &in) const
+Maybe<string>
+RestServer::Impl::invokeRest(const string &uri, istream &in) const
 {
     auto iter = rest_calls.find(uri);
     if (iter == rest_calls.end()) return genError("No matching REST call was found");
     auto instance = iter->second->getRest();
     return instance->performRestCall(in);
+}
+
+bool
+RestServer::Impl::isGetCall(const string &uri) const
+{
+    return get_calls.find(uri) != get_calls.end();
+}
+
+string
+RestServer::Impl::invokeGet(const string &uri) const
+{
+    auto instance = get_calls.find(uri);
+    return instance != get_calls.end() ? instance->second() : "";
 }
 
 string
@@ -226,7 +254,7 @@ RestServer::Impl::changeActionToString(RestAction oper)
             return "delete-";
         }
         default: {
-            dbgAssert(false) << "Unknown REST action";
+            dbgAssert(false) << alert << "Unknown REST action";
             return "";
         }
     }

@@ -48,6 +48,8 @@ std::string convertToHumanReadable(uint64_t size_in_bytes);
 
 std::string getFileName(const std::string &path);
 
+bool copyDirectory(const std::string &src_dir_path, const std::string &dst_dir_path);
+
 }// namespace Filesystem
 
 namespace Regex

@@ -10,6 +10,8 @@
 using namespace std;
 using namespace testing;
 
+USE_DEBUG_FLAG(D_INFRA_UTILS);
+
 auto contexts = make_pair(std::vector<Context *>(), false);
 
 class AgentCoreUtilUT : public Test
@@ -17,6 +19,7 @@ class AgentCoreUtilUT : public Test
 public:
     AgentCoreUtilUT()
     {
+        Debug::setUnitTestFlag(D_INFRA_UTILS, Debug::DebugLevel::TRACE);
         ON_CALL(mock_env, getActiveContexts()).WillByDefault(ReturnPointee(&contexts));
     }
 
@@ -121,6 +124,59 @@ TEST_F(AgentCoreUtilUT, isDirectoryTest)
     mkdir("./test", 0400);
     EXPECT_EQ(NGEN::Filesystem::isDirectory("/test/base/file/name"), false);
     EXPECT_EQ(NGEN::Filesystem::isDirectory("./test"), true);
+}
+
+TEST_F(AgentCoreUtilUT, copyDirectoryTest)
+{
+    string sourceDir = cptestFnameInExeDir("sourceDir1");
+    string destDir = cptestFnameInExeDir("destDir1");
+    cout << "sourceDir: " << sourceDir << endl;
+    NGEN::Filesystem::makeDir(sourceDir);
+    NGEN::Filesystem::makeDir(sourceDir + "/subdir1");
+    NGEN::Filesystem::makeDir(sourceDir + "/subdir2");
+    NGEN::Filesystem::makeDir(destDir);
+
+    ofstream file_1(sourceDir + "/file1.txt");
+    ASSERT_TRUE(file_1.is_open());
+    file_1 << "File 1 content";
+    file_1.close();
+    ofstream file_2(sourceDir + "/subdir1/file2.txt");
+    ASSERT_TRUE(file_2.is_open());
+    file_2 << "File 2 content";
+    file_2.close();
+    ofstream file_3(sourceDir + "/subdir2/file3.txt");
+    ASSERT_TRUE(file_3.is_open());
+    file_3 << "File 3 content";
+    file_3.close();
+
+    ASSERT_TRUE(NGEN::Filesystem::copyDirectory(sourceDir, destDir));
+
+    EXPECT_TRUE(NGEN::Filesystem::exists(destDir));
+    EXPECT_TRUE(NGEN::Filesystem::exists(destDir + "/file1.txt"));
+    EXPECT_TRUE(NGEN::Filesystem::exists(destDir + "/subdir1/file2.txt"));
+    EXPECT_TRUE(NGEN::Filesystem::exists(destDir + "/subdir2/file3.txt"));
+
+    ifstream file1(destDir + "/file1.txt");
+    string content1((istreambuf_iterator<char>(file1)), istreambuf_iterator<char>());
+    EXPECT_EQ(content1, "File 1 content");
+    file1.close();
+
+    ifstream file2(destDir + "/subdir1/file2.txt");
+    string content2((istreambuf_iterator<char>(file2)), istreambuf_iterator<char>());
+    EXPECT_EQ(content2, "File 2 content");
+    file2.close();
+
+    ifstream file3(destDir + "/subdir2/file3.txt");
+    string content3((istreambuf_iterator<char>(file3)), istreambuf_iterator<char>());
+    EXPECT_EQ(content3, "File 3 content");
+    file3.close();
+
+    NGEN::Filesystem::deleteDirectory(sourceDir + "/subdir1", true);
+    NGEN::Filesystem::deleteDirectory(sourceDir + "/subdir2", true);
+    NGEN::Filesystem::deleteDirectory(sourceDir, true);
+    NGEN::Filesystem::deleteDirectory(destDir + "/subdir1", true);
+    NGEN::Filesystem::deleteDirectory(destDir + "/subdir2", true);
+    NGEN::Filesystem::deleteDirectory(destDir, true);
 }
 
 TEST_F(AgentCoreUtilUT, removeTrailingWhitespacesTest)

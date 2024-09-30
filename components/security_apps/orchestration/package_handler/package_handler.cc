@@ -141,7 +141,10 @@ packageHandlerActionsToString(PackageHandlerActions action)
         }
     }
 
-    dbgAssert(false) << "Package handler action is not supported. Action: " << static_cast<unsigned int>(action);
+    dbgAssert(false)
+        << AlertInfo(AlertTeam::CORE, "service configuration")
+        << "Package handler action is not supported. Action: "
+        << static_cast<unsigned int>(action);
     return string();
 }
 

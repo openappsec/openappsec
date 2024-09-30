@@ -25,7 +25,10 @@ public:
         );
         setCompressionDebugFunction(
             CompressionUtilsDebugLevel::COMPRESSION_DBG_LEVEL_ASSERTION,
-            [](const char *assert_message) { dbgAssert(false) << assert_message; }
+            [](const char *assert_message)
+            {
+                dbgAssert(false) << AlertInfo(AlertTeam::CORE, "testing") << assert_message;
+            }
         );
     }
 

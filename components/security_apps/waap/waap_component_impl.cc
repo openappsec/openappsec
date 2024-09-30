@@ -117,7 +117,7 @@ WaapComponent::Impl::fini()
 std::string
 WaapComponent::Impl::getListenerName() const
 {
-    return "waap application";
+    return WAAP_APPLICATION_NAME;
 }
 
 // Start request (called before headers arrive). However, the method and URL path is known at this stage.

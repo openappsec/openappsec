@@ -84,7 +84,7 @@ IPSSignatureMetaData::getSeverityString() const
             return "Critical";
     }
 
-    dbgAssert(false) << "Illegal severity value: " << static_cast<uint>(severity);
+    dbgAssert(false) << AlertInfo(AlertTeam::CORE, "ips") << "Illegal severity value: " << static_cast<uint>(severity);
     return "Critical";
 }
 
@@ -116,7 +116,10 @@ IPSSignatureMetaData::getPerformanceString() const
             return "Critical";
     }
 
-    dbgAssert(false) << "Illegal performance value: " << static_cast<uint>(performance);
+    dbgAssert(false)
+        << AlertInfo(AlertTeam::CORE, "ips")
+        << "Illegal performance value: "
+        << static_cast<uint>(performance);
     return "Critical";
 }
 

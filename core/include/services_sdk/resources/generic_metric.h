@@ -16,7 +16,9 @@
 
 #include <chrono>
 #include <vector>
+#include <map>
 
+#include "metric/metric_metadata.h"
 #include "metric/metric_calc.h"
 #include "metric/all_metric_event.h"
 #include "i_mainloop.h"
@@ -26,6 +28,7 @@
 #include "i_messaging.h"
 #include "i_rest_api.h"
 #include "report/report_enums.h"
+#include "flags.h"
 
 namespace MetricCalculations
 {
@@ -37,6 +40,10 @@ namespace MetricCalculations
     template <typename T, uint N> class TopValues;
     template <typename PrintableKey, typename Metric> class MetricMap;
 } // MetricCalculations
+
+MetricMetadata::DotName operator"" _dot(const char *, std::size_t);
+MetricMetadata::Units operator"" _unit(const char *, std::size_t);
+MetricMetadata::Description operator"" _desc(const char *, std::size_t);
 
 class LogRest;
 
@@ -51,6 +58,8 @@ class GenericMetric
     public Listener<AllMetricEvent>
 {
 public:
+    enum class Stream { FOG, DEBUG, PROMETHEUS, AIOPS, COUNT };
+
     void
     init(
         const std::string &_metric_name,
@@ -79,13 +88,17 @@ public:
 
     static std::string getName() { return "GenericMetric"; }
 
-    std::string generateReport(bool with_reset);
+    std::string generateReport() const;
+    void resetMetrics();
     void upon(const AllMetricEvent &) override;
     std::string respond(const AllMetricEvent &event) override;
     std::string getListenerName() const override;
 
     std::string getMetricName() const;
     std::chrono::seconds getReportInterval() const;
+
+    void turnOnStream(Stream stream) { active_streams.setFlag(stream); }
+    void turnOffStream(Stream stream) { active_streams.unsetFlag(stream); }
 
 protected:
     virtual void sendLog(const LogRest &metric_client_rest) const;
@@ -98,6 +111,7 @@ private:
 
     void handleMetricStreamSending();
     void generateLog();
+    void generateDebug();
 
     I_MainLoop *i_mainloop;
     I_TimeGet *i_time;
@@ -107,12 +121,14 @@ private:
     ReportIS::Audience audience;
     std::chrono::seconds report_interval;
     std::vector<MetricCalc *> calcs;
+    Flags<Stream> active_streams;
     bool reset;
     bool force_buffering = false;
     Context ctx;
 };
 
 #include "metric/counter.h"
+#include "metric/no_reset_counter.h"
 #include "metric/max.h"
 #include "metric/min.h"
 #include "metric/average.h"

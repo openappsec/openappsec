@@ -26,7 +26,29 @@ using namespace ReportIS;
 
 USE_DEBUG_FLAG(D_METRICS);
 
-MetricCalc::MetricCalc(GenericMetric *metric, const string &title) : calc_title(title)
+MetricMetadata::DotName operator"" _dot(const char *str, size_t) { return MetricMetadata::DotName{str}; }
+MetricMetadata::Units operator"" _unit(const char *str, size_t) { return MetricMetadata::Units{str}; }
+MetricMetadata::Description operator"" _desc(const char *str, size_t) { return MetricMetadata::Description{str}; }
+
+string
+MetricCalc::getMetadata(const string &key) const
+{
+    auto value = metadata.find(key);
+    return value != metadata.end() ? value->second : "";
+}
+
+void
+MetricCalc::setMetadata(const string &key, const string &value)
+{
+    if (value.empty()) {
+        metadata.erase(key);
+    } else {
+        metadata[key] = value;
+    }
+}
+
+void
+MetricCalc::addMetric(GenericMetric *metric)
 {
     // Only top level metric should add themselves to the metric. Nested metrics will be served by their parent.
     if (metric != nullptr) metric->addCalc(this);
@@ -69,6 +91,9 @@ GenericMetric::init(
     bool _force_buffering
 )
 {
+    turnOnStream(Stream::FOG);
+    turnOnStream(Stream::DEBUG);
+
     i_mainloop = Singleton::Consume<I_MainLoop>::by<GenericMetric>();
     i_time = Singleton::Consume<I_TimeGet>::by<GenericMetric>();
     metric_name = _metric_name;
@@ -95,22 +120,10 @@ GenericMetric::init(
 void
 GenericMetric::handleMetricStreamSending()
 {
-    auto metric_debug = getConfigurationWithDefault<bool>(true, "metric", "debugMetricSendEnable");
-    auto report_str = generateReport(false);
-    if (!report_str.empty() && metric_debug) {
-        dbgTrace(D_METRICS) << report_str;
-    }
+    if (active_streams.isSet(Stream::DEBUG)) generateDebug();
+    if (active_streams.isSet(Stream::FOG)) generateLog();
 
-    auto metric_fog = getConfigurationWithDefault<bool>(true, "metric", "fogMetricSendEnable");
-    if (!report_str.empty() && metric_fog) {
-        generateLog();
-    }
-
-    if (reset) {
-        for(auto &calc : calcs) {
-            calc->reset();
-        }
-    }
+    if (reset) resetMetrics();
 }
 
 string
@@ -126,24 +139,26 @@ GenericMetric::getReportInterval() const
 }
 
 string
-GenericMetric::generateReport(bool with_reset)
+GenericMetric::generateReport() const
 {
     stringstream ss;
-    bool any_reported_calc = false;
-
     {
         cereal::JSONOutputArchive ar(ss);
         ar(cereal::make_nvp("Metric", metric_name));
         ar(cereal::make_nvp("Reporting interval", report_interval.count()));
         for(auto &calc : calcs) {
-            if (calc->wasOnceReported()) {
-                calc->save(ar);
-                if (with_reset) calc->reset();
-                any_reported_calc = true;
-            }
+            calc->save(ar);
         }
     }
-    return any_reported_calc ? ss.str() : "";
+    return ss.str();
+}
+
+void
+GenericMetric::resetMetrics()
+{
+    for(auto &calc : calcs) {
+        calc->reset();
+    }
 }
 
 void
@@ -155,16 +170,16 @@ GenericMetric::addCalc(MetricCalc *calc)
 void
 GenericMetric::upon(const AllMetricEvent &event)
 {
-    auto report_str = generateReport(event.getReset());
-    if (!report_str.empty()) {
-        dbgTrace(D_METRICS) << report_str;
-    }
+    dbgTrace(D_METRICS) << generateReport();
+    if (event.getReset()) resetMetrics();
 }
 
 string
 GenericMetric::respond(const AllMetricEvent &event)
 {
-    return generateReport(event.getReset());
+    auto res = generateReport();
+    if (event.getReset()) resetMetrics();
+    return res;
 }
 
 string GenericMetric::getListenerName() const { return metric_name; }
@@ -172,6 +187,8 @@ string GenericMetric::getListenerName() const { return metric_name; }
 void
 GenericMetric::generateLog()
 {
+    if (!getConfigurationWithDefault<bool>(true, "metric", "fogMetricSendEnable")) return;
+
     set<ReportIS::Tags> tags;
     Report metric_to_fog(
         metric_name,
@@ -191,7 +208,7 @@ GenericMetric::generateLog()
     );
 
     for (auto &calc : calcs) {
-        if (calc->wasOnceReported()) metric_to_fog << calc->getLogField();
+        metric_to_fog << calc->getLogField();
     }
 
     if (Singleton::exists<I_Environment>()) {
@@ -225,6 +242,13 @@ GenericMetric::generateLog()
     LogRest metric_client_rest(metric_to_fog);
 
     sendLog(metric_client_rest);
+}
+
+void
+GenericMetric::generateDebug()
+{
+    if (!getConfigurationWithDefault<bool>(true, "metric", "debugMetricSendEnable")) return;
+    dbgTrace(D_METRICS) << generateReport();
 }
 
 void

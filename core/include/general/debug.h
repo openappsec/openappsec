@@ -36,6 +36,58 @@ class I_SignalHandler;
 namespace Config { enum class Errors; }
 std::ostream & operator<<(std::ostream &, const Config::Errors &);
 
+enum class AlertTeam { CORE, WAAP, SDWAN, IOT };
+
+class AlertInfo
+{
+public:
+    template <typename ... Args>
+    AlertInfo(AlertTeam _team, const std::string &func, const Args & ... args) : team(_team), functionality(func)
+    {
+        evalParams(args ...);
+    }
+
+    template <typename ... Args>
+    AlertInfo
+    operator()(const Args & ... args) const
+    {
+        AlertInfo res = *this;
+        res.evalParams(args ...);
+        return res;
+    }
+
+    AlertTeam getTeam() const { return team; }
+    const std::string & getFunctionality() const { return functionality; }
+    const std::string & getDescription() const { return description; }
+    std::size_t getId() const { return id; }
+    std::size_t getFamilyId() const { return family_id; }
+
+private:
+    template <typename ... Args>
+    void
+    evalParams(const std::string &_description, const Args & ... args)
+    {
+        description = _description;
+        evalParams(args ...);
+    }
+
+    template <typename ... Args>
+    void
+    evalParams(const std::size_t &fam_id, const Args & ... args)
+    {
+        family_id = fam_id;
+        evalParams(args ...);
+    }
+
+    void evalParams();
+
+    AlertTeam team;
+    std::string functionality;
+    std::size_t id;
+    std::size_t family_id = 0;
+    std::string description;
+};
+
 class Debug
         :
     Singleton::Consume<I_TimeGet>,
@@ -92,6 +144,8 @@ public:
     private:
         std::set<std::ostream *> streams;
     };
+
+    class DebugAlert;
 
     class DebugLockState
     {
@@ -208,6 +262,7 @@ private:
     );
 
     void isCommunicationFlag(const DebugFlags &flag);
+    void sendAlert(const AlertInfo &alert);
 
     static DebugLevel lowest_global_level;
     static I_TimeGet *time;
@@ -224,6 +279,34 @@ private:
     DebugStreamAggr stream;
     std::set<std::shared_ptr<DebugStream>> current_active_streams;
 };
+
+class Debug::DebugAlert
+    {
+        class DebugAlertImpl
+        {
+        public:
+            DebugAlertImpl(Debug &_debug) : debug(_debug) {}
+
+            DebugStreamAggr &
+            operator<<(const AlertInfo &alert) __attribute__((warn_unused_result))
+            {
+                debug.sendAlert(alert);
+                return debug.getStreamAggr();
+            }
+
+        private:
+            Debug &debug;
+        };
+
+    public:
+        template <typename ... Args> DebugAlert(const Args & ... args) : debug(args...) {}
+
+        DebugAlertImpl getStreamAggr() __attribute__((warn_unused_result)) { return DebugAlertImpl(debug); }
+
+    private:
+        Debug debug;
+    };
+
 
 #define USE_DEBUG_FLAG(x) extern const Debug::DebugFlags x
 
@@ -245,7 +328,7 @@ getBaseName(const char *iter, const char *base)
 
 #define dbgAssert(cond) \
     if (CP_LIKELY(cond)) { \
-    } else Debug(__FILENAME__, __FUNCTION__, __LINE__).getStreamAggr()
+    } else Debug::DebugAlert(__FILENAME__, __FUNCTION__, __LINE__).getStreamAggr()
 
 // Macros to allow simple debug messaging
 #define DBG_GENERIC(level, ...) \

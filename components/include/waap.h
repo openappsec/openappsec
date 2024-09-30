@@ -34,6 +34,8 @@ class I_Messaging;
 class I_AgentDetails;
 class I_Encryptor;
 
+const std::string WAAP_APPLICATION_NAME = "waap application";
+
 class WaapComponent
         :
     public Component,

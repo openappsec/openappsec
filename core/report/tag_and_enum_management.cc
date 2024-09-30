@@ -19,6 +19,8 @@ using namespace ReportIS;
 
 #include <unordered_map>
 
+static const AlertInfo alert(AlertTeam::CORE, "report i/s");
+
 Maybe<ReportIS::Severity>
 TagAndEnumManagement::convertStringToSeverity(const string &severity)
 {
@@ -158,7 +160,7 @@ TagAndEnumManagement::convertToString(const StreamType &stream_type)
         case StreamType::COUNT: break;
     }
 
-    dbgAssert(false) << "Unknown log stream type. Type: " << static_cast<int>(stream_type);
+    dbgAssert(false) << alert << "Unknown log stream type. Type: " << static_cast<int>(stream_type);
     return "";
 }
 
@@ -173,7 +175,7 @@ TagAndEnumManagement::convertToString(const Severity &severity)
         case Severity::INFO:     return "Info";
     }
 
-    dbgAssert(false) << "Reached an impossible severity value of: " << static_cast<int>(severity);
+    dbgAssert(false) << alert << "Reached an impossible severity value of: " << static_cast<int>(severity);
     return "";
 }
 
@@ -186,7 +188,7 @@ TagAndEnumManagement::convertToString(const Type &type)
         case Type::CODE:     return "Code Related";
     }
 
-    dbgAssert(false) << "Reached an impossible type value of: " << static_cast<int>(type);
+    dbgAssert(false) << alert << "Reached an impossible type value of: " << static_cast<int>(type);
     return "";
 }
 
@@ -201,7 +203,7 @@ TagAndEnumManagement::convertToString(const Level &level)
         case Level::CUSTOM:   return "Custom";
     }
 
-    dbgAssert(false) << "Reached an impossible type value of: " << static_cast<int>(level);
+    dbgAssert(false) << alert << "Reached an impossible type value of: " << static_cast<int>(level);
     return "";
 }
 
@@ -216,7 +218,7 @@ TagAndEnumManagement::convertToString(const LogLevel &log_level)
         case LogLevel::ERROR:   return "error";
     }
 
-    dbgAssert(false) << "Reached an impossible type value of: " << static_cast<int>(log_level);
+    dbgAssert(false) << alert << "Reached an impossible type value of: " << static_cast<int>(log_level);
     return "";
 }
 
@@ -228,7 +230,7 @@ TagAndEnumManagement::convertToString(const Audience &audience)
         case Audience::INTERNAL: return "Internal";
     }
 
-    dbgAssert(false) << "Reached an impossible audience value of: " << static_cast<int>(audience);
+    dbgAssert(false) << alert << "Reached an impossible audience value of: " << static_cast<int>(audience);
     return "";
 }
 
@@ -242,7 +244,7 @@ TagAndEnumManagement::convertToString(const Priority &priority)
         case Priority::LOW:    return "Low";
     }
 
-    dbgAssert(false) << "Reached impossible priority value of: " << static_cast<int>(priority);
+    dbgAssert(false) << alert << "Reached impossible priority value of: " << static_cast<int>(priority);
     return "";
 }
 
@@ -261,7 +263,7 @@ TagAndEnumManagement::convertToString(const Notification &notification)
         case Notification::SDWAN_POLICY_WARNING_LOG: return "c58d490e-6aa0-43da-bfaa-7edad0a57b7a";
     }
 
-    dbgAssert(false) << "Reached impossible notification value of: " << static_cast<int>(notification);
+    dbgAssert(false) << alert << "Reached impossible notification value of: " << static_cast<int>(notification);
     return "";
 }
 
@@ -279,7 +281,7 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::HORIZON_TELEMETRY_METRICS: return "horizonTelemetryMetrics";
     }
 
-    dbgAssert(false) << "Reached impossible engine value of: " << static_cast<int>(issuing_engine);
+    dbgAssert(false) << alert << "Reached impossible engine value of: " << static_cast<int>(issuing_engine);
     return "";
 }
 

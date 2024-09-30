@@ -55,6 +55,7 @@ public:
     );
 
     virtual void finishMessage() { *stream << std::endl; }
+    virtual void sendAlert(const AlertInfo &) {}
 
     std::ostream * getStream() const { return stream; }
 
@@ -112,6 +113,7 @@ public:
     ) override;
 
     void finishMessage() override;
+    void sendAlert(const AlertInfo &_alert) override { possible_alert = _alert; }
 
 private:
     void sendBufferedMessages();
@@ -133,6 +135,7 @@ private:
     std::string trace_id;
     std::string span_id;
     uint line;
+    Maybe<AlertInfo, void> possible_alert = genError("");
 };
 
 #endif // __DEBUG_EX_H__

@@ -34,6 +34,8 @@ static const string invalidation_uri = "/api/v2/intelligence/invalidation";
 static const string registration_uri = "/api/v2/intelligence/invalidation/register";
 static const string query_uri = "/api/v2/intelligence/assets/query";
 static const string queries_uri = "/api/v2/intelligence/assets/queries";
+static const string fog_health_uri = "/access-manager/health/live";
+static const string intelligence_health_uri = "/show-health";
 
 class I_InvalidationCallBack
 {
@@ -291,6 +293,16 @@ private:
     I_MainLoop *mainloop;
 };
 
+
+class IntelligenceHealth : public ClientRest
+{
+public:
+    bool isLocalHealthy() const { return healthy.isActive() && healthy.get(); }
+
+private:
+    S2C_PARAM(bool, healthy);
+};
+
 class IntelligenceComponentV2::Impl
         :
     Singleton::Provide<I_Intelligence_IS_V2>::From<IntelligenceComponentV2>
@@ -312,6 +324,35 @@ public:
 
         auto rest_api = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
         rest_api->addRestCall<ReceiveInvalidation>(RestAction::SET, "new-invalidation/source/invalidation");
+    }
+
+    bool
+    isIntelligenceHealthy() const override
+    {
+        dbgFlow(D_INTELLIGENCE) << "Checking intelligence health";
+        IntelligenceHealth healthObj;
+        if (hasLocalIntelligenceSupport()) {
+            dbgDebug(D_INTELLIGENCE) << "Local intelligence supported";
+            return sendLocalIntelligenceToLocalServer(healthObj).ok();
+        }
+        dbgTrace(D_INTELLIGENCE) << "Checking connection to the FOG";
+        auto response = message->sendSyncMessage(
+            HTTPMethod::GET,
+            fog_health_uri,
+            string(""),
+            MessageCategory::INTELLIGENCE
+        );
+
+        if (response.ok() && response.unpack().getHTTPStatusCode() == HTTPStatusCode::HTTP_OK) {
+            dbgTrace(D_INTELLIGENCE) << "Connected to the FOG";
+            return true;
+        }
+
+        dbgTrace(D_INTELLIGENCE)
+            << "No connection to the FOG. "
+            << (response.ok() ? response.unpack() : response.getErr()).toString();
+
+        return false;
     }
 
     bool
@@ -485,6 +526,36 @@ private:
         if (res) return Response();
         dbgWarning(D_INTELLIGENCE) << "Could not send local intelligence invalidation.";
         return genError("Could not send local intelligence invalidation");
+    }
+
+    Maybe<Response>
+    sendIntelligenceRequestImpl(const IntelligenceHealth &, const MessageMetadata &req_md) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending intelligence health check";
+        IntelligenceHealth healthObj;
+        auto req_data = message->sendSyncMessage(
+            HTTPMethod::GET,
+            intelligence_health_uri,
+            healthObj,
+            MessageCategory::INTELLIGENCE,
+            req_md
+        );
+        if (req_data.ok() && healthObj.isLocalHealthy()) {
+            dbgDebug(D_INTELLIGENCE) << "Intelligence is healthy.";
+            return Response();
+        }
+
+        if (!req_data.ok()) {
+            dbgDebug(D_INTELLIGENCE)
+                << "Intelligence is not healthy. Body: "
+                << req_data.getErr().getBody()
+                << " Error: "
+                << req_data.getErr().toString();
+        } else {
+            dbgDebug(D_INTELLIGENCE) << "Intelligence return unhealthy status.";
+        }
+
+        return genError("Intelligence is not healthy");
     }
 
     Maybe<Response>

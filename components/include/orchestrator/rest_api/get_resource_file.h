@@ -115,7 +115,7 @@ public:
             case ResourceFileType::VIRTUAL_SETTINGS: return "virtualSettings";
             case ResourceFileType::VIRTUAL_POLICY:   return "virtualPolicy";
             default:
-                dbgAssert(false) << "Unknown file type";
+                dbgAssert(false) << AlertInfo(AlertTeam::CORE, "update process") << "Unknown file type";
         }
         return std::string();
     }

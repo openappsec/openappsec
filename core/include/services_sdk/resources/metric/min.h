@@ -25,21 +25,29 @@ template <typename T>
 class Min : public MetricCalc
 {
 public:
-    Min(GenericMetric *metric, const std::string &title) : Min(metric, title, std::numeric_limits<T>::max()) {}
-    Min(GenericMetric *metric, const std::string &title, T max_val) : MetricCalc(metric, title), min(max_val) {}
+    Min(GenericMetric *metric, const std::string &title) : Min(metric, title, 0) {}
+
+    template<typename ... Args>
+    Min(GenericMetric *metric, const std::string &title, T max_val, const Args & ... args)
+            :
+        MetricCalc(metric, title, args ...),
+        min(max_val),
+        reset_value(max_val)
+    {
+    }
 
     void
     report(const T &new_value)
     {
-        was_once_reported = true;
-        if (new_value < min) min = new_value;
+        if (new_value < min || first) min = new_value;
+        first = false;
     }
 
     void
     reset() override
     {
-        was_once_reported = false;
-        min = std::numeric_limits<T>::max();
+        min = reset_value;
+        first = true;
     }
 
     T
@@ -51,17 +59,19 @@ public:
     void
     save(cereal::JSONOutputArchive &ar) const override
     {
-        ar(cereal::make_nvp(calc_title, min));
+        ar(cereal::make_nvp(getMetricName(), min));
     }
 
     LogField
     getLogField() const override
     {
-        return LogField(calc_title, static_cast<uint64_t>(getMin()));
+        return LogField(getMetricName(), static_cast<uint64_t>(getMin()));
     }
 
 private:
     T min;
+    T reset_value;
+    bool first = true;
 };
 
 } // namespace MetricCalculations

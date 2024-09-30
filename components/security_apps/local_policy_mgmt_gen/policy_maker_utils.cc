@@ -555,7 +555,7 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
     bool webHeaders = trigger_spec.getAppsecTriggerExtendedLogging().isHttpHeaders();
     bool webBody = trigger_spec.getAppsecTriggerExtendedLogging().isRequestBody();
     bool logToCloud = trigger_spec.getAppsecTriggerLogDestination().getCloud();
-    bool logToContainerService = trigger_spec.getAppsecTriggerLogDestination().isContainerNeeded();
+    bool logTolocalTuning = trigger_spec.getAppsecTriggerLogDestination().isContainerNeeded();
     bool logToAgent = trigger_spec.getAppsecTriggerLogDestination().isAgentLocal();
     bool beautify_logs = trigger_spec.getAppsecTriggerLogDestination().shouldBeautifyLogs();
     bool logToCef = trigger_spec.getAppsecTriggerLogDestination().isCefNeeded();
@@ -582,7 +582,7 @@ extractLogTriggerData(const string &trigger_annotation_name, const T &trigger_sp
         logToAgent,
         logToCef,
         logToCloud,
-        logToContainerService,
+        logTolocalTuning,
         logToSyslog,
         responseBody,
         tpDetect,
@@ -1236,6 +1236,7 @@ PolicyMakerUtils::createWebAppSection(
         rule_config.getContext(),
         apssec_practice.getWebAttacks().getMinimumConfidence(practice_mode),
         apssec_practice.getWebAttacks().getMode(practice_mode),
+        apssec_practice.getAntiBot().getMode(),
         practice_advance_config,
         apssec_practice.getAntiBot(),
         log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],

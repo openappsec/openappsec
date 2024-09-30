@@ -27,6 +27,7 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
+static const AlertInfo alert(AlertTeam::CORE, "agent details");
 
 const map<string, I_AgentDetails::MachineType> AgentDetails::machineTypes({
     { "Amazon EC2",            I_AgentDetails::MachineType::AWS },
@@ -381,7 +382,7 @@ AgentDetails::convertProxyProtocolToString(ProxyProtocol proto) const
         case ProxyProtocol::HTTP: return "http";
         case ProxyProtocol::HTTPS: return "https";
     }
-    dbgAssert(false) << "Unsupported Proxy Protocol " << static_cast<int>(proto);
+    dbgAssert(false) << alert << "Unsupported Proxy Protocol " << static_cast<int>(proto);
     return "";
 }
 
@@ -469,7 +470,9 @@ AgentDetails::loadProxyType(ProxyProtocol protocol)
 {
     dbgFlow(D_ORCHESTRATOR) << "Loading proxy type: " << convertProxyProtocolToString(protocol);
     dbgAssert(protocol == ProxyProtocol::HTTP || protocol == ProxyProtocol::HTTPS)
-        << "Unsupported Proxy Protocol " << static_cast<int>(protocol);
+        << alert
+        << "Unsupported Proxy Protocol "
+        << static_cast<int>(protocol);
 
     static const map<ProxyProtocol, string> env_var_name = {
         {ProxyProtocol::HTTPS, "https_proxy"},

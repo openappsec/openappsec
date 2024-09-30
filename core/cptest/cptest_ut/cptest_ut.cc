@@ -8,7 +8,7 @@ TEST(CPTest, PrepareToDie)
 {
     cptestPrepareToDie();
     auto die = []() {
-        dbgAssert(false) << "You killed my father";
+        dbgAssert(false) << AlertInfo(AlertTeam::CORE, "testing") << "You killed my father";
     };
     EXPECT_DEATH(die(), "You killed my father");
 }

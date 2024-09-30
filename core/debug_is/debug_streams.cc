@@ -230,6 +230,18 @@ DebugFogStream::printHeader(
     }
 }
 
+static string
+getTeam(const Maybe<AlertInfo, void> &alert)
+{
+    switch((*alert).getTeam()) {
+        case AlertTeam::CORE: return "Core";
+        case AlertTeam::WAAP: return "Waap";
+        case AlertTeam::SDWAN: return "SDWAN";
+        case AlertTeam::IOT: return "IoT";
+    }
+    return "Core";
+}
+
 void
 DebugFogStream::finishMessage()
 {
@@ -264,6 +276,14 @@ DebugFogStream::finishMessage()
         Tags::INFORMATIONAL
     );
     message_to_fog << LogField("eventMessage", message.str());
+
+    if (possible_alert.ok()) {
+        message_to_fog << LogField("eventId", (*possible_alert).getId());
+        message_to_fog << LogField("eventFamilyId", (*possible_alert).getFamilyId());
+        message_to_fog << LogField("eventFunctionality", (*possible_alert).getFunctionality());
+        message_to_fog << LogField("eventDescription", (*possible_alert).getDescription());
+        message_to_fog << LogField("eventResponseTeam", getTeam(possible_alert));
+    }
 
     if (!getConfigurationWithDefault<bool>(true, "Debug I/S", "Enable bulk of debugs")) {
         LogRest rest(move(message_to_fog));
@@ -370,18 +390,20 @@ DebugFogStream::getSeverity() const
     return Severity::CRITICAL;
 }
 
+static const AlertInfo alert(AlertTeam::CORE, "debug configuration");
+
 LogLevel
 DebugFogStream::getLogLevel() const
 {
     switch (level) {
-        case Debug::DebugLevel::NOISE:     dbgAssert(false) << "Impossible LogLevel 'Noise'"; break;
+        case Debug::DebugLevel::NOISE:     dbgAssert(false) << alert << "Impossible LogLevel 'Noise'"; break;
         case Debug::DebugLevel::TRACE:     return LogLevel::TRACE;
         case Debug::DebugLevel::DEBUG:     return LogLevel::DEBUG;
         case Debug::DebugLevel::WARNING:   return LogLevel::WARNING;
         case Debug::DebugLevel::INFO:      return LogLevel::INFO;
         case Debug::DebugLevel::ERROR:     return LogLevel::ERROR;
         case Debug::DebugLevel::ASSERTION: return LogLevel::ERROR;
-        case Debug::DebugLevel::NONE:      dbgAssert(false) << "Impossible LogLevel 'None'"; break;
+        case Debug::DebugLevel::NONE:      dbgAssert(false) << alert << "Impossible LogLevel 'None'"; break;
     }
 
     return LogLevel::INFO;

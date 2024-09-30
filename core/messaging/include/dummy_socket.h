@@ -39,7 +39,7 @@ public:
     init()
     {
         server_fd = socket(AF_INET, SOCK_STREAM, 0);
-        dbgAssert(server_fd >= 0) << "Failed to open a socket";
+        dbgAssert(server_fd >= 0) << AlertInfo(AlertTeam::CORE, "messaging i/s") << "Failed to open a socket";
         int socket_enable = 1;
         setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int));
 

@@ -143,7 +143,7 @@ jumpKeyword::getStartOffset(uint buf_size, const I_KeywordRuntimeState *prev) co
             return prev->getOffset(ctx);
         }
     }
-    dbgAssert(false) << "Invalid jumping 'from' parameter";
+    dbgAssert(false) << AlertInfo(AlertTeam::CORE, "keywords") << "Invalid jumping 'from' parameter";
     return 0;
 }
 

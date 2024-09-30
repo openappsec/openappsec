@@ -430,7 +430,9 @@ kiss_thin_nfa_exec(KissThinNFA *nfa_h, const Buffer& buf, std::vector<std::pair<
 {
     struct kiss_bnfa_runtime_s bnfa_runtime;
 
-    dbgAssert(nfa_h != nullptr) << "kiss_thin_nfa_exec() was called with null handle";
+    dbgAssert(nfa_h != nullptr)
+        << AlertInfo(AlertTeam::CORE, "pattern matcher")
+        << "kiss_thin_nfa_exec() was called with null handle";
 
     if (buf.size() == 0) {
         return;

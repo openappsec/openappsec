@@ -180,12 +180,16 @@ NewAppsecTriggerLogDestination::load(cereal::JSONInputArchive &archive_in)
     } else {
         cloud = false;
     }
-    auto mode = Singleton::Consume<I_AgentDetails>::by<NewAppsecTriggerLogDestination>()->getOrchestrationMode();
-    auto env_type = Singleton::Consume<I_EnvDetails>::by<NewAppsecTriggerLogDestination>()->getEnvType();
-    bool k8s_service_default = (mode == OrchestrationMode::HYBRID && env_type == EnvType::K8S);
-    // BC try load previous name. TODO: update CRD
-    parseAppsecJSONKey<bool>("k8s-service", container_service, archive_in, k8s_service_default);
-    parseAppsecJSONKey<bool>("container-service", container_service, archive_in, container_service);
+    bool local_tuning_default = false;
+    // check ENV VAR LOCAL_TUNING_ENABLED
+    char * tuning_enabled = getenv("LOCAL_TUNING_ENABLED");
+    if (tuning_enabled != NULL) {
+        for (unsigned int i = 0; i < strlen(tuning_enabled); i++) {
+            tuning_enabled[i] = tolower(tuning_enabled[i]);
+        }
+        local_tuning_default = string(tuning_enabled) == "true";
+    }
+    parseAppsecJSONKey<bool>("local-tuning", container_service, archive_in, local_tuning_default);
 
     NewStdoutLogging stdout_log;
     parseAppsecJSONKey<NewStdoutLogging>("stdout", stdout_log, archive_in);

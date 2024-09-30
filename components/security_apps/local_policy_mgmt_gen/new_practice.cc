@@ -50,6 +50,13 @@ static const std::unordered_map<std::string, std::string> key_to_mode_val = {
     { "detect", "Detect"},
     { "inactive", "Inactive"}
 };
+static const std::unordered_map<std::string, std::string> anti_bot_key_to_mode_val = {
+    { "prevent-learn", "Prevent"},
+    { "detect-learn", "Detect"},
+    { "prevent", "Prevent"},
+    { "detect", "Detect"},
+    { "inactive", "Disabled"}
+};
 static const std::unordered_map<std::string, uint64_t> unit_to_int = {
     { "bytes", 1},
     { "KB", 1024},
@@ -81,57 +88,44 @@ getModeWithDefault(
     return key_to_val.at(mode);
 }
 
-void
-NewAppSecWebBotsURI::load(cereal::JSONInputArchive &archive_in)
-{
-    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Bots URI";
-    parseAppsecJSONKey<string>("uri", uri, archive_in);
-}
-
-const string &
-NewAppSecWebBotsURI::getURI() const
-{
-    return uri;
-}
-
-std::vector<std::string>
+const std::vector<std::string> &
 NewAppSecPracticeAntiBot::getIjectedUris() const
 {
-    vector<string> injected;
-    for (const NewAppSecWebBotsURI &uri : injected_uris) injected.push_back(uri.getURI());
-    return injected;
+    return injected_uris;
 }
 
-std::vector<std::string>
+const std::vector<std::string> &
 NewAppSecPracticeAntiBot::getValidatedUris() const
 {
-    vector<string> validated;
-    for (const NewAppSecWebBotsURI &uri : validated_uris) validated.push_back(uri.getURI());
-    return validated;
+    return validated_uris;
+}
+
+const std::string &
+NewAppSecPracticeAntiBot::getMode() const
+{
+    return override_mode;
 }
 
 void
 NewAppSecPracticeAntiBot::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Bots";
-    parseAppsecJSONKey<vector<NewAppSecWebBotsURI>>("injectedUris", injected_uris, archive_in);
-    parseAppsecJSONKey<vector<NewAppSecWebBotsURI>>("validatedUris", validated_uris, archive_in);
-    parseMandatoryAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
-    if (valid_modes.count(override_mode) == 0) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec Web Bots override mode invalid: " << override_mode;
+    string mode;
+    parseAppsecJSONKey<vector<string>>("injectedUris", injected_uris, archive_in);
+    parseAppsecJSONKey<vector<string>>("validatedUris", validated_uris, archive_in);
+    parseMandatoryAppsecJSONKey<string>("overrideMode", mode, archive_in, "inactive");
+    if (valid_modes.count(mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Web Bots override mode invalid: " << mode;
     }
+    override_mode = anti_bot_key_to_mode_val.at(mode);
 }
 
 void
 NewAppSecPracticeAntiBot::save(cereal::JSONOutputArchive &out_ar) const
 {
-    vector<string> injected;
-    vector<string> validated;
-    for (const NewAppSecWebBotsURI &uri : injected_uris) injected.push_back(uri.getURI());
-    for (const NewAppSecWebBotsURI &uri : validated_uris) validated.push_back(uri.getURI());
     out_ar(
-        cereal::make_nvp("injected", injected),
-        cereal::make_nvp("validated", validated)
+        cereal::make_nvp("injected", injected_uris),
+        cereal::make_nvp("validated", validated_uris)
     );
 }
 

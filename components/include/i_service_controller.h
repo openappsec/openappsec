@@ -66,6 +66,8 @@ public:
 
     virtual std::map<std::string, std::vector<PortNumber>> getServiceToPortMap() = 0;
 
+    virtual bool getServicesPolicyStatus() const = 0;
+
 protected:
     virtual ~I_ServiceController() {}
 };

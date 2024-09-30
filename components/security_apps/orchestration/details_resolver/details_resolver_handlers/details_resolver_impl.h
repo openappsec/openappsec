@@ -42,12 +42,28 @@ SHELL_PRE_CMD("gunzip local.cfg", "gunzip -c $FWDIR/state/local/FW1/local.cfg.gz
 #ifdef SHELL_CMD_HANDLER
 #if defined(gaia) || defined(smb)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtObjectUid",
+    "mgmt_cli --format json -r true show-session | jq -r '.[\"connected-server\"].uid'",
+    getMgmtObjUid
+)
 SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
     "FS_PATH=<FILESYSTEM-PREFIX>; [ -f ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log ] "
     "&& head -1 ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
     checkIsInstallHorizonTelemetrySucceeded)
-SHELL_CMD_HANDLER("QUID", "[ -d /opt/CPquid ] "
+SHELL_CMD_HANDLER("GLOBAL_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo ''",
+    getQUID)
+SHELL_CMD_HANDLER("QUID", "FS_PATH=<FILESYSTEM-PREFIX>;"
+    "VS_ID=$(echo \"${FS_PATH}\" | grep -o -E \"vs[0-9]+\" | grep -o -E \"[0-9]+\");"
+    "[ -z \"${VS_ID}\" ] && "
+    "(python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo '');"
+    "[ -n \"${VS_ID}\" ] && "
+    "(sed \"s|###VS_ID###|${VS_ID}|g\" /opt/CPotelcol/quid_api/get_vs_quid.json"
+    " > /opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID}); "
+    "[ -n \"${VS_ID}\" ] && [ -f /opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} ] && "
+    "(python3 /opt/CPquid/Quid_Api.py -i "
+    "/opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} | jq -r .message[0].QUID || echo '');",
     getQUID)
 SHELL_CMD_HANDLER("SMO_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_smo_quid.json | jq -r .message || echo ''",
@@ -102,8 +118,13 @@ SHELL_CMD_HANDLER(
 SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
 SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
-SHELL_CMD_HANDLER("hasIdaIdnEnabled", "fw ctl get int nac_pep_scaled_sharing_enabled", checkPepIdaIdnStatus)
-SHELL_CMD_HANDLER("requiredNanoServices", "fw ctl get int nac_pep_scaled_sharing_enabled", getIDAGaiaPackages)
+SHELL_CMD_HANDLER("hasIdaIdnEnabled", "fw ctl get int nac_pep_identity_next_enabled", checkPepIdaIdnStatus)
+SHELL_CMD_HANDLER("requiredNanoServices", "echo 'idaSaml_gaia;idaIdn_gaia;'", getRequiredNanoServices)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtObjectName",
+    "mgmt_cli --format json -r true show-session | jq -r '.[\"connected-server\"].name'",
+    getMgmtObjName
+)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "cat $FWDIR/database/myself_objects.C "
@@ -118,8 +139,8 @@ SHELL_CMD_HANDLER(
 )
 SHELL_CMD_HANDLER(
     "Hardware",
-    "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:appliance_type/ {print $3}' | head -n 1",
-    getGWHardware
+    "cat $FWDIR/database/myself_objects.C | awk -F '[:()]' '/:appliance_type/ {print $3}' | head -n 1 | sed 's/\"//g'",
+    getHardware
 )
 SHELL_CMD_HANDLER(
     "Application Control",
@@ -219,6 +240,7 @@ SHELL_CMD_HANDLER(
 
 SHELL_CMD_OUTPUT("kernel_version", "uname -r")
 SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
+SHELL_CMD_OUTPUT("report_timestamp", "date -u +\%s")
 #endif // SHELL_CMD_OUTPUT
 
 
@@ -227,16 +249,10 @@ SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
 #ifdef FILE_CONTENT_HANDLER
 
 #if defined(gaia)
-
 FILE_CONTENT_HANDLER(
     "hasIdpConfigured",
     (getenv("SAMLPORTAL_HOME") ? string(getenv("SAMLPORTAL_HOME")) : "") + "/phpincs/spPortal/idpPolicy.xml",
     checkIDP
-)
-FILE_CONTENT_HANDLER(
-    "cpProductIntegrationMgmtObjectName",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",
-    getMgmtObjName
 )
 #endif //gaia
 
@@ -245,11 +261,6 @@ FILE_CONTENT_HANDLER("alpine_tag", "/usr/share/build/cp-alpine-tag", getCPAlpine
 #endif // alpine
 #if defined(gaia) || defined(smb)
 FILE_CONTENT_HANDLER("os_release", "/etc/cp-release", getOsRelease)
-FILE_CONTENT_HANDLER(
-    "cpProductIntegrationMgmtObjectUid",
-    (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C",
-    getMgmtObjUid
-)
 #else // !(gaia || smb)
 FILE_CONTENT_HANDLER("os_release", "/etc/os-release", getOsRelease)
 #endif // gaia || smb

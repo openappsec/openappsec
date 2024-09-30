@@ -76,6 +76,7 @@ using namespace std;
 using ChunkType = ngx_http_chunk_type_e;
 
 static const uint32_t corrupted_session_id = CORRUPTED_SESSION_ID;
+static const AlertInfo alert(AlertTeam::CORE, "nginx attachment");
 
 class FailopenModeListener : public Listener<FailopenModeEvent>
 {
@@ -410,7 +411,10 @@ private:
     bool
     registerAttachmentProcess(uint32_t nginx_user_id, uint32_t nginx_group_id, I_Socket::socketFd new_socket)
     {
-        dbgAssert(server_sock > 0) << "Registration attempt occurred while registration socket is uninitialized";
+        dbgAssert(server_sock > 0)
+        << alert
+        << "Registration attempt occurred while registration socket is uninitialized";
+
 #ifdef FAILURE_TEST
         bool did_fail_on_purpose = false;
 #endif
@@ -802,10 +806,10 @@ private:
         case ChunkType::HOLD_DATA:
             return "HOLD_DATA";
         case ChunkType::COUNT:
-            dbgAssert(false) << "Invalid 'COUNT' ChunkType";
+            dbgAssert(false) << alert << "Invalid 'COUNT' ChunkType";
             return "";
         }
-        dbgAssert(false) << "ChunkType was not handled by the switch case";
+        dbgAssert(false) << alert << "ChunkType was not handled by the switch case";
         return "";
     }
 
@@ -1582,7 +1586,7 @@ private:
             case WAIT:
                 return "WAIT";
         }
-        dbgAssert(false) << "Invalid EventVerdict enum: " << static_cast<int>(verdict.getVerdict());
+        dbgAssert(false) << alert << "Invalid EventVerdict enum: " << static_cast<int>(verdict.getVerdict());
         return string();
     }
 
@@ -1633,13 +1637,14 @@ private:
             return false;
         }
 
-        dbgAssert(sock.unpack() > 0) << "The generated server socket is OK, yet negative";
+        dbgAssert(sock.unpack() > 0) << alert << "The generated server socket is OK, yet negative";
         server_sock = sock.unpack();
 
         I_MainLoop::Routine accept_attachment_routine =
             [this] ()
             {
                 dbgAssert(inst_awareness->getUniqueID().ok())
+                    << alert
                     << "NGINX attachment Initialized without Instance Awareness";
 
                 bool did_fail_on_purpose = false;
@@ -1652,7 +1657,7 @@ private:
                     << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
                     return;
                 }
-                dbgAssert(new_sock.unpack() > 0) << "The generated client socket is OK, yet negative";
+                dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
                 I_Socket::socketFd new_attachment_socket = new_sock.unpack();
 
                 Maybe<string> uid = getUidFromSocket(new_attachment_socket);
@@ -1711,7 +1716,9 @@ private:
     Maybe<string>
     getUidFromSocket(I_Socket::socketFd new_attachment_socket)
     {
-        dbgAssert(server_sock > 0) << "Registration attempt occurred while registration socket is uninitialized";
+        dbgAssert(server_sock > 0)
+            << alert
+            << "Registration attempt occurred while registration socket is uninitialized";
 
         bool did_fail_on_purpose = false;
         DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::ReceiveDataFromSocket);

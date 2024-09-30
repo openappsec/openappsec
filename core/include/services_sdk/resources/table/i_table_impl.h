@@ -48,7 +48,10 @@ Opaque &
 I_Table::getState()
 {
     Opaque *ptr = static_cast<Opaque *>(getState(typeid(Opaque)));
-    dbgAssert(ptr != nullptr) << "Trying to access a non existing opaque " << typeid(Opaque).name();
+    dbgAssert(ptr != nullptr)
+        << AlertInfo(AlertTeam::CORE, "table")
+        << "Trying to access a non existing opaque "
+        << typeid(Opaque).name();
     return *ptr;
 }
 

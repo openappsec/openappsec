@@ -26,7 +26,7 @@ public:
     void
     setBulkSize(uint size)
     {
-        dbgAssert(size > 0) << "Bulk size must be larger than 0";
+        dbgAssert(size > 0) << AlertInfo(AlertTeam::CORE, "report i/s") << "Bulk size must be larger than 0";
         dbgDebug(D_REPORT_BULK) << "Bulk size is set to " << size;
         bulk_size = size;
     }

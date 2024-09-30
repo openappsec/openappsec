@@ -39,11 +39,32 @@ void doPMExecTrace() { dbgTrace(D_PM_EXEC) << "PM_EXEC trace message"; line = to
 
 template <typename ...Args> void doManyFlags(Args ...args) { dbgDebug(args...) << "stab"; line = to_string(__LINE__); }
 
+TEST(DebugBaseTest, alert_obkect)
+{
+    AlertInfo alert1(AlertTeam::CORE, "testing");
+    EXPECT_EQ(alert1.getTeam(), AlertTeam::CORE);
+    EXPECT_EQ(alert1.getFunctionality(), "testing");
+    EXPECT_EQ(alert1.getDescription(), "");
+    EXPECT_EQ(alert1.getFamilyId(), 0u);
+    EXPECT_NE(alert1.getId(), 0u);
+
+    auto alert2 = alert1("additional data", 5);
+    EXPECT_EQ(alert2.getTeam(), AlertTeam::CORE);
+    EXPECT_EQ(alert2.getFunctionality(), "testing");
+    EXPECT_EQ(alert2.getDescription(), "additional data");
+    EXPECT_EQ(alert2.getFamilyId(), 5u);
+    EXPECT_NE(alert2.getId(), 0u);
+    EXPECT_NE(alert1.getId(), alert2.getId());
+}
+
 TEST(DebugBaseTest, death_on_panic)
 {
     cptestPrepareToDie();
 
-    EXPECT_DEATH(dbgAssert(1==2) << "Does your school teach otherwise?", "Does your school teach otherwise?");
+    EXPECT_DEATH(
+        dbgAssert(1==2) << AlertInfo(AlertTeam::CORE, "testing") << "Does your school teach otherwise?",
+        "Does your school teach otherwise?"
+    );
 }
 
 TEST(DebugBaseTest, default_levels)
@@ -1014,7 +1035,7 @@ TEST(DebugFogTest, fog_stream)
         "                    \"agentId\": \"Unknown\",\n"
         "                    \"issuingFunction\": \"handleThresholdReach\",\n"
         "                    \"issuingFile\": \"debug_streams.cc\",\n"
-        "                    \"issuingLine\": 344,\n"
+        "                    \"issuingLine\": 364,\n"
         "                    \"eventTraceId\": \"\",\n"
         "                    \"eventSpanId\": \"\",\n"
         "                    \"issuingEngineVersion\": \"\",\n"
@@ -1112,6 +1133,126 @@ TEST(DebugFogTest, fog_stream)
 
     EXPECT_EQ(message_body_1, expected_message_1);
     EXPECT_EQ(message_body_2, expected_message_2);
+
+    EXPECT_CALL(mock_mainloop, doesRoutineExist(0)).WillOnce(Return(true));
+    EXPECT_CALL(mock_mainloop, stop(0));
+    Debug::fini();
+}
+
+TEST(DebugFogTest, alert_fog_stream)
+{
+    ConfigComponent conf;
+    ::Environment env;
+    env.preload();
+    env.init();
+    stringstream capture_debug;
+    conf.preload();
+
+    StrictMock<MockMainLoop> mock_mainloop;
+    StrictMock<MockTimeGet> mock_time;
+    NiceMock<MockAgentDetails> mock_agent_details;
+
+    ON_CALL(mock_agent_details, getFogDomain()).WillByDefault(Return(Maybe<string>(string("fog_domain.com"))));
+    ON_CALL(mock_agent_details, getFogPort()).WillByDefault(Return(Maybe<uint16_t>(443)));
+
+    EXPECT_CALL(mock_agent_details, getAgentId()).WillRepeatedly(Return("Unknown"));
+    EXPECT_CALL(mock_agent_details, getOrchestrationMode()).WillRepeatedly(Return(OrchestrationMode::ONLINE));
+
+    EXPECT_CALL(mock_time, getWalltimeStr(_)).WillRepeatedly(Return(string("2016-11-13T17:31:24.087")));
+    I_MainLoop::Routine send_debug_routine = nullptr;
+
+    EXPECT_CALL(mock_mainloop, addRecurringRoutine(_, _, _, _, _))
+        .WillOnce(DoAll(SaveArg<2>(&send_debug_routine), Return(0)));
+
+    StrictMock<MockMessaging> messaging_mock;
+    string message_body;
+
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events/bulk",
+        _,
+        _,
+        _,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
+
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(
+        vector<string>{"--orchestration-mode=online_mode"}
+    );
+    Debug::preload();
+    string config_json =
+        "{"
+        "    \"Debug I/S\": {"
+        "        \"Sent debug bulk size\": ["
+        "            {"
+        "                \"value\": 2"
+        "            }"
+        "        ]"
+        "    },"
+        "    \"Debug\": [{"
+        "        \"Streams\": ["
+        "            {"
+        "                \"Output\": \"FOG\""
+        "            },"
+        "            {"
+        "                \"Output\": \"STDOUT\""
+        "            }"
+        "        ]"
+        "    }]"
+        "}";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(ss);
+
+    Debug::DebugAlert("MockFile", "MockFunction", 0, Debug::DebugLevel::ERROR, D_FW).getStreamAggr()
+        << AlertInfo(AlertTeam::CORE, "testing")
+        << "Generic error message";
+
+    string expected_message =
+        "{\n"
+        "    \"logs\": [\n"
+        "        {\n"
+        "            \"id\": 1,\n"
+        "            \"log\": {\n"
+        "                \"eventTime\": \"2016-11-13T17:31:24.087\",\n"
+        "                \"eventName\": \"Debug message\",\n"
+        "                \"eventSeverity\": \"High\",\n"
+        "                \"eventPriority\": \"Low\",\n"
+        "                \"eventType\": \"Code Related\",\n"
+        "                \"eventLevel\": \"Log\",\n"
+        "                \"eventLogLevel\": \"error\",\n"
+        "                \"eventAudience\": \"Internal\",\n"
+        "                \"eventAudienceTeam\": \"\",\n"
+        "                \"eventFrequency\": 0,\n"
+        "                \"eventTags\": [\n"
+        "                    \"Informational\"\n"
+        "                ],\n"
+        "                \"eventSource\": {\n"
+        "                    \"agentId\": \"Unknown\",\n"
+        "                    \"issuingFunction\": \"MockFunction\",\n"
+        "                    \"issuingFile\": \"MockFile\",\n"
+        "                    \"issuingLine\": 0,\n"
+        "                    \"eventTraceId\": \"\",\n"
+        "                    \"eventSpanId\": \"\",\n"
+        "                    \"issuingEngineVersion\": \"\",\n"
+        "                    \"serviceName\": \"Unnamed Nano Service\"\n"
+        "                },\n"
+        "                \"eventData\": {\n"
+        "                    \"eventMessage\": \"Generic error message\",\n"
+        "                    \"eventId\": 6255310698607853351,\n"
+        "                    \"eventFamilyId\": 0,\n"
+        "                    \"eventFunctionality\": \"testing\",\n"
+        "                    \"eventDescription\": \"\",\n"
+        "                    \"eventResponseTeam\": \"Core\"\n"
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    ]\n"
+        "}";
+
+    send_debug_routine();
+
+    EXPECT_EQ(message_body, expected_message);
 
     EXPECT_CALL(mock_mainloop, doesRoutineExist(0)).WillOnce(Return(true));
     EXPECT_CALL(mock_mainloop, stop(0));
