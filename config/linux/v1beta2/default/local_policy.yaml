@@ -6,25 +6,16 @@ apiVersion: v1beta2
 
 policies:
   default:
-    # start in detect-learn and move to prevent-learn based on learning progress 
+    # start in detect-learn and move to prevent-learn based on learning progress
     mode: detect-learn
-    threatPreventionPractices:
-    - default-threat-prevention-practice
-    accessControlPractices:
-    - default-access-control-practice
+    threatPreventionPractices: [default-threat-prevention-practice]
+    accessControlPractices: [default-access-control-practice]
     customResponses: default-web-user-response
-    triggers:
-    - default-log-trigger
-  specificRules:
-    - host: www.example.com
-      # this is an example for specific rule, adjust the values as required for the protected app
-      mode: detect-learn
-      threatPreventionPractices:
-      - default-threat-prevention-practice
-      accessControlPractices:
-      - default-access-control-practice
-      triggers:
-      - default-log-trigger
+    triggers: [default-log-trigger]
+    sourceIdentifiers: ""
+    trustedSources: ""
+    exceptions: []
+  specificRules: []
 
 threatPreventionPractices:
   - name: default-threat-prevention-practice
@@ -57,7 +48,7 @@ threatPreventionPractices:
       files: []
       # relevant for docker and linux embedded deployments
       # 0 or 1 files supported in array
-    openapiSchemaValidation: # schema validation requires "Premium Edition" 
+    schemaValidation: # schema validation requires "Premium Edition" 
       overrideMode: inherited
       configmap: []
       # relevant for deployments on kubernetes
@@ -91,7 +82,7 @@ logTriggers:
       urlPath: true
       urlQuery: true
       httpHeaders: false
-      requestBody: false      
+      requestBody: false
     additionalSuspiciousEventsLogging:
       enabled: true
       minSeverity: high
