@@ -102,6 +102,8 @@ public:
 
     std::string getLogInsteadOfSending();
 
+    void addMarkerSuffix(const std::string &suffix);
+
 private:
     std::chrono::microseconds getCurrentTime() const;
     void loadBaseLogFields();

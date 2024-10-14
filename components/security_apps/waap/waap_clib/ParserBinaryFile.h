@@ -20,7 +20,7 @@
 
 #define MIN_HEADER_LOOKUP 16
 #define MAX_HEADER_LOOKUP 64
-#define MAX_TAIL_LOOKUP 5
+#define MAX_TAIL_LOOKUP 20
 
 class ParserBinaryFile : public ParserBase {
 public:

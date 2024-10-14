@@ -26,7 +26,7 @@ public:
     TestMessagingBuffer()
     {
         env.preload();
-        Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Executable Name", "tmp_test_file");
+        Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "tmp_test_file");
 
         config.preload();
         config.init();

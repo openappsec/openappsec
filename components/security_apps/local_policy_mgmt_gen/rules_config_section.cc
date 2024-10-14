@@ -17,6 +17,8 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
+static const string empty_string="";
+
 AssetUrlParser
 AssetUrlParser::parse(const string &uri)
 {
@@ -242,6 +244,13 @@ UsersIdentifier::getIdentifier() const
 {
     return source_identifier;
 }
+
+const string &
+UsersIdentifier::getIdentifierValue() const
+{
+    if (identifier_values.empty()) return empty_string;
+    return identifier_values[0];
+}
 // LCOV_EXCL_STOP
 
 void
@@ -271,6 +280,13 @@ UsersIdentifiersRulebase::getIdentifier() const
 {
     if (source_identifiers.empty()) return source_identifier;
     return source_identifiers[0].getIdentifier();
+}
+
+const string &
+UsersIdentifiersRulebase::getIdentifierValue() const
+{
+    if (source_identifiers.empty()) return empty_string;
+    return source_identifiers[0].getIdentifierValue();
 }
 // LCOV_EXCL_STOP
 

@@ -165,6 +165,14 @@ public:
         }
 
         registerGlobalValue<std::string>("Executable Name", arg_vec.front());
+
+        auto file_path_end = arg_vec.front().find_last_of("/");
+        auto executable_name = arg_vec.front().substr(file_path_end + 1);
+        auto file_sufix_start = executable_name.find_first_of(".");
+        if (file_sufix_start != std::string::npos) {
+            executable_name = executable_name.substr(0, file_sufix_start);
+        }
+        registerGlobalValue<std::string>("Base Executable Name", executable_name);
     }
 
     void

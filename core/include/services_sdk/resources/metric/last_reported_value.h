@@ -44,6 +44,12 @@ public:
         return last_reported;
     }
 
+    float
+    getValue() const override
+    {
+        return static_cast<float>(last_reported);
+    }
+
     void
     save(cereal::JSONOutputArchive &ar) const override
     {

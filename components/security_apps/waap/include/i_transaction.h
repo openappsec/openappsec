@@ -70,6 +70,7 @@ public:
     virtual const std::string getParam() const = 0;
     virtual const std::vector<std::string> getKeywordMatches() const = 0;
     virtual const std::vector<std::string> getKeywordsCombinations() const = 0;
+    virtual const std::vector<std::string> getKeywordsAfterFilter() const = 0;
     virtual const std::string getContentTypeStr() const = 0;
     virtual Waap::Util::ContentType getContentType() const = 0;
     virtual const std::string getKeywordMatchesStr() const = 0;
@@ -84,6 +85,7 @@ public:
     virtual const std::string getUriStr() const = 0;
     virtual const std::string& getSourceIdentifier() const = 0;
     virtual double getScore() const = 0;
+    virtual double getOtherModelScore() const = 0;
     virtual const std::vector<double> getScoreArray() const = 0;
     virtual Waap::CSRF::State& getCsrfState() = 0;
     virtual ngx_http_cp_verdict_e getUserLimitVerdict() = 0;

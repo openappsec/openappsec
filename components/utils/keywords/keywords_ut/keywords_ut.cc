@@ -55,6 +55,13 @@ TEST_F(KeywordsRuleTest, data_basic_test) {
     EXPECT_FALSE(ruleRun("data: \"75\", part HTTP_RESPONSE_BODY;"));
 }
 
+TEST_F(KeywordsRuleTest, consecutive_delimiter_test) {
+    appendBuffer("HTTP_RESPONSE_BODY", "123456789");
+
+    EXPECT_TRUE(ruleRun("data: \"234\" , part  HTTP_RESPONSE_BODY;"));
+    EXPECT_FALSE(ruleRun("data: \"75\", part  HTTP_RESPONSE_BODY;"));
+}
+
 TEST_F(KeywordsRuleTest, data_relative_test) {
     appendBuffer("HTTP_RESPONSE_BODY", "1234567890");
 

@@ -24,6 +24,7 @@ class I_EnvDetails
 public:
     virtual EnvType getEnvType() = 0;
     virtual std::string getToken() = 0;
+    virtual std::string getNameSpace() = 0;
 
 protected:
     virtual ~I_EnvDetails() {}

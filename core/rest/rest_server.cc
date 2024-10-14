@@ -47,6 +47,7 @@ public:
     void startNewConnection() const;
 
     bool bindRestServerSocket(struct sockaddr_in &addr, vector<uint16_t> port_range);
+    bool bindRestServerSocket(struct sockaddr_in6 &addr, vector<uint16_t> port_range);
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
     bool addGetCall(const string &uri, const function<string()> &cb) override;
     uint16_t getListeningPort() const override { return listening_port; }
@@ -73,10 +74,36 @@ private:
 bool
 RestServer::Impl::bindRestServerSocket(struct sockaddr_in &addr, vector<uint16_t> port_range)
 {
+    dbgFlow(D_API) << "Binding IPv4 socket";
     for (uint16_t port : port_range) {
         addr.sin_port = htons(port);
 
         if (bind(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) == 0) return true;
+
+        if (errno == EADDRINUSE) {
+            dbgDebug(D_API) << "Port " << port << " is already in use";
+        } else {
+            dbgDebug(D_API) << "Failed to bind to port " << port << " with error: " << strerror(errno);
+        }
+    }
+
+    return false;
+}
+
+bool
+RestServer::Impl::bindRestServerSocket(struct sockaddr_in6 &addr, vector<uint16_t> port_range)
+{
+    dbgFlow(D_API) << "Binding IPv6 socket";
+    for (uint16_t port : port_range) {
+        addr.sin6_port = htons(port);
+
+        if (bind(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) == 0) return true;
+
+        if (errno == EADDRINUSE) {
+            dbgDebug(D_API) << "Port " << port << " is already in use";
+        } else {
+            dbgDebug(D_API) << "Failed to bind to port " << port << " with error: " << strerror(errno);
+        }
     }
 
     return false;
@@ -119,21 +146,55 @@ RestServer::Impl::init()
     mainloop = Singleton::Consume<I_MainLoop>::by<RestServer>();
 
     auto init_connection = [this] () {
-        fd = socket(AF_INET, SOCK_STREAM, 0);
+        auto allow_external_conn = "Nano service API Allow Get From External IP";
+        auto conf_value = getConfiguration<bool>("connection", allow_external_conn);
+        bool accept_get_from_external_ip = false;
+        if (conf_value.ok()) {
+            accept_get_from_external_ip = *conf_value;
+        } else {
+            auto env_value = Singleton::Consume<I_Environment>::by<RestServer>()->get<bool>(allow_external_conn);
+            if (env_value.ok()) {
+                accept_get_from_external_ip = *env_value;
+            }
+        }
+
+        if (accept_get_from_external_ip) {
+            fd = socket(AF_INET6, SOCK_STREAM, 0);
+        } else {
+            fd = socket(AF_INET, SOCK_STREAM, 0);
+        }
         dbgAssert(fd >= 0) << alert << "Failed to open a socket";
+
         int socket_enable = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)) < 0) {
             dbgWarning(D_API) << "Could not set the socket options";
         }
 
-        struct sockaddr_in addr;
-        bzero(&addr, sizeof(addr));
+        if (accept_get_from_external_ip) {
+            int option = 0;
+            if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &option, sizeof(option)) < 0) {
+                dbgWarning(D_API) << "Could not set the IPV6_V6ONLY option";
+            }
 
-        addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            struct sockaddr_in6 addr6;
+            bzero(&addr6, sizeof(addr6));
+            addr6.sin6_family = AF_INET6;
+            addr6.sin6_addr = in6addr_any;
 
-        while (!bindRestServerSocket(addr, port_range)) {
-            mainloop->yield(bind_retry_interval_msec);
+            while (!bindRestServerSocket(addr6, port_range)) {
+                mainloop->yield(bind_retry_interval_msec);
+            }
+            listening_port = ntohs(addr6.sin6_port);
+        } else {
+            struct sockaddr_in addr;
+            bzero(&addr, sizeof(addr));
+            addr.sin_family = AF_INET;
+            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+            while (!bindRestServerSocket(addr, port_range)) {
+                mainloop->yield(bind_retry_interval_msec);
+            }
+            listening_port = ntohs(addr.sin_port);
         }
 
         listen(fd, listen_limit);
@@ -146,9 +207,12 @@ RestServer::Impl::init()
             "REST server listener",
             is_primary.ok() && *is_primary
         );
-
-        listening_port = ntohs(addr.sin_port);
-        dbgInfo(D_API) << "REST server started: " << listening_port;
+        dbgInfo(D_API)
+            << "REST server started: "
+            << listening_port
+            << ". Accepting: "
+            << (accept_get_from_external_ip ? "external" : "loopback")
+            << " connections";
         Singleton::Consume<I_Environment>::by<RestServer>()->registerValue<int>("Listening Port", listening_port);
     };
 
@@ -172,14 +236,30 @@ void
 RestServer::Impl::startNewConnection() const
 {
     dbgFlow(D_API) << "Starting a new connection";
-    int new_socket = accept(fd, nullptr, nullptr);
+    struct sockaddr_storage addr;
+    socklen_t addr_len = sizeof(addr);
+    int new_socket = accept(fd, (struct sockaddr *)&addr, &addr_len);
     if (new_socket < 0) {
-        dbgWarning(D_API) << "Failed to accept a new socket";
+        dbgWarning(D_API) << "Failed to accept a new socket: " << strerror(errno);
         return;
     }
-    dbgDebug(D_API) << "Starting a new socket: " << new_socket;
 
-    RestConn conn(new_socket, mainloop, this);
+    dbgDebug(D_API) << "Starting a new socket: " << new_socket;
+    bool is_external = false;
+    if (addr.ss_family == AF_INET6) {
+        struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) &addr;
+        if (IN6_IS_ADDR_V4MAPPED(&addr_in6->sin6_addr)) {
+            struct in_addr ipv4_addr;
+            memcpy(&ipv4_addr, &addr_in6->sin6_addr.s6_addr[12], sizeof(ipv4_addr));
+            is_external = ipv4_addr.s_addr != htonl(INADDR_LOOPBACK);
+        } else {
+            is_external = memcmp(&addr_in6->sin6_addr, &in6addr_loopback, sizeof(in6addr_loopback)) != 0;
+        }
+    } else {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)&addr;
+        is_external = addr_in->sin_addr.s_addr != htonl(INADDR_LOOPBACK);
+    }
+    RestConn conn(new_socket, mainloop, this, is_external);
     mainloop->addFileRoutine(
         I_MainLoop::RoutineType::Offline,
         new_socket,
@@ -283,4 +363,5 @@ RestServer::preload()
     registerExpectedConfiguration<uint>("connection", "Nano service API Port Alternative");
     registerExpectedConfiguration<uint>("connection", "Nano service API Port Range start");
     registerExpectedConfiguration<uint>("connection", "Nano service API Port Range end");
+    registerExpectedConfiguration<bool>("connection", "Nano service API Allow Get From External IP");
 }

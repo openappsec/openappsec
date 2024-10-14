@@ -23,6 +23,14 @@ using namespace std;
 USE_DEBUG_FLAG(D_NGINX_POLICY);
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
+static const std::unordered_map<std::string, std::string> key_to_source_identefier_val = {
+    { "sourceip", "Source IP"},
+    { "cookie", "Cookie:"},
+    { "headerkey", "Header:"},
+    { "JWTKey", ""},
+    { "x-forwarded-for", "X-Forwarded-For"}
+};
+
 void
 SecurityAppsWrapper::save(cereal::JSONOutputArchive &out_ar) const
 {
@@ -1038,7 +1046,7 @@ PolicyMakerUtils::createIpsSections(
         practice_name,
         practice_id,
         source_identifier,
-        override_mode,
+        "Inactive",
         apssec_practice.getIntrusionPrevention().createIpsRules(override_mode)
     );
 
@@ -1048,8 +1056,7 @@ PolicyMakerUtils::createIpsSections(
 void
 PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, bool is_temporary)
 {
-    auto path = getFilesystemPathConfig() + "/conf/snort/" + file_name;
-    string in_file = is_temporary ? path + ".rule" : path;
+    auto path = is_temporary ? getFilesystemPathConfig() + "/conf/snort/" + file_name + ".rule" : file_name;
 
     if (snort_protections.find(path) != snort_protections.end()) {
         dbgTrace(D_LOCAL_POLICY) << "Snort protections section for file " << file_name << " already exists";
@@ -1060,7 +1067,9 @@ PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, bool is_
         << (is_temporary ? " temporary" : "") << " file " << path;
 
     auto snort_script_path = getFilesystemPathConfig() + "/scripts/snort_to_ips_local.py";
-    auto cmd = "python3 " + snort_script_path + " " + in_file + " " + path + ".out " + path + ".err";
+    auto tmp_out = "/tmp/" + file_name + ".out";
+    auto tmp_err = "/tmp/" + file_name + ".err";
+    auto cmd = "python3 " + snort_script_path + " " + path + " " + tmp_out + " " + tmp_err;
 
     auto res = Singleton::Consume<I_ShellCmd>::by<LocalPolicyMgmtGenerator>()->getExecOutput(cmd);
 
@@ -1069,16 +1078,16 @@ PolicyMakerUtils::createSnortProtecionsSection(const string &file_name, bool is_
         return;
     }
 
-    Maybe<ProtectionsSectionWrapper> maybe_protections = openFileAsJson<ProtectionsSectionWrapper>(path + ".out");
+    Maybe<ProtectionsSectionWrapper> maybe_protections = openFileAsJson<ProtectionsSectionWrapper>(tmp_out);
     if (!maybe_protections.ok()){
         dbgWarning(D_LOCAL_POLICY) << maybe_protections.getErr();
         return;
     }
 
     auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<LocalPolicyMgmtGenerator>();
-    if (is_temporary) i_orchestration_tools->removeFile(in_file);
-    i_orchestration_tools->removeFile(path + ".out");
-    i_orchestration_tools->removeFile(path + ".err");
+    if (is_temporary) i_orchestration_tools->removeFile(path);
+    i_orchestration_tools->removeFile(tmp_out);
+    i_orchestration_tools->removeFile(tmp_err);
 
     snort_protections[path] = ProtectionsSection(
         maybe_protections.unpack().getProtections(),
@@ -1208,7 +1217,8 @@ void
 PolicyMakerUtils::createWebAppSection(
     const V1beta2AppsecLinuxPolicy &policy,
     const RulesConfigRulebase& rule_config,
-    const string &practice_id, const string &full_url,
+    const string &practice_id,
+    const string &full_url,
     const string &default_mode,
     map<AnnotationTypes, string> &rule_annotations)
 {
@@ -1225,6 +1235,7 @@ PolicyMakerUtils::createWebAppSection(
         apssec_practice.getWebAttacks().getMaxObjectDepth(),
         apssec_practice.getWebAttacks().getMaxUrlSizeBytes()
     );
+
     WebAppSection web_app = WebAppSection(
         full_url == "Any" ? default_appsec_url : full_url,
         rule_config.getAssetId(),
@@ -1236,7 +1247,10 @@ PolicyMakerUtils::createWebAppSection(
         rule_config.getContext(),
         apssec_practice.getWebAttacks().getMinimumConfidence(practice_mode),
         apssec_practice.getWebAttacks().getMode(practice_mode),
-        apssec_practice.getAntiBot().getMode(),
+        apssec_practice.getAntiBot().getMode(practice_mode),
+        apssec_practice.getOpenSchemaValidation().getOverrideMode(practice_mode),
+        apssec_practice.getOpenSchemaValidation().getEnforceLevel(),
+        apssec_practice.getOpenSchemaValidation().getOas(),
         practice_advance_config,
         apssec_practice.getAntiBot(),
         log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],
@@ -1290,7 +1304,7 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
     );
     rules_config[rule_config.getAssetName()] = rule_config;
 
-    string current_identifier;
+    string current_identifier, current_identifier_value;
     if (!rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS].empty()) {
         UsersIdentifiersRulebase user_identifiers = createUserIdentifiers<V1beta2AppsecLinuxPolicy>(
             rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS],
@@ -1299,6 +1313,15 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         );
         users_identifiers[rule_annotations[AnnotationTypes::SOURCE_IDENTIFIERS]] = user_identifiers;
         current_identifier = user_identifiers.getIdentifier();
+        current_identifier_value = user_identifiers.getIdentifierValue();
+    }
+
+    string ips_identifier, ips_identifier_value;
+    if(key_to_source_identefier_val.find(current_identifier) != key_to_source_identefier_val.end()) {
+        ips_identifier = key_to_source_identefier_val.at(current_identifier);
+    }
+    if (current_identifier == "cookie" || current_identifier == "headerkey") {
+        ips_identifier_value = current_identifier_value;
     }
 
     createIpsSections(
@@ -1306,7 +1329,7 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
         rule_config.getAssetName(),
         practice_id,
         rule_annotations[AnnotationTypes::PRACTICE],
-        current_identifier,
+        ips_identifier + ips_identifier_value,
         rule_config.getContext(),
         policy,
         rule_annotations,

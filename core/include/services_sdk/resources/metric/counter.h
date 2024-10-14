@@ -44,6 +44,12 @@ public:
         return counter;
     }
 
+    float
+    getValue() const override
+    {
+        return static_cast<float>(counter);
+    }
+
     void
     save(cereal::JSONOutputArchive &ar) const override
     {

@@ -91,7 +91,7 @@ private:
     bool matchAttributesString(const std::set<std::string> &values) const;
     bool matchAttributesIp(const std::set<std::string> &values) const;
     bool isRegEx() const;
-    bool isIP() const;
+    void sortAndMergeIpRangesValues();
 
     MatchType type;
     Operators operator_type;

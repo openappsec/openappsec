@@ -29,12 +29,15 @@ public:
 
     virtual EnvType getEnvType() override;
     virtual std::string getToken() override;
+    virtual std::string getNameSpace() override;
 
 private:
     std::string retrieveToken();
+    std::string retrieveNamespace();
     std::string readFileContent(const std::string &file_path);
 
     std::string token;
+    std::string agent_namespace;
     EnvType env_type;
 };
 

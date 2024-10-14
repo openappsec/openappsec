@@ -44,6 +44,9 @@ namespace Waap {
         static const std::string xmlEntityAttributeId;
     private:
         double getScoreData(Waf2ScanResult& res, const std::string &poolName, bool applyLearning = true);
+        double getScoreFromPool(
+            Waf2ScanResult &res, const std::vector<std::string> &newKeywords, const std::string &poolName
+        );
         bool shouldIgnoreOverride(const Waf2ScanResult &res);
         bool isKeyCspReport(const std::string &key, Waf2ScanResult &res, DeepParser &dp);
         

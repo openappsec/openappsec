@@ -1452,12 +1452,12 @@ upload_ai() # Initials - uai
         if [ "$AI_VERBOSE" = "true" ]; then
             echo "Uploading file $file"
         fi
-        if [ -z "${is_gaia}" -o "$is_smb_release" = "1" ]; then
-            uai_curl_output=$(${curl_cmd} -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1)
+        if [ -n "${is_gaia}" -o "$is_smb_release" = "1" ]; then
+            uai_curl_output=$(${curl_cmd} -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1 | tail -1)
         elif [ "${remove_curl_ld_path}" = "true" ]; then
-            uai_curl_output=$(LD_LIBRARY_PATH="" ${curl_cmd} --cacert ${FILESYSTEM_PATH}/certs/fog.pem "${uai_proxy_val}" -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1)
+            uai_curl_output=$(LD_LIBRARY_PATH="" ${curl_cmd} --cacert ${FILESYSTEM_PATH}/certs/fog.pem "${uai_proxy_val}" -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1 | tail -1)
         else
-            uai_curl_output=$(${curl_cmd} --cacert ${FILESYSTEM_PATH}/certs/fog.pem "${uai_proxy_val}" -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1)
+            uai_curl_output=$(${curl_cmd} --cacert ${FILESYSTEM_PATH}/certs/fog.pem "${uai_proxy_val}" -o /dev/null -s -w "%{http_code}\n" --progress-bar --request PUT -T "${file}" -H "user-agent: Infinity Next (a7030abf93a4c13)" -H "Content-Type: application/json" -H "Authorization: Bearer ${uai_token}" "$uai_fog_address"/agents-core/storage/"$uai_tenant_id"/"$uai_agent_id"/"$uai_current_time"/"$uai_file_dir" 2>&1 | tail -1)
         fi
         if [ "$AI_UPLOAD_TOO_LARGE_FLAG" = "false" ] && [ "$uai_curl_output" = "413" ]; then
             AI_UPLOAD_TOO_LARGE_FLAG=true

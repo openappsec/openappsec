@@ -50,7 +50,8 @@ WaapComponent::Impl::Impl() :
     drop_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP),
     waapStateTable(NULL),
     transactionsCount(0),
-    deepAnalyzer()
+    deepAnalyzer(),
+    waapModelResultLogger()
 {
 }
 

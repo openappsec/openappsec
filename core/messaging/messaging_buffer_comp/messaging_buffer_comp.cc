@@ -112,9 +112,8 @@ MessagingBufferComponent::Impl::init()
     
     auto sub_path = getProfileAgentSettingWithDefault<string>("nano_agent/event_buffer/", "eventBuffer.baseFolder");
     buffer_root_path = getLogFilesPathConfig() + "/" + sub_path;
-    string full_executable_name =
-        Singleton::Consume<I_Environment>::by<Messaging>()->get<string>("Executable Name").unpack();
-    string executable_name = full_executable_name.substr(full_executable_name.find_last_of("/") + 1);
+    string executable_name =
+        Singleton::Consume<I_Environment>::by<Messaging>()->get<string>("Base Executable Name").unpack();
     removeLegacyBuffer(buffer_root_path, executable_name);
     mkdir(buffer_root_path.c_str(), 0644);
 

@@ -766,22 +766,8 @@ Debug::findDebugFilePrefix(const string &file_name)
 string
 Debug::getExecutableName()
 {
-    auto executable = env->get<string>("Executable Name");
-    if (!executable.ok() || *executable == "") {
-        return "";
-    }
-
-    string executable_name = *executable;
-    auto file_path_end = executable_name.find_last_of("/");
-    if (file_path_end != string::npos) {
-        executable_name = executable_name.substr(file_path_end + 1);
-    }
-    auto file_sufix_start = executable_name.find_first_of(".");
-    if (file_sufix_start != string::npos) {
-        executable_name = executable_name.substr(0, file_sufix_start);
-    }
-
-    return executable_name;
+    auto executable = env->get<string>("Base Executable Name");
+    return executable.ok() ? *executable : "";
 }
 
 void

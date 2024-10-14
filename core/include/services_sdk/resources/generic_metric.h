@@ -24,6 +24,7 @@
 #include "i_mainloop.h"
 #include "i_time_get.h"
 #include "i_agent_details.h"
+#include "i_instance_awareness.h"
 #include "i_environment.h"
 #include "i_messaging.h"
 #include "i_rest_api.h"
@@ -52,6 +53,7 @@ class GenericMetric
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_TimeGet>,
     Singleton::Consume<I_AgentDetails>,
+    Singleton::Consume<I_InstanceAwareness>,
     Singleton::Consume<I_Environment>,
     Singleton::Consume<I_Messaging>,
     Singleton::Consume<I_RestApi>,
@@ -111,7 +113,9 @@ private:
 
     void handleMetricStreamSending();
     void generateLog();
+    void generatePrometheus();
     void generateDebug();
+    void generateAiopsLog();
 
     I_MainLoop *i_mainloop;
     I_TimeGet *i_time;

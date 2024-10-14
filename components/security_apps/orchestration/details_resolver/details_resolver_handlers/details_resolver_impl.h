@@ -66,7 +66,12 @@ SHELL_CMD_HANDLER("QUID", "FS_PATH=<FILESYSTEM-PREFIX>;"
     "/opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} | jq -r .message[0].QUID || echo '');",
     getQUID)
 SHELL_CMD_HANDLER("SMO_QUID", "[ -d /opt/CPquid ] "
-    "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_smo_quid.json | jq -r .message || echo ''",
+    "&& python3 /opt/CPquid/Quid_Api.py -i "
+    "/opt/CPotelcol/quid_api/get_smo_quid.json | jq -r .message[0].SMO_QUID || echo ''",
+    getQUID)
+SHELL_CMD_HANDLER("MGMT_QUID", "[ -d /opt/CPquid ] "
+    "&& python3 /opt/CPquid/Quid_Api.py -i "
+    "/opt/CPotelcol/quid_api/get_mgmt_quid.json | jq -r .message[0].MGMT_QUID || echo ''",
     getQUID)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(

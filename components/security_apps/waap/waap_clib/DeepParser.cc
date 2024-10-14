@@ -1308,7 +1308,7 @@ DeepParser::createInternalParser(
                         *this,
                         parser_depth + 1,
                         '&',
-                        valueStats.isUrlEncoded)
+                        valueStats.isUrlEncoded && !Waap::Util::testUrlBadUtf8Evasion(cur_val))
                 );
             } else if (!Waap::Util::testUrlBareUtf8Evasion(cur_val)) {
                 dbgTrace(D_WAAP_DEEP_PARSER) << "!Waap::Util::testUrlBareUtf8Evasion(cur_val)";
@@ -1323,7 +1323,7 @@ DeepParser::createInternalParser(
                             *this,
                             parser_depth + 1,
                             '&',
-                            valueStats.isUrlEncoded)
+                            valueStats.isUrlEncoded && !Waap::Util::testUrlBadUtf8Evasion(cur_val))
                     );
                     offset = 0;
                     return offset;
@@ -1545,5 +1545,6 @@ DeepParser::isPDFDetected(const std::string &cur_val) const
     static const std::string PDF_header("%PDF-");
     if (cur_val.size() < 10)
         return false;
-    return cur_val.substr(0, cur_val.size() > 64 ? 64 : cur_val.size()).find(PDF_header) != std::string::npos;
+    return cur_val.substr(0, cur_val.size() > MAX_PDF_HEADER_LOOKUP ? MAX_PDF_HEADER_LOOKUP : cur_val.size())
+                .find(PDF_header) != std::string::npos;
 }

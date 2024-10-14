@@ -215,6 +215,18 @@ public:
         return is_to_fog;
     }
 
+    void
+    setSniHostName(const std::string &_host_name)
+    {
+        sni_host_name = _host_name;
+    }
+
+    Maybe<std::string>
+    getSniHostName() const
+    {
+        return sni_host_name;
+    }
+
     template <class Archive>
     void
     serialize(Archive &ar)
@@ -237,6 +249,7 @@ public:
 
 private:
     std::string host_name = "";
+    Maybe<std::string> sni_host_name = genError("SNI host name not set");
     std::string ca_path = "";
     std::string client_cert_path = "";
     std::string client_key_path = "";

@@ -123,3 +123,12 @@ LogGen::loadBaseLogFields()
 
     log.getMarkers() = env->getAllStrings(EnvKeyAttr::LogSection::MARKER);
 }
+
+// Adding a suffix to log markers will allow for creating a unique log that won't be reduced
+void
+LogGen::addMarkerSuffix(const string &suffix)
+{
+    for (auto &marker : log.getMarkers()) {
+        marker.second += suffix;
+    }
+}

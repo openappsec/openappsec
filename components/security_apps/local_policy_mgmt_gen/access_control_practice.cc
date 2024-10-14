@@ -228,7 +228,11 @@ AccessControlPracticeSpec::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec practice spec";
 
     parseAppsecJSONKey<string>("name", practice_name, archive_in);
-    parseAppsecJSONKey<string>("practiceMode", mode, archive_in);
+    parseAppsecJSONKey<string>("practiceMode", mode, archive_in, "inherited");
+    if (valid_modes.count(mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Access control practice mode invalid: " << mode;
+        throw PolicyGenException("AppSec Access control practice mode invalid: " + mode);
+    }
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
     parseMandatoryAppsecJSONKey<AccessControlRateLimit>("rateLimit", rate_limit, archive_in);
 }

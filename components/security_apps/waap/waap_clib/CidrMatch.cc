@@ -25,6 +25,51 @@
 #include "log_generator.h"
 #include <stdexcept>
 
+static in_addr applyMaskV4(const in_addr& addr, uint8_t prefixLength) {
+    in_addr maskedAddr;
+    if (prefixLength == 0) {
+        maskedAddr.s_addr = 0;
+    } else {
+        uint32_t mask = htonl(~((1 << (32 - prefixLength)) - 1));  // Create mask
+        maskedAddr.s_addr = addr.s_addr & mask;  // Apply mask
+    }
+    return maskedAddr;
+}
+
+// Function to apply a network mask to an IPv6 address
+static in6_addr applyMaskV6(const in6_addr& addr, uint8_t prefixLength) {
+    in6_addr maskedAddr = addr;
+    int fullBytes = prefixLength / 8;
+    int remainingBits = prefixLength % 8;
+
+    // Mask full bytes
+    for (int i = fullBytes; i < 16; ++i) {
+        maskedAddr.s6_addr[i] = 0;
+    }
+
+    // Mask remaining bits
+    if (remainingBits > 0) {
+        uint8_t mask = ~((1 << (8 - remainingBits)) - 1);
+        maskedAddr.s6_addr[fullBytes] &= mask;
+    }
+
+    return maskedAddr;
+}
+
+// Helper function to convert an IPv4 address to string
+static std::string ipv4ToString(const in_addr& ipv4) {
+    char str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ipv4, str, INET_ADDRSTRLEN);
+    return std::string(str);
+}
+
+// Helper function to convert an IPv6 address to string
+static std::string ipv6ToString(const in6_addr& ipv6) {
+    char str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &ipv6, str, INET6_ADDRSTRLEN);
+    return std::string(str);
+}
+
 USE_DEBUG_FLAG(D_WAAP);
 namespace Waap {
 namespace Util {
@@ -36,6 +81,15 @@ bool CIDRData::operator==(const CIDRData &other) const {
         cidrsMatching &&
         networkBits == other.networkBits &&
         isIPV6 == other.isIPV6;
+}
+
+bool CIDRData::operator<(const CIDRData &other) const {
+    if (isIPV6) {
+        if (!other.isIPV6) return false;
+        return memcmp(ipCIDRV6.s6_addr, other.ipCIDRV6.s6_addr, sizeof(ipCIDRV6.s6_addr)) < 0;
+    }
+    if (other.isIPV6) return true;
+    return ntohl(ipCIDRV4.s_addr) < ntohl(other.ipCIDRV4.s_addr);
 }
 
 bool cidr4_match(const in_addr &addr, const in_addr &net, uint8_t bits) {
@@ -114,9 +168,11 @@ bool isCIDR(const std::string& strCIDR, CIDRData& cidr)
     memset(&cidr.ipCIDRV6, 0, sizeof(struct in6_addr));
 
     if (inet_pton(AF_INET, strPrefix.c_str(), &cidr.ipCIDRV4) == 1 && bits <= 32) {
+        cidr.ipCIDRV4 = applyMaskV4(cidr.ipCIDRV4, bits);
         cidr.isIPV6 = false;
     }
     else if (inet_pton(AF_INET6, strPrefix.c_str(), &cidr.ipCIDRV6) == 1 && bits <= 128) {
+        cidr.ipCIDRV6 = applyMaskV6(cidr.ipCIDRV6, bits);
         cidr.isIPV6 = true;
     }
     else
@@ -128,6 +184,7 @@ bool isCIDR(const std::string& strCIDR, CIDRData& cidr)
 
     return true;
 }
+
 bool cidrMatch(const std::string& sourceip, const std::string& targetCidr) {
     CIDRData cidrData;
 
@@ -139,6 +196,7 @@ bool cidrMatch(const std::string& sourceip, const std::string& targetCidr) {
 
     return cidrMatch(sourceip, cidrData);
 }
+
 bool cidrMatch(const std::string & sourceip, const CIDRData & cidr){
     struct in_addr source_inaddr;
     struct in6_addr source_inaddr6;
@@ -155,5 +213,43 @@ bool cidrMatch(const std::string & sourceip, const CIDRData & cidr){
     dbgDebug(D_WAAP) << "Source IP address does not match any of the CIDR definitions.";
     return false;
 }
+
+bool doesFirstCidrContainSecond(const CIDRData &first, const CIDRData &second) {
+    if (first.isIPV6 != second.isIPV6) return false;  // IPv4 and IPv6 cannot overlap
+    if (first.networkBits >= second.networkBits) return false;
+
+    if (!first.isIPV6) {
+        // IPv4 containment check
+        in_addr smallerNetwork = applyMaskV4(second.ipCIDRV4, first.networkBits);
+        return (first.ipCIDRV4.s_addr == smallerNetwork.s_addr);
+    }
+    // IPv6 containment check
+    in6_addr smallerNetwork = applyMaskV6(second.ipCIDRV6, first.networkBits);
+
+    for (int i = 0; i < 16; ++i) {
+        if (first.ipCIDRV6.s6_addr[i] != smallerNetwork.s6_addr[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string cidrsToString(const std::vector<CIDRData>& cidrs) {
+    std::stringstream ss;
+    bool is_first = true;
+    ss << "[";
+    for (const auto& cidr : cidrs) {
+        if (!is_first) ss << ", ";
+        if (cidr.isIPV6) {
+            ss << ipv6ToString(cidr.ipCIDRV6) << "/" << static_cast<int>(cidr.networkBits);
+        } else {
+            ss << ipv4ToString(cidr.ipCIDRV4) << "/" << static_cast<int>(cidr.networkBits);
+        }
+        is_first = false;
+    }
+    ss << "]";
+    return ss.str();
+}
+
 }
 }

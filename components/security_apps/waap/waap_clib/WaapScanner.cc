@@ -13,7 +13,9 @@
 
 #include "WaapScanner.h"
 #include "WaapScores.h"
+#include "Waf2Engine.h"
 #include "i_transaction.h"
+#include "WaapModelResultLogger.h"
 #include <string>
 #include "debug.h"
 #include "reputation_features_events.h"
@@ -105,20 +107,59 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     }
 
     std::sort(newKeywords.begin(), newKeywords.end());
-
+    res.keywordsAfterFilter.clear();
+    for (auto keyword : newKeywords) {
+        res.keywordsAfterFilter.push_back(keyword);
+    }
     res.scoreArray.clear();
+    res.coefArray.clear();
     res.keywordCombinations.clear();
+
+    double res_score = getScoreFromPool(res, newKeywords, poolName);
+
+    string other_pool_name = Waap::Scores::getOtherScorePoolName();
+    Waap::Scores::ModelLoggingSettings modelLoggingSettings = Waap::Scores::getModelLoggingSettings();
+
+    if (applyLearning && poolName != other_pool_name &&
+        modelLoggingSettings.logLevel != Waap::Scores::ModelLogLevel::OFF) {
+        double other_score = getScoreFromPool(res, newKeywords, other_pool_name);
+
+        dbgDebug(D_WAAP_SCANNER) << "Comparing score from pool " << poolName << ": " << res_score
+                                << ", vs. pool " << other_pool_name << ": " << other_score
+                                << ", score difference: " << res_score - other_score
+                                << ", sample: " << res.unescaped_line;
+        Singleton::Consume<I_WaapModelResultLogger>::by<WaapComponent>()->logModelResult(
+            modelLoggingSettings, m_transaction, res, poolName, other_pool_name, res_score, other_score
+        );
+        res.other_model_score = other_score;
+    } else {
+        res.other_model_score = res_score;
+    }
+    return res_score;
+}
+
+double Waap::Scanner::getScoreFromPool(
+    Waf2ScanResult &res, const std::vector<std::string> &newKeywords, const std::string &poolName
+)
+{
+    KeywordsStats stats = m_transaction->getAssetState()->scoreBuilder.getSnapshotStats(poolName);
 
     if (!newKeywords.empty()) {
         // Collect scores of individual keywords
         Waap::Scores::calcIndividualKeywords(m_transaction->getAssetState()->scoreBuilder, poolName, newKeywords,
-            res.scoreArray);
+            res.scoreArray, res.coefArray);
         // Collect keyword combinations and their scores. Append scores to scoresArray,
         // and also populate m_scanResultKeywordCombinations list
         Waap::Scores::calcCombinations(m_transaction->getAssetState()->scoreBuilder, poolName, newKeywords,
-            res.scoreArray, res.keywordCombinations);
+            res.scoreArray, res.coefArray, res.keywordCombinations);
     }
 
+    if (stats.isLinModel) {
+        return Waap::Scores::calcLogisticRegressionScore(
+            res.coefArray, stats.linModelIntercept, stats.linModelNNZCoef
+        );
+    }
+    // use base_scores calculation
     return Waap::Scores::calcArrayScore(res.scoreArray);
 }
 
@@ -127,7 +168,7 @@ bool Waap::Scanner::isKeyCspReport(const std::string &key, Waf2ScanResult &res, 
 {
     if (res.score < 8.0f && res.location == "body" && dp.getActualParser(0) == "jsonParser") {
         if (key == "csp-report.blocked-uri" || key == "csp-report.script-sample" ||
-                (key == "csp-report.original-policy" && Waap::Util::containsCspReportPolicy(res.unescaped_line)) ) {
+            (key == "csp-report.original-policy" && Waap::Util::containsCspReportPolicy(res.unescaped_line)) ) {
             dbgTrace(D_WAAP_SCANNER) << "CSP report detected, ignoring.";
             return true;
         }

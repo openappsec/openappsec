@@ -56,6 +56,12 @@ public:
         return max;
     }
 
+    float
+    getValue() const override
+    {
+        return static_cast<float>(max);
+    }
+
     void
     save(cereal::JSONOutputArchive &ar) const override
     {

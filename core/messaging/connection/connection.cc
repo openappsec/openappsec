@@ -96,6 +96,8 @@ public:
             client_key_path = metadata.getClientKeyPath();
             is_dual_auth = true;
         }
+
+        sni_hostname = metadata.getSniHostName();
     }
 
     void
@@ -329,6 +331,12 @@ private:
         if (!SSL_set1_host(ssl_socket, host)) {
             return genError("Failed to set host name verification. Host: " + string(host));
         }
+
+        if (sni_hostname.ok()) {
+            host = sni_hostname->c_str();
+        }
+
+        dbgDebug(D_CONNECTION) << "Setting TLS host name extension. Host: " << host;
         if (!SSL_set_tlsext_host_name(ssl_socket, host)) {
             return genError("Failed to set TLS host name extension. Host: " + string(host));
         }
@@ -656,7 +664,7 @@ private:
     printOut(const string &data)
     {
         string type = getConfigurationWithDefault<string>("chopped", "message", "Data printout type");
-        uint length = getConfigurationWithDefault<uint>(10, "message", "Data printout length");
+        uint length = getConfigurationWithDefault<uint>(50, "message", "Data printout length");
         if (type == "full") return data;
         if (type == "size") return to_string(data.size()) + " bytes";
         if (type == "none") return "";
@@ -689,6 +697,7 @@ private:
     bool lock = false;
     bool should_close_connection = false;
     bool is_dual_auth = false;
+    Maybe<string> sni_hostname = genError<string>("Uninitialized");
 };
 
 Connection::Connection(const MessageConnectionKey &key, const MessageMetadata &metadata)

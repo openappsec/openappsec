@@ -125,6 +125,7 @@ struct Log {
 struct Trigger {
     template <typename _A>
     void serialize(_A &ar) {
+        ar(cereal::make_nvp("id", triggerId));
         ar(cereal::make_nvp("$triggerType", triggerType));
         triggerType = to_lower_copy(triggerType);
 
@@ -137,6 +138,7 @@ struct Trigger {
     Trigger();
     bool operator==(const Trigger &other) const;
 
+    std::string triggerId;
     std::string triggerType;
     std::shared_ptr<Log> log;
 };

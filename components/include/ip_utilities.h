@@ -28,8 +28,9 @@
 
 // LCOV_EXCL_START Reason: temporary until we add relevant UT until 07/10
 bool operator<(const IpAddress &this_ip_addr, const IpAddress &other_ip_addr);
-
 bool operator==(const IpAddress &this_ip_addr, const IpAddress &other_ip_addr);
+bool operator<=(const IpAddress &this_ip_addr, const IpAddress &other_ip_addr);
+bool operator<(const IPRange &range1, const IPRange &range2);
 // LCOV_EXCL_STOP
 
 Maybe<std::pair<std::string, int>> extractAddressAndMaskSize(const std::string &cidr);

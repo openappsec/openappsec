@@ -291,6 +291,9 @@ public:
         const std::string &_web_attack_mitigation_severity,
         const std::string &_web_attack_mitigation_mode,
         const std::string &_bot_protection,
+        const std::string &schema_validation_mode,
+        const std::string &schema_validation_enforce_level,
+        const std::vector<std::string> &schema_validation_oas,
         const PracticeAdvancedConfig &_practice_advanced_config,
         const AppsecPracticeAntiBotSection &_anti_bots,
         const LogTriggerSection &parsed_log_trigger,
@@ -302,27 +305,30 @@ public:
     bool operator< (const WebAppSection &other) const;
 
 private:
-    std::string application_urls;
-    std::string asset_id;
-    std::string asset_name;
-    std::string rule_id;
-    std::string rule_name;
-    std::string practice_id;
-    std::string practice_name;
-    std::string context;
-    std::string web_attack_mitigation_action;
-    std::string web_attack_mitigation_severity;
-    std::string web_attack_mitigation_mode;
-    std::string csrf_protection_mode;
-    std::string open_redirect_mode;
-    std::string error_disclosure_mode;
-    std::string bot_protection;
-    bool web_attack_mitigation;
-    std::vector<TriggersInWaapSection> triggers;
-    PracticeAdvancedConfig practice_advanced_config;
-    AppsecPracticeAntiBotSection anti_bots;
-    std::vector<AppSecTrustedSources> trusted_sources;
-    std::vector<AppSecOverride> overrides;
+    bool                                    web_attack_mitigation;
+    std::string                             application_urls;
+    std::string                             asset_id;
+    std::string                             asset_name;
+    std::string                             rule_id;
+    std::string                             rule_name;
+    std::string                             practice_id;
+    std::string                             practice_name;
+    std::string                             context;
+    std::string                             web_attack_mitigation_action;
+    std::string                             web_attack_mitigation_severity;
+    std::string                             web_attack_mitigation_mode;
+    std::string                             csrf_protection_mode;
+    std::string                             open_redirect_mode;
+    std::string                             error_disclosure_mode;
+    std::string                             bot_protection;
+    std::string                             schema_validation_mode;
+    std::string                             schema_validation_enforce_level;
+    std::vector<std::string>                schema_validation_oas;
+    PracticeAdvancedConfig                  practice_advanced_config;
+    AppsecPracticeAntiBotSection            anti_bots;
+    std::vector<AppSecOverride>             overrides;
+    std::vector<AppSecTrustedSources>       trusted_sources;
+    std::vector<TriggersInWaapSection>      triggers;
 };
 
 class WebAPISection
@@ -410,7 +416,7 @@ class ParsedRule
 {
 public:
     ParsedRule() {}
-    ParsedRule(const std::string &_host) : host(_host) {}
+    ParsedRule(const std::string &_host, const std::string &_mode) : host(_host), mode(_mode) {}
 
     void load(cereal::JSONInputArchive &archive_in);
     const std::vector<std::string> & getExceptions() const;

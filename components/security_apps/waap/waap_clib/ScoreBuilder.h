@@ -26,6 +26,8 @@
 #include <cereal/types/string.hpp>
 #include "WaapDefines.h"
 
+USE_DEBUG_FLAG(D_WAAP_SCORE_BUILDER);
+
 struct ScoreBuilderData {
     std::string m_sourceIdentifier;
     std::string m_userAgent;
@@ -52,11 +54,15 @@ enum KeywordType {
 };
 
 struct KeywordData {
-    KeywordData() : truePositiveCtr(0), falsePositiveCtr(0), score(0.0), type(KEYWORD_TYPE_UNKNOWN) {}
+    KeywordData() :
+        truePositiveCtr(0), falsePositiveCtr(0), score(0.0), coef(0.0), new_score(0.0), type(KEYWORD_TYPE_UNKNOWN)
+    {}
 
     unsigned int truePositiveCtr;
     unsigned int falsePositiveCtr;
     double score;
+    double coef;
+    double new_score;
     KeywordType type;
 
     template <class Archive>
@@ -65,20 +71,42 @@ struct KeywordData {
             cereal::make_nvp("true_positives", truePositiveCtr),
             cereal::make_nvp("score", score),
             cereal::make_nvp("type", type));
+        try {
+            ar(cereal::make_nvp("coef", coef),
+                cereal::make_nvp("new_score", new_score));
+        } catch (const cereal::Exception &e) {
+            ar.setNextName(nullptr);
+            coef = 0;
+            new_score = 0;
+        }
     }
 };
 
 struct KeywordsStats {
-    KeywordsStats() : truePositiveCtr(0), falsePositiveCtr(0) {}
+    KeywordsStats() : truePositiveCtr(0), falsePositiveCtr(0), linModelIntercept(0), linModelNNZCoef(0), isLinModel(0)
+    {}
 
     template <class Archive>
     void serialize(Archive& ar) {
         ar(cereal::make_nvp("false_positives", falsePositiveCtr),
-            cereal::make_nvp("true_positives", truePositiveCtr));
+                cereal::make_nvp("true_positives", truePositiveCtr));
+        try {
+            ar(cereal::make_nvp("intercept", linModelIntercept),
+                cereal::make_nvp("log_nnz_coef", linModelNNZCoef));
+            isLinModel = true;
+        } catch (const cereal::Exception &e) {
+            ar.setNextName(nullptr);
+            linModelIntercept = 0;
+            linModelNNZCoef = 0;
+            isLinModel = false;
+        }
     }
 
     unsigned int truePositiveCtr;
     unsigned int falsePositiveCtr;
+    double linModelIntercept;
+    double linModelNNZCoef;
+    bool isLinModel;
 };
 
 typedef std::unordered_set<std::string> keywords_set;
@@ -106,6 +134,7 @@ struct KeywordsScorePool {
 
     KeywordsScorePool();
 
+    // LCOV_EXCL_START Reason: no test exist
     template <typename _A>
     KeywordsScorePool(_A &iarchive)
     {
@@ -120,6 +149,7 @@ struct KeywordsScorePool {
             m_keywordsDataMap[key] = item.second;
         }
     }
+    // LCOV_EXCL_STOP
 
     template <class Archive>
     void serialize(Archive& ar) {
@@ -148,6 +178,8 @@ public:
 
     void snap();
     double getSnapshotKeywordScore(const std::string &keyword, double defaultScore, const std::string &poolName) const;
+    double getSnapshotKeywordCoef(const std::string &keyword, double defaultCoef, const std::string &poolName) const;
+    KeywordsStats getSnapshotStats(const std::string &poolName) const;
 
     keywords_set getIpItemKeywordsSet(std::string ip);
     keywords_set getUaItemKeywordsSet(std::string userAgent);
@@ -200,6 +232,8 @@ protected:
     SerializedData m_serializedData;
     std::map<std::string, KeywordsScorePool> &m_keywordsScorePools; // live data continuously updated during traffic
     std::map<std::string, KeywordScoreMap> m_snapshotKwScoreMap; // the snapshot is updated only by a call to snap()
+    std::map<std::string, KeywordScoreMap> m_snapshotKwCoefMap; // the snapshot is updated only by a call to snap()
+    std::map<std::string, KeywordsStats> m_snapshotStatsMap; // the snapshot is updated only by a call to snap()
     std::list<std::string> m_falsePositivesSetsIntersection;
     I_WaapAssetState* m_pWaapAssetState;
 };

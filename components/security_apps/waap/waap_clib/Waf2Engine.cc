@@ -819,8 +819,15 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
         std::string tag = scanStage + "_param";
         m_deepParser.m_key.push(tag.data(), tag.size());
         size_t buff_len = uriEnd - p;
-        dbgTrace(D_WAAP) << "% will be encoded?'" << checkUrlEncoded(p, buff_len) << "'";
-        ParserUrlEncode up(m_deepParserReceiver, 0, paramSep, checkUrlEncoded(p, buff_len));
+
+        bool should_decode = checkUrlEncoded(p, buff_len);
+        if (should_decode) {
+            std::string url_as_string(p, buff_len);
+            should_decode = should_decode && (Waap::Util::testUrlBadUtf8Evasion(url_as_string) != true);
+       }
+        dbgTrace(D_WAAP) << "should_decode % = " << should_decode;
+
+        ParserUrlEncode up(m_deepParserReceiver, 0, paramSep, should_decode);
         up.push(p, buff_len);
         up.finish();
         m_deepParser.m_key.pop(tag.c_str());
@@ -1298,6 +1305,15 @@ void Waf2Transaction::finish() {
 
 void Waf2Transaction::set_ignoreScore(bool ignoreScore) {
     m_ignoreScore = ignoreScore;
+}
+
+bool Waf2Transaction::get_ignoreScore() const
+{
+    auto maybe_override_ignore_score = getProfileAgentSetting<std::string>("agent.waap.alwaysReportScore");
+    if (maybe_override_ignore_score.ok()) {
+        return maybe_override_ignore_score.unpack() == "true";
+    }
+    return m_ignoreScore;
 }
 
 void
@@ -1888,6 +1904,14 @@ Waf2Transaction::sendLog()
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: decisions marked for block only";
         return;
     }
+
+    std::set<std::string> triggers_set;
+    for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
+        triggers_set.insert(trigger.triggerId);
+        dbgTrace(D_WAAP) << "Add waap log trigger id to triggers set:" << trigger.triggerId;
+    }
+    ScopedContext ctx;
+    ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
 
     auto maybeLogTriggerConf = getConfiguration<LogTriggerConf>("rulebase", "log");
     switch (decision_type)

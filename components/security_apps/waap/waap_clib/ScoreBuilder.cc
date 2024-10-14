@@ -95,6 +95,10 @@ void KeywordsScorePool::mergeScores(const KeywordsScorePool& baseScores)
             m_keywordsDataMap[it->first] = it->second;
         }
     }
+
+    m_stats.linModelIntercept = baseScores.m_stats.linModelIntercept;
+    m_stats.linModelNNZCoef = baseScores.m_stats.linModelNNZCoef;
+    m_stats.isLinModel = baseScores.m_stats.isLinModel;
 }
 
 
@@ -118,7 +122,6 @@ ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& base
     m_pWaapAssetState(pWaapAssetState)
 {
     restore();
-
     // merge
     mergeScores(baseScores);
 }
@@ -352,14 +355,40 @@ void ScoreBuilder::snap()
         const std::string &poolName = pool.first;
         const KeywordsScorePool& keywordScorePool = pool.second;
         m_snapshotKwScoreMap[poolName];
+        m_snapshotKwCoefMap[poolName];
+        if (keywordScorePool.m_keywordsDataMap.empty()) {
+            m_snapshotStatsMap[poolName] = KeywordsStats();
+        } else {
+            m_snapshotStatsMap[poolName] = keywordScorePool.m_stats;
+        }
 
         for (const auto &kwData : keywordScorePool.m_keywordsDataMap)
         {
             const std::string &kwName = kwData.first;
-            double kwScore = kwData.second.score;
-            m_snapshotKwScoreMap[poolName][kwName] = kwScore;
+            if (keywordScorePool.m_stats.isLinModel) {
+                m_snapshotKwScoreMap[poolName][kwName] = kwData.second.new_score;
+            } else {
+                m_snapshotKwScoreMap[poolName][kwName] = kwData.second.score;
+            }
+            m_snapshotKwCoefMap[poolName][kwName] = kwData.second.coef;
         }
     }
+}
+
+KeywordsStats
+ScoreBuilder::getSnapshotStats(const std::string &poolName) const
+{
+    std::map<std::string, KeywordsStats>::const_iterator poolIt = m_snapshotStatsMap.find(poolName);
+    if (poolIt == m_snapshotStatsMap.end()) {
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "pool " << poolName << " does not exist. Getting stats from base pool";
+        poolIt = m_snapshotStatsMap.find(KEYWORDS_SCORE_POOL_BASE);
+        if (poolIt == m_snapshotStatsMap.end()) {
+            dbgWarning(D_WAAP_SCORE_BUILDER) <<
+                "base pool does not exist! This is probably a bug. Returning empty stats";
+            return KeywordsStats();
+        }
+    }
+    return poolIt->second;
 }
 
 double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double defaultScore,
@@ -369,12 +398,11 @@ double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double 
     if (poolIt == m_snapshotKwScoreMap.end()) {
         dbgTrace(D_WAAP_SCORE_BUILDER) << "pool " << poolName << " does not exist. Getting score from base pool";
         poolIt = m_snapshotKwScoreMap.find(KEYWORDS_SCORE_POOL_BASE);
-    }
-
-    if (poolIt == m_snapshotKwScoreMap.end()) {
-        dbgDebug(D_WAAP_SCORE_BUILDER) <<
-            "base pool does not exist! This is probably a bug. Returning default score " << defaultScore;
-        return defaultScore;
+        if (poolIt == m_snapshotKwScoreMap.end()) {
+            dbgDebug(D_WAAP_SCORE_BUILDER) <<
+                "base pool does not exist! This is probably a bug. Returning default score " << defaultScore;
+            return defaultScore;
+        }
     }
 
     const KeywordScoreMap &kwScoreMap = poolIt->second;
@@ -389,6 +417,35 @@ double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double 
     dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordScore:'" << keyword << "': " << kwScoreFound->second << " (pool '" <<
         poolName << "')";
     return kwScoreFound->second;
+}
+
+double
+ScoreBuilder::getSnapshotKeywordCoef(const std::string &keyword, double defaultCoef, const std::string &poolName) const
+{
+    std::map<std::string, KeywordScoreMap>::const_iterator poolIt = m_snapshotKwCoefMap.find(poolName);
+    if (poolIt == m_snapshotKwCoefMap.end()) {
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "pool " << poolName << " does not exist. Getting coef from base pool";
+        poolIt = m_snapshotKwCoefMap.find(KEYWORDS_SCORE_POOL_BASE);
+    }
+
+    if (poolIt == m_snapshotKwCoefMap.end()) {
+        dbgWarning(D_WAAP_SCORE_BUILDER) <<
+            "base pool does not exist! This is probably a bug. Returning default coef " << defaultCoef;
+        return defaultCoef;
+    }
+
+    const KeywordScoreMap &kwCoefMap = poolIt->second;
+
+    KeywordScoreMap::const_iterator kwCoefFound = kwCoefMap.find(keyword);
+    if (kwCoefFound == kwCoefMap.end()) {
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordCoef:'" << keyword << "': " << defaultCoef <<
+            " (default, keyword not found in pool '" << poolName << "')";
+        return defaultCoef;
+    }
+
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordCoef:'" << keyword << "': " << kwCoefFound->second << " (pool '" <<
+        poolName << "')";
+    return kwCoefFound->second;
 }
 
 keywords_set ScoreBuilder::getIpItemKeywordsSet(std::string ip)

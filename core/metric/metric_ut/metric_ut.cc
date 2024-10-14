@@ -10,6 +10,7 @@
 #include "mock/mock_rest_api.h"
 #include "agent_details.h"
 #include "mock/mock_messaging.h"
+#include "mock/mock_instance_awareness.h"
 #include "config.h"
 #include "config_component.h"
 
@@ -67,6 +68,14 @@ public:
         top_usage.report(event.getCPU());
     }
 
+    void
+    setAiopsMetric()
+    {
+        turnOnStream(Stream::AIOPS);
+        max.setMetricDotName("cpu.max");
+        max.setMetircUnits("percrnt");
+    }
+
     Max<double> max{this, "cpuMax"};
     Min<double> min{this, "cpuMin"};
     Average<double> avg{this, "cpuAvg"};
@@ -121,13 +130,15 @@ public:
 class HttpTransaction : public Event<HttpTransaction>
 {
 public:
-    HttpTransaction(const string &_url, uint _bytes) : url(_url), bytes(_bytes) {}
+    HttpTransaction(const string &_url, const string &m, uint _bytes) : url(_url), method(m), bytes(_bytes) {}
 
-    const string & getUrl() const { return url;}
+    const string & getUrl() const { return url; }
+    const string & getMethod() const { return method; }
     uint getBytes() const { return bytes; }
 
 private:
     string url;
+    string method;
     uint bytes;
 };
 
@@ -144,9 +155,33 @@ public:
         total.report(event.getUrl(), 1);
     }
 
+    void
+    setAiopsMetric()
+    {
+        turnOnStream(Stream::AIOPS);
+    }
+
 private:
-    MetricMap<string, Average<double>> avg{this, "PerUrlAvg"};
-    MetricMap<string, NoResetCounter> total{this, "TotalRequests"};
+    MetricMap<string, Average<double>> avg{Average<double>{nullptr, ""}, this, "url", "PerUrlAvg"};
+    MetricMap<string, NoResetCounter> total{NoResetCounter{nullptr, ""}, this, "url", "TotalRequests"};
+};
+
+class UrlMetric2 : public GenericMetric, public Listener<HttpTransaction>
+{
+public:
+    void
+    upon(const HttpTransaction &event) override
+    {
+        total.report(event.getUrl(), event.getMethod(), 1);
+    }
+
+private:
+    MetricMap<string, MetricMap<string, NoResetCounter>> total{
+        MetricMap<string, NoResetCounter>{NoResetCounter{nullptr, ""}, nullptr, "method", ""},
+        this,
+        "url",
+        "request.total"
+    };
 };
 
 class MetricTest : public Test
@@ -155,6 +190,8 @@ public:
     MetricTest()
     {
         EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "declare-boolean-variable", _)).WillOnce(Return(true));
+        ON_CALL(instance, getUniqueID()).WillByDefault(Return(string("87")));
+        ON_CALL(instance, getFamilyID()).WillByDefault(Return(string("")));
         env.init();
         Debug::setNewDefaultStdout(&debug_output);
         Debug::setUnitTestFlag(D_METRICS, Debug::DebugLevel::TRACE);
@@ -177,6 +214,7 @@ public:
 
     StrictMock<MockMainLoop> mock_ml;
     NiceMock<MockTimeGet> timer;
+    NiceMock<MockInstanceAwareness> instance;
     StrictMock<MockRestApi> rest;
     ::Environment env;
     ConfigComponent conf;
@@ -255,7 +293,9 @@ TEST_F(MetricTest, basicMetricTest)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 89,\n"
@@ -326,7 +366,9 @@ TEST_F(MetricTest, basicMetricTest)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 90,\n"
@@ -399,7 +441,9 @@ TEST_F(MetricTest, basicMetricTest)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 100,\n"
@@ -485,6 +529,150 @@ TEST_F(MetricTest, printMetricsTest)
     GenericMetric::fini();
 }
 
+TEST_F(MetricTest, printPromeathus)
+{
+    conf.preload();
+
+    stringstream configuration;
+    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
+
+    EXPECT_TRUE(Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration));
+
+    CPUMetric cpu_mt;
+    cpu_mt.init(
+        "CPU usage",
+        ReportIS::AudienceTeam::AGENT_CORE,
+        ReportIS::IssuingEngine::AGENT_CORE,
+        seconds(5),
+        false
+    );
+    cpu_mt.turnOffStream(GenericMetric::Stream::FOG);
+    cpu_mt.turnOffStream(GenericMetric::Stream::DEBUG);
+    cpu_mt.turnOnStream(GenericMetric::Stream::PROMETHEUS);
+    cpu_mt.registerListener();
+
+    CPUEvent cpu_event;
+    cpu_event.setProcessCPU(89);
+    cpu_event.notify();
+
+    string message_body;
+    EXPECT_CALL(messaging_mock, sendSyncMessage(_, "/set-prometheus-data", _, _, _))
+        .WillOnce(DoAll(SaveArg<2>(&message_body), Return(HTTPResponse())));
+    routine();
+
+    string res =
+        "{\n"
+        "    \"metrics\": [\n"
+        "        {\n"
+        "            \"name\": \"cpuMax\",\n"
+        "            \"type\": \"gauge\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"cpuMin\",\n"
+        "            \"type\": \"gauge\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"cpuAvg\",\n"
+        "            \"type\": \"gauge\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"cpuCurrent\",\n"
+        "            \"type\": \"gauge\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"cpuCounter\",\n"
+        "            \"type\": \"gauge\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"cpuTotalCounter\",\n"
+        "            \"type\": \"counter\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        }\n"
+        "    ]\n"
+        "}";
+
+    EXPECT_EQ(message_body, res);
+}
+
+TEST_F(MetricTest, printPromeathusMultiMap)
+{
+    conf.preload();
+
+    stringstream configuration;
+    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
+
+    EXPECT_TRUE(Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration));
+
+    UrlMetric2 metric;
+    metric.init(
+        "Bytes per URL",
+        ReportIS::AudienceTeam::AGENT_CORE,
+        ReportIS::IssuingEngine::AGENT_CORE,
+        seconds(5),
+        true
+    );
+    metric.turnOnStream(GenericMetric::Stream::PROMETHEUS);
+    metric.registerListener();
+
+    HttpTransaction("/index.html", "GET", 10).notify();
+    HttpTransaction("/index2.html", "GET", 20).notify();
+    HttpTransaction("/index.html", "POST", 40).notify();
+
+    string message_body;
+    EXPECT_CALL(messaging_mock, sendSyncMessage(_, "/set-prometheus-data", _, _, _))
+        .WillOnce(DoAll(SaveArg<2>(&message_body), Return(HTTPResponse())));
+    routine();
+
+    string res =
+        "{\n"
+        "    \"metrics\": [\n"
+        "        {\n"
+        "            \"name\": \"request.total\",\n"
+        "            \"type\": \"counter\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\","
+                                "method=\\\"GET\\\",url=\\\"/index.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"request.total\",\n"
+        "            \"type\": \"counter\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\","
+                                "method=\\\"POST\\\",url=\\\"/index.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"name\": \"request.total\",\n"
+        "            \"type\": \"counter\",\n"
+        "            \"description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\","
+                                "method=\\\"GET\\\",url=\\\"/index2.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        }\n"
+        "    ]\n"
+        "}";
+
+    EXPECT_EQ(message_body, res);
+}
+
 TEST_F(MetricTest, metricTestWithReset)
 {
     CPUMetric cpu_mt;
@@ -554,7 +742,9 @@ TEST_F(MetricTest, metricTestWithReset)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 89,\n"
@@ -624,7 +814,9 @@ TEST_F(MetricTest, metricTestWithReset)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 90,\n"
@@ -694,7 +886,9 @@ TEST_F(MetricTest, metricTestWithReset)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 100,\n"
@@ -796,7 +990,9 @@ TEST_F(MetricTest, generateReportWithReset)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 89,\n"
@@ -888,7 +1084,9 @@ TEST_F(MetricTest, generateReportWithReset)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 90,\n"
@@ -959,7 +1157,9 @@ TEST_F(MetricTest, generateReportWithReset)
         "            \"eventTraceId\": \"\",\n"
         "            \"eventSpanId\": \"\",\n"
         "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"My named nano service\"\n"
+        "            \"serviceName\": \"My named nano service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
         "        },\n"
         "        \"eventData\": {\n"
         "            \"cpuMax\": 100,\n"
@@ -1015,6 +1215,7 @@ TEST_F(MetricTest, allMetricTest)
         seconds(5),
         false
     );
+
     msg_size_mt.registerListener();
 
     EXPECT_EQ(msg_size_mt.getMetricName(), "Message size");
@@ -1074,9 +1275,9 @@ TEST_F(MetricTest, testMapMetric)
     );
     url_mt.registerListener();
 
-    HttpTransaction("/index.html", 10).notify();
-    HttpTransaction("/index2.html", 20).notify();
-    HttpTransaction("/index.html", 40).notify();
+    HttpTransaction("/index.html", "GET", 10).notify();
+    HttpTransaction("/index2.html", "GET", 20).notify();
+    HttpTransaction("/index.html", "POST", 40).notify();
 
     string message_body;
 
@@ -1190,4 +1391,310 @@ TEST_F(MetricTest, testManyValuesOutOfOrder)
         "    ]\n";
 
     EXPECT_THAT(AllMetricEvent().query(), ElementsAre(HasSubstr(cpu_str)));
+}
+
+TEST_F(MetricTest, basicAIOPSMetricTest)
+{
+    EXPECT_CALL(timer, getWalltimeStr()).WillRepeatedly(Return(string("2016-11-13T17:31:24.087")));
+    CPUMetric cpu_mt;
+    cpu_mt.init(
+        "CPU usage",
+        ReportIS::AudienceTeam::AGENT_CORE,
+        ReportIS::IssuingEngine::AGENT_CORE,
+        seconds(5),
+        false
+    );
+    cpu_mt.setAiopsMetric();
+    cpu_mt.registerListener();
+
+    EXPECT_EQ(cpu_mt.getMetricName(), "CPU usage");
+    EXPECT_EQ(cpu_mt.getReportInterval().count(), 5);
+
+    routine();
+
+    CPUEvent cpu_event;
+    cpu_event.setProcessCPU(89);
+    cpu_event.notify();
+
+    string metric_str =
+        "{\n"
+        "    \"Metric\": \"CPU usage\",\n"
+        "    \"Reporting interval\": 5,\n"
+        "    \"cpuMax\": 89.0,\n"
+        "    \"cpuMin\": 89.0,\n"
+        "    \"cpuAvg\": 89.0,\n"
+        "    \"cpuCurrent\": 89.0,\n"
+        "    \"cpuCounter\": 1,\n"
+        "    \"cpuTotalCounter\": 1,\n"
+        "    \"cpuTops\": [\n"
+        "        89.0\n"
+        "    ]\n"
+        "}";
+
+    string message_body;
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
+
+    string expected_message =
+        "{\n"
+        "    \"log\": {\n"
+        "        \"eventTime\": \"2016-11-13T17:31:24.087\",\n"
+        "        \"eventName\": \"AIOPS Metric Data\",\n"
+        "        \"eventSeverity\": \"Info\",\n"
+        "        \"eventPriority\": \"Low\",\n"
+        "        \"eventType\": \"Periodic\",\n"
+        "        \"eventLevel\": \"Log\",\n"
+        "        \"eventLogLevel\": \"info\",\n"
+        "        \"eventAudience\": \"Internal\",\n"
+        "        \"eventAudienceTeam\": \"Agent Core\",\n"
+        "        \"eventFrequency\": 5,\n"
+        "        \"eventTags\": [\n"
+        "            \"Informational\"\n"
+        "        ],\n"
+        "        \"eventSource\": {\n"
+        "            \"agentId\": \"Unknown\",\n"
+        "            \"issuingEngine\": \"Agent Core\",\n"
+        "            \"eventTraceId\": \"\",\n"
+        "            \"eventSpanId\": \"\",\n"
+        "            \"issuingEngineVersion\": \"\",\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
+        "        },\n"
+        "        \"eventData\": {\n"
+        "            \"eventObject\": {\n"
+        "                \"Metrics\": [\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"cpu.max\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"percrnt\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 89.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {},\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"cpuMin\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 89.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {},\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"cpuAvg\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 89.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {},\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"cpuCurrent\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 89.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {},\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"cpuCounter\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 1.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {},\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"cpuTotalCounter\",\n"
+        "                        \"MetricType\": \"counter\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 1.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {},\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    }\n"
+        "                ]\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}";
+
+    routine();
+    EXPECT_THAT(debug_output.str(), HasSubstr(metric_str));
+    EXPECT_EQ(message_body, expected_message);
+    debug_output.str("");
+}
+
+TEST_F(MetricTest, testAIOPSMapMetric)
+{
+    EXPECT_CALL(timer, getWalltimeStr()).WillRepeatedly(Return(string("2016-11-13T17:31:24.087")));
+    UrlMetric url_mt;
+    url_mt.init(
+        "Bytes per URL",
+        ReportIS::AudienceTeam::AGENT_CORE,
+        ReportIS::IssuingEngine::AGENT_CORE,
+        seconds(5),
+        true
+    );
+    url_mt.registerListener();
+
+    url_mt.setAiopsMetric();
+
+    HttpTransaction("/index.html", "GET", 10).notify();
+    HttpTransaction("/index2.html", "GET", 20).notify();
+    HttpTransaction("/index.html", "POST", 40).notify();
+
+    string message_body;
+
+    EXPECT_CALL(messaging_mock, sendAsyncMessage(
+        _,
+        "/api/v1/agents/events",
+        _,
+        MessageCategory::METRIC,
+        _,
+        _
+    )).WillRepeatedly(SaveArg<2>(&message_body));
+    routine();
+
+    string expected_message =
+        "{\n"
+        "    \"log\": {\n"
+        "        \"eventTime\": \"2016-11-13T17:31:24.087\",\n"
+        "        \"eventName\": \"AIOPS Metric Data\",\n"
+        "        \"eventSeverity\": \"Info\",\n"
+        "        \"eventPriority\": \"Low\",\n"
+        "        \"eventType\": \"Periodic\",\n"
+        "        \"eventLevel\": \"Log\",\n"
+        "        \"eventLogLevel\": \"info\",\n"
+        "        \"eventAudience\": \"Internal\",\n"
+        "        \"eventAudienceTeam\": \"Agent Core\",\n"
+        "        \"eventFrequency\": 5,\n"
+        "        \"eventTags\": [\n"
+        "            \"Informational\"\n"
+        "        ],\n"
+        "        \"eventSource\": {\n"
+        "            \"agentId\": \"Unknown\",\n"
+        "            \"issuingEngine\": \"Agent Core\",\n"
+        "            \"eventTraceId\": \"\",\n"
+        "            \"eventSpanId\": \"\",\n"
+        "            \"issuingEngineVersion\": \"\",\n"
+        "            \"serviceName\": \"Unnamed Nano Service\",\n"
+        "            \"serviceId\": \"87\",\n"
+        "            \"serviceFamilyId\": \"\"\n"
+        "        },\n"
+        "        \"eventData\": {\n"
+        "            \"eventObject\": {\n"
+        "                \"Metrics\": [\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"/index.html\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 25.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {\n"
+        "                            \"url\": \"/index.html\"\n"
+        "                        },\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"/index2.html\",\n"
+        "                        \"MetricType\": \"gauge\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 20.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {\n"
+        "                            \"url\": \"/index2.html\"\n"
+        "                        },\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"/index.html\",\n"
+        "                        \"MetricType\": \"counter\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 2.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {\n"
+        "                            \"url\": \"/index.html\"\n"
+        "                        },\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    },\n"
+        "                    {\n"
+        "                        \"Timestamp\": \"2016-11-13T17:31:24.087\",\n"
+        "                        \"MetricName\": \"/index2.html\",\n"
+        "                        \"MetricType\": \"counter\",\n"
+        "                        \"MetricUnit\": \"\",\n"
+        "                        \"MetricDescription\": \"\",\n"
+        "                        \"MetricValue\": 1.0,\n"
+        "                        \"ResourceAttributes\": {\n"
+        "                            \"agent\": \"Unknown\",\n"
+        "                            \"id\": \"87\"\n"
+        "                        },\n"
+        "                        \"MetricAttributes\": {\n"
+        "                            \"url\": \"/index2.html\"\n"
+        "                        },\n"
+        "                        \"AssetID\": \"Unknown\"\n"
+        "                    }\n"
+        "                ]\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}";
+
+    EXPECT_EQ(message_body, expected_message);
 }

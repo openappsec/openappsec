@@ -20,6 +20,8 @@
 #include "DeepParser.h"
 #include "WaapAssetState.h"
 #include "PatternMatcher.h"
+#include "generic_rulebase/rulebase_config.h"
+#include "generic_rulebase/evaluators/trigger_eval.h"
 #include "Waf2Util.h"
 #include "WaapConfigApplication.h"
 #include "WaapConfigApi.h"
@@ -39,6 +41,7 @@
 #include "i_waap_telemetry.h"
 #include "i_deepAnalyzer.h"
 #include "i_time_get.h"
+#include "i_waap_model_result_logger.h"
 #include "table_opaque.h"
 #include "WaapResponseInspectReasons.h"
 #include "WaapResponseInjectReasons.h"
@@ -91,6 +94,7 @@ public:
     const std::vector<std::string> getFilteredKeywords() const;
     const std::map<std::string, std::vector<std::string>> getFilteredVerbose() const;
     virtual const std::vector<std::string> getKeywordsCombinations() const;
+    virtual const std::vector<std::string> getKeywordsAfterFilter() const;
     const std::vector<DeepParser::KeywordInfo>& getKeywordInfo() const;
     const std::vector<std::pair<std::string, std::string> >& getKvPairs() const;
     const std::string getKeywordMatchesStr() const;
@@ -99,6 +103,9 @@ public:
     const std::string getLastScanSample() const;
     virtual const std::string& getLastScanParamName() const;
     double getScore() const;
+    // LCOV_EXCL_START Reason: model testing
+    double getOtherModelScore() const;
+    // LCOV_EXCL_STOP
     const std::vector<double> getScoreArray() const;
     Waap::CSRF::State& getCsrfState();
     const std::set<std::string> getFoundPatterns() const;
@@ -161,7 +168,7 @@ public:
 
     // decision functions
     void set_ignoreScore(bool ignoreScore);
-    bool get_ignoreScore() const { return m_ignoreScore; }
+    bool get_ignoreScore() const;
     void decide(
         bool& bForceBlock,
         bool& bForceException,

@@ -1485,11 +1485,10 @@ private:
     }
 
     void
-    setUpgradeTime()
+    setDelayedUpgradeTime()
     {
         if (getConfigurationFlag("service_startup") != "true") return;
-        if (i_service_controller->getServiceToPortMap().empty()) return;
-
+        if (!i_agent_details->isOpenAppsecAgent() && i_service_controller->getServiceToPortMap().empty()) return;
         try {
             string upgrade_delay_interval_str = getAttribute("no-setting", "UPGRADE_DELAY_INTERVAL_MIN");
             int upgrade_delay_interval = upgrade_delay_interval_str != "" ? stoi(upgrade_delay_interval_str) : 30;
@@ -1506,6 +1505,7 @@ private:
     void
     run()
     {
+        loadExistingPolicy();
         sleep_interval = policy.getErrorSleepInterval();
         Maybe<void> registration_status(genError("Not running yet."));
         while (!(registration_status = registerToTheFog()).ok()) {
@@ -1530,7 +1530,6 @@ private:
                 << " seconds";
             Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(seconds(sleep_interval));
         }
-        loadExistingPolicy();
         failure_count = 0;
 
         Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(chrono::seconds(1));
@@ -1587,7 +1586,7 @@ private:
             ).notify();
         }
 
-        setUpgradeTime();
+        setDelayedUpgradeTime();
         while (true) {
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->startNewTrace(false);
             if (shouldReportAgentDetailsMetadata()) {

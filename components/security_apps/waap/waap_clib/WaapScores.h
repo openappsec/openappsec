@@ -20,7 +20,21 @@
 namespace Waap {
 namespace Scores {
 
+enum class ModelLogLevel {
+    OFF = 0,
+    DIFF = 1,
+    ALL = 2
+};
+
+struct ModelLoggingSettings {
+    ModelLogLevel logLevel;
+    bool logToS3;
+    bool logToStream;
+};
+
 std::string getScorePoolNameByLocation(const std::string &location);
+std::string getOtherScorePoolName();
+ModelLoggingSettings getModelLoggingSettings();
 
 void
 addKeywordScore(
@@ -28,7 +42,9 @@ addKeywordScore(
     const std::string &poolName,
     std::string keyword,
     double defaultScore,
-    std::vector<double>& scoresArray);
+    double defaultCoef,
+    std::vector<double>& scoresArray,
+    std::vector<double>& coefArray);
 
 // Calculate score of individual keywords
 void
@@ -36,7 +52,8 @@ calcIndividualKeywords(
     const ScoreBuilder& scoreBuilder,
     const std::string &poolName,
     const std::vector<std::string>& keyword_matches,
-    std::vector<double>& scoresArray);
+    std::vector<double>& scoresArray,
+    std::vector<double>& coefArray);
 
 // Calculate keyword combinations and their scores
 void
@@ -45,9 +62,11 @@ calcCombinations(
     const std::string &poolName,
     const std::vector<std::string>& keyword_matches,
     std::vector<double>& scoresArray,
+    std::vector<double>& coefArray,
     std::vector<std::string>& keyword_combinations);
 
 double calcArrayScore(std::vector<double>& scoreArray);
+double calcLogisticRegressionScore(std::vector<double> &coefArray, double intercept, double nnzCoef=0.0);
 
 }
 }

@@ -123,6 +123,7 @@ public:
     );
 
     const std::string & getIdentifier() const;
+    const std::string & getIdentifierValue() const;
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
@@ -145,6 +146,7 @@ public:
     );
 
     const std::string & getIdentifier() const;
+    const std::string & getIdentifierValue() const;
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 

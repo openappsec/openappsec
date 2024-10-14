@@ -28,6 +28,7 @@ public:
     MOCK_CONST_METHOD0(getAgentId, std::string());
     MOCK_METHOD0(loadAccessToken, void());
     MOCK_CONST_METHOD0(getAccessToken, std::string());
+    MOCK_CONST_METHOD0(isOpenAppsecAgent, bool());
 
     // OpenSSL
     MOCK_METHOD1(setOpenSSLDir, void(const std::string&));

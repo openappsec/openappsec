@@ -33,6 +33,7 @@ class I_WaapAssetStatesManager;
 class I_Messaging;
 class I_AgentDetails;
 class I_Encryptor;
+class I_WaapModelResultLogger;
 
 const std::string WAAP_APPLICATION_NAME = "waap application";
 
@@ -50,7 +51,8 @@ class WaapComponent
     Singleton::Consume<I_AgentDetails>,
     Singleton::Consume<I_Messaging>,
     Singleton::Consume<I_Encryptor>,
-    Singleton::Consume<I_Environment>
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<I_WaapModelResultLogger>
 {
 public:
     WaapComponent();
