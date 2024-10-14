@@ -117,7 +117,7 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
 
     double res_score = getScoreFromPool(res, newKeywords, poolName);
 
-    string other_pool_name = Waap::Scores::getOtherScorePoolName();
+    std::string other_pool_name = Waap::Scores::getOtherScorePoolName();
     Waap::Scores::ModelLoggingSettings modelLoggingSettings = Waap::Scores::getModelLoggingSettings();
 
     if (applyLearning && poolName != other_pool_name &&
