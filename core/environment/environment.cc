@@ -265,18 +265,9 @@ Environment::Impl::getCurrentHeadersMap()
         tracing_headers["X-Span-Id"] = span_id;
     }
 
-    auto exec_name = get<string>("Executable Name");
+    auto exec_name = get<string>("Base Executable Name");
     if (exec_name.ok() && *exec_name != "") {
-        string executable_name = *exec_name;
-        auto file_path_end = executable_name.find_last_of("/");
-        if (file_path_end != string::npos) {
-            executable_name = executable_name.substr(file_path_end + 1);
-        }
-        auto file_sufix_start = executable_name.find_first_of(".");
-        if (file_sufix_start != string::npos) {
-            executable_name = executable_name.substr(0, file_sufix_start);
-        }
-        tracing_headers["X-Calling-Service"] = executable_name;
+        tracing_headers["X-Calling-Service"] = *exec_name;
     }
 
     return tracing_headers;

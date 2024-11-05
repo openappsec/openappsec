@@ -485,6 +485,7 @@ private:
         MessageMetadata req_md(server, *port);
         req_md.insertHeaders(getHTTPHeaders());
         req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         return sendIntelligenceRequestImpl(rest_req, req_md);
     }
 

@@ -189,6 +189,15 @@ const std::vector<std::string> Waf2Transaction::getKeywordsCombinations() const
     }
     return std::vector<std::string>();
 }
+const std::vector<std::string> Waf2Transaction::getKeywordsAfterFilter() const
+{
+    if (m_scanResult)
+    {
+        return m_scanResult->keywordsAfterFilter;
+    }
+    return std::vector<std::string>();
+}
+
 const std::vector<DeepParser::KeywordInfo>& Waf2Transaction::getKeywordInfo() const
 {
     return m_deepParser.m_keywordInfo;
@@ -230,6 +239,15 @@ double Waf2Transaction::getScore() const
     }
     return 0;
 }
+// LCOV_EXCL_START Reason: model testing
+double Waf2Transaction::getOtherModelScore() const
+{
+    if (m_scanResult) {
+        return m_scanResult->other_model_score;
+    }
+    return 0;
+}
+// LCOV_EXCL_STOP
 const std::vector<double> Waf2Transaction::getScoreArray() const
 {
     if (m_scanResult) {
@@ -397,6 +415,7 @@ void Waf2Transaction::sendAutonomousSecurityLog(
     waap_log << LogField("waapUriFalsePositiveScore", (int)(
         autonomousSecurityDecision->getFpMitigationScore() * 100));
     waap_log << LogField("waapKeywordsScore", (int)(getScore() * 100));
+    waap_log << LogField("reservedNgenA", (int)(getOtherModelScore() * 100));
     waap_log << LogField("waapFinalScore", (int)(autonomousSecurityDecision->getFinalScore() * 100));
     waap_log << LogField("waapCalculatedThreatLevel", autonomousSecurityDecision->getThreatLevel());
 }

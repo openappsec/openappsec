@@ -28,6 +28,7 @@ EnvDetails::EnvDetails() : env_type(EnvType::LINUX)
     auto tools = Singleton::Consume<I_OrchestrationTools>::from<OrchestrationTools>();
     if (tools->doesFileExist("/.dockerenv")) env_type = EnvType::DOCKER;
     token = retrieveToken();
+    agent_namespace = retrieveNamespace();
     if (!token.empty()) {
         auto env_res = getenv("deployment_type");
         env_type = env_res != nullptr && env_res == string("non_crd_k8s") ? EnvType::NON_CRD_K8S : EnvType::K8S;
@@ -47,9 +48,21 @@ EnvDetails::getToken()
 }
 
 string
+EnvDetails::getNameSpace()
+{
+    return agent_namespace;
+}
+
+string
 EnvDetails::retrieveToken()
 {
     return readFileContent(k8s_service_account + "/token");
+}
+
+string
+EnvDetails::retrieveNamespace()
+{
+    return readFileContent(k8s_service_account + "/namespace");
 }
 
 string

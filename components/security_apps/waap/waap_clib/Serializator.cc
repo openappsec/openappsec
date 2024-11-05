@@ -195,6 +195,9 @@ void SerializeToFileBase::saveData()
     } else {
         ss.str(string((const char *)res.output, res.num_output_bytes));
     }
+    if (res.output) free(res.output);
+    res.output = nullptr;
+    res.num_output_bytes = 0;
 
 
     filestream << ss.str();

@@ -12,28 +12,21 @@
 // limitations under the License.
 
 #pragma once
+#include <set>
+#include <boost/regex.hpp>
 
 namespace Waap {
-    namespace Util {
-        struct CIDRData; // forward decleration
-        struct RegexComparator;
+namespace Util {
+
+// Custom comparator for std::shared_ptr<boost::regex>
+struct RegexComparator {
+    bool operator()(const std::shared_ptr<boost::regex>& lhs, const std::shared_ptr<boost::regex>& rhs) const {
+        // Compare the actual regex patterns by string representation
+        return lhs->str() < rhs->str();
     }
-}
-
-class Waf2Transaction;
-
-// Functor used to match Override rules against request data
-class WaapOverrideFunctor {
-public:
-    WaapOverrideFunctor(Waf2Transaction &waf2Transaction);
-
-    bool operator()(const std::string &tag, const std::vector<Waap::Util::CIDRData> &values);
-
-    bool operator()(
-        const std::string &tag,
-        const std::set<std::shared_ptr<boost::regex>, Waap::Util::RegexComparator> &rxes
-    );
-
-private:
-    Waf2Transaction &waf2Transaction;
 };
+
+std::string regexSetToString(const std::set<std::shared_ptr<boost::regex>, RegexComparator> &regexSet);
+
+}
+}

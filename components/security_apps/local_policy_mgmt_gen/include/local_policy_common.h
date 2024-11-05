@@ -49,12 +49,27 @@ static const std::unordered_map<std::string, TriggerType> string_to_trigger_type
     { "WebUserResponse", TriggerType::WebUserResponse }
 };
 
+static const std::unordered_map<std::string, std::string> key_to_mitigation_severity = {
+    { "high", "High"},
+    { "medium", "Medium"},
+    { "critical", "Critical"},
+    { "Transparent", "Transparent"}
+};
+
 static const std::unordered_map<std::string, std::string> key_to_practices_val = {
     { "prevent-learn", "Prevent"},
     { "detect-learn", "Learn"},
     { "prevent", "Prevent"},
     { "detect", "Detect"},
     { "inactive", "Inactive"}
+};
+
+static const std::unordered_map<std::string, std::string> key_to_practices_mode_val = {
+    { "prevent-learn", "Prevent"},
+    { "detect-learn", "Detect"},
+    { "prevent", "Prevent"},
+    { "detect", "Detect"},
+    { "inactive", "Disabled"}
 };
 
 static const std::unordered_map<std::string, std::string> key_to_practices_val2 = {
@@ -66,6 +81,8 @@ static const std::unordered_map<std::string, std::string> key_to_practices_val2 
 };
 
 static const std::string default_appsec_url = "http://*:*";
+static const std::string default_appsec_name = "Any";
+
 
 class PolicyGenException : public std::exception
 {

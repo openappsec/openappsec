@@ -23,9 +23,11 @@ unescaped_line(),
 param_name(),
 location(),
 score(0.0f),
+other_model_score(0.0f),
 scoreNoFilter(0.0f),
 scoreArray(),
 keywordCombinations(),
+keywordsAfterFilter(),
 attack_types(),
 m_isAttackInParam(false)
 {
@@ -41,9 +43,11 @@ void Waf2ScanResult::clear()
     param_name.clear();
     location.clear();
     score = 0;
+    other_model_score = 0;
     scoreNoFilter = 0;
     scoreArray.clear();
     keywordCombinations.clear();
+    keywordsAfterFilter.clear();
     attack_types.clear();
 }
 

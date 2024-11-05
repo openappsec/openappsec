@@ -54,6 +54,12 @@ public:
         return (count > 0) ? double(sum)/count : 0;
     }
 
+    float
+    getValue() const override
+    {
+        return static_cast<float>(getAverage());
+    }
+
     void
     save(cereal::JSONOutputArchive &ar) const override
     {

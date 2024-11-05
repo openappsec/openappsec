@@ -35,6 +35,14 @@ convertAnnotationKeysTostring(const AnnotationKeys &key)
     }
 }
 
+string
+getAppSecScopeType()
+{
+    auto env_res = getenv("CRDS_SCOPE");
+    if (env_res != nullptr) return env_res;
+    return "cluster";
+}
+
 void
 K8sPolicyUtils::init()
 {
@@ -42,6 +50,7 @@ K8sPolicyUtils::init()
     env_type = env_details->getEnvType();
     if (env_type == EnvType::K8S) {
         token = env_details->getToken();
+        agent_ns = getAppSecScopeType() == "namespaced" ? env_details->getNameSpace() + "/" : "";
         messaging = Singleton::Consume<I_Messaging>::by<K8sPolicyUtils>();
     }
 }
@@ -140,10 +149,12 @@ extractElementsFromNewRule(
     const NewParsedRule &rule,
     map<AnnotationTypes, unordered_set<string>> &policy_elements_names)
 {
-    policy_elements_names[AnnotationTypes::EXCEPTION].insert(
-        rule.getExceptions().begin(),
-        rule.getExceptions().end()
-    );
+    if (rule.getExceptions().size() > 0) {
+        policy_elements_names[AnnotationTypes::EXCEPTION].insert(
+            rule.getExceptions().begin(),
+            rule.getExceptions().end()
+        );
+    }
     policy_elements_names[AnnotationTypes::THREAT_PREVENTION_PRACTICE].insert(
         rule.getPractices().begin(),
         rule.getPractices().end()
@@ -152,14 +163,24 @@ extractElementsFromNewRule(
         rule.getAccessControlPractices().begin(),
         rule.getAccessControlPractices().end()
     );
-    policy_elements_names[AnnotationTypes::TRIGGER].insert(
-        rule.getLogTriggers().begin(),
-        rule.getLogTriggers().end()
-    );
-    policy_elements_names[AnnotationTypes::WEB_USER_RES].insert(rule.getCustomResponse());
-    policy_elements_names[AnnotationTypes::SOURCE_IDENTIFIERS].insert(rule.getSourceIdentifiers());
-    policy_elements_names[AnnotationTypes::TRUSTED_SOURCES].insert(rule.getTrustedSources());
-    policy_elements_names[AnnotationTypes::UPGRADE_SETTINGS].insert(rule.getUpgradeSettings());
+    if (rule.getLogTriggers().size() > 0) {
+        policy_elements_names[AnnotationTypes::TRIGGER].insert(
+            rule.getLogTriggers().begin(),
+            rule.getLogTriggers().end()
+        );
+    }
+    if (rule.getCustomResponse() != "" ) {
+        policy_elements_names[AnnotationTypes::WEB_USER_RES].insert(rule.getCustomResponse());
+    }
+    if (rule.getSourceIdentifiers() != "" ) {
+        policy_elements_names[AnnotationTypes::SOURCE_IDENTIFIERS].insert(rule.getSourceIdentifiers());
+    }
+    if (rule.getTrustedSources() != "" ) {
+        policy_elements_names[AnnotationTypes::TRUSTED_SOURCES].insert(rule.getTrustedSources());
+    }
+    if (rule.getUpgradeSettings() != "" ) {
+        policy_elements_names[AnnotationTypes::UPGRADE_SETTINGS].insert(rule.getUpgradeSettings());
+    }
 }
 
 map<AnnotationTypes, unordered_set<string>>
@@ -259,9 +280,11 @@ K8sPolicyUtils::extractV1Beta2ElementsFromCluster(
     dbgTrace(D_LOCAL_POLICY) << "Retrieve AppSec elements. type: " << crd_plural;
     vector<T> elements;
     for (const string &element_name : elements_names) {
+        string ns_suffix = getAppSecScopeType() == "namespaced" ? "ns" : "";
+        string ns = getAppSecScopeType() == "namespaced" ? "namespaces/" : "";
         dbgTrace(D_LOCAL_POLICY) << "AppSec element name: " << element_name;
         auto maybe_appsec_element = getObjectFromCluster<AppsecSpecParser<T>>(
-            "/apis/openappsec.io/v1beta2/" + crd_plural + "/" + element_name
+            "/apis/openappsec.io/v1beta2/" + ns + agent_ns + crd_plural + ns_suffix + "/" + element_name
         );
 
         if (!maybe_appsec_element.ok()) {
@@ -362,8 +385,9 @@ K8sPolicyUtils::createSnortFile(vector<NewAppSecPracticeSpec> &practices) const
         practice.getSnortSignatures().setTemporary(true);
         for (const string &config_map : practice.getSnortSignatures().getConfigMap())
         {
+            string ns = agent_ns == "" ? "default/" : agent_ns;
             auto maybe_configmap = getObjectFromCluster<ConfigMaps>(
-                "/api/v1/namespaces/default/configmaps/" + config_map
+                "/api/v1/namespaces/" + ns + "configmaps/" + config_map
             );
             if (!maybe_configmap.ok())  {
                 dbgWarning(D_LOCAL_POLICY) << "Failed to get configMaps from the cluster.";
@@ -377,6 +401,28 @@ K8sPolicyUtils::createSnortFile(vector<NewAppSecPracticeSpec> &practices) const
             }
             append_mode = true;
             practice.getSnortSignatures().addFile(file_name);
+        }
+    }
+}
+
+void
+K8sPolicyUtils::createSchemaValidationOas(vector<NewAppSecPracticeSpec> &practices) const
+{
+    for (NewAppSecPracticeSpec &practice : practices) {
+        vector<string> res;
+        for (const string &config_map : practice.getOpenSchemaValidation().getConfigMap())
+        {
+            string ns = agent_ns == "" ? "default/" : agent_ns;
+            auto maybe_configmap = getObjectFromCluster<ConfigMaps>(
+                "/api/v1/namespaces/" + ns + "configmaps/" + config_map
+            );
+            if (!maybe_configmap.ok())  {
+                dbgWarning(D_LOCAL_POLICY) << "Failed to get configMaps from the cluster.";
+                continue;
+            }
+            string file_content = maybe_configmap.unpack().getFileContent();
+            string res = Singleton::Consume<I_Encryptor>::by<K8sPolicyUtils>()->base64Encode(file_content);
+            practice.getOpenSchemaValidation().addOas(res);
         }
     }
 }
@@ -396,6 +442,7 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
     }
 
     if (default_rule.getMode().empty() && !ingress_mode.empty()) {
+        dbgTrace(D_LOCAL_POLICY) << "setting the policy default rule mode to the ingress mode: " << ingress_mode;
         default_rule.setMode(ingress_mode);
     }
 
@@ -411,6 +458,7 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
         );
 
     createSnortFile(threat_prevention_practices);
+    createSchemaValidationOas(threat_prevention_practices);
 
     vector<AccessControlPracticeSpec> access_control_practices =
         extractV1Beta2ElementsFromCluster<AccessControlPracticeSpec>(
@@ -493,9 +541,12 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
                 maybe_appsec_policy_spec.ok() ? "There is no v1beta1 policy" : maybe_appsec_policy_spec.getErr();
             dbgWarning(D_LOCAL_POLICY
             ) << "Failed to retrieve Appsec policy with crds version: v1beta1, Trying version: v1beta2";
+            string ns_suffix = getAppSecScopeType() == "namespaced" ? "ns" : "";
+            string ns = getAppSecScopeType() == "namespaced" ? "namespaces/" : "";
             auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
-                "/apis/openappsec.io/v1beta2/policies/" + policy_name
+                "/apis/openappsec.io/v1beta2/" + ns + agent_ns + "policies" + ns_suffix + "/" + policy_name
             );
+
             if (!maybe_v1beta2_appsec_policy_spec.ok()) {
                 dbgWarning(D_LOCAL_POLICY)
                     << "Failed to retrieve AppSec policy. Error: " << maybe_v1beta2_appsec_policy_spec.getErr();
@@ -535,10 +586,11 @@ K8sPolicyUtils::createPolicy(
     if (policies.find(annotations_values[AnnotationKeys::PolicyKey]) == policies.end()) {
         policies[annotations_values[AnnotationKeys::PolicyKey]] = appsec_policy;
     }
+    auto default_mode = appsec_policy.getAppsecPolicySpec().getDefaultRule().getMode();
     if (item.getSpec().doesDefaultBackendExist()) {
         dbgTrace(D_LOCAL_POLICY)
             << "Inserting Any host rule to the specific asset set";
-        K ingress_rule = K("*");
+        K ingress_rule = K("*", default_mode);
         policies[annotations_values[AnnotationKeys::PolicyKey]].addSpecificRule(ingress_rule);
     }
 
@@ -556,12 +608,11 @@ K8sPolicyUtils::createPolicy(
                     << "' uri: '"
                     << uri.getPath()
                     << "'";
-                K ingress_rule = K(host);
+                K ingress_rule = K(host, default_mode);
                 policies[annotations_values[AnnotationKeys::PolicyKey]].addSpecificRule(ingress_rule);
             }
         }
     }
-
 }
 
 std::tuple<map<string, AppsecLinuxPolicy>, map<string, V1beta2AppsecLinuxPolicy>>

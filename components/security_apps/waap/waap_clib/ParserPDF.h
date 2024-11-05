@@ -17,8 +17,8 @@
 #include "ParserBase.h"
 #include <string.h>
 
-#define MAX_HEADER_LOOKUP 64
-#define MAX_TAIL_LOOKUP 5
+#define MAX_PDF_HEADER_LOOKUP 64
+#define MAX_PDF_TAIL_LOOKUP 20
 
 class ParserPDF : public ParserBase {
 public:

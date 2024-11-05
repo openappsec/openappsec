@@ -5,6 +5,8 @@
 
 using namespace std;
 
+USE_DEBUG_FLAG(D_KEYWORD);
+
 static const string whitespaces = " \t";
 
 static string
@@ -14,6 +16,13 @@ getSubStrNoPadding(const string &str, uint start, uint end)
     auto r_end = str.find_last_not_of(whitespaces, end-1);
 
     if (r_end==string::npos || r_start==string::npos || r_start>r_end) {
+        dbgWarning(D_KEYWORD)
+            << "Can't extract substring from '"
+            << str
+            << "', padded start: "
+            << r_start
+            <<  ", padded end: "
+            << r_end;
         throw KeywordError("Found an empty section in the '"+ str + "'");
     }
 
@@ -45,13 +54,24 @@ split(const string &str, const string &delim, uint start = 0)
             }
             default:
                 if (!in_string && delim.find(str[index])!=string::npos) {
-                    res.push_back(getSubStrNoPadding(str, part_start, index));
+                    if (part_start == index) {
+                        dbgTrace(D_KEYWORD) << "Encountered consecutive delimiter in: " << str;
+                    } else {
+                        res.push_back(getSubStrNoPadding(str, part_start, index));
+                    }
                     part_start = index+1;
                 }
         }
     }
 
-    if (escape||in_string) throw KeywordError("Split has ended in the middle of the parsing");
+    if (escape||in_string) {
+        dbgWarning(D_KEYWORD)
+            << "Failed to split "
+            << str
+            << ". Split ended in "
+            << (escape ? "escape" : "middle of string");
+        throw KeywordError("Split has ended in the middle of the parsing");
+    }
 
     if (str.find_first_not_of(whitespaces, part_start)!=string::npos) {
         res.push_back(getSubStrNoPadding(str, part_start, str.size()));

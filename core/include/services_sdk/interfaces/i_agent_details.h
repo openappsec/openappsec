@@ -46,6 +46,7 @@ public:
     virtual OrchestrationMode getOrchestrationMode()                  const = 0;
     virtual std::string getAccessToken()                              const = 0;
     virtual void loadAccessToken()                                          = 0;
+    virtual bool isOpenAppsecAgent()                                  const = 0;
 
     // OpenSSL
     virtual void setOpenSSLDir(const std::string &openssl_dir)  = 0;

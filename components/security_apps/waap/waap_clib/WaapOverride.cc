@@ -12,7 +12,6 @@
 // limitations under the License.
 
 #include "WaapOverride.h"
-#include "Waf2Util.h"
 
 USE_DEBUG_FLAG(D_WAAP);
 
@@ -25,8 +24,8 @@ bool Match::operator==(const Match &other) const
             (m_operand1 == other.m_operand1) &&
             (m_operand2 == other.m_operand2) &&
             (m_tag == other.m_tag) &&
-            Waap::Util::compareObjects(m_valueRegex, other.m_valueRegex) &&
-            m_cidr == other.m_cidr &&
+            (m_valuesRegex == other.m_valuesRegex) &&
+            m_ip_addr_values == other.m_ip_addr_values &&
             m_isCidr == other.m_isCidr;
 }
 

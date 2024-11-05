@@ -22,7 +22,10 @@ bool
 operator<(const IpAddress &this_ip_addr, const IpAddress &other_ip_addr)
 {
     if (this_ip_addr.ip_type < other_ip_addr.ip_type) return true;
-    if (this_ip_addr.ip_type == IP_VERSION_4) return this_ip_addr.addr4_t.s_addr < other_ip_addr.addr4_t.s_addr;
+    if (this_ip_addr.ip_type > other_ip_addr.ip_type) return false;
+    if (this_ip_addr.ip_type == IP_VERSION_4) {
+        return ntohl(this_ip_addr.addr4_t.s_addr) < ntohl(other_ip_addr.addr4_t.s_addr);
+    }
     return memcmp(&this_ip_addr.addr6_t, &other_ip_addr.addr6_t, sizeof(struct in6_addr)) < 0;
 }
 
@@ -32,6 +35,19 @@ operator==(const IpAddress &this_ip_addr, const IpAddress &other_ip_addr)
     if (this_ip_addr.ip_type != other_ip_addr.ip_type) return false;
     if (this_ip_addr.ip_type == IP_VERSION_4) return this_ip_addr.addr4_t.s_addr == other_ip_addr.addr4_t.s_addr;
     return memcmp(&this_ip_addr.addr6_t, &other_ip_addr.addr6_t, sizeof(struct in6_addr)) == 0;
+}
+
+bool
+operator<=(const IpAddress &this_ip_addr, const IpAddress &other_ip_addr)
+{
+    if (this_ip_addr < other_ip_addr || this_ip_addr == other_ip_addr) return true;
+    return false;
+}
+
+bool
+operator<(const IPRange &range1, const IPRange &range2)
+{
+    return range1.start < range2.start || (range1.start == range2.start && range1.end < range2.end);
 }
 // LCOV_EXCL_STOP
 

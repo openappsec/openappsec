@@ -29,9 +29,12 @@ struct Waf2ScanResult {
     std::string param_name;
     std::string location;
     double score;
+    double other_model_score;
     double scoreNoFilter;
     std::vector<double> scoreArray;
+    std::vector<double> coefArray;
     std::vector<std::string> keywordCombinations;
+    std::vector<std::string> keywordsAfterFilter;
     std::set<std::string> attack_types;
     bool m_isAttackInParam;
     void clear(); // clear Waf2ScanResult

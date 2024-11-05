@@ -14,6 +14,8 @@
 #include "WaapScores.h"
 #include <vector>
 #include <string>
+#include <cmath>
+
 #include "ScoreBuilder.h"
 #include "WaapDefines.h"
 #include "debug.h"
@@ -24,11 +26,44 @@ namespace Waap {
 namespace Scores {
 
 std::string getScorePoolNameByLocation(const std::string &location) {
-    std::string poolName = KEYWORDS_SCORE_POOL_BASE;
-    if (location == "header") {
-        poolName = KEYWORDS_SCORE_POOL_HEADERS;
+    auto maybePoolName = getProfileAgentSetting<std::string>("agent.waap.scorePoolName");
+    std::string res = KEYWORDS_SCORE_POOL_BASE;
+    if (maybePoolName.ok()) {
+        res = maybePoolName.unpack();
     }
-    return poolName;
+    else if (location == "header") {
+        res = KEYWORDS_SCORE_POOL_HEADERS;
+    }
+    return res;
+}
+
+std::string getOtherScorePoolName()
+{
+    auto maybePoolName = getProfileAgentSetting<std::string>("agent.waap.otherScorePoolName");
+    if (maybePoolName.ok()) {
+        return maybePoolName.unpack();
+    }
+    return KEYWORDS_SCORE_POOL_BASE;
+}
+
+ModelLoggingSettings getModelLoggingSettings()
+{
+    ModelLoggingSettings settings = {.logLevel = ModelLogLevel::DIFF,
+                                    .logToS3 = false,
+                                    .logToStream = true};
+    auto maybeLogS3 = getProfileAgentSetting<bool>("agent.waap.modelLogToS3");
+    if (maybeLogS3.ok()) {
+        settings.logToS3 = maybeLogS3.unpack();
+    }
+    auto maybeLogKusto = getProfileAgentSetting<bool>("agent.waap.modelLogToStream");
+    if (maybeLogKusto.ok()) {
+        settings.logToStream = maybeLogKusto.unpack();
+    }
+    auto maybeLogLevel = getProfileAgentSetting<uint>("agent.waap.modelLogLevel");
+    if (maybeLogLevel.ok() && (settings.logToS3 || settings.logToStream)) {
+        settings.logLevel = static_cast<ModelLogLevel>(maybeLogLevel.unpack());
+    }
+    return settings;
 }
 
 void
@@ -37,9 +72,16 @@ addKeywordScore(
     const std::string &poolName,
     std::string keyword,
     double defaultScore,
-    std::vector<double>& scoresArray)
+    double defaultCoef,
+    std::vector<double>& scoresArray,
+    std::vector<double>& coefArray)
 {
-    scoresArray.push_back(scoreBuilder.getSnapshotKeywordScore(keyword, defaultScore, poolName));
+    double score = scoreBuilder.getSnapshotKeywordScore(keyword, defaultScore, poolName);
+    double coef = scoreBuilder.getSnapshotKeywordCoef(keyword, defaultCoef, poolName);
+    dbgDebug(D_WAAP_SCORE_BUILDER) << "Adding score: " << score << " coef: " << coef
+                                    << " keyword: '" << keyword << "' pool: " << poolName;
+    scoresArray.push_back(score);
+    coefArray.push_back(coef);
 }
 
 // Calculate score of individual keywords
@@ -48,13 +90,14 @@ calcIndividualKeywords(
     const ScoreBuilder& scoreBuilder,
     const std::string &poolName,
     const std::vector<std::string>& keyword_matches,
-    std::vector<double>& scoresArray)
+    std::vector<double>& scoresArray,
+    std::vector<double>& coefArray)
 {
     std::vector<std::string> keywords = keyword_matches; // deep copy!! (PERFORMANCE WARNING!)
     std::sort(keywords.begin(), keywords.end());
 
     for (auto pKeyword = keywords.begin(); pKeyword != keywords.end(); ++pKeyword) {
-        addKeywordScore(scoreBuilder, poolName, *pKeyword, 2.0f, scoresArray);
+        addKeywordScore(scoreBuilder, poolName, *pKeyword, 2.0f, 0.3f, scoresArray, coefArray);
     }
 }
 
@@ -65,10 +108,12 @@ calcCombinations(
     const std::string &poolName,
     const std::vector<std::string>& keyword_matches,
     std::vector<double>& scoresArray,
+    std::vector<double>& coefArray,
     std::vector<std::string>& keyword_combinations)
 {
     keyword_combinations.clear();
     static const double max_combi_score = 1.0f;
+    double default_coef = 0.8f;
 
     for (size_t i = 0; i < keyword_matches.size(); ++i) {
         std::vector<std::string> combinations;
@@ -93,7 +138,7 @@ calcCombinations(
             }
             // set default combination score to be the sum of its keywords, bounded by 1
             default_score = std::min(default_score, max_combi_score);
-            addKeywordScore(scoreBuilder, poolName, combination, default_score, scoresArray);
+            addKeywordScore(scoreBuilder, poolName, combination, default_score, default_coef, scoresArray, coefArray);
             keyword_combinations.push_back(combination);
         }
     }
@@ -105,7 +150,6 @@ calcArrayScore(std::vector<double>& scoreArray)
     // Calculate cumulative score from array of individual scores
     double score = 1.0f;
     for (auto pScore = scoreArray.begin(); pScore != scoreArray.end(); ++pScore) {
-        dbgTrace(D_WAAP_SCORE_BUILDER) << "scoreArr[]=" << *pScore;
         double left = 10.0f - score;
         double divisor = (*pScore / 3.0f + 10.0f);  // note: divisor can't be empty because
                                                     // *pScore is always positive and there's a +10 offset
@@ -113,6 +157,21 @@ calcArrayScore(std::vector<double>& scoreArray)
     }
     dbgTrace(D_WAAP_SCORE_BUILDER) << "calculated score: " << score;
     return score;
+}
+
+double
+calcLogisticRegressionScore(std::vector<double> &coefArray, double intercept, double nnzCoef)
+{
+    // Sparse logistic regression model, with boolean feature values
+    // Instead of performing a dot product of features*coefficients, we sum the coefficients of the non-zero features
+    // An additional feature was added for the log of the number of non-zero features, as a regularization term
+    double log_odds = intercept + nnzCoef * log(static_cast<double>(coefArray.size()) + 1);
+    for (double &pCoef : coefArray) {
+        log_odds += pCoef;
+    }
+    // Apply the expit function to the log-odds to obtain the probability,
+    // and multiply by 10 to obtain a 'score' in the range [0, 10]
+    return 1.0f / (1.0f + exp(-log_odds)) * 10.0f;
 }
 
 }

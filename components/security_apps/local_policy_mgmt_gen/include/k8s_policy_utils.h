@@ -24,6 +24,7 @@
 #include "maybe_res.h"
 #include "i_orchestration_tools.h"
 #include "i_shell_cmd.h"
+#include "i_encryptor.h"
 #include "i_messaging.h"
 #include "i_env_details.h"
 #include "i_agent_details.h"
@@ -40,6 +41,7 @@ class K8sPolicyUtils
     Singleton::Consume<I_Messaging>,
     Singleton::Consume<I_ShellCmd>,
     Singleton::Consume<I_EnvDetails>,
+    Singleton::Consume<I_Encryptor>,
     Singleton::Consume<I_AgentDetails>
 {
 public:
@@ -80,6 +82,8 @@ private:
 
     void createSnortFile(std::vector<NewAppSecPracticeSpec> &practices) const;
 
+    void createSchemaValidationOas(std::vector<NewAppSecPracticeSpec> &practices) const;
+
     template<class T>
     std::vector<T> extractV1Beta2ElementsFromCluster(
         const std::string &crd_plural,
@@ -112,6 +116,7 @@ private:
     I_Messaging* messaging = nullptr;
     EnvType env_type;
     std::string token;
+    std::string agent_ns;
 };
 
 #endif // __K8S_POLICY_UTILS_H__

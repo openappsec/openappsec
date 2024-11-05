@@ -56,6 +56,12 @@ public:
         return min;
     }
 
+    float
+    getValue() const override
+    {
+        return static_cast<float>(min);
+    }
+
     void
     save(cereal::JSONOutputArchive &ar) const override
     {

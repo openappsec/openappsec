@@ -38,9 +38,10 @@ size_t
 ParserPDF::push(const char *buf, size_t len)
 {
     dbgTrace(D_WAAP_PARSER_PDF)
-        << "buf="
-        << buf
-        << "len="
+        << "buf='"
+        << std::string(buf, std::min((size_t)200, len))
+        << (len > 200 ? "..." : "")
+        << "' len="
         << len;
 
     const char *c;
@@ -65,13 +66,18 @@ ParserPDF::push(const char *buf, size_t len)
                 m_state = s_body;
                 CP_FALL_THROUGH;
             case s_body:
-                c = strstr(buf + len - MAX_TAIL_LOOKUP, PDF_TAIL);
-                dbgTrace(D_WAAP_PARSER_PDF) << "ParserPDF::push(): c=" << c;
-                if (c) {
-                    m_state = s_end;
-                    CP_FALL_THROUGH;
-                } else {
-                    break;
+                {
+                    size_t tail_lookup_offset = (len > MAX_PDF_TAIL_LOOKUP) ? len - MAX_PDF_TAIL_LOOKUP : 0;
+                    c = strstr(buf + tail_lookup_offset, PDF_TAIL);
+                    dbgTrace(D_WAAP_PARSER_PDF)
+                        << "string to search: " << std::string(buf + tail_lookup_offset)
+                        << " c=" << c;
+                    if (c) {
+                        m_state = s_end;
+                        CP_FALL_THROUGH;
+                    } else {
+                        break;
+                    }
                 }
             case s_end:
                 if (m_receiver.onKey("PDF", 3) != 0) {

@@ -304,6 +304,12 @@ AgentDetails::getOrchestrationMode() const
     return orchestration_mode;
 }
 
+bool
+AgentDetails::isOpenAppsecAgent() const
+{
+    return (orchestration_mode == OrchestrationMode::HYBRID) || (tenant_id.rfind("org_", 0) == 0);
+}
+
 string
 AgentDetails::getAccessToken() const
 {

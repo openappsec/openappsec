@@ -23,6 +23,8 @@
 #include "config.h"
 #include "debug.h"
 #include "local_policy_common.h"
+#include "i_orchestration_tools.h"
+#include "i_encryptor.h"
 
 bool isModeInherited(const std::string &mode);
 
@@ -88,6 +90,8 @@ public:
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 
+    bool operator<(const IpsProtectionsSection &other) const;
+
 private:
     std::string                                 context;
     std::string                                 name;
@@ -105,7 +109,7 @@ public:
     // LCOV_EXCL_START Reason: no test exist
     IPSSection() {};
 
-    IPSSection(const std::vector<IpsProtectionsSection> &_ips) : ips(_ips) {};
+    IPSSection(const std::vector<IpsProtectionsSection> &_ips);
     // LCOV_EXCL_STOP
 
     void save(cereal::JSONOutputArchive &out_ar) const;
@@ -138,6 +142,12 @@ public:
     const std::string & getMode(const std::string &default_mode = "inactive") const;
 
 private:
+
+    const std::string & getRulesMode(
+        const std::string &mode,
+        const std::string &default_mode = "inactive"
+    ) const;
+
     std::string override_mode;
     std::string max_performance_impact;
     std::string min_severity_level;
@@ -487,15 +497,16 @@ private:
     SnortSection snort;
 };
 
-class NewSnortSignaturesAndOpenSchemaAPI
+class NewSnortSignatures
 {
 public:
-    NewSnortSignaturesAndOpenSchemaAPI() : is_temporary(false) {};
+    NewSnortSignatures() : is_temporary(false) {};
 
     void load(cereal::JSONInputArchive &archive_in);
 
     void addFile(const std::string &file_name);
     const std::string & getOverrideMode(const std::string &default_mode = "inactive") const;
+    const std::string & getEnforceLevel() const;
     const std::vector<std::string> & getConfigMap() const;
     const std::vector<std::string> & getFiles() const;
     bool isTemporary() const;
@@ -503,9 +514,32 @@ public:
 
 private:
     std::string override_mode;
+    std::string enforcement_level;
     std::vector<std::string> config_map;
     std::vector<std::string> files;
     bool is_temporary;
+};
+
+class NewOpenApiSchema : Singleton::Consume<I_OrchestrationTools>, Singleton::Consume<I_Encryptor>
+{
+public:
+    NewOpenApiSchema() {};
+
+    void load(cereal::JSONInputArchive &archive_in);
+
+    void addOas(const std::string &file);
+    const std::string & getOverrideMode(const std::string &default_mode = "inactive") const;
+    const std::string & getEnforceLevel() const;
+    const std::vector<std::string> & getConfigMap() const;
+    const std::vector<std::string> & getFiles() const;
+    const std::vector<std::string> & getOas() const;
+
+private:
+    std::string override_mode;
+    std::string enforcement_level;
+    std::vector<std::string> config_map;
+    std::vector<std::string> files;
+    std::vector<std::string> oas;
 };
 
 class NewAppSecPracticeAntiBot
@@ -513,7 +547,7 @@ class NewAppSecPracticeAntiBot
 public:
     const std::vector<std::string> & getIjectedUris() const;
     const std::vector<std::string> & getValidatedUris() const;
-    const std::string & getMode() const;
+    const std::string & getMode(const std::string &default_mode = "inactive") const;
 
     void load(cereal::JSONInputArchive &archive_in);
     void save(cereal::JSONOutputArchive &out_ar) const;
@@ -569,8 +603,8 @@ class NewAppSecPracticeSpec
 public:
     void load(cereal::JSONInputArchive &archive_in);
 
-    NewSnortSignaturesAndOpenSchemaAPI & getSnortSignatures();
-    const NewSnortSignaturesAndOpenSchemaAPI & getOpenSchemaValidation() const;
+    NewSnortSignatures & getSnortSignatures();
+    NewOpenApiSchema & getOpenSchemaValidation();
     const NewAppSecPracticeWebAttacks & getWebAttacks() const;
     const NewAppSecPracticeAntiBot & getAntiBot() const;
     const NewIntrusionPrevention & getIntrusionPrevention() const;
@@ -583,8 +617,8 @@ public:
 private:
     NewFileSecurity                             file_security;
     NewIntrusionPrevention                      intrusion_prevention;
-    NewSnortSignaturesAndOpenSchemaAPI          openapi_schema_validation;
-    NewSnortSignaturesAndOpenSchemaAPI          snort_signatures;
+    NewOpenApiSchema                            openapi_schema_validation;
+    NewSnortSignatures                          snort_signatures;
     NewAppSecPracticeWebAttacks                 web_attacks;
     NewAppSecPracticeAntiBot                    anti_bot;
     std::string                                 appsec_class_name;

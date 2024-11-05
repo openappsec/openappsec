@@ -21,6 +21,7 @@
 #include <memory>
 #include "debug.h"
 #include "CidrMatch.h"
+#include "RegexComparator.h"
 
 USE_DEBUG_FLAG(D_WAAP_OVERRIDE);
 
@@ -52,23 +53,52 @@ public:
                 m_isValid = false;
                 dbgDebug(D_WAAP_OVERRIDE) << "Invalid override tag: " << m_tag;
             }
-            // The name "value" here is misleading. The real meaning is "regex pattern string"
-            ar(cereal::make_nvp("value", m_value));
+
+            try {
+                ar(cereal::make_nvp("values", m_values));
+                dbgDebug(D_WAAP_OVERRIDE) << "Values list is missing, using single value instead.";
+            } catch (const cereal::Exception &e) {
+                // The name "value" here is misleading. The real meaning is "regex pattern string"
+                ar(cereal::make_nvp("value", m_value));
+                m_values.insert(m_value);
+            }
 
             if (m_tag == "sourceip" || m_tag == "sourceidentifier") {
-                m_isCidr = Waap::Util::isCIDR(m_value, m_cidr);
+                m_isCidr = true;
+                m_ip_addr_values.resize(m_values.size());
+
+                int val_idx = 0;
+                for (const auto &cur_val : m_values) {
+                    if (!Waap::Util::isCIDR(cur_val, m_ip_addr_values[val_idx])) {
+                        dbgDebug(D_WAAP_OVERRIDE) << "Invalid value in list of IP addresses: " << cur_val;
+                        m_isValid = false;
+                        break;
+                    }
+                    val_idx++;
+                }
+                sortAndMergeCIDRs();
+                dbgTrace(D_WAAP_OVERRIDE) << "CIDR list: " << cidrsToString(m_ip_addr_values);
             }
             m_isOverrideResponse = (m_tag == "responsebody" || m_tag == "responseBody");
 
             if (!m_isCidr) {
-                // regex build may throw boost::regex_error
-                m_valueRegex = nullptr;
-                try {
-                    m_valueRegex = std::make_shared<boost::regex>(m_value);
-                }
-                catch (const boost::regex_error &err) {
-                    dbgDebug(D_WAAP_OVERRIDE) << "Waap::Override::Match(): Failed to compile regex pattern '" <<
-                        m_value << "' on position " << err.position() << ". Reason: '" << err.what() << "'";
+                for (const auto &cur_val : m_values) {
+                    try {
+                        m_valuesRegex.emplace(std::make_shared<boost::regex>(cur_val));
+                    }
+                    catch (const boost::regex_error &err) {
+                        dbgDebug(D_WAAP_OVERRIDE)
+                            << "Waap::Override::Match(): Failed to compile regex pattern '"
+                            << cur_val
+                            << "' on position "
+                            << err.position()
+                            <<  ". Reason: '"
+                            << err.what()
+                            << "'";
+                        m_isValid = false;
+                        m_valuesRegex.clear();
+                        break;
+                    }
                 }
             }
         }
@@ -95,13 +125,21 @@ public:
     template<typename TestFunctor>
     bool match(TestFunctor testFunctor) const {
         if (m_op == "basic" && m_isCidr) {
-            bool result = testFunctor(m_tag, m_cidr);
-            dbgTrace(D_WAAP_OVERRIDE) << "Override matching CIDR: " << m_value << " result: " << result;
+            bool result = testFunctor(m_tag, m_ip_addr_values);
+            dbgTrace(D_WAAP_OVERRIDE)
+                << "Override matching CIDR list: "
+                << cidrsToString(m_ip_addr_values)
+                << " result: "
+                << result;
             return result;
         }
-        else if (m_op == "basic" && m_valueRegex) {
-            bool result = testFunctor(m_tag, *m_valueRegex);
-            dbgTrace(D_WAAP_OVERRIDE) << "Override matching regex: " << m_value << " result: " << result;
+        else if (m_op == "basic" && !m_valuesRegex.empty()) {
+            bool result = testFunctor(m_tag, m_valuesRegex);
+            dbgTrace(D_WAAP_OVERRIDE)
+                << "Override matching regex list: "
+                << regexSetToString(m_valuesRegex)
+                << " result: "
+                << result;
             return result;
         }
         if (m_op == "and") {
@@ -125,24 +163,39 @@ public:
         return false;
     }
 
-    bool isOverrideResponse() const {
-        return m_isOverrideResponse;
-    }
+    bool isOverrideResponse() const { return m_isOverrideResponse; }
 
-    bool isValidMatch() const{
-        return m_isValid;
-    }
+    bool isValidMatch() const { return m_isValid; }
 
 private:
+    void sortAndMergeCIDRs() {
+        if (m_ip_addr_values.empty()) return;
+        std::sort(m_ip_addr_values.begin(), m_ip_addr_values.end());
+
+        size_t mergedIndex = 0;
+        for (size_t i = 1; i < m_ip_addr_values.size(); ++i) {
+            Waap::Util::CIDRData &current = m_ip_addr_values[mergedIndex];
+            Waap::Util::CIDRData &next = m_ip_addr_values[i];
+
+            if (!doesFirstCidrContainSecond(current, next)) {
+                ++mergedIndex;
+                if (i != mergedIndex) m_ip_addr_values[mergedIndex] = next;
+            }
+        }
+
+        m_ip_addr_values.resize(mergedIndex + 1);
+    }
+
     std::string m_op;
     std::shared_ptr<Match> m_operand1;
     std::shared_ptr<Match> m_operand2;
     std::string m_tag;
     std::string m_value;
-    std::shared_ptr<boost::regex> m_valueRegex;
-    Waap::Util::CIDRData m_cidr;
-    bool        m_isCidr;
-    bool        m_isOverrideResponse;
+    std::set<std::string> m_values;
+    std::vector<Waap::Util::CIDRData> m_ip_addr_values;
+    std::set<std::shared_ptr<boost::regex>, Waap::Util::RegexComparator> m_valuesRegex;
+    bool m_isCidr;
+    bool m_isOverrideResponse;
     bool m_isValid;
 };
 

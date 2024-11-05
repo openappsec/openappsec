@@ -315,22 +315,13 @@ void
 ConfigComponent::Impl::preload()
 {
     I_Environment *environment = Singleton::Consume<I_Environment>::by<ConfigComponent>();
-    auto executable = environment->get<string>("Executable Name");
+    auto executable = environment->get<string>("Base Executable Name");
     if (!executable.ok() || *executable == "") {
         dbgWarning(D_CONFIG)
             << "Could not load nano service's settings since \"Executable Name\" in not found in the environment";
         return;
     }
-
     executable_name = *executable;
-    auto file_path_end = executable_name.find_last_of("/");
-    if (file_path_end != string::npos) {
-        executable_name = executable_name.substr(file_path_end + 1);
-    }
-    auto file_sufix_start = executable_name.find_first_of(".");
-    if (file_sufix_start != string::npos) {
-        executable_name = executable_name.substr(0, file_sufix_start);
-    }
 
     config_file_paths.insert(executable_name + "-conf.json");
     config_file_paths.insert(executable_name + "-debug-conf.json");

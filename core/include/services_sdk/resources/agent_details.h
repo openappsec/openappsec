@@ -73,6 +73,7 @@ public:
     Maybe<std::string> getOpenSSLDir()       const;
     std::string getClusterId()               const;
     OrchestrationMode getOrchestrationMode() const;
+    bool isOpenAppsecAgent()                 const;
     std::string getAccessToken()             const;
     void loadAccessToken();
 

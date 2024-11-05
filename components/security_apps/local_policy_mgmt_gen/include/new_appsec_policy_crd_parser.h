@@ -31,7 +31,7 @@ class NewParsedRule
 {
 public:
     NewParsedRule() {}
-    NewParsedRule(const std::string &_host) : host(_host) {}
+    NewParsedRule(const std::string &_host, const std::string &_mode) : host(_host), mode(_mode) {}
 
     void load(cereal::JSONInputArchive &archive_in);
 

@@ -157,6 +157,9 @@ MatchQuery::load(cereal::JSONInputArchive &archive_in)
                         dbgDebug(D_RULEBASE_CONFIG) << "Failed to compile regex. Error: " << e.what();
                     }
                 }
+                if (isKeyTypeIp()) {
+                    sortAndMergeIpRangesValues();
+                }
                 first_value = *(value.begin());
             }
             break;
@@ -301,7 +304,7 @@ MatchQuery::matchAttributes(
     bool negate = type == MatchQuery::Conditions::NotEquals || type == MatchQuery::Conditions::NotIn;
     bool match = false;
 
-    if (isIP()) {
+    if (isKeyTypeIp()) {
         match = matchAttributesIp(values);
     } else if (isRegEx()) {
         match = matchAttributesRegEx(values, matched_override_keywords);
@@ -352,10 +355,18 @@ MatchQuery::matchAttributesString(const set<string> &values) const
 bool
 MatchQuery::matchAttributesIp(const set<string> &values) const
 {
-    for (const IPRange &rule_ip_range : ip_addr_value) {
-        for (const string &requested_value : values) {
-            IpAddress ip_addr = IPUtilities::createIpFromString(requested_value);
-            if (IPUtilities::isIpAddrInRange(rule_ip_range, ip_addr)) return true;
+    for (const string &requested_value : values) {
+        int left = 0;
+        int right = ip_addr_value.size() - 1;
+        IpAddress ip_addr = IPUtilities::createIpFromString(requested_value);
+        while (left <= right) {
+            int mid = left + (right - left) / 2;
+            if (IPUtilities::isIpAddrInRange(ip_addr_value[mid], ip_addr)) return true;
+            if (ip_addr_value[mid].start < ip_addr) {
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+            }
         }
     }
     return false;
@@ -367,8 +378,23 @@ MatchQuery::isRegEx() const
     return key != "protectionName";
 }
 
-bool
-MatchQuery::isIP() const
+void
+MatchQuery::sortAndMergeIpRangesValues()
 {
-    return key == "sourceIP" || key == "destinationIP";
+    if (ip_addr_value.empty()) return;
+
+    sort(ip_addr_value.begin(), ip_addr_value.end());
+    size_t mergedIndex = 0;
+    for (size_t i = 1; i < ip_addr_value.size(); ++i) {
+        if (ip_addr_value[i].start <= ip_addr_value[mergedIndex].end) {
+            if (ip_addr_value[mergedIndex].end <= ip_addr_value[i].end) {
+                ip_addr_value[mergedIndex].end = ip_addr_value[i].end;
+            }
+        } else {
+            ++mergedIndex;
+            ip_addr_value[mergedIndex] = ip_addr_value[i];
+        }
+    }
+
+    ip_addr_value.resize(mergedIndex + 1);
 }

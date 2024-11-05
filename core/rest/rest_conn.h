@@ -21,7 +21,7 @@
 class RestConn
 {
 public:
-    RestConn(int _fd, I_MainLoop *_mainloop, const I_RestInvoke *_invoke);
+    RestConn(int _fd, I_MainLoop *_mainloop, const I_RestInvoke *_invoke, bool is_external = false);
     ~RestConn();
 
     void parseConn() const;
@@ -35,6 +35,7 @@ private:
     int fd;
     I_MainLoop *mainloop;
     const I_RestInvoke *invoke;
+    bool is_external_ip = false;
 };
 
 #endif // __REST_CONN_H__

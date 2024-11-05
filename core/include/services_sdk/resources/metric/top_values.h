@@ -59,6 +59,12 @@ public:
         values.clear();
     }
 
+    float
+    getValue() const override
+    {
+        return std::nanf("");
+    }
+
     std::vector<T>
     getTopValues() const
     {

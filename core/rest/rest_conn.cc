@@ -23,11 +23,12 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_API);
 
-RestConn::RestConn(int _fd, I_MainLoop *_mainloop, const I_RestInvoke *_invoke)
+RestConn::RestConn(int _fd, I_MainLoop *_mainloop, const I_RestInvoke *_invoke, bool is_external)
         :
-    fd(_fd),
-    mainloop(_mainloop),
-    invoke(_invoke)
+        fd(_fd),
+        mainloop(_mainloop),
+        invoke(_invoke),
+        is_external_ip(is_external)
 {}
 
 RestConn::~RestConn()
@@ -99,6 +100,12 @@ RestConn::parseConn() const
 
     if (method=="GET" && invoke->isGetCall(identifier)) {
         return sendResponse("200 OK", invoke->invokeGet(identifier), false);
+    }
+
+    if (is_external_ip) {
+        dbgWarning(D_API) << "External IP tried to POST";
+        sendResponse("500 Internal Server Error", "", false);
+        stop();
     }
 
     stringstream body;

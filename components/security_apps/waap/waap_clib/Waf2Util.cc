@@ -508,6 +508,8 @@ const char* g_htmlTags[] = {
 };
 
 static const string b64_prefix("base64,");
+// Empirically calculated entropy threshold for base64 encoded data, value above it is considered as base64 encoded
+static const double base64_entropy_threshold = 4.01;
 
 const size_t g_htmlTagsCount = sizeof(g_htmlTags) / sizeof(g_htmlTags[0]);
 
@@ -966,7 +968,8 @@ base64_decode_status decodeBase64Chunk(
         string::const_iterator it,
         string::const_iterator end,
         string& decoded,
-        bool clear_on_error)
+        bool clear_on_error,
+        bool called_with_prefix)
 {
     decoded.clear();
     uint32_t acc = 0;
@@ -974,6 +977,7 @@ base64_decode_status decodeBase64Chunk(
     int terminatorCharsSeen = 0; // whether '=' character was seen, and how many of them.
     uint32_t nonPrintableCharsCount = 0;
     uint32_t spacer_count = 0;
+    uint32_t length = end - it;
 
     dbgTrace(D_WAAP) << "decodeBase64Chunk: value='" << value << "' match='" << string(it, end) << "'";
     string::const_iterator begin = it;
@@ -985,6 +989,8 @@ base64_decode_status decodeBase64Chunk(
                 "b64DecodeChunk: (leave as-is) because encoded data length should be exactly divisible by 4.";
             return B64_DECODE_INVALID;
         }
+
+        std::unordered_map<char, double> frequency;
 
         while (it != end) {
             unsigned char c = *it;
@@ -1008,6 +1014,7 @@ base64_decode_status decodeBase64Chunk(
 
                 // allow for more terminator characters
                 it++;
+                frequency[c]++;
                 continue;
             }
 
@@ -1032,6 +1039,7 @@ base64_decode_status decodeBase64Chunk(
                 // Start tracking terminator characters
                 terminatorCharsSeen++;
                 it++;
+                frequency[c]++;
                 continue;
             }
             else {
@@ -1062,6 +1070,7 @@ base64_decode_status decodeBase64Chunk(
             }
 
             it++;
+            frequency[c]++;
         }
 
         // end of encoded sequence decoded.
@@ -1077,6 +1086,27 @@ base64_decode_status decodeBase64Chunk(
             << decoded.size()
             << "; decoded='"
             << decoded << "'";
+
+        // Check if entropy is correlates with b64 threshold (initially > 4.5)
+        if (!called_with_prefix) {
+            double entropy = 0;
+            double p = 0;
+            for (const auto& pair : frequency) {
+                p = pair.second / length;
+                entropy -= p * std::log2(p);
+            }
+            dbgTrace(D_WAAP_BASE64) << " ===b64Test===:  base entropy = " << entropy << "length = " << length;
+            // Add short payload factor
+            if (length < 16)
+                entropy = entropy * 16 / length;
+            // Enforce tailoring '=' characters
+            entropy+=terminatorCharsSeen;
+
+            dbgTrace(D_WAAP_BASE64) << " ===b64Test===:  corrected entropy = " << entropy << "length = " << length;
+            if (entropy <= base64_entropy_threshold) {
+                return B64_DECODE_INVALID;
+            }
+        }
 
         // Return success only if decoded.size>=5 and there are less than 10% of non-printable
         // characters in output.
@@ -1323,10 +1353,11 @@ processDecodedChunk(
     string::const_iterator start,
     string::const_iterator end,
     string &value,
-    BinaryFileType &binaryFileType
+    BinaryFileType &binaryFileType,
+    bool called_with_prefix = false
 )
 {
-    base64_decode_status retVal = decodeBase64Chunk(s, start, end, value, false);
+    base64_decode_status retVal = decodeBase64Chunk(s, start, end, value, false, called_with_prefix);
     dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: after decode. retVal=" << retVal
                             << " value.size()=" << value.size();
     if (retVal != B64_DECODE_INVALID && !value.empty()) {
@@ -1349,7 +1380,7 @@ bool isBase64PrefixProcessingOK (
         if (detectBase64Chunk(s, start, end)) {
             dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: chunk detected";
             if ((start != s.end()) && (end == s.end())) {
-                retVal = processDecodedChunk(s, start, end, value, binaryFileType);
+                retVal = processDecodedChunk(s, start, end, value, binaryFileType, true);
             }
         } else if (start != s.end()) {
             dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: chunk not detected."

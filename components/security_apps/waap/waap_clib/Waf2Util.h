@@ -871,7 +871,8 @@ decodeBase64Chunk(
     std::string::const_iterator it,
     std::string::const_iterator end,
     std::string &decoded,
-    bool clear_on_error = true);
+    bool clear_on_error = true,
+    bool called_with_prefix = false);
 
 bool
 b64DecodeChunk(

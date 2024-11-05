@@ -19,6 +19,7 @@
 #include "table_opaque.h"
 #include "i_transaction.h"
 #include "waap_clib/DeepAnalyzer.h"
+#include "waap_clib/WaapModelResultLogger.h"
 #include "waap_clib/WaapAssetState.h"
 #include "waap_clib/WaapAssetStatesManager.h"
 #include "reputation_features_agg.h"
@@ -80,6 +81,7 @@ private:
     uint64_t transactionsCount;
     // instance of singleton classes
     DeepAnalyzer deepAnalyzer;
+    WaapModelResultLogger waapModelResultLogger;
     WaapAssetStatesManager waapAssetStatesManager;
     std::unordered_set<std::string> m_seen_assets_id;
 };

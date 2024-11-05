@@ -22,6 +22,7 @@ static const set<string> performance_impacts    = {"low", "medium", "high"};
 static const set<string> severity_levels        = {"low", "medium", "high", "critical"};
 static const set<string> size_unit              = {"bytes", "KB", "MB", "GB"};
 static const set<string> confidences_actions    = {"prevent", "detect", "inactive", "as-top-level", "inherited"};
+static const set<string> valied_enforcement_level = {"fullSchema", "endpointOnly"};
 static const set<string> valid_modes = {
     "prevent",
     "detect",
@@ -32,38 +33,38 @@ static const set<string> valid_modes = {
     "inherited"
 };
 static const set<string> valid_confidences      = {"medium", "high", "critical"};
-static const std::unordered_map<std::string, std::string> key_to_performance_impact_val = {
+static const unordered_map<string, string> key_to_performance_impact_val = {
     { "low", "Low or lower"},
     { "medium", "Medium or lower"},
     { "high", "High or lower"}
 };
-static const std::unordered_map<std::string, std::string> key_to_severity_level_val = {
+static const unordered_map<string, string> key_to_severity_level_val = {
     { "low", "Low or above"},
     { "medium", "Medium or above"},
     { "high", "High or above"},
     { "critical", "Critical"}
 };
-static const std::unordered_map<std::string, std::string> key_to_mode_val = {
+static const unordered_map<string, string> key_to_mode_val = {
     { "prevent-learn", "Prevent"},
     { "detect-learn", "Detect"},
     { "prevent", "Prevent"},
     { "detect", "Detect"},
     { "inactive", "Inactive"}
 };
-static const std::unordered_map<std::string, std::string> anti_bot_key_to_mode_val = {
+static const unordered_map<string, string> anti_bot_key_to_mode_val = {
     { "prevent-learn", "Prevent"},
     { "detect-learn", "Detect"},
     { "prevent", "Prevent"},
     { "detect", "Detect"},
     { "inactive", "Disabled"}
 };
-static const std::unordered_map<std::string, uint64_t> unit_to_int = {
+static const unordered_map<string, uint64_t> unit_to_int = {
     { "bytes", 1},
     { "KB", 1024},
     { "MB", 1048576},
     { "GB", 1073741824}
 };
-static const std::string TRANSPARENT_MODE = "Transparent";
+static const string TRANSPARENT_MODE = "Transparent";
 
 bool
 isModeInherited(const string &mode)
@@ -71,11 +72,11 @@ isModeInherited(const string &mode)
     return mode == "as-top-level" || mode == "inherited";
 }
 
-const std::string &
+const string &
 getModeWithDefault(
-    const std::string &mode,
-    const std::string &default_mode,
-    const std::unordered_map<std::string, std::string> &key_to_val)
+    const string &mode,
+    const string &default_mode,
+    const unordered_map<string, string> &key_to_val)
 {
     if (isModeInherited(mode) && (key_to_val.find(default_mode) != key_to_val.end())) {
         dbgError(D_LOCAL_POLICY) << "Setting to top-level mode: " << default_mode;
@@ -88,36 +89,35 @@ getModeWithDefault(
     return key_to_val.at(mode);
 }
 
-const std::vector<std::string> &
+const vector<string> &
 NewAppSecPracticeAntiBot::getIjectedUris() const
 {
     return injected_uris;
 }
 
-const std::vector<std::string> &
+const vector<string> &
 NewAppSecPracticeAntiBot::getValidatedUris() const
 {
     return validated_uris;
 }
 
-const std::string &
-NewAppSecPracticeAntiBot::getMode() const
+const string &
+NewAppSecPracticeAntiBot::getMode(const string &default_mode) const
 {
-    return override_mode;
+    return getModeWithDefault(override_mode, default_mode, anti_bot_key_to_mode_val);
 }
 
 void
 NewAppSecPracticeAntiBot::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Web Bots";
-    string mode;
     parseAppsecJSONKey<vector<string>>("injectedUris", injected_uris, archive_in);
     parseAppsecJSONKey<vector<string>>("validatedUris", validated_uris, archive_in);
-    parseMandatoryAppsecJSONKey<string>("overrideMode", mode, archive_in, "inactive");
-    if (valid_modes.count(mode) == 0) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec Web Bots override mode invalid: " << mode;
+    parseMandatoryAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
+    if (valid_modes.count(override_mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Web Bots override mode invalid: " << override_mode;
+        throw PolicyGenException("AppSec Web Bots override mode invalid: " + override_mode);
     }
-    override_mode = anti_bot_key_to_mode_val.at(mode);
 }
 
 void
@@ -242,14 +242,14 @@ NewAppSecPracticeWebAttacks::getProtections() const
 }
 
 SnortProtectionsSection::SnortProtectionsSection(
-    const std::string               &_context,
-    const std::string               &_asset_name,
-    const std::string               &_asset_id,
-    const std::string               &_practice_name,
-    const std::string               &_practice_id,
-    const std::string               &_source_identifier,
-    const std::string               &_mode,
-    const std::vector<std::string>  &_files)
+    const string               &_context,
+    const string               &_asset_name,
+    const string               &_asset_id,
+    const string               &_practice_name,
+    const string               &_practice_id,
+    const string               &_source_identifier,
+    const string               &_mode,
+    const vector<string>  &_files)
         :
     context(_context),
     asset_name(_asset_name),
@@ -278,10 +278,10 @@ SnortProtectionsSection::save(cereal::JSONOutputArchive &out_ar) const
 }
 
 DetectionRules::DetectionRules(
-    const std::string                   &_type,
-    const std::string                   &_SSM,
-    const std::string                   &_keywords,
-    const std::vector<std::string>      &_context)
+    const string                   &_type,
+    const string                   &_SSM,
+    const string                   &_keywords,
+    const vector<string>      &_context)
         :
     type(_type),
     SSM(_SSM),
@@ -314,14 +314,14 @@ DetectionRules::save(cereal::JSONOutputArchive &out_ar) const
 
 ProtectionMetadata::ProtectionMetadata(
     bool                                _silent,
-    const std::string                   &_protection_name,
-    const std::string                   &_severity,
-    const std::string                   &_confidence_level,
-    const std::string                   &_performance_impact,
-    const std::string                   &_last_update,
-    const std::string                   &_maintrain_id,
-    const std::vector<std::string>      &_tags,
-    const std::vector<std::string>      &_cve_list)
+    const string                   &_protection_name,
+    const string                   &_severity,
+    const string                   &_confidence_level,
+    const string                   &_performance_impact,
+    const string                   &_last_update,
+    const string                   &_maintrain_id,
+    const vector<string>      &_tags,
+    const vector<string>      &_cve_list)
         :
     silent(_silent),
     protection_name(_protection_name),
@@ -394,9 +394,9 @@ ProtectionsProtectionsSection::save(cereal::JSONOutputArchive &out_ar) const
 }
 
 ProtectionsSection::ProtectionsSection(
-    const std::vector<ProtectionsProtectionsSection>    &_protections,
-    const std::string                                   &_name,
-    const std::string                                   &_modification_time)
+    const vector<ProtectionsProtectionsSection>    &_protections,
+    const string                                   &_name,
+    const string                                   &_modification_time)
         :
     protections(_protections),
     name(_name),
@@ -460,12 +460,16 @@ SnortSectionWrapper::save(cereal::JSONOutputArchive &out_ar) const
 }
 
 void
-NewSnortSignaturesAndOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
+NewSnortSignatures::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Snort Signatures practice";
     parseMandatoryAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
     parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
     parseAppsecJSONKey<vector<string>>("files", files, archive_in);
+    if (valid_modes.count(override_mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Snort Signatures override mode invalid: " << override_mode;
+        throw PolicyGenException("AppSec Snort Signatures override mode invalid: " + override_mode);
+    }
     is_temporary = false;
     if (valid_modes.count(override_mode) == 0) {
         dbgWarning(D_LOCAL_POLICY) << "AppSec Snort Signatures override mode invalid: " << override_mode;
@@ -474,40 +478,105 @@ NewSnortSignaturesAndOpenSchemaAPI::load(cereal::JSONInputArchive &archive_in)
 }
 
 void
-NewSnortSignaturesAndOpenSchemaAPI::addFile(const string &file_name)
+NewSnortSignatures::addFile(const string &file_name)
 {
     files.push_back(file_name);
 }
 
 const string &
-NewSnortSignaturesAndOpenSchemaAPI::getOverrideMode(const string &default_mode) const
+NewSnortSignatures::getOverrideMode(const string &default_mode) const
 {
-    const string &res = getModeWithDefault(override_mode, default_mode, key_to_practices_val);
+    const string &res = getModeWithDefault(override_mode, default_mode, key_to_practices_mode_val);
     return res;
 }
 
 const vector<string> &
-NewSnortSignaturesAndOpenSchemaAPI::getFiles() const
+NewSnortSignatures::getFiles() const
 {
     return files;
 }
 
 const vector<string> &
-NewSnortSignaturesAndOpenSchemaAPI::getConfigMap() const
+NewSnortSignatures::getConfigMap() const
 {
     return config_map;
 }
 
 bool
-NewSnortSignaturesAndOpenSchemaAPI::isTemporary() const
+NewSnortSignatures::isTemporary() const
 {
     return is_temporary;
 }
 
 void
-NewSnortSignaturesAndOpenSchemaAPI::setTemporary(bool val)
+NewSnortSignatures::setTemporary(bool val)
 {
     is_temporary = val;
+}
+
+void
+NewOpenApiSchema::load(cereal::JSONInputArchive &archive_in)
+{
+    dbgTrace(D_LOCAL_POLICY) << "Loading AppSec Schema Validation practice";
+    parseMandatoryAppsecJSONKey<string>("overrideMode", override_mode, archive_in, "inactive");
+    parseAppsecJSONKey<vector<string>>("configmap", config_map, archive_in);
+    parseAppsecJSONKey<vector<string>>("files", files, archive_in);
+    parseAppsecJSONKey<string>("enforcementLevel", enforcement_level, archive_in, "fullSchema");
+    if (valied_enforcement_level.count(enforcement_level) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Schema Validation enforcement level invalid: " << enforcement_level;
+        throw PolicyGenException("AppSec Schema Validation enforcement level invalid: " + enforcement_level);
+    }
+    if (valid_modes.count(override_mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Schema Validation override mode invalid: " << override_mode;
+        throw PolicyGenException("AppSec Schema Validation override mode invalid: " + override_mode);
+    }
+    for (const string &file : files)
+    {
+        auto i_orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<NewOpenApiSchema>();
+        auto file_content = i_orchestration_tools->readFile(file);
+        if (!file_content.ok()) {
+            dbgWarning(D_LOCAL_POLICY) << "Couldn't open the schema validation file";
+            continue;
+        }
+        oas.push_back(Singleton::Consume<I_Encryptor>::by<NewOpenApiSchema>()->base64Encode(file_content.unpack()));
+    }
+}
+
+void
+NewOpenApiSchema::addOas(const string &file)
+{
+    oas.push_back(file);
+}
+
+const string &
+NewOpenApiSchema::getOverrideMode(const string &default_mode) const
+{
+    const string &res = getModeWithDefault(override_mode, default_mode, key_to_practices_val2);
+    return res;
+}
+
+const string &
+NewOpenApiSchema::getEnforceLevel() const
+{
+    return enforcement_level;
+}
+
+const vector<string> &
+NewOpenApiSchema::getFiles() const
+{
+    return files;
+}
+
+const vector<string> &
+NewOpenApiSchema::getConfigMap() const
+{
+    return config_map;
+}
+
+const vector<string> &
+NewOpenApiSchema::getOas() const
+{
+    return oas;
 }
 
 void
@@ -548,7 +617,7 @@ IpsProtectionsSection::IpsProtectionsSection(
 {
 }
 
-std::string &
+string &
 IpsProtectionsSection::getMode()
 {
     return mode;
@@ -568,6 +637,20 @@ IpsProtectionsSection::save(cereal::JSONOutputArchive &out_ar) const
         cereal::make_nvp("defaultAction",       mode),
         cereal::make_nvp("rules",               rules)
     );
+}
+
+bool
+IpsProtectionsSection::operator<(const IpsProtectionsSection &other) const
+{
+    // for sorting from the most specific to the least specific rule
+    if (name == default_appsec_name) return false;
+    if (other.name == default_appsec_name) return true;
+    return name.size() > other.name.size();
+}
+
+IPSSection::IPSSection(const vector<IpsProtectionsSection> &_ips) : ips(_ips)
+{
+    sort(ips.begin(), ips.end());
 }
 
 void
@@ -648,7 +731,7 @@ NewIntrusionPrevention::createIpsRules(const string &default_mode) const
     vector<IpsProtectionsRulesSection> ips_rules;
     IpsProtectionsRulesSection high_rule(
         min_cve_Year,
-        getModeWithDefault(high_confidence_event_action, default_mode, key_to_practices_val),
+        getRulesMode(high_confidence_event_action, default_mode),
         string("High"),
         max_performance_impact,
         string(""),
@@ -658,7 +741,7 @@ NewIntrusionPrevention::createIpsRules(const string &default_mode) const
 
     IpsProtectionsRulesSection med_rule(
         min_cve_Year,
-        getModeWithDefault(medium_confidence_event_action, default_mode, key_to_practices_val),
+        getRulesMode(medium_confidence_event_action, default_mode),
         string("Medium"),
         max_performance_impact,
         string(""),
@@ -668,7 +751,7 @@ NewIntrusionPrevention::createIpsRules(const string &default_mode) const
 
     IpsProtectionsRulesSection low_rule(
         min_cve_Year,
-        getModeWithDefault(low_confidence_event_action, default_mode, key_to_practices_val),
+        getRulesMode(low_confidence_event_action, default_mode),
         string("Low"),
         max_performance_impact,
         string(""),
@@ -679,11 +762,23 @@ NewIntrusionPrevention::createIpsRules(const string &default_mode) const
     return ips_rules;
 }
 
-const std::string &
-NewIntrusionPrevention::getMode(const std::string &default_mode) const
+const string &
+NewIntrusionPrevention::getMode(const string &default_mode) const
 {
-    const string &res = getModeWithDefault(override_mode, default_mode, key_to_practices_val);
+    const string &res = getModeWithDefault(override_mode, default_mode, key_to_practices_mode_val);
     return res;
+}
+
+const string &
+NewIntrusionPrevention::getRulesMode(const string &mode, const string &default_mode) const
+{
+    if (isModeInherited(mode)) return default_mode;
+
+    if (key_to_practices_mode_val.find(mode) == key_to_practices_mode_val.end()) {
+        dbgError(D_LOCAL_POLICY) << "Given mode: " << mode << " or top-level: " << default_mode << " is invalid.";
+        return key_to_practices_mode_val.at("inactive");
+    }
+    return key_to_practices_mode_val.at(mode);
 }
 
 FileSecurityProtectionsSection::FileSecurityProtectionsSection(
@@ -692,20 +787,20 @@ FileSecurityProtectionsSection::FileSecurityProtectionsSection(
     bool                    _allow_files_without_name,
     bool                    _required_file_size_limit,
     bool                    _required_archive_extraction,
-    const std::string       &_context,
-    const std::string       &_name,
-    const std::string       &_asset_id,
-    const std::string       &_practice_name,
-    const std::string       &_practice_id,
-    const std::string       &_action,
-    const std::string       &_files_without_name_action,
-    const std::string       &_high_confidence_action,
-    const std::string       &_medium_confidence_action,
-    const std::string       &_low_confidence_action,
-    const std::string       &_severity_level,
-    const std::string       &_file_size_limit_action,
-    const std::string       &_multi_level_archive_action,
-    const std::string       &_unopened_archive_action)
+    const string       &_context,
+    const string       &_name,
+    const string       &_asset_id,
+    const string       &_practice_name,
+    const string       &_practice_id,
+    const string       &_action,
+    const string       &_files_without_name_action,
+    const string       &_high_confidence_action,
+    const string       &_medium_confidence_action,
+    const string       &_low_confidence_action,
+    const string       &_severity_level,
+    const string       &_file_size_limit_action,
+    const string       &_multi_level_archive_action,
+    const string       &_unopened_archive_action)
         :
     file_size_limit(_file_size_limit),
     archive_file_size_limit(_archive_file_size_limit),
@@ -831,13 +926,13 @@ NewFileSecurityArchiveInspection::getrequiredArchiveExtraction() const
     return extract_archive_files;
 }
 
-const std::string &
+const string &
 NewFileSecurityArchiveInspection::getMultiLevelArchiveAction() const
 {
     return archived_files_within_archived_files;
 }
 
-const std::string &
+const string &
 NewFileSecurityArchiveInspection::getUnopenedArchiveAction() const
 {
     return archived_files_where_content_extraction_failed;
@@ -886,7 +981,7 @@ NewFileSecurityLargeFileInspection::getFileSizeLimit() const
     return (file_size_limit * unit_to_int.at(file_size_limit_unit));
 }
 
-const std::string &
+const string &
 NewFileSecurityLargeFileInspection::getFileSizeLimitAction() const
 {
     return files_exceeding_size_limit_action;
@@ -1007,7 +1102,7 @@ void
 NewAppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
 {
     dbgTrace(D_LOCAL_POLICY) << "Loading AppSec practice spec";
-    parseAppsecJSONKey<NewSnortSignaturesAndOpenSchemaAPI>(
+    parseAppsecJSONKey<NewOpenApiSchema>(
         "schemaValidation",
         openapi_schema_validation,
         archive_in
@@ -1015,11 +1110,15 @@ NewAppSecPracticeSpec::load(cereal::JSONInputArchive &archive_in)
     parseAppsecJSONKey<string>("appsecClassName", appsec_class_name, archive_in);
     parseMandatoryAppsecJSONKey<NewFileSecurity>("fileSecurity", file_security, archive_in);
     parseMandatoryAppsecJSONKey<NewIntrusionPrevention>("intrusionPrevention", intrusion_prevention, archive_in);
-    parseMandatoryAppsecJSONKey<NewSnortSignaturesAndOpenSchemaAPI>("snortSignatures", snort_signatures, archive_in);
+    parseMandatoryAppsecJSONKey<NewSnortSignatures>("snortSignatures", snort_signatures, archive_in);
     parseMandatoryAppsecJSONKey<NewAppSecPracticeWebAttacks>("webAttacks", web_attacks, archive_in);
     parseAppsecJSONKey<NewAppSecPracticeAntiBot>("antiBot", anti_bot, archive_in);
     parseAppsecJSONKey<string>("name", practice_name, archive_in);
     parseAppsecJSONKey<string>("practiceMode", mode, archive_in, "inherited");
+    if (valid_modes.count(mode) == 0) {
+        dbgWarning(D_LOCAL_POLICY) << "AppSec Threat prevention practice mode invalid: " << mode;
+        throw PolicyGenException("AppSec Threat prevention practice mode invalid: " + mode);
+    }
 }
 
 void
@@ -1028,13 +1127,13 @@ NewAppSecPracticeSpec::setName(const string &_name)
     practice_name = _name;
 }
 
-const NewSnortSignaturesAndOpenSchemaAPI &
-NewAppSecPracticeSpec::getOpenSchemaValidation() const
+NewOpenApiSchema &
+NewAppSecPracticeSpec::getOpenSchemaValidation()
 {
     return openapi_schema_validation;
 }
 
-NewSnortSignaturesAndOpenSchemaAPI &
+NewSnortSignatures &
 NewAppSecPracticeSpec::getSnortSignatures()
 {
     return snort_signatures;

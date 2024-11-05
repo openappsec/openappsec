@@ -836,7 +836,7 @@ TEST_F(DebugConfigTest, testSetConfig)
     EXPECT_CALL(mock_rest, mockRestCall(RestAction::ADD, "declare-boolean-variable", _)).WillOnce(Return(true));
 
     env.preload();
-    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Executable Name", "debug-ut");
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "debug-ut");
     env.init();
 
     Debug::init();

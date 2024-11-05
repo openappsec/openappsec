@@ -438,19 +438,30 @@ WebAppSection::WebAppSection(
     csrf_protection_mode("Disabled"),
     open_redirect_mode("Disabled"),
     error_disclosure_mode("Disabled"),
+    schema_validation_mode("Disabled"),
+    schema_validation_enforce_level("fullSchema"),
     practice_advanced_config(parsed_appsec_spec),
     anti_bots(parsed_appsec_spec.getAntiBot()),
     trusted_sources({ parsed_trusted_sources })
 {
+    auto mitigation_sevirity = parsed_appsec_spec.getWebAttacks().getMinimumConfidence();
+    if (key_to_mitigation_severity.find(mitigation_sevirity) == key_to_mitigation_severity.end()) {
+        dbgWarning(D_LOCAL_POLICY)
+        << "web attack mitigation severity invalid: "
+        << mitigation_sevirity;
+        throw PolicyGenException("web attack mitigation severity invalid: " + mitigation_sevirity);
+    } else {
+        web_attack_mitigation_severity = key_to_mitigation_severity.at(mitigation_sevirity);
+    }
     web_attack_mitigation = web_attack_mitigation_mode != "Disabled";
     web_attack_mitigation_severity =
         web_attack_mitigation_mode != "Prevent" ? "Transparent" :
-        parsed_appsec_spec.getWebAttacks().getMinimumConfidence();
+        web_attack_mitigation_severity;
     web_attack_mitigation_action =
         web_attack_mitigation_mode != "Prevent" ? "Transparent" :
-        web_attack_mitigation_severity == "critical" ? "low" :
-        web_attack_mitigation_severity == "high" ? "balanced" :
-        web_attack_mitigation_severity == "medium" ? "high" :
+        web_attack_mitigation_severity == "Critical" ? "Low" :
+        web_attack_mitigation_severity == "High" ? "Balanced" :
+        web_attack_mitigation_severity == "Medium" ? "High" :
         "Error";
 
     triggers.push_back(TriggersInWaapSection(parsed_log_trigger));
@@ -479,6 +490,9 @@ WebAppSection::WebAppSection(
     const string &_web_attack_mitigation_severity,
     const string &_web_attack_mitigation_mode,
     const string &_bot_protection,
+    const string &_schema_validation_mode,
+    const string &_schema_validation_enforce_level,
+    const vector<string> &_schema_validation_oas,
     const PracticeAdvancedConfig &_practice_advanced_config,
     const AppsecPracticeAntiBotSection &_anti_bots,
     const LogTriggerSection &parsed_log_trigger,
@@ -493,19 +507,29 @@ WebAppSection::WebAppSection(
     practice_id(_practice_id),
     practice_name(_practice_name),
     context(_context),
-    web_attack_mitigation_severity(_web_attack_mitigation_severity),
     web_attack_mitigation_mode(_web_attack_mitigation_mode),
     bot_protection(_bot_protection),
+    schema_validation_mode(_schema_validation_mode),
+    schema_validation_enforce_level(_schema_validation_enforce_level),
+    schema_validation_oas(_schema_validation_oas),
     practice_advanced_config(_practice_advanced_config),
     anti_bots(_anti_bots),
     trusted_sources({ parsed_trusted_sources })
 {
+    if (key_to_mitigation_severity.find(_web_attack_mitigation_severity) == key_to_mitigation_severity.end()) {
+        dbgWarning(D_LOCAL_POLICY)
+        << "web attack mitigation severity invalid: "
+        << _web_attack_mitigation_severity;
+        throw PolicyGenException("web attack mitigation severity invalid: " + _web_attack_mitigation_severity);
+    } else {
+        web_attack_mitigation_severity = key_to_mitigation_severity.at(_web_attack_mitigation_severity);
+    }
     web_attack_mitigation = web_attack_mitigation_mode != "Disabled";
     web_attack_mitigation_action =
         web_attack_mitigation_mode != "Prevent" ? "Transparent" :
-        web_attack_mitigation_severity == "critical" ? "low" :
-        web_attack_mitigation_severity == "high" ? "balanced" :
-        web_attack_mitigation_severity == "medium" ? "high" :
+        web_attack_mitigation_severity == "Critical" ? "Low" :
+        web_attack_mitigation_severity == "High" ? "Balanced" :
+        web_attack_mitigation_severity == "Medium" ? "High" :
         "Error";
 
     csrf_protection_mode = protections.getCsrfProtectionMode(_web_attack_mitigation_mode);
@@ -516,6 +540,7 @@ WebAppSection::WebAppSection(
     for (const SourcesIdentifiers &source_ident : parsed_trusted_sources.getSourcesIdentifiers()) {
         overrides.push_back(AppSecOverride(source_ident));
     }
+
 }
 
 // LCOV_EXCL_STOP
@@ -523,35 +548,35 @@ WebAppSection::WebAppSection(
 void
 WebAppSection::save(cereal::JSONOutputArchive &out_ar) const
 {
-    string disabled_str = "Disabled";
     vector<string> empty_list;
     out_ar(
-        cereal::make_nvp("context",                     context),
-        cereal::make_nvp("webAttackMitigation",         web_attack_mitigation),
-        cereal::make_nvp("webAttackMitigationSeverity", web_attack_mitigation_severity),
-        cereal::make_nvp("webAttackMitigationAction",   web_attack_mitigation_action),
-        cereal::make_nvp("webAttackMitigationMode",     web_attack_mitigation_mode),
-        cereal::make_nvp("practiceAdvancedConfig",      practice_advanced_config),
-        cereal::make_nvp("csrfProtection",              csrf_protection_mode),
-        cereal::make_nvp("openRedirect",                open_redirect_mode),
-        cereal::make_nvp("errorDisclosure",             error_disclosure_mode),
-        cereal::make_nvp("practiceId",                  practice_id),
-        cereal::make_nvp("practiceName",                practice_name),
-        cereal::make_nvp("assetId",                     asset_id),
-        cereal::make_nvp("assetName",                   asset_name),
-        cereal::make_nvp("ruleId",                      rule_id),
-        cereal::make_nvp("ruleName",                    rule_name),
-        cereal::make_nvp("schemaValidation",               false),
-        cereal::make_nvp("schemaValidation_v2",            disabled_str),
-        cereal::make_nvp("oas",                            empty_list),
-        cereal::make_nvp("triggers",                    triggers),
-        cereal::make_nvp("applicationUrls",             application_urls),
-        cereal::make_nvp("overrides",                   overrides),
-        cereal::make_nvp("trustedSources",              trusted_sources),
-        cereal::make_nvp("waapParameters",              empty_list),
-        cereal::make_nvp("botProtection",               false),
-        cereal::make_nvp("antiBot",                     anti_bots),
-        cereal::make_nvp("botProtection_v2",            bot_protection != "" ? bot_protection : string("Detect"))
+        cereal::make_nvp("context",                         context),
+        cereal::make_nvp("webAttackMitigation",             web_attack_mitigation),
+        cereal::make_nvp("webAttackMitigationSeverity",     web_attack_mitigation_severity),
+        cereal::make_nvp("webAttackMitigationAction",       web_attack_mitigation_action),
+        cereal::make_nvp("webAttackMitigationMode",         web_attack_mitigation_mode),
+        cereal::make_nvp("practiceAdvancedConfig",          practice_advanced_config),
+        cereal::make_nvp("csrfProtection",                  csrf_protection_mode),
+        cereal::make_nvp("openRedirect",                    open_redirect_mode),
+        cereal::make_nvp("errorDisclosure",                 error_disclosure_mode),
+        cereal::make_nvp("practiceId",                      practice_id),
+        cereal::make_nvp("practiceName",                    practice_name),
+        cereal::make_nvp("assetId",                         asset_id),
+        cereal::make_nvp("assetName",                       asset_name),
+        cereal::make_nvp("ruleId",                          rule_id),
+        cereal::make_nvp("ruleName",                        rule_name),
+        cereal::make_nvp("schemaValidation",                schema_validation_mode == "Prevent"),
+        cereal::make_nvp("schemaValidation_v2",             schema_validation_mode),
+        cereal::make_nvp("oas",                             schema_validation_oas),
+        cereal::make_nvp("schemaValidationEnforceLevel",    schema_validation_enforce_level),
+        cereal::make_nvp("triggers",                        triggers),
+        cereal::make_nvp("applicationUrls",                 application_urls),
+        cereal::make_nvp("overrides",                       overrides),
+        cereal::make_nvp("trustedSources",                  trusted_sources),
+        cereal::make_nvp("waapParameters",                  empty_list),
+        cereal::make_nvp("botProtection",                   false),
+        cereal::make_nvp("antiBot",                         anti_bots),
+        cereal::make_nvp("botProtection_v2",                bot_protection != "" ? bot_protection : string("Detect"))
     );
 }
 

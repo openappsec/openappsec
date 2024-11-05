@@ -150,7 +150,8 @@ ParserBinaryFile::push(const char *buf, size_t len)
                     }
                 } else {
                     dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "parsing binary. Searching for tail: " << tail;
-                    c = strstr(buf + len - tail.size(), tail.c_str());
+                    size_t tail_lookup_offset = (len > MAX_TAIL_LOOKUP) ? len - MAX_TAIL_LOOKUP : 0;
+                    c = strstr(buf + tail_lookup_offset, tail.c_str());
                     dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "search result: c=" << c;
                     if (c) {
                         m_state = s_end;
