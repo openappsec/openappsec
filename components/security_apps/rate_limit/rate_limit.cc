@@ -185,7 +185,7 @@ public:
         ScopedContext rate_limit_ctx;
         rate_limit_ctx.registerValue<GenericConfigId>(AssetMatcher::ctx_key, site_config->get_AssetId());
         auto maybe_rate_limit_config = getConfiguration<RateLimitConfig>("rulebase", "rateLimit");
-        if (!maybe_rate_limit_config.ok())
+        if (!maybe_rate_limit_config.ok() || !site_config)
             return genError("Failed to get rate limit configuration. Skipping rate limit check.");
 
         const auto &rate_limit_config = maybe_rate_limit_config.unpack();
