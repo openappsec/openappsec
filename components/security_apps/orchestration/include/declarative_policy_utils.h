@@ -79,8 +79,8 @@ public:
     ) override;
     std::string getUpdate(CheckUpdateRequest &request) override;
     bool shouldApplyPolicy() override;
-    void turnOffApplyPolicyFlag() override;
-    void turnOnApplyPolicyFlag() override;
+    void turnOffApplyLocalPolicyFlag() override;
+    void turnOnApplyLocalPolicyFlag() override;
 
     std::string getCurrPolicy() override { return curr_policy; }
 
@@ -94,7 +94,7 @@ private:
     std::string curr_version;
     std::string curr_policy;
     std::string curr_checksum;
-    bool should_apply_policy;
+    bool should_apply_local_policy;
 };
 
 #endif // __DECLARATIVE_POLICY_UTILS_H__

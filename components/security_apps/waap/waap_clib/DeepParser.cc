@@ -28,6 +28,8 @@
 #include "ParserDelimiter.h"
 #include "ParserPDF.h"
 #include "ParserBinaryFile.h"
+#include "ParserKnownBenignSkipper.h"
+#include "ParserScreenedJson.h"
 #include "WaapAssetState.h"
 #include "Waf2Regex.h"
 #include "Waf2Util.h"
@@ -359,6 +361,7 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             isRefererParamPayload,
             isUrlPayload,
             isUrlParamPayload,
+            isCookiePayload,
             flags,
             parser_depth,
             base64BinaryFileType
@@ -410,6 +413,7 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             isRefererParamPayload,
             isUrlPayload,
             isUrlParamPayload,
+            isCookiePayload,
             flags,
             parser_depth,
             base64BinaryFileType
@@ -461,6 +465,7 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
                 isRefererParamPayload,
                 isUrlPayload,
                 isUrlParamPayload,
+                isCookiePayload,
                 flags,
                 parser_depth,
                 base64ParamFound,
@@ -835,6 +840,7 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
     bool isRefererParamPayload,
     bool isUrlPayload,
     bool isUrlParamPayload,
+    bool isCookiePayload,
     int flags,
     size_t parser_depth,
     bool base64ParamFound,
@@ -854,6 +860,7 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
             isRefererParamPayload,
             isUrlPayload,
             isUrlParamPayload,
+            isCookiePayload,
             flags,
             parser_depth,
             b64FileType
@@ -918,6 +925,7 @@ bool isRefererPayload,
 bool isRefererParamPayload,
 bool isUrlPayload,
 bool isUrlParamPayload,
+bool isCookiePayload,
 int flags,
 size_t parser_depth
 ) {
@@ -959,6 +967,7 @@ DeepParser::createInternalParser(
     bool isRefererParamPayload,
     bool isUrlPayload,
     bool isUrlParamPayload,
+    bool isCookiePayload,
     int flags,
     size_t parser_depth,
     Waap::Util::BinaryFileType b64FileType
@@ -978,7 +987,19 @@ DeepParser::createInternalParser(
         << "\n\tflags: "
         << flags
         << "\n\tparser_depth: "
-        << parser_depth;
+        << parser_depth
+        << "\n\tisBodyPayload: "
+        << isBodyPayload
+        << "\n\tisRefererPayload: "
+        << isRefererPayload
+        << "\n\tisRefererParamPayload: "
+        << isRefererParamPayload
+        << "\n\tisUrlPayload: "
+        << isUrlPayload
+        << "\n\tisUrlParamPayload: "
+        << isUrlParamPayload
+        << "\n\tisCookiePayload: "
+        << isCookiePayload;
     bool isPipesType = false, isSemicolonType = false, isAsteriskType = false, isCommaType = false,
         isAmperType = false;
     bool isKeyValDelimited = false;
@@ -1042,6 +1063,53 @@ DeepParser::createInternalParser(
                     isBinaryType = true;
                 }
             }
+        }
+    }
+
+    if (Waap::Util::isScreenedJson(cur_val)) {
+        dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse screened JSON";
+        m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserScreenedJson>>(*this, parser_depth + 1));
+        offset = 0;
+        return offset;
+    }
+
+    dbgTrace(D_WAAP_DEEP_PARSER)
+        << "Offset = "
+        << offset
+        << " depth = "
+        << m_depth
+        << " isBodyPayload = "
+        << isBodyPayload;
+    //Detect sensor_data format in body and just use dedicated filter for it
+    if (m_depth == 1
+        && isBodyPayload
+        && Waap::Util::detectKnownSource(cur_val) ==  Waap::Util::SOURCE_TYPE_SENSOR_DATA) {
+        m_parsersDeque.push_back(
+            std::make_shared<BufferedParser<ParserKnownBenignSkipper>>(
+                *this,
+                parser_depth + 1,
+                Waap::Util::SOURCE_TYPE_SENSOR_DATA
+            )
+        );
+        offset = 0;
+        dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse data_sensor data - skipping it";
+        return offset;
+    }
+    // Detect cookie parameter sensorsdata2015jssdkcross
+    // and causes false positives due to malformed JSON. Make preprocessing to parse it correctly
+    if (m_depth == 2
+        && isCookiePayload) {
+        offset = Waap::Util::definePrefixedJson(cur_val);
+        if (offset >= 0) {
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserJson>>(
+                    *this,
+                    parser_depth + 1,
+                    m_pTransaction
+                )
+            );
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse JSON data";
+            return offset;
         }
     }
 
@@ -1374,6 +1442,7 @@ DeepParser::createInternalParser(
             isRefererParamPayload,
             isUrlPayload,
             isUrlParamPayload,
+            isCookiePayload,
             flags,
             parser_depth
             );

@@ -33,6 +33,8 @@
 #include "maybe_res.h"
 #include "rest/schema_printer.h"
 
+static const std::string BULK_ARRAY_NAME = "bulkArray";
+
 /// @class JsonError
 /// @brief Class representing JSON parsing errors.
 ///

@@ -32,7 +32,10 @@ MetricMetadata::Units operator"" _unit(const char *str, size_t) { return MetricM
 MetricMetadata::Description operator"" _desc(const char *str, size_t) { return MetricMetadata::Description{str}; }
 
 // LCOV_EXCL_START Reason: Tested in unit test (testAIOPSMapMetric), but not detected by coverage
-static ostream & operator<<(ostream &os, const AiopsMetricList &metrics) { return os << metrics.toString(); }
+static ostream & operator<<(ostream &os, const CompressAndEncodeAIOPSMetrics &metrics)
+{
+    return os << metrics.toString();
+}
 // LCOV_EXCL_STOP
 
 vector<AiopsMetricData>
@@ -44,8 +47,8 @@ MetricCalc::getAiopsMetrics() const
     string name = getMetricDotName() != "" ? getMetricDotName() : getMetricName();
     string units = getMetircUnits();
     string description = getMetircDescription();
-    string type = getMetricType() == MetricType::GAUGE ? "gauge" : "counter";
-    
+    string type = getMetricType() == MetricType::GAUGE ? "Gauge" : "Counter";
+
     return { AiopsMetricData(name, type, units, description, getBasicLabels(), value) };
 }
 
@@ -320,17 +323,17 @@ class PrometheusRest : public ClientRest
     public:
         Metric(const string &n, const string &t, const string &d, const string &l, const string &v)
                 :
-            name(n),
-            type(t),
-            description(d),
+            metric_name(n),
+            metric_type(t),
+            metric_description(d),
             labels(l),
             value(v)
         {}
 
     private:
-        C2S_PARAM(string, name);
-        C2S_PARAM(string, type);
-        C2S_PARAM(string, description);
+        C2S_PARAM(string, metric_name);
+        C2S_PARAM(string, metric_type);
+        C2S_PARAM(string, metric_description);
         C2S_PARAM(string, labels);
         C2S_PARAM(string, value);
     };
@@ -356,6 +359,7 @@ void
 GenericMetric::generatePrometheus()
 {
     if (!getProfileAgentSettingWithDefault(false, "prometheus")) return;
+    dbgTrace(D_METRICS) << "Generate prometheus metric";
 
     vector<PrometheusData> all_metrics;
     for (auto &calc : calcs) {
@@ -371,7 +375,7 @@ GenericMetric::generatePrometheus()
     new_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendSyncMessage(
         HTTPMethod::POST,
-        "/set-prometheus-data",
+        "/add-metrics",
         rest,
         MessageCategory::GENERIC,
         new_config_req_md
@@ -382,6 +386,7 @@ void
 GenericMetric::generateAiopsLog()
 {
     if (!getConfigurationWithDefault<bool>(true, "metric", "aiopsMetricSendEnable")) return;
+    dbgTrace(D_METRICS) << "Generate AIOPS metric";
 
     AiopsMetricList aiops_metrics;
 
@@ -397,18 +402,17 @@ GenericMetric::generateAiopsLog()
         Level::LOG,
         LogLevel::INFO,
         audience,
-        team,
+        ReportIS::AudienceTeam::HORIZON_TELEMETRY,
         Severity::INFO,
         Priority::LOW,
         report_interval,
         LogField("agentId", Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getAgentId()),
         tags,
         Tags::INFORMATIONAL,
-        issuing_engine
+        ReportIS::IssuingEngine::HORIZON_TELEMETRY_METRICS
     );
 
-    metric_to_fog << LogField("eventObject", aiops_metrics);
-    
+    metric_to_fog << LogField("eventObject", CompressAndEncodeAIOPSMetrics(aiops_metrics));
     LogRest metric_client_rest(metric_to_fog);
     sendLog(metric_client_rest);
 }

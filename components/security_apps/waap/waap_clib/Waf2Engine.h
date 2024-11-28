@@ -41,7 +41,6 @@
 #include "i_waap_telemetry.h"
 #include "i_deepAnalyzer.h"
 #include "i_time_get.h"
-#include "i_waap_model_result_logger.h"
 #include "table_opaque.h"
 #include "WaapResponseInspectReasons.h"
 #include "WaapResponseInjectReasons.h"

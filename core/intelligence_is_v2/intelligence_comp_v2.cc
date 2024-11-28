@@ -93,9 +93,12 @@ public:
         res << "\"name\": \"" << details->getAgentId() << "\", ";
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
         res << "\"url\": \"http://127.0.0.1:" << rest->getListeningPort() <<"/set-new-invalidation\", ";
+        res << "\"capabilities\": { \"getBulkCallback\": " << "true" << " }, ";
         res << "\"dataMap\": [";
         res << stream.str();
         res << " ] }";
+
+        dbgTrace(D_INTELLIGENCE) << res.str();
 
         return res;
     }
@@ -148,13 +151,19 @@ public:
     void
     performCallBacks(const Invalidation &invalidation, const string &registration_id) const override
     {
-        dbgDebug(D_INTELLIGENCE) << "Looking for callbacks for invalidation " << invalidation.genObject();
+        dbgTrace(D_INTELLIGENCE)
+            << "Looking for callbacks for invalidation "
+            << invalidation.genObject()
+            << " registration id: "
+            << registration_id;
         if (registration_id != "") {
             auto invalidation_cb = registration_id_to_cb.find(registration_id);
             if (invalidation_cb != registration_id_to_cb.end()) return invalidation_cb->second(invalidation);
         }
+        dbgDebug(D_INTELLIGENCE) << "Have not found callback per registration id";
+
         for (auto &registed_invalidation : callbacks) {
-            dbgTrace(D_INTELLIGENCE) << "Checking against: " << registed_invalidation.second.first.genObject();
+            dbgDebug(D_INTELLIGENCE) << "Checking against: " << registed_invalidation.second.first.genObject();
             performCallBacksImpl(invalidation, registed_invalidation.second);
         }
     }
@@ -169,6 +178,7 @@ private:
         auto &registereed_invalidation = invalidation_and_cb.first;
         auto &cb = invalidation_and_cb.second;
         if (!registereed_invalidation.matches(actual_invalidation)) return;
+        dbgTrace(D_INTELLIGENCE) << "Found a matching invalidation registration, should callback";
         cb(actual_invalidation);
     }
 
@@ -177,7 +187,7 @@ private:
     uint running_id = 0;
 };
 
-class ReceiveInvalidation : public ServerRest
+class SingleReceivedInvalidation : public ServerRest
 {
 public:
     void
@@ -246,6 +256,29 @@ private:
     C2S_OPTIONAL_PARAM(vector<StrAttributes>, mainAttributes);
     C2S_OPTIONAL_PARAM(vector<StrAttributes>, attributes);
     C2S_OPTIONAL_PARAM(string, invalidationType);
+};
+
+
+class ReceiveInvalidation : public ServerRest
+{
+public:
+
+    void
+    doCall() override
+    {
+        dbgTrace(D_INTELLIGENCE)
+            << (bulkArray.isActive() ?
+            "BULK invalidations, receiving invalidations in bulks"
+            : "error in format, expected bulk invalidations, not single");
+
+        for (SingleReceivedInvalidation &r : bulkArray.get()) {
+            r.doCall();
+        }
+        return;
+    }
+
+private:
+    C2S_LABEL_PARAM(vector<SingleReceivedInvalidation>, bulkArray, BULK_ARRAY_NAME);
 };
 
 class PagingController

@@ -2033,7 +2033,7 @@ private:
         }
         auto policy_mgmt_mode = getSettingWithDefault<string>("management", "profileManagedMode");
         if (getOrchestrationMode() == OrchestrationMode::HYBRID || policy_mgmt_mode == "declarative") {
-            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyPolicyFlag();
+            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOnApplyLocalPolicyFlag();
         }
 
         auto policy_version = i_service_controller->getPolicyVersion();

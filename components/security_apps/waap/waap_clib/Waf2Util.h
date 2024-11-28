@@ -894,6 +894,16 @@ namespace Util {
 
     bool isValidJson(const std::string &input);
 
+    enum KnownSourceType {
+        SOURCE_TYPE_UNKNOWN = 0,
+        SOURCE_TYPE_SENSOR_DATA = 1
+    };
+
+    KnownSourceType detectKnownSource(const std::string &input);
+    bool isScreenedJson(const std::string &input);
+
+    int definePrefixedJson(const std::string &input);
+
     bool detectJSONasParameter(const std::string &s,
             std::string &key,
             std::string &value);

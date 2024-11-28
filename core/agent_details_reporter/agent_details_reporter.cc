@@ -117,7 +117,7 @@ private:
                 return;
             }
 
-            dbgInfo(D_AGENT_DETAILS)
+            dbgDebug(D_AGENT_DETAILS)
                 << "Successfully handled attributes persistence. Operation: "
                 << operation
                 << ", Path "

@@ -293,8 +293,13 @@ public:
             return ACCEPT;
         }
 
-        burst = rule.getRateLimit();
-        limit = calcRuleLimit(rule);
+        auto replicas = getenv("REPLICA_COUNT") ? std::stoi(getenv("REPLICA_COUNT")) : 1;
+        if (replicas == 0) {
+            dbgWarning(D_RATE_LIMIT) << "REPLICA_COUNT environment variable is set to 0, setting REPLICA_COUNT to 1";
+            replicas = 1;
+        }
+        burst = static_cast<float>(rule.getRateLimit()) / replicas;
+        limit = static_cast<float>(calcRuleLimit(rule)) / replicas;
 
         dbgTrace(D_RATE_LIMIT)
             << "found rate limit rule with: "

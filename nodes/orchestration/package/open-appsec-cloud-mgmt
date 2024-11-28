@@ -58,6 +58,7 @@ send_notification_to_the_fog()
         "$var_fog/api/v1/agents/events/bulk" -H "X-Trace-Id:${correlation_id}" \
         --header "Authorization: Bearer ${ra_token}" --header "user-agent: Infinity Next (a7030abf93a4c13)" \
         --header "Content-Type: application/json" \
+        --header "x-rate-limit-product-type: openappsec" \
         --data "{\"logs\": [{\"log\": {\"eventTime\": \
         \"$DATE\",\"eventName\": \"Agent started onboarding process to cloud management\",\"eventSeverity\": \
         \"Info\",\"eventPriority\": \"Urgent\",\"eventLogLevel\": \"info\",\"eventType\": \"Event Driven\",
@@ -73,7 +74,9 @@ send_notification_to_the_fog()
         upload_res=$(curl -s -o /dev/null -s -w "%{http_code}\n" \
             --request POST "$var_fog/api/v1/agents/events/bulk" -H "X-Trace-Id:${correlation_id}" \
             --header "Authorization: Bearer ${ra_token}" --header "user-agent: Infinity Next (a7030abf93a4c13)" \
-            --header "Content-Type: application/json" --data "{\"logs\": \
+            --header "Content-Type: application/json" \
+            --header "x-rate-limit-product-type: openappsec" \
+            --data "{\"logs\": \
             [{\"log\": {\"eventTime\": \"$DATE\",\"eventName\": \"Agent started onboarding process to cloud management\",
             \"eventSeverity\": \"Info\",\"eventPriority\": \"Urgent\",\"eventLogLevel\": \"info\",\"eventType\": \"Event Driven\",
             \"eventLevel\": \"Log\",\"eventAudience\": \"Internal\",\"eventAudienceTeam\": \"Agent Core\",\"eventFrequency\": 0,

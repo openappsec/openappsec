@@ -1358,7 +1358,7 @@ Waf2Transaction::isHtmlType(const char* data, int data_len){
         dbgTrace(D_WAAP) << "Waf2Transaction::isHtmlType: false";
         return false;
     }
-    std::string body(data);
+    std::string body(data, data_len);
     if(!m_pWaapAssetState->getSignatures()->html_regex.hasMatch(body))
     {
         dbgTrace(D_WAAP) << "Waf2Transaction::isHtmlType: false";
@@ -1661,6 +1661,9 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     waapLog << LogField("sourcePort", m_remote_port);
     waapLog << LogField("httpHostName", m_hostStr);
     waapLog << LogField("httpMethod", m_methodStr);
+    if (!m_siteConfig->get_AssetId().empty()) waapLog << LogField("assetId", m_siteConfig->get_AssetId());
+    if (!m_siteConfig->get_AssetName().empty()) waapLog << LogField("assetName", m_siteConfig->get_AssetName());
+
     const auto& autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
         m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
     bool send_extended_log = shouldSendExtendedLog(triggerLog);
@@ -2343,6 +2346,7 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
         exceptions_dict["sourceIdentifier"].insert(m_source_identifier);
         exceptions_dict["url"].insert(getUriStr());
         exceptions_dict["hostName"].insert(m_hostStr);
+        exceptions_dict["method"].insert(m_methodStr);
 
         for (auto &keyword : res.keyword_matches) {
             exceptions_dict["indicator"].insert(keyword);
@@ -2355,8 +2359,9 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
         auto behaviors = exceptions.unpack().getBehavior(exceptions_dict,
                 getAssetState()->m_filtersMngr->getMatchedOverrideKeywords());
         for (const auto &behavior : behaviors) {
+            dbgTrace(D_WAAP_OVERRIDE) << "got behavior: " << behavior.getId();
             if (!res.filtered_keywords.empty() || res.score > 0) {
-                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for " << res.param_name << " with filtered indicators";
+                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for param '" << res.param_name << "' with filtered indicators";
                 std::string overrideId = behavior.getId();
                 if (m_overrideOriginalMaxScore.find(overrideId) == m_overrideOriginalMaxScore.end()){
                     m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
@@ -2375,7 +2380,7 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
             }
             if (behavior == action_ignore)
             {
-                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for " << res.param_name << " should ignore.";
+                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for param '" << res.param_name << "': should ignore.";
                 std::string overrideId = behavior.getId();
                 if (!overrideId.empty()) {
                     m_matchedOverrideIds.insert(overrideId);

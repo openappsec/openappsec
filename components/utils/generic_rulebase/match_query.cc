@@ -111,7 +111,7 @@ MatchQuery::load(cereal::JSONInputArchive &archive_in)
                     is_specific_label = false;
                 }
             }
-            is_ignore_keyword = (key == "indicator");
+            is_ignore_keyword = (key == "indicator" || key == "keyword");
 
             if (condition_type != Conditions::Exist) {
                 archive_in(cereal::make_nvp("value", value));
@@ -244,9 +244,10 @@ MatchQuery::getAllKeys() const
 bool
 MatchQuery::matchAttributes(
         const unordered_map<string, set<string>> &key_value_pairs,
-        set<string> &matched_override_keywords ) const
+        set<string> &matched_override_keywords) const
 {
 
+    dbgTrace(D_RULEBASE_CONFIG) << "Start matching attributes";
     if (type == MatchType::Condition) {
         auto key_value_pair = key_value_pairs.find(key);
         if (key_value_pair == key_value_pairs.end()) {
@@ -257,9 +258,11 @@ MatchQuery::matchAttributes(
     } else if (type == MatchType::Operator && operator_type == Operators::And) {
         for (const MatchQuery &inner_match: items) {
             if (!inner_match.matchAttributes(key_value_pairs, matched_override_keywords)) {
+                dbgTrace(D_RULEBASE_CONFIG) << "Failed to match attributes for AND operator";
                 return false;
             }
         }
+        dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched all inner matches for AND operator";
         return true;
     } else if (type == MatchType::Operator && operator_type == Operators::Or) {
         // With 'or' condition, evaluate matched override keywords first and add the ones that were fully matched
@@ -272,6 +275,7 @@ MatchQuery::matchAttributes(
                 res = true;
             }
         }
+        dbgTrace(D_RULEBASE_CONFIG) << "Match result for OR operator is: " << res;
         return res;
     } else {
         dbgWarning(D_RULEBASE_CONFIG) << "Unsupported match query type";
@@ -285,6 +289,7 @@ MatchQuery::getMatch( const unordered_map<string, set<string>> &key_value_pairs)
     MatchQuery::MatchResult matches;
     matches.matched_keywords = make_shared<set<string>>();
     matches.is_match = matchAttributes(key_value_pairs, *matches.matched_keywords);
+    dbgTrace(D_RULEBASE_CONFIG) << "Match result: " << matches.is_match;
     return matches;
 }
 
@@ -306,10 +311,13 @@ MatchQuery::matchAttributes(
 
     if (isKeyTypeIp()) {
         match = matchAttributesIp(values);
+        dbgTrace(D_RULEBASE_CONFIG) << "Match result for IP address: " << match;
     } else if (isRegEx()) {
         match = matchAttributesRegEx(values, matched_override_keywords);
+        dbgTrace(D_RULEBASE_CONFIG) << "Match result for regex: " << match;
     } else {
         match = matchAttributesString(values);
+        dbgTrace(D_RULEBASE_CONFIG) << "Match result for string: " << match;
     }
 
     return negate ? !match : match;
@@ -324,6 +332,8 @@ MatchQuery::matchAttributesRegEx(
     boost::cmatch value_matcher;
     for (const boost::regex &val_regex : regex_values) {
         for (const string &requested_match_value : values) {
+            dbgTrace(D_RULEBASE_CONFIG) << "Matching value: '" << requested_match_value
+                                    << "' with regex: '" << val_regex << "'";
             if (NGEN::Regex::regexMatch(
                 __FILE__,
                 __LINE__,

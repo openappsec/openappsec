@@ -783,6 +783,55 @@ WaapAssetState::filterKeywordsDueToLongText(Waf2ScanResult &res) const
 #endif
 }
 
+// std::string nicePrint() - is a function used to create std::string that will represent all data that is
+// collected inside Waf2ScanResult object. This function is used for debugging purposes. it should make deep-dive
+// into the object easier.
+
+std::string
+WaapAssetState::nicePrint(Waf2ScanResult &res) const
+{
+    std::string result = "Waf2ScanResult:\n";
+    result += "keyword_matches:\n";
+    for (const auto &keyword : res.keyword_matches) {
+        result += keyword + "\n";
+    }
+    result += "regex_matches:\n";
+    for (const auto &regex : res.regex_matches) {
+        result += regex + "\n";
+    }
+    result += "filtered_keywords:\n";
+    for (const auto &filtered : res.filtered_keywords) {
+        result += filtered + "\n";
+    }
+    result += "found_patterns:\n";
+    for (const auto &pattern : res.found_patterns) {
+        result += pattern.first + ":\n";
+        for (const auto &value : pattern.second) {
+            result += value + "\n";
+        }
+    }
+    result += "unescaped_line: " + res.unescaped_line + "\n";
+    result += "param_name: " + res.param_name + "\n";
+    result += "location: " + res.location + "\n";
+    result += "score: " + std::to_string(res.score) + "\n";
+    result += "scoreNoFilter: " + std::to_string(res.scoreNoFilter) + "\n";
+    result += "scoreArray:\n";
+    for (const auto &score : res.scoreArray) {
+        result += std::to_string(score) + "\n";
+    }
+    result += "keywordCombinations:\n";
+    for (const auto &combination : res.keywordCombinations) {
+        result += combination + "\n";
+    }
+    result += "attack_types:\n";
+    for (const auto &attack : res.attack_types) {
+        result += attack + "\n";
+    }
+    result += "m_isAttackInParam: " + std::to_string(res.m_isAttackInParam) + "\n";
+    return result;
+}
+
+
 bool
 checkBinaryData(const std::string &line, bool binaryDataFound)
 {
@@ -1033,7 +1082,7 @@ WaapAssetState::apply(
     // Scan unescaped_line with aho-corasick once, and reuse it in multiple calls to checkRegex below
     // This is done to improve performance of regex matching.
     SampleValue unescapedLineSample(res.unescaped_line, m_Signatures->m_regexPreconditions);
-
+    dbgTrace(D_WAAP_SAMPLE_SCAN) << "after doing second set of checkRegex calls..." << nicePrint(res);
     checkRegex(
         unescapedLineSample,
         m_Signatures->specific_acuracy_keywords_regex,
@@ -1111,7 +1160,7 @@ WaapAssetState::apply(
     }
 
     bool os_cmd_ev = Waap::Util::find_in_map_of_stringlists_keys("os_cmd_ev", res.found_patterns);
-
+    dbgTrace(D_WAAP_SAMPLE_SCAN) << "before evasion checking " << nicePrint(res);
     if (os_cmd_ev) {
         dbgTrace(D_WAAP_EVASIONS) << "os command evasion found";
 
@@ -1294,6 +1343,47 @@ WaapAssetState::apply(
             wordsCount = std::min(wordsCount, newWordsCount);
         }
     }
+
+    bool path_traversal_ev = Waap::Util::find_in_map_of_stringlists_keys("path_traversal", res.found_patterns);
+    dbgTrace(D_WAAP_EVASIONS)
+        << "path_traversal_ev = " << path_traversal_ev
+        << " sample = " << res.unescaped_line
+        << " res.unescaped_line.find(2f) =  " << res.unescaped_line.find("2f");
+    if ((path_traversal_ev) && (res.unescaped_line.find("2f") != std::string::npos)) {
+        // Possible path traversal evasion .2f. detected: - clean up and scan with regexes again.
+        dbgTrace(D_WAAP_EVASIONS) << "comment evasion .2f. found" << res.unescaped_line
+            << "Status beroe evasion checking " << nicePrint(res);
+
+        std::string unescaped = line;
+        replaceAll(unescaped, "2f", "/");
+        size_t kwCount = res.keyword_matches.size();
+
+        if (res.unescaped_line != unescaped) {
+            SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+            checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
+                res.found_patterns, longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->words_regex, res.keyword_matches, res.found_patterns,
+                longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->pattern_regex, res.regex_matches, res.found_patterns,
+                longTextFound, binaryDataFound);
+        }
+
+        if (kwCount == res.keyword_matches.size()) {
+            // Remove the evasion keyword if no real evasion found
+            keywordsToRemove.push_back("path_traversal");
+            path_traversal_ev = false;
+        }
+        else if (!binaryDataFound) {
+            // Recalculate repetition and/or probing indicators
+            unsigned int newWordsCount = 0;
+            calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                newWordsCount);
+            // Take minimal words count because empirically it means evasion was probably succesfully decoded
+            wordsCount = std::min(wordsCount, newWordsCount);
+        }
+        dbgTrace(D_WAAP_EVASIONS) << "status after evasion checking " << nicePrint(res);
+    }
+
 
     bool quoutes_space_evasion = Waap::Util::find_in_map_of_stringlists_keys(
         "quotes_space_ev_fast_reg",
@@ -1726,7 +1816,7 @@ WaapAssetState::apply(
             wordsCount = std::min(wordsCount, newWordsCount);
         }
     }
-
+    dbgTrace(D_WAAP_SAMPLE_SCAN) << "after evasions..." << nicePrint(res);
     // Remove evasion keywords that should not be reported because there's no real evasion found
     if (!keywordsToRemove.empty()) {
         dbgTrace(D_WAAP_SAMPLE_SCAN)

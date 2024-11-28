@@ -87,9 +87,10 @@ add_library(waap_clib
     ParserPairs.cc
     Waf2Util2.cc
     ParserPDF.cc
+    ParserKnownBenignSkipper.cc
+    ParserScreenedJson.cc
     ParserBinaryFile.cc
     RegexComparator.cc
-    WaapModelResultLogger.cc
 )
 
 add_definitions("-Wno-unused-function")

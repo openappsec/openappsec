@@ -276,3 +276,30 @@ TEST_F(TestMessagingComp, testSetFogConnection)
     EXPECT_CALL(mock_messaging_connection, establishConnection(metadata, category)).WillOnce(Return(conn));
     EXPECT_TRUE(messaging_comp.setFogConnection(category));
 }
+
+TEST_F(TestMessagingComp, testRateLimitBlock)
+{
+    setAgentDetails();
+    string body = "test body";
+    HTTPMethod method = HTTPMethod::POST;
+    string uri = "/test-uri";
+    MessageCategory category = MessageCategory::GENERIC;
+
+    MessageConnectionKey conn_key(fog_addr, fog_port, MessageCategory::GENERIC);
+    Flags<MessageConnectionConfig> conn_flags;
+    conn_flags.setFlag(MessageConnectionConfig::UNSECURE_CONN);
+    MessageMetadata conn_metadata(fog_addr, fog_port, conn_flags, false, true);
+    Connection conn(conn_key, conn_metadata);
+
+    EXPECT_CALL(mock_messaging_connection, getFogConnectionByCategory(MessageCategory::GENERIC))
+        .WillOnce(Return(conn));
+
+    unordered_map<string, string> res_headers = {{"Retry-After", "10"}};
+    HTTPResponse res(HTTPStatusCode::HTTP_TOO_MANY_REQUESTS, "response!!", res_headers);
+    EXPECT_CALL(mock_messaging_connection, mockSendRequest(_, _, _)).WillOnce(Return(res));
+    auto sending_res = messaging_comp.sendSyncMessage(method, uri, body, category, conn_metadata);
+    ASSERT_FALSE(sending_res.ok());
+    HTTPResponse http_res = sending_res.getErr();
+    EXPECT_EQ(http_res.getBody(), "The connection is suspended due to rate limit block, message is buffered.");
+    EXPECT_EQ(http_res.getHTTPStatusCode(), HTTPStatusCode::HTTP_TOO_MANY_REQUESTS);
+}

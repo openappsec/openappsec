@@ -148,6 +148,21 @@ MessagingComp::sendMessage(
     auto response = i_conn->sendRequest(conn, *req);
     if (!response.ok()) return response.passErr();
 
+    auto response_data = response.unpack();
+
+    if (response_data.getHTTPStatusCode() == HTTPStatusCode::HTTP_TOO_MANY_REQUESTS) {
+        dbgDebug(D_MESSAGING) << "Too many requests. Suspend the message";
+        auto rate_limit_metadata = message_metadata;
+        uint retry_after_sec = 60;
+        auto retry_after_header = response_data.getHeaderVal("retry-after");
+        if (retry_after_header.ok()) {
+            retry_after_sec = stoi(*retry_after_header);
+        }
+        rate_limit_metadata.setShouldBufferMessage(true);
+        rate_limit_metadata.setRateLimitBlock(retry_after_sec);
+        return suspendMessage(body, method, uri, category, rate_limit_metadata);
+    }
+
     if (is_to_fog && method == HTTPMethod::GET) fog_get_requests_cache.emplaceEntry(uri, *response);
     return response;
 }
@@ -355,6 +370,15 @@ MessagingComp::suspendMessage(
     const MessageMetadata &message_metadata
 ) const
 {
+    if (message_metadata.isRateLimitBlock()) {
+        dbgInfo(D_MESSAGING) << "Rate limit block is active, message is suspended, message is buffered.";
+        i_messaging_buffer->pushNewBufferedMessage(body, method, uri, category, message_metadata, false);
+        return genError<HTTPResponse>(
+            HTTPStatusCode::HTTP_TOO_MANY_REQUESTS,
+            "The connection is suspended due to rate limit block, message is buffered."
+        );
+    }
+
     if (message_metadata.shouldBufferMessage()) {
         dbgWarning(D_MESSAGING) << "Buffering message due to connection suspended";
         i_messaging_buffer->pushNewBufferedMessage(body, method, uri, category, message_metadata, false);

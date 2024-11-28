@@ -25,7 +25,7 @@ private:
     bool isLegalChunkedResponse(const std::string &res);
 
     Maybe<HTTPStatusCode> status_code = genError("Not received");
-    Maybe<std::map<std::string, std::string>> headers = genError("Not received");
+    Maybe<std::unordered_map<std::string, std::string>> headers = genError("Not received");
     std::string body;
     std::string raw_response;
     bool error = false;

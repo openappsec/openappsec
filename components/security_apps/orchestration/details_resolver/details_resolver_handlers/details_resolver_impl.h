@@ -73,6 +73,15 @@ SHELL_CMD_HANDLER("MGMT_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i "
     "/opt/CPotelcol/quid_api/get_mgmt_quid.json | jq -r .message[0].MGMT_QUID || echo ''",
     getQUID)
+SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "[ -d /opt/CPOtlpAgent/custom_scripts ] "
+    "&& ENV_NO_FORMAT=1 /opt/CPOtlpAgent/custom_scripts/agent_role.sh",
+    getOtlpAgentGaiaOsRole)
+SHELL_CMD_HANDLER(
+    "IS_AIOPS_RUNNING",
+    "FS_PATH=<FILESYSTEM-PREFIX>; "
+    "PID=$(ps auxf | grep -v grep | grep -E ${FS_PATH}.*cp-nano-horizon-telemetry | awk -F' ' '{printf $2}'); "
+    "[ -z \"{PID}\" ] && echo 'false' || echo 'true'",
+    getIsAiopsRunning)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
@@ -180,8 +189,7 @@ SHELL_CMD_HANDLER(
 )
 SHELL_CMD_HANDLER(
     "managements",
-    "sed -n '/:masters (/,$p' $FWDIR/database/myself_objects.C |"
-    " sed -e ':a' -e 'N' -e '$!ba' -e 's/\\n//g' -e 's/\t//g' -e 's/ //g' | sed 's/))):.*/)))):/'",
+    "echo 1",
     extractManagements
 )
 #endif //gaia
@@ -237,8 +245,7 @@ SHELL_CMD_HANDLER(
 
 SHELL_CMD_HANDLER(
     "managements",
-    "sed -n '/:masters (/,$p' /tmp/local.cfg |"
-    " sed -e ':a' -e 'N' -e '$!ba' -e 's/\\n//g' -e 's/\t//g' -e 's/ //g' | sed 's/))):.*/)))):/'",
+    "echo 1",
     extractManagements
 )
 #endif//smb
