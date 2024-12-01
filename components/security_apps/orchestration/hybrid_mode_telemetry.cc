@@ -34,7 +34,9 @@ HybridModeMetric::upon(const HybridModeMetricEvent &)
 {
     auto shell_cmd = Singleton::Consume<I_ShellCmd>::by<OrchestrationComp>();
     auto maybe_cmd_output = shell_cmd->getExecOutput(
-        getFilesystemPathConfig() + "/watchdog/cp-nano-watchdog --restart_count"
+        getFilesystemPathConfig() + "/watchdog/cp-nano-watchdog --restart_count",
+        1000,
+        false
     );
 
     // get wd process restart count

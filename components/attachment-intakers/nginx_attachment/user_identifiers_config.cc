@@ -282,7 +282,7 @@ isIpTrusted(const string &value, const vector<CIDRSData> &cidr_values)
 }
 
 Maybe<string>
-UsersAllIdentifiersConfig::parseXForwardedFor(const string &str) const
+UsersAllIdentifiersConfig::parseXForwardedFor(const string &str, ExtractType type) const
 {
     vector<string> header_values = split(str);
 
@@ -291,12 +291,23 @@ UsersAllIdentifiersConfig::parseXForwardedFor(const string &str) const
     vector<string> xff_values = getHeaderValuesFromConfig("x-forwarded-for");
     vector<CIDRSData> cidr_values(xff_values.begin(), xff_values.end());
 
-    for (const string &value : header_values) {
-        if (!IPAddr::createIPAddr(value).ok()) {
-            dbgWarning(D_NGINX_ATTACHMENT_PARSER) << "Invalid IP address found in the xff header IPs list: " << value;
+    for (auto it = header_values.rbegin(); it != header_values.rend() - 1; ++it) {
+        if (!IPAddr::createIPAddr(*it).ok()) {
+            dbgWarning(D_NGINX_ATTACHMENT_PARSER) << "Invalid IP address found in the xff header IPs list: " << *it;
             return genError("Invalid IP address");
         }
-        if (!isIpTrusted(value, cidr_values)) return genError("Untrusted Ip found");
+        if (type == ExtractType::PROXYIP) continue;
+        if (!isIpTrusted(*it, cidr_values)) {
+            dbgDebug(D_NGINX_ATTACHMENT_PARSER) << "Found untrusted IP in the xff header IPs list: " << *it;
+            return *it;
+        }
+    }
+
+    if (!IPAddr::createIPAddr(header_values[0]).ok()) {
+        dbgWarning(D_NGINX_ATTACHMENT_PARSER)
+            << "Invalid IP address found in the xff header IPs list: "
+            << header_values[0];
+        return genError("Invalid IP address");
     }
 
     return header_values[0];
@@ -312,7 +323,7 @@ UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, Ext
         return;
     }
     NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
-    auto value = parseXForwardedFor(header.getValue());
+    auto value = parseXForwardedFor(header.getValue(), type);
     if (!value.ok()) {
         dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Could not extract source identifier from X-Forwarded-For header";
         return;
@@ -321,12 +332,13 @@ UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, Ext
     if (type == ExtractType::SOURCEIDENTIFIER) {
         opaque.setSourceIdentifier(header.getKey(), value.unpack());
         dbgDebug(D_NGINX_ATTACHMENT_PARSER)
-            << "Added source identifir to XFF "
+            << "Added source identifier from XFF header"
             <<  value.unpack();
         opaque.setSavedData(HttpTransactionData::xff_vals_ctx, header.getValue());
+        opaque.setSavedData(HttpTransactionData::source_identifier, value.unpack());
         dbgTrace(D_NGINX_ATTACHMENT_PARSER)
-        << "XFF found, set ctx with value from header: "
-        << static_cast<string>(header.getValue());
+            << "XFF found, set ctx with value from header: "
+            << static_cast<string>(header.getValue());
     } else {
         opaque.setSavedData(HttpTransactionData::proxy_ip_ctx, value.unpack());
     }

@@ -18,6 +18,8 @@
 #include <regex>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
+#include <cereal/external/rapidjson/document.h>
+#include <cereal/external/rapidjson/filereadstream.h>
 
 #if defined(gaia)
 
@@ -101,6 +103,14 @@ checkIsInstallHorizonTelemetrySucceeded(const string &command_output)
 }
 
 Maybe<string>
+getOtlpAgentGaiaOsRole(const string &command_output)
+{
+    if (command_output == "" ) return string("-1");
+
+    return command_output;
+}
+
+Maybe<string>
 getQUID(const string &command_output)
 {
     if (command_output == "" ) return string("false");
@@ -111,6 +121,13 @@ getQUID(const string &command_output)
     return command_output;
 }
 
+Maybe<string>
+getIsAiopsRunning(const string &command_output)
+{
+    if (command_output == "" ) return string("false");
+    
+    return command_output;
+}
 
 Maybe<string>
 checkHasSDWan(const string &command_output)
@@ -187,10 +204,33 @@ getMgmtObjAttr(shared_ptr<istream> file_stream, const string &attr)
 }
 
 Maybe<string>
+getAttrFromCpsdwanGetDataJson(const string &attr)
+{
+    static const std::string get_data_json_path = "/tmp/cpsdwan_getdata_orch.json";
+    std::ifstream ifs(get_data_json_path);
+    if (ifs.is_open()) {
+        rapidjson::IStreamWrapper isw(ifs);
+        rapidjson::Document document;
+        document.ParseStream(isw);
+
+        if (!document.HasParseError() && document.HasMember(attr.c_str()) && document[attr.c_str()].IsString()) {
+            return string(document[attr.c_str()].GetString());
+        }
+    }
+
+    return genError("Attribute " + attr + " was not found in " + get_data_json_path);
+}
+
+Maybe<string>
 getMgmtObjUid(const string &command_output)
 {
     if (!command_output.empty()) {
         return command_output;
+    }
+
+    Maybe<string> obj_uuid = getAttrFromCpsdwanGetDataJson("uuid");
+    if (obj_uuid.ok()) {
+        return obj_uuid.unpack();
     }
 
     static const string obj_path = (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C";
@@ -310,7 +350,12 @@ getSmbObjectName(const string &command_output)
     if (command_output.empty() || command_output[0] != centrally_managed_comd_output) {
         return genError("Object name was not found");
     }
-    
+
+    Maybe<string> obj_name = getAttrFromCpsdwanGetDataJson("name");
+    if (obj_name.ok()) {
+        return obj_name.unpack();
+    }
+
     static const string obj_path = (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C";
     auto ifs = std::make_shared<std::ifstream>(obj_path);
     if (!ifs->is_open()) {

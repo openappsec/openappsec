@@ -109,7 +109,7 @@ MessagingBufferComponent::Impl::init()
     encryptor = Singleton::Consume<I_Encryptor>::by<Messaging>();
     mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
     messaging = Singleton::Consume<I_Messaging>::from<Messaging>();
-    
+
     auto sub_path = getProfileAgentSettingWithDefault<string>("nano_agent/event_buffer/", "eventBuffer.baseFolder");
     buffer_root_path = getLogFilesPathConfig() + "/" + sub_path;
     string executable_name =
@@ -276,8 +276,15 @@ MessagingBufferComponent::Impl::sendMessage()
     }
 
     if (res == HTTPStatusCode::HTTP_SUSPEND) {
-        dbgDebug(D_MESSAGING) << "Suspended connection - sleeping for a while";
+        dbgDebug(D_MESSAGING) << "Message is Suspended - sleeping for a while";
         mainloop->yield(chrono::seconds(1));
+        return true;
+    }
+
+    if (res == HTTPStatusCode::HTTP_TOO_MANY_REQUESTS) {
+        dbgDebug(D_MESSAGING) << "Suspended message due to rate limit block - sleeping for a while";
+        mainloop->yield(chrono::seconds(1));
+        popMessage();
         return true;
     }
 
@@ -295,6 +302,12 @@ MessagingBufferComponent::Impl::sendMessage(const BufferedMessage &message) cons
 {
     MessageMetadata message_metadata = message.getMessageMetadata();
     message_metadata.setShouldBufferMessage(false);
+
+    if (message_metadata.isRateLimitBlock()) {
+        mainloop->yield(chrono::seconds(1));
+        return HTTPStatusCode::HTTP_SUSPEND;
+    }
+
     auto res = messaging->sendSyncMessage(
         message.getMethod(),
         message.getURI(),
@@ -305,6 +318,9 @@ MessagingBufferComponent::Impl::sendMessage(const BufferedMessage &message) cons
 
     if (res.ok()) return HTTPStatusCode::HTTP_OK;
     if (res.getErr().getHTTPStatusCode() == HTTPStatusCode::HTTP_SUSPEND) return HTTPStatusCode::HTTP_SUSPEND;
+    if (res.getErr().getHTTPStatusCode() == HTTPStatusCode::HTTP_TOO_MANY_REQUESTS) {
+        return HTTPStatusCode::HTTP_TOO_MANY_REQUESTS;
+    }
     return HTTPStatusCode::HTTP_UNKNOWN;
 }
 

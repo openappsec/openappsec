@@ -1135,7 +1135,11 @@ private:
             "webUserResponse"
         );
 
+        bool remove_event_id_param =
+            getProfileAgentSettingWithDefault<string>("false", "nginxAttachment.removeRedirectEventId") == "true";
+
         string uuid;
+        string redirectUrl;
         if (i_transaction_table->hasState<NginxAttachmentOpaque>()) {
             NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
             uuid = opaque.getSessionUUID();
@@ -1145,7 +1149,12 @@ private:
         if (web_trigger_conf.getDetailsLevel() == "Redirect") {
             web_response_data.response_data.redirect_data.redirect_location_size =
                 web_trigger_conf.getRedirectURL().size();
-            web_response_data.response_data.redirect_data.add_event_id = web_trigger_conf.getAddEventId() ? 1 : 0;
+            bool add_event = web_trigger_conf.getAddEventId();
+            if (add_event && !remove_event_id_param) {
+                web_response_data.response_data.redirect_data.redirect_location_size +=
+                    strlen("?event_id=") + uuid.size();
+            }
+            web_response_data.response_data.redirect_data.add_event_id = add_event ? 1 : 0;
             web_response_data.web_repsonse_type = static_cast<uint8_t>(ngx_web_response_type_e::REDIRECT_WEB_RESPONSE);
         } else {
             web_response_data.response_data.custom_response_data.title_size =
@@ -1159,8 +1168,13 @@ private:
         verdict_data_sizes.push_back(sizeof(ngx_http_cp_web_response_data_t));
 
         if (web_trigger_conf.getDetailsLevel() == "Redirect") {
-            verdict_data.push_back(reinterpret_cast<const char *>(web_trigger_conf.getRedirectURL().data()));
-            verdict_data_sizes.push_back(web_trigger_conf.getRedirectURL().size());
+            redirectUrl = web_trigger_conf.getRedirectURL();
+            if (!remove_event_id_param && web_trigger_conf.getAddEventId()) {
+                redirectUrl += "?event-id=" + uuid;
+            }
+
+            verdict_data.push_back(reinterpret_cast<const char *>(redirectUrl.data()));
+            verdict_data_sizes.push_back(redirectUrl.size());
         } else {
             verdict_data.push_back(reinterpret_cast<const char *>(web_trigger_conf.getResponseTitle().data()));
             verdict_data_sizes.push_back(web_trigger_conf.getResponseTitle().size());

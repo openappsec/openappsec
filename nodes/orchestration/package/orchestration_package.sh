@@ -924,6 +924,8 @@ install_orchestration()
         cp_exec "ln -sf /storage/nano_agent${USR_LIB_PATH}/cpnano ${USR_LIB_PATH}/cpnano"
         cp_exec "mkdir -p /storage/nano_agent/${FILESYSTEM_PATH}"
         cp_exec "ln -sf /storage/nano_agent/${FILESYSTEM_PATH} ${FILESYSTEM_PATH}"
+        cp_copy smb_egg/nano-egg-internal /opt/fw1/bin/nano-egg-internal
+        chmod +x  /opt/fw1/bin/nano-egg-internal
     fi
     ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
     ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/

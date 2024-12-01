@@ -36,6 +36,7 @@ static const map<HTTPStatusCode, string> status_code_to_string = {
     { HTTPStatusCode::HTTP_PROXY_AUTHENTICATION_REQUIRED,   "407 - HTTP_PROXY_AUTHENTICATION_REQUIRED"  },
     { HTTPStatusCode::HTTP_REQUEST_TIME_OUT,                "408 - HTTP_REQUEST_TIME_OUT"               },
     { HTTPStatusCode::HTTP_PAYLOAD_TOO_LARGE,               "413 - HTTP_PAYLOAD_TOO_LARGE"              },
+    { HTTPStatusCode::HTTP_TOO_MANY_REQUESTS,               "429 - HTTP_TOO_MANY_REQUESTS"              },
     { HTTPStatusCode::HTTP_INTERNAL_SERVER_ERROR,           "500 - HTTP_INTERNAL_SERVER_ERROR"          },
     { HTTPStatusCode::HTTP_NOT_IMPLEMENTED,                 "501 - HTTP_NOT_IMPLEMENTED"                },
     { HTTPStatusCode::HTTP_BAD_GATEWAY,                     "502 - HTTP_BAD_GATEWAY"                    },
@@ -63,6 +64,7 @@ static const map<int, HTTPStatusCode> num_to_status_code = {
     { 407, HTTPStatusCode::HTTP_PROXY_AUTHENTICATION_REQUIRED  },
     { 408, HTTPStatusCode::HTTP_REQUEST_TIME_OUT               },
     { 413, HTTPStatusCode::HTTP_PAYLOAD_TOO_LARGE              },
+    { 429, HTTPStatusCode::HTTP_TOO_MANY_REQUESTS              },
     { 500, HTTPStatusCode::HTTP_INTERNAL_SERVER_ERROR          },
     { 501, HTTPStatusCode::HTTP_NOT_IMPLEMENTED                },
     { 502, HTTPStatusCode::HTTP_BAD_GATEWAY                    },
@@ -100,6 +102,16 @@ HTTPResponse::toString() const
     return "[Status-code]: " + code->second + ", [Body]: " + (body.empty() ? "{}" : body);
 }
 
+Maybe<string>
+HTTPResponse::getHeaderVal(const string &header_key)
+{
+    auto header = headers.find(header_key);
+    if (header == headers.end()) {
+        return genError("Header \'" + header_key + "\' not found.");
+    }
+    return header->second;
+}
+
 Maybe<HTTPResponse>
 HTTPResponseParser::parseData(const string &data, bool is_connect)
 {
@@ -116,7 +128,7 @@ HTTPResponseParser::parseData(const string &data, bool is_connect)
 
     if (!handleBody(is_connect)) return genError("Response not ready!");
 
-    return HTTPResponse(status_code.unpack(), body);
+    return HTTPResponse(status_code.unpack(), body, headers.unpack());
 }
 
 static string
@@ -133,7 +145,7 @@ bool
 HTTPResponseParser::handleHeaders()
 {
     stringstream ss(raw_response);
-    map<string, string> header_map;
+    unordered_map<string, string> header_map;
 
     while (true) {
         string header;
@@ -171,7 +183,7 @@ HTTPResponseParser::getHeaderVal(const string &header_key)
     auto headers_map = headers.unpack();
     auto header = headers_map.find(header_key);
     if (header == headers_map.end()) {
-        return genError("Header\'" + header_key + "\' not found.");
+        return genError("Header \'" + header_key + "\' not found.");
     }
     return header->second;
 }

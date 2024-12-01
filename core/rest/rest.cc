@@ -33,6 +33,18 @@ ServerRest::performRestCall(istream &in)
 {
     try {
         try {
+            int firstChar = in.peek();
+            if (firstChar != EOF) {
+                // array as root is not supported in JSONInputArchive format
+                // but this struct is in bulk invalidations requirements
+                // we will change the format here
+                if (firstChar == '[') {
+                    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                    std::string modifiedContent = "{\"" + BULK_ARRAY_NAME + "\": " + content + "}";
+                    std::istringstream* modifiedStream = new std::istringstream(modifiedContent);
+                    in.rdbuf(modifiedStream->rdbuf());
+                }
+            }
             cereal::JSONInputArchive in_ar(in);
             load(in_ar);
         } catch (cereal::Exception &e) {

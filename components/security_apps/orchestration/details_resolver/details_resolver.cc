@@ -350,7 +350,7 @@ DetailsResolver::Impl::readCloudMetadata()
     }
 
     if (!cloud_metadata.ok()) {
-        dbgWarning(D_ORCHESTRATOR) << cloud_metadata.getErr();
+        dbgDebug(D_ORCHESTRATOR) << cloud_metadata.getErr();
         return genError("Failed to fetch cloud metadata");
     }
 

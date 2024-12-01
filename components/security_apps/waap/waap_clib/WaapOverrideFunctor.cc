@@ -105,7 +105,7 @@ bool WaapOverrideFunctor::operator()(
             }
             return false;
         }
-        else if (tagLower == "keyword") {
+        else if (tagLower == "keyword" || tagLower == "indicator") {
             for (const auto &rx : rxes) {
                 for (const std::string& keywordStr : waf2Transaction.getKeywordMatches()) {
                     if (REGX_MATCH(keywordStr)) {

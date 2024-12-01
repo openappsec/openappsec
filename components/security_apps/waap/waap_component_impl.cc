@@ -50,8 +50,7 @@ WaapComponent::Impl::Impl() :
     drop_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP),
     waapStateTable(NULL),
     transactionsCount(0),
-    deepAnalyzer(),
-    waapModelResultLogger()
+    deepAnalyzer()
 {
 }
 
@@ -536,9 +535,15 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
         verdict = drop_response.getVerdict();
     }
 
+    bool sould_inject_response = waf2Transaction.shouldInjectResponse();
+    // in Chunked transfer encoding the last chunk is always empty - and we leave it empty
+    bool should_stay_empty_chunk = event.isLastChunk() && dataBufLen == 0;
+    dbgTrace(D_WAAP)
+        << (sould_inject_response ? "should Inject Response" : "should not Inject Response")
+        << (should_stay_empty_chunk ? " empty last chunk will stay empty" : "");
     if (verdict == pending_response.getVerdict() &&
-        waf2Transaction.shouldInjectResponse() &&
-        !event.isLastChunk()
+        sould_inject_response &&
+        !should_stay_empty_chunk
     ) {
         // Inject if needed. Note that this is only reasonable to do if there was no DROP decision above
 

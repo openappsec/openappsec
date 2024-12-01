@@ -17,7 +17,7 @@ void
 DeclarativePolicyUtils::init()
 {
     local_policy_path = getFilesystemPathConfig() + "/conf/local_policy.yaml";
-    should_apply_policy = true;
+    should_apply_local_policy = true;
     Singleton::Consume<I_RestApi>::by<DeclarativePolicyUtils>()->addRestCall<ApplyPolicyRest>(
         RestAction::SET, "apply-policy"
     );
@@ -40,7 +40,7 @@ DeclarativePolicyUtils::upon(const ApplyPolicyEvent &event)
 {
     dbgTrace(D_ORCHESTRATOR) << "Apply policy event";
     local_policy_path = event.getPolicyPath();
-    should_apply_policy = true;
+    should_apply_local_policy = true;
 }
 // LCOV_EXCL_STOP
 
@@ -48,19 +48,24 @@ bool
 DeclarativePolicyUtils::shouldApplyPolicy()
 {
     auto env_type = Singleton::Consume<I_EnvDetails>::by<DeclarativePolicyUtils>()->getEnvType();
-    return env_type == EnvType::K8S ? true : should_apply_policy;
+    if (env_type == EnvType::K8S) {
+        I_OrchestrationTools *orch_tools = Singleton::Consume<I_OrchestrationTools>::by<DeclarativePolicyUtils>();
+        auto maybe_new_version = orch_tools->readFile("/etc/cp/conf/k8s-policy-check.trigger");
+        return maybe_new_version != curr_version;
+    }
+    return should_apply_local_policy;
 }
 
 void
-DeclarativePolicyUtils::turnOffApplyPolicyFlag()
+DeclarativePolicyUtils::turnOffApplyLocalPolicyFlag()
 {
-    should_apply_policy = false;
+    should_apply_local_policy = false;
 }
 
 void
-DeclarativePolicyUtils::turnOnApplyPolicyFlag()
+DeclarativePolicyUtils::turnOnApplyLocalPolicyFlag()
 {
-    should_apply_policy = true;
+    should_apply_local_policy = true;
 }
 
 Maybe<string>
@@ -211,6 +216,6 @@ DeclarativePolicyUtils::periodicPolicyLoad()
 
     if (*new_checksum == curr_checksum) return;
 
-    should_apply_policy = true;
+    should_apply_local_policy = true;
     curr_checksum = *new_checksum;
 }

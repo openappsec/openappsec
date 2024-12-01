@@ -48,8 +48,9 @@ public:
             m_tag = to_lower_copy(m_tag);
 
             if (m_tag != "sourceip" && m_tag != "sourceidentifier" && m_tag != "url" && m_tag != "hostname" &&
-                m_tag != "keyword" && m_tag != "paramname" && m_tag != "paramvalue" && m_tag != "paramlocation" &&
-                m_tag != "responsebody" &&  m_tag != "headername" && m_tag != "headervalue" && m_tag != "method") {
+                m_tag != "keyword" && m_tag != "indicator" && m_tag != "paramname" && m_tag != "paramvalue" &&
+                m_tag != "paramlocation" && m_tag != "responsebody" &&  m_tag != "headername" &&
+                m_tag != "headervalue" && m_tag != "method") {
                 m_isValid = false;
                 dbgDebug(D_WAAP_OVERRIDE) << "Invalid override tag: " << m_tag;
             }

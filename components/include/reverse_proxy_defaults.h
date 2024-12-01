@@ -28,7 +28,7 @@ static const std::string default_nginx_config_file = "/etc/cp/conf/rpmanager/ngi
 static const std::string default_prepare_nginx_config_file = "/etc/cp/conf/rpmanager/nginx_prepare.conf";
 static const std::string default_global_conf_template = "/etc/cp/conf/rpmanager/nginx-conf-template";
 static const std::string default_nginx_config_include_file =
-    "/etc/cp/conf/rpmanager/servers/nginx_conf_include.conf";
+    "/etc/cp/conf/rpmanager/servers/00_nginx_conf_include.conf";
 static const std::string default_global_conf_include_template =
     "/etc/cp/conf/rpmanager/nginx-conf-include-template";
 static const std::string default_global_conf_include_template_no_responses =

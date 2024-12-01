@@ -31,15 +31,26 @@ public:
     HTTPResponse() = default;
 // LCOV_EXCL_STOP
 
-    HTTPResponse(HTTPStatusCode _status_code, const std::string &_body) : status_code(_status_code), body(_body) {}
+    HTTPResponse(
+        HTTPStatusCode _status_code,
+        const std::string &_body,
+        std::unordered_map<std::string, std::string> _headers = std::unordered_map<std::string, std::string>()
+    )
+            :
+        status_code(_status_code),
+        body(_body),
+        headers(_headers)
+    {}
 
     HTTPStatusCode getHTTPStatusCode() const;
     const std::string & getBody() const;
     std::string toString() const;
+    Maybe<std::string> getHeaderVal(const std::string &header_key);
 
 private:
     HTTPStatusCode status_code;
     std::string body;
+    std::unordered_map<std::string, std::string> headers;
 };
 
 #endif // __HTTP_RESPONSE_H__

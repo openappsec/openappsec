@@ -793,7 +793,7 @@ ServiceController::Impl::updateServiceConfiguration(
             << "Policy file was not updated. Sending reload command regarding settings and data";
         auto signal_services = sendSignalForServices(nano_services_to_update, "");
         if (!signal_services.ok()) return signal_services.passErr();
-        Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
+        Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyLocalPolicyFlag();
         return Maybe<void>();
     }
 
@@ -940,7 +940,7 @@ ServiceController::Impl::updateServiceConfiguration(
         if (new_policy_path.compare(config_file_path) == 0) {
             dbgDebug(D_SERVICE_CONTROLLER) << "Enforcing the default policy file";
             policy_version = version_value;
-            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
+            Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyLocalPolicyFlag();
             return Maybe<void>();
         }
 
@@ -959,7 +959,7 @@ ServiceController::Impl::updateServiceConfiguration(
     }
 
     if (!was_policy_updated && !send_signal_for_services_err.empty()) return genError(send_signal_for_services_err);
-    Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyPolicyFlag();
+    Singleton::Consume<I_DeclarativePolicy>::from<DeclarativePolicyUtils>()->turnOffApplyLocalPolicyFlag();
     return Maybe<void>();
 }
 

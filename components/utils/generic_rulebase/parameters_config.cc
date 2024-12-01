@@ -119,10 +119,13 @@ ParameterException::getBehavior(
     for (const MatchBehaviorPair &match_behavior_pair: match_queries) {
         MatchQuery::MatchResult match_res = match_behavior_pair.match.getMatch(key_value_pairs);
         if (match_res.is_match) {
-            dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched an exception from a list of matches.";
+            dbgTrace(D_RULEBASE_CONFIG)
+                << "Successfully matched an exception from a list of matches, behavior: "
+                << match_behavior_pair.behavior.getId();
             // When matching indicators with action=ignore, we expect no behavior override.
             // Instead, a matched keywords list should be returned which will be later removed from score calculation
             if (match_res.matched_keywords->size() > 0 && match_behavior_pair.behavior == action_ignore) {
+                dbgTrace(D_RULEBASE_CONFIG) << "Got action ignore";
                 matched_override_keywords.insert(match_res.matched_keywords->begin(),
                         match_res.matched_keywords->end());
             } else {

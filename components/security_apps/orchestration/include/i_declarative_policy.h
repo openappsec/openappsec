@@ -22,8 +22,8 @@ public:
 
     virtual std::string getCurrPolicy() = 0;
 
-    virtual void turnOffApplyPolicyFlag() = 0;
-    virtual void turnOnApplyPolicyFlag() = 0;
+    virtual void turnOffApplyLocalPolicyFlag() = 0;
+    virtual void turnOnApplyLocalPolicyFlag() = 0;
 
 protected:
     virtual ~I_DeclarativePolicy() {}

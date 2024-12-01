@@ -486,6 +486,8 @@ TEST_F(IntelligenceInvalidation, register_for_invalidation)
     EXPECT_THAT(body, HasSubstr("\"mainAttributes\": [ { \"attr2\": \"2\" } ]"));
     EXPECT_THAT(body, HasSubstr("\"attributes\": [ { \"attr3\": \"3\" } ]"));
     EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
+    EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true }"));
+
 }
 
 TEST_F(IntelligenceInvalidation, register_for_multiple_assets_invalidation)
@@ -529,6 +531,7 @@ TEST_F(IntelligenceInvalidation, register_for_multiple_assets_invalidation)
     ));
 
     EXPECT_NE(i_intelligence->registerInvalidation(invalidation, callback), 0);
+    EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true }"));
 
     EXPECT_THAT(
         body,
@@ -606,7 +609,7 @@ TEST_F(IntelligenceInvalidation, invalidation_callback)
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     stringstream json;
-    json << invalidation2.genObject();
+    json << "[" << invalidation2.genObject() << "]";
     mock_invalidation->performRestCall(json);
 
     EXPECT_EQ(recieved_invalidations.size(), 1u);
@@ -650,7 +653,7 @@ TEST_F(IntelligenceInvalidation, delete_invalidation_callback)
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     stringstream json;
-    json << invalidation2.genObject();
+    json << "[" << invalidation2.genObject() << "]";
     mock_invalidation->performRestCall(json);
 
     EXPECT_EQ(recieved_invalidations.size(), 0u);
@@ -694,7 +697,7 @@ TEST_F(IntelligenceInvalidation, invalidation_short_handling)
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     stringstream json;
-    json << invalidation2.genObject();
+    json <<  "[" << invalidation2.genObject() << "]";
     mock_invalidation->performRestCall(json);
 
     EXPECT_EQ(recieved_invalidations.size(), 0u);
@@ -789,7 +792,7 @@ TEST_F(IntelligenceInvalidation, invalidation_flow_with_multiple_assets)
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     stringstream json1;
-    json1 << not_matching_invalidation.genObject();
+    json1 << "[" << not_matching_invalidation.genObject() << "]";
     mock_invalidation->performRestCall(json1);
 
     EXPECT_EQ(recieved_invalidations.size(), 0u);
@@ -805,7 +808,7 @@ TEST_F(IntelligenceInvalidation, invalidation_flow_with_multiple_assets)
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     stringstream json2;
-    json2 << matching_invalidation.genObject();
+    json2 << "[" << matching_invalidation.genObject() << "]";
     mock_invalidation->performRestCall(json2);
 
     EXPECT_EQ(recieved_invalidations.size(), 1u);
@@ -865,7 +868,7 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_2_registred_assets)
     auto stop_listening_2 = make_scope_exit([&] { invalidation_2_to_register.stopListening(i_intelligence); });
 
     stringstream json;
-    json << matching_invalidation.genObject();
+    json << "[" << matching_invalidation.genObject() << "]";
     mock_invalidation->performRestCall(json);
 
     EXPECT_EQ(recieved_invalidations.size(), 2u);
@@ -927,9 +930,43 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_by_registration_id)
 
     string modifiedJsonString = matching_invalidation.genObject().substr(2);
     stringstream json;
-    json << "{ \"invalidationRegistrationId\": \""<< *registration_id << "\", " << modifiedJsonString;
+    json << "[{ \"invalidationRegistrationId\": \""<< *registration_id << "\", " << modifiedJsonString << "]";
     cout << json.str() << endl;
     mock_invalidation->performRestCall(json);
 
     EXPECT_EQ(recieved_invalidations.size(), 1u);
+}
+
+TEST_F(IntelligenceInvalidation, bulk_invalidation_callback)
+{
+    stringstream configuration;
+    configuration << "{";
+    configuration << "  \"agentSettings\":[";
+    configuration << "    {\"key\":\"agent.config.useLocalIntelligence\",\"id\":\"id1\",\"value\":\"true\"}";
+    configuration << "  ],";
+    configuration << "  \"intelligence\":{";
+    configuration << "    \"local intelligence server ip\":\"127.0.0.1\",";
+    configuration << "    \"local intelligence server primary port\":9090";
+    configuration << "  }";
+    configuration << "}";
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
+
+    EXPECT_CALL(
+        messaging_mock,
+        sendSyncMessage(_, "/api/v2/intelligence/invalidation/register", _, _, _)
+    ).WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
+    
+    auto invalidation = Invalidation("agent_y");
+    EXPECT_NE(i_intelligence->registerInvalidation(invalidation, callback), 0);
+    auto invalidation2 = Invalidation("agent2");
+    EXPECT_NE(i_intelligence->registerInvalidation(invalidation2, callback), 0);
+    auto invalidation3 = Invalidation("agent3");
+    EXPECT_NE(i_intelligence->registerInvalidation(invalidation3, callback), 0);
+    
+    dbgTrace(D_INTELLIGENCE) << "2 callbacks: ";
+
+    stringstream json3;
+    json3 << "[{\"class\":\"agent3\"},{\"class\":\"agent2\"}]";
+    mock_invalidation->performRestCall(json3);
+    EXPECT_EQ(recieved_invalidations.size(), 2u);
 }

@@ -8,6 +8,7 @@
 #include "config.h"
 #include "singleton.h"
 #include "i_agent_details.h"
+#include "i_time_get.h"
 
 class MessageProxySettings
 {
@@ -54,7 +55,7 @@ private:
     uint16_t proxy_port = 0;
 };
 
-class MessageMetadata
+class MessageMetadata : Singleton::Consume<I_TimeGet>
 {
 public:
     inline MessageMetadata();
@@ -227,6 +228,26 @@ public:
         return sni_host_name;
     }
 
+    void
+    setRateLimitBlock(uint block_time)
+    {
+        is_rate_limit_block = true;
+        auto timer = Singleton::Consume<I_TimeGet>::by<MessageMetadata>();
+        auto current_timeout = timer->getMonotonicTime() + std::chrono::seconds(block_time);
+        rate_limit_block_time = current_timeout.count();
+    }
+
+    bool
+    isRateLimitBlock() const
+    {
+        if (is_rate_limit_block) {
+            auto timer = Singleton::Consume<I_TimeGet>::by<MessageMetadata>();
+            uint current_time = timer->getMonotonicTime().count();
+            if (current_time < rate_limit_block_time) return true;
+        }
+        return false;
+    }
+
     template <class Archive>
     void
     serialize(Archive &ar)
@@ -243,7 +264,9 @@ public:
             cereal::make_nvp("is_to_fog", is_to_fog),
             cereal::make_nvp("ca_path", ca_path),
             cereal::make_nvp("client_cert_path", client_cert_path),
-            cereal::make_nvp("client_key_path", client_key_path)
+            cereal::make_nvp("client_key_path", client_key_path),
+            cereal::make_nvp("is_rate_limit_block", is_rate_limit_block),
+            cereal::make_nvp("rate_limit_block_time", rate_limit_block_time)
         );
     }
 
@@ -262,6 +285,8 @@ private:
     std::string external_certificate = "";
     bool should_buffer = false;
     bool is_to_fog = false;
+    bool is_rate_limit_block = false;
+    uint rate_limit_block_time = 0;
 };
 
 #endif // __MESSAGING_METADATA_H__

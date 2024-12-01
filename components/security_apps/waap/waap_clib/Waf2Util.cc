@@ -35,6 +35,7 @@
 #include "user_identifiers_config.h"
 #include "Waf2Regex.h"
 #include "ParserBinaryFile.h"
+#include "ParserKnownBenignSkipper.h"
 
 using boost::algorithm::to_lower_copy;
 using namespace std;
@@ -1218,21 +1219,21 @@ static const SingleRegex csp_report_policy_re(
     "csp_report_policy"
 );
 static const SingleRegex base64_key_value_detector_re(
-        "^[^<>{};,&\\?|=\\s]+={1}\\s*.+",
-        err,
-        "base64_key_value");
+    "^[^<>{};,&\\?|=\\s]+={1}\\s*.+",
+    err,
+    "base64_key_value");
 static const SingleRegex json_key_value_detector_re(
     "\\A[^<>{};,&\\?|=\\s]+=[{\\[][^;\",}\\]]*[,:\"].+[\\s\\S]",
-        err,
-        "json_key_value");
+    err,
+    "json_key_value");
 static const SingleRegex base64_key_detector_re(
-        "^[^<>{};,&\\?|=\\s]+={1}",
-        err,
-        "base64_key");
+    "^[^<>{};,&\\?|=\\s]+={1}",
+    err,
+    "base64_key");
 static const SingleRegex base64_prefix_detector_re(
-        "data:\\S*;base64,\\S+|base64,\\S+",
-        err,
-        "base64_prefix");
+    "data:\\S*;base64,\\S+|base64,\\S+",
+    err,
+    "base64_prefix");
 
 // looks for combination <param>={<some text>*:<some text>*}
 //used to allow parsing param=JSON to reduce false positives

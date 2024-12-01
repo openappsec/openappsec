@@ -49,6 +49,7 @@ private: //ugly but needed for build
         Waap::Util::map_of_stringlists_t & found_patterns, bool longTextFound, bool binaryDataFound) const;
 
     void filterKeywordsDueToLongText(Waf2ScanResult &res) const;
+    std::string nicePrint(Waf2ScanResult &res) const;
 
 public:
     // Load and compile signatures from file

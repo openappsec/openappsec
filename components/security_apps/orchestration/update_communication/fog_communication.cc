@@ -74,7 +74,7 @@ FogCommunication::getUpdate(CheckUpdateRequest &request)
                 << " to: "
                 << policy_mgmt_mode;
             profile_mode = policy_mgmt_mode;
-            i_declarative_policy->turnOnApplyPolicyFlag();
+            i_declarative_policy->turnOnApplyLocalPolicyFlag();
         }
 
         if (i_declarative_policy->shouldApplyPolicy()) {

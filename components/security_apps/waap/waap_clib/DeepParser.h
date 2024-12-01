@@ -129,6 +129,7 @@ private:
         bool isRefererParamPayload,
         bool isUrlPayload,
         bool isUrlParamPayload,
+        bool isCookiePayload,
         int flags,
         size_t parser_depth,
         Waap::Util::BinaryFileType b64FileType
@@ -144,6 +145,7 @@ private:
         bool isRefererParamPayload,
         bool isUrlPayload,
         bool isUrlParamPayload,
+        bool isCookiePayload,
         int flags,
         size_t parser_depth
     );
@@ -160,6 +162,7 @@ private:
         bool isRefererParamPayload,
         bool isUrlPayload,
         bool isUrlParamPayload,
+        bool isCookiePayload,
         int flags,
         size_t parser_depth,
         bool base64ParamFound,

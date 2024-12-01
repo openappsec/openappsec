@@ -15,7 +15,6 @@
 #include "WaapScores.h"
 #include "Waf2Engine.h"
 #include "i_transaction.h"
-#include "WaapModelResultLogger.h"
 #include <string>
 #include "debug.h"
 #include "reputation_features_events.h"
@@ -111,10 +110,6 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     for (auto keyword : newKeywords) {
         res.keywordsAfterFilter.push_back(keyword);
     }
-    res.scoreArray.clear();
-    res.coefArray.clear();
-    res.keywordCombinations.clear();
-
     double res_score = getScoreFromPool(res, newKeywords, poolName);
 
     std::string other_pool_name = Waap::Scores::getOtherScorePoolName();
@@ -123,14 +118,10 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     if (applyLearning && poolName != other_pool_name &&
         modelLoggingSettings.logLevel != Waap::Scores::ModelLogLevel::OFF) {
         double other_score = getScoreFromPool(res, newKeywords, other_pool_name);
-
         dbgDebug(D_WAAP_SCANNER) << "Comparing score from pool " << poolName << ": " << res_score
                                 << ", vs. pool " << other_pool_name << ": " << other_score
                                 << ", score difference: " << res_score - other_score
                                 << ", sample: " << res.unescaped_line;
-        Singleton::Consume<I_WaapModelResultLogger>::by<WaapComponent>()->logModelResult(
-            modelLoggingSettings, m_transaction, res, poolName, other_pool_name, res_score, other_score
-        );
         res.other_model_score = other_score;
     } else {
         res.other_model_score = res_score;
@@ -142,6 +133,9 @@ double Waap::Scanner::getScoreFromPool(
     Waf2ScanResult &res, const std::vector<std::string> &newKeywords, const std::string &poolName
 )
 {
+    res.scoreArray.clear();
+    res.coefArray.clear();
+    res.keywordCombinations.clear();
     KeywordsStats stats = m_transaction->getAssetState()->scoreBuilder.getSnapshotStats(poolName);
 
     if (!newKeywords.empty()) {

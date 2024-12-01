@@ -23,6 +23,8 @@
 
 #include "report/report.h"
 #include "customized_cereal_map.h"
+#include "compression_utils.h"
+#include "i_encryptor.h"
 
 class GenericMetric;
 
@@ -56,6 +58,11 @@ public:
         value(_value)
     {
         timestamp = Singleton::Consume<I_TimeGet>::by<GenericMetric>()->getWalltimeStr();
+        // convert timestamp to RFC 3339 format
+        std::size_t pos = timestamp.find('.');
+        if (pos != std::string::npos) {
+            timestamp = timestamp.substr(0, pos) + "Z";
+        }
         asset_id = Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getAgentId();
     }
 
@@ -118,7 +125,73 @@ public:
     }
 
 // LCOV_EXCL_START Reason: Tested in unit test (testAIOPSMapMetric), but not detected by coverage
-    std::string
+    Maybe<std::string>
+    toString() const
+    {
+        std::stringstream ss;
+        {
+            cereal::JSONOutputArchive ar(ss);
+            serialize(ar);
+        }
+        auto res = compressAndEncodeData(ss.str());
+        if (!res.ok()) {
+            return genError("Failed to compress and encode the data");
+        }
+        return res.unpack();
+    }
+// LCOV_EXCL_STOP
+
+private:
+    Maybe<std::string>
+    compressAndEncodeData(const std::string &unhandled_data) const
+    {
+        std::string data_holder = unhandled_data;
+        auto compression_stream = initCompressionStream();
+        CompressionResult compression_response = compressData(
+            compression_stream,
+            CompressionType::GZIP,
+            data_holder.size(),
+            reinterpret_cast<const unsigned char *>(data_holder.c_str()),
+            true
+        );
+        finiCompressionStream(compression_stream);
+        if (!compression_response.ok) {
+            // send log to Kibana
+            return genError("Failed to compress(gzip) data");
+        }
+
+        std::string compressed_data =
+            std::string((const char *)compression_response.output, compression_response.num_output_bytes);
+
+        auto encryptor = Singleton::Consume<I_Encryptor>::by<GenericMetric>();
+        Maybe<std::string> handled_data = encryptor->base64Encode(compressed_data);
+
+        if (compression_response.output) free(compression_response.output);
+        compression_response.output = nullptr;
+        compression_response.num_output_bytes = 0;
+        return handled_data;
+    }
+
+    std::vector<AiopsMetricData> metrics;
+};
+
+class CompressAndEncodeAIOPSMetrics
+{
+public:
+    CompressAndEncodeAIOPSMetrics(const AiopsMetricList &_aiops_metrics) : aiops_metrics(_aiops_metrics) {}
+
+    void
+    serialize(cereal::JSONOutputArchive &ar) const
+    {
+        auto metric_str = aiops_metrics.toString();
+        if (!metric_str.ok()) {
+            return;
+        }
+        ar(cereal::make_nvp("records", metric_str.unpack()));
+    }
+
+// LCOV_EXCL_START Reason: Tested in unit test (testAIOPSMapMetric), but not detected by coverage
+    Maybe<std::string>
     toString() const
     {
         std::stringstream ss;
@@ -131,7 +204,7 @@ public:
 // LCOV_EXCL_STOP
 
 private:
-    std::vector<AiopsMetricData> metrics;
+    AiopsMetricList aiops_metrics;
 };
 
 class MetricCalc

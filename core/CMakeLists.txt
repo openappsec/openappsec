@@ -37,7 +37,7 @@ target_link_libraries(
     ngen_core
     -Wl,-whole-archive
     "table;debug_is;shell_cmd;metric;tenant_manager;messaging;encryptor;time_proxy;singleton;mainloop;environment;logging;report;rest"
-    "config;intelligence_is_v2;event_is;memory_consumption;connkey"
+    "compression_utils;-lz;config;intelligence_is_v2;event_is;memory_consumption;connkey"
     "instance_awareness;socket_is;agent_details;agent_details_reporter;buffers;cpu;agent_core_utilities"
     "report_messaging"
     -Wl,-no-whole-archive

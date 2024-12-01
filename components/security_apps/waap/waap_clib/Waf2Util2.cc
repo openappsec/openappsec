@@ -1,5 +1,7 @@
 #include "Waf2Util.h"
+#include "Waf2Regex.h"
 #include <string>
+#include "debug.h"
 
 namespace Waap {
 namespace Util {
@@ -625,6 +627,53 @@ isValidJson(const std::string &input)
 
     if (m_state != S_ERROR && array_count >= 0 && object_count >= 0)
         return true;
+    return false;
+}
+
+KnownSourceType
+detectKnownSource(const std::string &input)
+{
+    static bool err = false;
+    static const SingleRegex known_source_sensor_data_re(
+        "^\\{\\\"sensor_data\\\":\\\"",
+        err,
+        "known_source_sensor_data"
+    );
+    if (known_source_sensor_data_re.hasMatch(input)) {
+        return SOURCE_TYPE_SENSOR_DATA;
+    }
+    return SOURCE_TYPE_UNKNOWN;
+}
+
+int
+definePrefixedJson(const std::string &input)
+{
+    static const size_t MAX_JSON_PREFIX_LEN = 32;
+    static const size_t MIN_PARAMETER_LEN = 4;
+    if (input.size() < MIN_PARAMETER_LEN) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < std::min(input.size(), MAX_JSON_PREFIX_LEN) - 2 ; ++i) {
+        if (input[i] == '-' && input[i+1] == '{') return i + 1;
+    }
+
+    return -1;
+}
+
+bool
+isScreenedJson(const std::string &input)
+{
+    static bool err = false;
+    static const SingleRegex screened_json_re(
+        R"(^"{\s*\\"\w+\\"\s*:\s*\\"["\w])",
+        err,
+        "screened_json"
+    );
+
+    if (screened_json_re.hasMatch(input)) {
+        return true;
+    }
     return false;
 }
 
