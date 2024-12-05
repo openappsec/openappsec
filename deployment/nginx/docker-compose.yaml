@@ -94,7 +94,7 @@ services:
 ## uncomment this block for testing purposes only, make sure to also adjust the nginx.conf file 
 ## to include a proxy_pass directive forwarding external traffic on e.g. port 80 to the juiceshop-backend container
 ## you can use the example file available here:
-## https://github.com/openappsec/openappsec/blob/main/examples/juiceshop/default.conf
+## https://raw.githubusercontent.com/openappsec/openappsec/refs/heads/main/examples/juiceshop/default.conf
 ## place the file above in {NGINX_CONF_DIR} and uncomment the two lines for creating a volume mount
 ## in the appsec-nginx service definition
 ## note that juiceshop container listens on HTTP port 3000 by default
