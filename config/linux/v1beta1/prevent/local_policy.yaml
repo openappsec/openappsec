@@ -12,17 +12,17 @@ practices:
   - name: webapp-default-practice
     openapi-schema-validation:
       configmap: []
-      override-mode: prevent-learn
+      override-mode: as-top-level
     snort-signatures:
       configmap: []
-      override-mode: prevent-learn
+      override-mode: as-top-level
     web-attacks:
       max-body-size-kb: 1000000
       max-header-size-bytes: 102400
       max-object-depth: 40
       max-url-size-bytes: 32768
       minimum-confidence: critical
-      override-mode: prevent-learn
+      override-mode: as-top-level
       protections:
         csrf-protection: inactive
         error-disclosure: inactive
@@ -31,7 +31,7 @@ practices:
     anti-bot:
       injected-URIs: []
       validated-URIs: []
-      override-mode: prevent-learn
+      override-mode: as-top-level
 
 log-triggers:
   - name: appsec-default-log-trigger
