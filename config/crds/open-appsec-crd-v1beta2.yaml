@@ -138,6 +138,8 @@ spec:
                   items:
                     type: object
                     properties:
+                      name:
+                        type: string
                       host:
                         type: string
                       mode:
@@ -183,142 +185,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata :
-  name : practices.openappsec.io
-
-spec:
-  group: openappsec.io
-  versions:
-    - name: v1beta1
-      served: true
-      storage: true
-      schema:
-        openAPIV3Schema:
-          type: object
-          properties:
-            spec:
-              type: object
-              properties:
-                web-attacks:
-                  type: object
-                  properties:
-                    override-mode:
-                      type: string
-                      enum:
-                        - prevent-learn
-                        - detect-learn
-                        - prevent
-                        - detect
-                        - inactive
-                    minimum-confidence:
-                      type: string
-                      enum:
-                        - medium
-                        - high
-                        - critical
-                    max-url-size-bytes:
-                      type: integer
-                    max-object-depth:
-                      type: integer
-                    max-body-size-kb:
-                      type: integer
-                    max-header-size-bytes:
-                      type: integer
-                    protections:
-                      type: object
-                      properties:
-                        csrf-enabled:
-                          type: string
-                          enum:
-                            - prevent-learn
-                            - detect-learn
-                            - prevent
-                            - detect
-                            - inactive
-                        error-disclosure-enabled:
-                          type: string
-                          enum:
-                            - prevent-learn
-                            - detect-learn
-                            - prevent
-                            - detect
-                            - inactive
-                        open-redirect-enabled:
-                          type: string
-                          enum:
-                            - prevent-learn
-                            - detect-learn
-                            - prevent
-                            - detect
-                            - inactive
-                        non-valid-http-methods:
-                          type: boolean
-                anti-bot:
-                  type: object
-                  properties:
-                    override-mode:
-                      type: string
-                      enum:
-                        - prevent-learn
-                        - detect-learn
-                        - prevent
-                        - detect
-                        - inactive
-                    injected-URIs:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          uri:
-                            type: string
-                    validated-URIs:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          uri:
-                            type: string
-                snort-signatures:
-                  type: object
-                  properties:
-                    override-mode:
-                      type: string
-                      enum:
-                        - prevent-learn
-                        - detect-learn
-                        - prevent
-                        - detect
-                        - inactive
-                    configmap:
-                      type: array
-                      items:
-                        type: string
-                openapi-schema-validation:
-                  type: object
-                  properties:
-                    override-mode:
-                      type: string
-                      enum:
-                        - prevent-learn
-                        - detect-learn
-                        - prevent
-                        - detect
-                        - inactive
-                    configmap:
-                      type: array
-                      items:
-                        type: string
-
-  scope: Cluster
-  names:
-    plural: practices
-    singular: practice
-    kind: Practice
-    shortNames:
-      - practice
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata :
   name : accesscontrolpractices.openappsec.io
   creationTimestamp: null
 spec:
@@ -337,8 +203,6 @@ spec:
                 - rateLimit
               properties:
                 appsecClassName:
-                  type: string
-                name:
                   type: string
                 practiceMode:
                   type: string
@@ -431,7 +295,7 @@ spec:
                   type: string
                   enum:
                     - block-page
-                    #- redirect
+                    - redirect
                     - response-code-only
                 message-title:
                   type: string
@@ -454,8 +318,6 @@ spec:
                 - mode
               properties:
                 appsecClassName:
-                  type: string
-                name:
                   type: string
                 mode:
                   type: string
@@ -568,8 +430,6 @@ spec:
                 - condition
               properties:
                 appsecClassName:
-                  type: string
-                name:
                   type: string
                 action:
                   type: string
@@ -718,8 +578,6 @@ spec:
               properties:
                 appsecClassName:
                   type: string
-                name:
-                  type: string
                 accessControlLogging:
                   type: object
                   properties:
@@ -801,8 +659,8 @@ spec:
                             - json
                             - json-formatted
                           default: json
-                    k8s-service:
-                      type: boolean # Default value is dependant on the environment type
+                    local-tuning:
+                      type: boolean
                     cefService:
                       type: array
                       items:
@@ -873,8 +731,6 @@ spec:
               properties:
                 appsecClassName:
                   type: string
-                name:
-                  type: string
                 sourcesIdentifiers: # required, minItems: 1
                   type: array
                   items:
@@ -928,8 +784,6 @@ spec:
                 - snortSignatures
               properties:
                 appsecClassName:
-                  type: string
-                name:
                   type: string
                 practiceMode:
                   type: string
@@ -1078,6 +932,8 @@ spec:
                         - inactive
                         - inherited #inherited from threatPreventionPractice mode set in policy
                       default: inactive
+                    enforcementLevel:
+                      type: string
                     configmap:
                       type: array
                       items:
@@ -1302,8 +1158,6 @@ spec:
                 - sourcesIdentifiers
               properties:
                 appsecClassName:
-                  type: string
-                name:
                   type: string
                 minNumOfSources:
                   type: integer
