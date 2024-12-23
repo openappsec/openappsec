@@ -1,0 +1,9 @@
+_format_version: "3.0"
+
+services:
+  - name: juiceshop-service
+    url: http://juiceshop-backend:3000
+    routes:
+      - name: juiceshop-route
+        paths:
+          - /
