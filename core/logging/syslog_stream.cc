@@ -23,24 +23,22 @@ USE_DEBUG_FLAG(D_REPORT);
 static string lookup_cmd = "nslookup ";
 static string line_selection_cmd = "| grep Address | sed -n 2p";
 static string parsing_cmd = "| cut -f2 -d' ' | tr -d '\n'";
+static string SYSLOG_NAME = "Syslog";
 
 SyslogStream::SyslogStream(const string &_address, int _port, I_Socket::SocketType _protocol)
         :
-    i_socket(Singleton::Consume<I_Socket>::by<LoggingComp>()),
-    mainloop(Singleton::Consume<I_MainLoop>::by<LoggingComp>()),
-    address(_address),
-    port(_port),
-    protocol(_protocol)
+    LogStreamConnector(_address, _port, _protocol, SYSLOG_NAME)
 {
-    connect();
-    if (!socket.ok()) {
-        dbgWarning(D_REPORT) << "Failed to connect to the syslog server";
-    }
+    socket = genError("Not set yet");
+    init();
 }
 
 SyslogStream::~SyslogStream()
 {
+    sendAllLogs();
     if (mainloop != nullptr && mainloop->doesRoutineExist(log_send_routine)) mainloop->stop(log_send_routine);
+    if (mainloop != nullptr && mainloop->doesRoutineExist(connecting_routine)) mainloop->stop(connecting_routine);
+
     if (socket.ok()) {
         i_socket->closeSocket(const_cast<int &>(*socket));
         socket = genError("Closed socket");
@@ -55,7 +53,7 @@ SyslogStream::sendLog(const Report &log)
         syslog_report = to_string(syslog_report.length()) + " " + syslog_report;
     }
     vector<char> data(syslog_report.begin(), syslog_report.end());
-    mainloop->addOneTimeRoutine(
+    log_send_routine = mainloop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Offline,
         [this, data] () { sendLog(data); },
         "Logging Syslog stream messaging"
@@ -65,45 +63,57 @@ SyslogStream::sendLog(const Report &log)
 void
 SyslogStream::sendLog(const vector<char> &data)
 {
-    for (int tries = 0; tries < 3; ++tries) {
-        if (!socket.ok()) {
-            connect();
-            if (!socket.ok()) {
-                dbgWarning(D_REPORT) << "Failed to connect to the syslog server, Log will not be sent.";
-                return;
-            }
-            dbgTrace(D_REPORT) << "Successfully connect to the syslog server";
-        }
+    dbgTrace(D_REPORT) << "Sending Syslog log." << " Max logs per send: " << max_logs_per_send;
+    sendLogWithQueue(data);
+}
 
-        if (i_socket->writeData(socket.unpack(), data)) {
-            dbgTrace(D_REPORT) << "log was sent to syslog server";
-            return;
-        }
-    }
-    dbgWarning(D_REPORT) << "Failed to send log to syslog server";
+
+void
+SyslogStream::init() {
+    updateSettings();
+    maintainConnection();
+
+    auto syslog_retry_interval = getProfileAgentSettingWithDefault<uint>(
+        RETRY_CONNECT_INTERVAL,
+        "agent.config.log.syslogServer.connect_retry_interval");
+    chrono::seconds connect_retry_interval = chrono::seconds(syslog_retry_interval);
+    connecting_routine = mainloop->addRecurringRoutine(
+        I_MainLoop::RoutineType::Offline,
+        connect_retry_interval,
+        [this] ()
+        {
+            dbgTrace(D_REPORT) << SYSLOG_CONNECT_NAME;
+            maintainConnection();
+        },
+        SYSLOG_CONNECT_NAME
+    );
 }
 
 void
 SyslogStream::connect()
 {
-    auto syslog_address = getProfileAgentSettingWithDefault<string>(address, "agent.config.log.syslogServer.IP");
-    auto syslog_port = getProfileAgentSettingWithDefault<uint>(port, "agent.config.log.syslogServer.port");
+    dbgDebug(D_REPORT)
+        << "Connecting to Syslog server"
+        << " Address: "
+        << address
+        << " Port: "
+        << port;
 
-    if (syslog_address.empty()) {
+    if (address.empty()) {
         dbgWarning(D_REPORT) << "Cannot connect to Syslog server, Address IP/Domain not configured.";
         return;
     }
 
     struct in_addr addr;
-    if (inet_pton(AF_INET, syslog_address.data(), &addr) != 1) {
+    if (inet_pton(AF_INET, address.data(), &addr) != 1) {
         I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<LoggingComp>();
-        string host_cmd = lookup_cmd + syslog_address + line_selection_cmd + parsing_cmd;
+        string host_cmd = lookup_cmd + address + line_selection_cmd + parsing_cmd;
         Maybe<string> res = shell_cmd->getExecOutput(host_cmd, 500);
         if (!res.ok()) {
             dbgWarning(D_REPORT)
                 << "Failed to execute domain lookup command. "
                 << "SYSLOG Domain: "
-                << syslog_address
+                << address
                 << "Error: "
                 << res.getErr();
             return;
@@ -113,7 +123,7 @@ SyslogStream::connect()
             dbgWarning(D_REPORT)
                 << "Got en empty ip address from lookup command. "
                 << "SYSLOG Domain: "
-                << syslog_address
+                << address
                 << "Got bad ip address: "
                 << res.unpack();
             return;
@@ -124,19 +134,46 @@ SyslogStream::connect()
             dbgWarning(D_REPORT)
                 << "Got a faulty ip address from lookup command. "
                 << "SYSLOG Domain: "
-                << syslog_address
+                << address
                 << "Got bad ip address: "
                 << res.unpack();
             return;
         }
 
-        syslog_address = res.unpack();
+        address = res.unpack();
     }
 
     socket = i_socket->genSocket(
         protocol,
         false,
         false,
-        syslog_address + ":" + to_string(syslog_port)
+        address + ":" + to_string(port)
     );
+}
+
+void
+SyslogStream::updateSettings()
+{
+    max_logs_per_send = getProfileAgentSettingWithDefault<int>(
+        NUMBER_OF_LOGS_PER_SEND,
+        "agent.config.log.syslogServer.MaxLogsPerSend"
+    );
+    if (max_logs_per_send < 0) {
+        max_logs_per_send = NUMBER_OF_LOGS_PER_SEND;
+    }
+    address = getProfileAgentSettingWithDefault<string>(address, "agent.config.log.syslogServer.IP");
+    port = getProfileAgentSettingWithDefault<uint>(port, "agent.config.log.syslogServer.port");
+    max_data_in_queue =
+        getProfileAgentSettingWithDefault<uint>(MAX_LOG_QUEUE, "agent.config.log.syslogServer.MaxLogQueue");
+
+    dbgTrace(D_REPORT)
+        << "Syslog server settings updated. "
+        << "Address: "
+        << address
+        << " Port: "
+        << port
+        << " Max logs per send: "
+        << max_logs_per_send
+        << " Max data in queue: "
+        << max_data_in_queue;
 }

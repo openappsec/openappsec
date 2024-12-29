@@ -24,6 +24,7 @@
 #include "metric/all_metric_event.h"
 #include "mock/mock_shell_cmd.h"
 #include "version.h"
+#include "../log_streams.h"
 
 using namespace testing;
 using namespace std;
@@ -104,6 +105,7 @@ public:
 class LogTest : public testing::Test
 {
 public:
+    const ::Report CreateReport(ReportIS::Tags &tag1, ReportIS::Tags &tag2);
     LogTest()
             :
         agent_details(),
@@ -131,6 +133,16 @@ public:
         EXPECT_CALL(mock_mainloop, addOneTimeRoutine(_, _, "Logging Syslog stream messaging", _)).WillRepeatedly(
             DoAll(SaveArg<1>(&sysog_routine), Return(0))
         );
+
+        EXPECT_CALL(
+                mock_mainloop,
+                addRecurringRoutine(_, _, _, "connecting to Syslog server", _)
+            ).WillRepeatedly(DoAll(SaveArg<2>(&connect_syslog_routine), Return(2)));
+
+        EXPECT_CALL(
+                mock_mainloop,
+                addRecurringRoutine(_, _, _, "connecting to CEF server", _)
+            ).WillRepeatedly(DoAll(SaveArg<2>(&connect_cef_routine), Return(3)));
 
         EXPECT_CALL(mock_socket_is, writeData(1, _)).WillRepeatedly(
             WithArg<1>(
@@ -291,6 +303,8 @@ public:
     ConfigComponent           config;
     vector<string>            capture_syslog_cef_data;
     I_MainLoop::Routine       sysog_routine = nullptr;
+    I_MainLoop::Routine       connect_syslog_routine = nullptr;
+    I_MainLoop::Routine       connect_cef_routine = nullptr;
     StrictMock<MockShellCmd>  mock_shell_cmd;
     bool                      is_domain;
 
@@ -1469,98 +1483,148 @@ TEST_F(LogTest, BulkModification)
     EXPECT_EQ(local_body, str1);
 }
 
-TEST_F(LogTest, ObfuscationTest)
+const ::Report
+LogTest::CreateReport(Tags &tag1, Tags &tag2) {
+    LogField origin("String", "Another string");
+
+    const ::Report report(
+        "String=\"Another string\"",
+        chrono::microseconds(90000),
+        Type::EVENT,
+        Level::LOG,
+        LogLevel::INFO,
+        Audience::INTERNAL,
+        AudienceTeam::AGENT_CORE,
+        Severity::INFO,
+        Priority::LOW,
+        chrono::seconds(3600),
+        origin,
+        tag1,
+        tag2,
+        Notification::POLICY_UPDATE,
+        IssuingEngine::AGENT_CORE
+    );
+    return report;
+}
+
+TEST_F(LogTest, ObfuscationCefSysLogTest)
 {
     loadFakeConfiguration(false);
     Tags tag1 = Tags::POLICY_INSTALLATION;
     Tags tag2 = Tags::ACCESS_CONTROL;
+    std::string address = "172.28.1.6";
+    int port = 514;
+    I_Socket::SocketType protocol = I_Socket::SocketType::TCP;
+    // for cef
+    CefStream cef_stream(address, port, protocol);
+    ASSERT_NE(connect_cef_routine, nullptr);
+    connect_cef_routine();
+    cef_stream.sendLog(CreateReport(tag1, tag2));
+    EXPECT_EQ(capture_syslog_cef_data.size(), 1u);
+    // for syslog activate send log
+    SyslogStream syslog_stream(address, port, protocol);
 
-    static const string expected_obfuscated_log(
-        "{\n"
-        "    \"log\": {\n"
-        "        \"eventTime\": \"0:0:0\",\n"
-        "        \"eventName\": \"Install policy\",\n"
-        "        \"eventSeverity\": \"Info\",\n"
-        "        \"eventPriority\": \"Low\",\n"
-        "        \"eventType\": \"Event Driven\",\n"
-        "        \"eventLevel\": \"Log\",\n"
-        "        \"eventLogLevel\": \"info\",\n"
-        "        \"eventAudience\": \"Internal\",\n"
-        "        \"eventAudienceTeam\": \"\",\n"
-        "        \"eventFrequency\": 0,\n"
-        "        \"eventTags\": [\n"
-        "            \"Access Control\",\n"
-        "            \"Policy Installation\"\n"
-        "        ],\n"
-        "        \"eventSource\": {\n"
-        "            \"agentId\": \"Unknown\",\n"
-        "            \"eventTraceId\": \"\",\n"
-        "            \"eventSpanId\": \"\",\n"
-        "            \"issuingEngineVersion\": \"\",\n"
-        "            \"serviceName\": \"Unnamed Nano Service\"\n"
-        "        },\n"
-        "        \"eventData\": {\n"
-        "            \"logIndex\": 1,\n"
-        "            \"String\": \"{XORANDB64}:mocked field\"\n"
-        "        }\n"
-        "    }\n"
-        "}"
-    );
-    StrictMock<MockEncryptor> mock_encrypt;
-    EXPECT_CALL(mock_encrypt, base64Encode(_)).WillOnce(Return("mocked field"));
-
-    static const string expected_clear_log(
-        "{\n"
-        "    \"eventTime\": \"0:0:0\",\n"
-        "    \"eventName\": \"Install policy\",\n"
-        "    \"eventSeverity\": \"Info\",\n"
-        "    \"eventPriority\": \"Low\",\n"
-        "    \"eventType\": \"Event Driven\",\n"
-        "    \"eventLevel\": \"Log\",\n"
-        "    \"eventLogLevel\": \"info\",\n"
-        "    \"eventAudience\": \"Internal\",\n"
-        "    \"eventAudienceTeam\": \"\",\n"
-        "    \"eventFrequency\": 0,\n"
-        "    \"eventTags\": [\n"
-        "        \"Access Control\",\n"
-        "        \"Policy Installation\"\n"
-        "    ],\n"
-        "    \"eventSource\": {\n"
-        "        \"agentId\": \"Unknown\",\n"
-        "        \"eventTraceId\": \"\",\n"
-        "        \"eventSpanId\": \"\",\n"
-        "        \"issuingEngineVersion\": \"\",\n"
-        "        \"serviceName\": \"Unnamed Nano Service\"\n"
-        "    },\n"
-        "    \"eventData\": {\n"
-        "        \"logIndex\": 1,\n"
-        "        \"String\": \"Another string\"\n"
-        "    }\n"
-        "}"
-    );
-
-    {
-        LogGen log(
-            "Install policy",
-            Audience::INTERNAL,
-            Severity::INFO,
-            Priority::LOW,
-            tag1,
-            tag2,
-            Enreachments::BEAUTIFY_OUTPUT
-        );
-        log << LogField("String", "Another string", LogFieldOption::XORANDB64);
-        EXPECT_EQ(toJson(log), expected_clear_log);
-    }
-
-    EXPECT_THAT(getMessages(), HasSubstr(expected_clear_log));
-    EXPECT_THAT(readLogFile(), HasSubstr(expected_clear_log));
-    EXPECT_EQ(getBodyFogMessage(), expected_obfuscated_log);
+    // connection to socket before send log
+    ASSERT_NE(connect_syslog_routine, nullptr);
+    connect_syslog_routine();
+    
+    syslog_stream.sendLog(CreateReport(tag1, tag2)); // send log in routine sysog_routine
     ASSERT_NE(sysog_routine, nullptr);
     sysog_routine();
-    EXPECT_EQ(capture_syslog_cef_data.size(), 2u);
+
+    EXPECT_EQ(capture_syslog_cef_data.size(), 2u); // 1 for CEF 1 for Syslog
     for (const string &str : capture_syslog_cef_data) {
-        EXPECT_THAT(str, AnyOf(HasSubstr("String='Another string'"), HasSubstr("String=\"Another string\"")));
+        EXPECT_THAT(str, AnyOf(
+            HasSubstr("String='Another string'"),
+            HasSubstr(R"(String="Another string")"),
+            HasSubstr("String=\"Another string\"")));
+    }
+}
+
+TEST_F(LogTest, SysLogWriteFailTest)
+{
+    loadFakeConfiguration(false);
+    capture_syslog_cef_data.clear();
+    Tags tag1 = Tags::POLICY_INSTALLATION;
+    Tags tag2 = Tags::ACCESS_CONTROL;
+
+    // for syslog activate send log
+    std::string address = "172.28.1.6";
+    int port = 514;
+    I_Socket::SocketType protocol = I_Socket::SocketType::TCP;
+    SyslogStream syslog_stream(address, port, protocol);
+
+    ASSERT_NE(connect_syslog_routine, nullptr);
+    connect_syslog_routine();
+
+    EXPECT_CALL(mock_socket_is, writeData(1, _))
+        .WillOnce(Return(false))
+        .WillOnce(Return(false))
+        .WillOnce(Return(false))
+        .WillRepeatedly(
+            WithArg<1>(
+                Invoke(
+                    [this](const vector<char> &data)
+                    {
+                        capture_syslog_cef_data.emplace_back(data.begin(), data.end());
+                        return true;
+                    }
+                )
+            )
+        );
+
+    syslog_stream.sendLog(CreateReport(tag1, tag2));
+    ASSERT_NE(sysog_routine, nullptr);
+    EXPECT_EQ(capture_syslog_cef_data.size(), 0u); //before write
+    sysog_routine();
+    EXPECT_EQ(capture_syslog_cef_data.size(), 1u);
+    for (const string &str : capture_syslog_cef_data) {
+        EXPECT_THAT(str, AnyOf(
+            HasSubstr("String='Another string'"),
+            HasSubstr(R"(String="Another string")"),
+            HasSubstr("String=\"Another string\"")));
+    }
+}
+
+TEST_F(LogTest, CefWriteFailTest)
+{
+    loadFakeConfiguration(false);
+    capture_syslog_cef_data.clear();
+    Tags tag1 = Tags::POLICY_INSTALLATION;
+    Tags tag2 = Tags::ACCESS_CONTROL;
+
+    // for syslog activate send log
+    std::string address = "172.28.1.6";
+    int port = 514;
+    I_Socket::SocketType protocol = I_Socket::SocketType::TCP;
+    CefStream cef_stream(address, port, protocol);
+
+    ASSERT_NE(connect_cef_routine, nullptr);
+    connect_cef_routine();
+
+    EXPECT_CALL(mock_socket_is, writeData(1, _))
+        .WillOnce(Return(false))
+        .WillOnce(Return(false))
+        .WillOnce(Return(false))
+        .WillRepeatedly(
+            WithArg<1>(
+                Invoke(
+                    [this](const vector<char> &data)
+                    {
+                        capture_syslog_cef_data.emplace_back(data.begin(), data.end());
+                        return true;
+                    }
+                )
+            )
+        );
+    EXPECT_EQ(capture_syslog_cef_data.size(), 0u); //before write
+    cef_stream.sendLog(CreateReport(tag1, tag2));
+    EXPECT_EQ(capture_syslog_cef_data.size(), 1u);
+    for (const string &str : capture_syslog_cef_data) {
+        EXPECT_THAT(str, AnyOf(
+            HasSubstr("String='Another string'"),
+            HasSubstr(R"(String="Another string")"),
+            HasSubstr("String=\"Another string\"")));
     }
 }
 

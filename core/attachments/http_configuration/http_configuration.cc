@@ -111,7 +111,8 @@ HttpAttachmentConfiguration::save(cereal::JSONOutputArchive &archive) const
         cereal::make_nvp("keep_alive_interval_msec", getNumericalValue("keep_alive_interval_msec")),
         cereal::make_nvp("min_retries_for_verdict", getNumericalValue("min_retries_for_verdict")),
         cereal::make_nvp("max_retries_for_verdict", getNumericalValue("max_retries_for_verdict")),
-        cereal::make_nvp("body_size_trigger", getNumericalValue("body_size_trigger"))
+        cereal::make_nvp("body_size_trigger", getNumericalValue("body_size_trigger")),
+        cereal::make_nvp("remove_server_header", getNumericalValue("remove_server_header"))
     );
 }
 
@@ -167,6 +168,7 @@ HttpAttachmentConfiguration::load(cereal::JSONInputArchive &archive)
     loadNumericalValue(archive, "min_retries_for_verdict", 3);
     loadNumericalValue(archive, "max_retries_for_verdict", 15);
     loadNumericalValue(archive, "body_size_trigger", 200000);
+    loadNumericalValue(archive, "remove_server_header", 0);
 }
 
 bool

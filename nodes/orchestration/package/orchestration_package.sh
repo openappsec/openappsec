@@ -791,7 +791,7 @@ upgrade_conf_if_needed()
         fi
     fi
 
-    cp_exec "${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG} --default --service orchestration"
+    CP_ENV_FILESYSTEM=${FILESYSTEM_PATH} CP_ENV_LOG_FILE=${LOG_FILE_PATH} cp_exec "${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG} --default --service orchestration"
 
     if [ ! -f "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}" ]; then
         cp_print "Creating env details file" ${FORCE_STDOUT}
@@ -1145,7 +1145,7 @@ install_orchestration()
     cp_copy configuration/cp-nano-orchestration-debug-conf.json ${FILESYSTEM_PATH}/${ORCHESTRATION_DEBUG_CONF_FILE}
     cp_exec "chmod 600 ${FILESYSTEM_PATH}/${ORCHESTRATION_DEBUG_CONF_FILE}"
 
-    cp_exec "${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG} --default --service orchestration"
+    CP_ENV_FILESYSTEM=${FILESYSTEM_PATH} CP_ENV_LOG_FILE=${LOG_FILE_PATH} cp_exec "${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${CP_NANO_DEBUG} --default --service orchestration"
 
     set_conf_additional_flags
 

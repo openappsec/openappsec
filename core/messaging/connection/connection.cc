@@ -98,6 +98,8 @@ public:
         }
 
         sni_hostname = metadata.getSniHostName();
+        dn_host_name = metadata.getDnHostName();
+
     }
 
     void
@@ -328,17 +330,24 @@ private:
         SSL_set_hostflags(ssl_socket, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
 
         auto host = key.getHostName().c_str();
-        if (!SSL_set1_host(ssl_socket, host)) {
-            return genError("Failed to set host name verification. Host: " + string(host));
+        auto dn = host;
+        auto sni = host;
+
+        if (dn_host_name.ok()) {
+            dn = dn_host_name->c_str();
         }
 
+        dbgDebug(D_CONNECTION) << "Setting host DN: " << dn;
+        if (!SSL_set1_host(ssl_socket, dn)) {
+            return genError("Failed to set host name verification. Host: " + string(dn));
+        }
         if (sni_hostname.ok()) {
-            host = sni_hostname->c_str();
+            sni = sni_hostname->c_str();
         }
 
-        dbgDebug(D_CONNECTION) << "Setting TLS host name extension. Host: " << host;
-        if (!SSL_set_tlsext_host_name(ssl_socket, host)) {
-            return genError("Failed to set TLS host name extension. Host: " + string(host));
+        dbgDebug(D_CONNECTION) << "Setting TLS host name extension. Host: " << sni;
+        if (!SSL_set_tlsext_host_name(ssl_socket, sni)) {
+            return genError("Failed to set TLS host name extension. Host: " + string(sni));
         }
 
         return Maybe<void>();
@@ -698,6 +707,8 @@ private:
     bool should_close_connection = false;
     bool is_dual_auth = false;
     Maybe<string> sni_hostname = genError<string>("Uninitialized");
+    Maybe<string> dn_host_name = genError<string>("Uninitialized");
+
 };
 
 Connection::Connection(const MessageConnectionKey &key, const MessageMetadata &metadata)
@@ -716,7 +727,7 @@ Connection::setProxySettings(const MessageProxySettings &settings)
     map<string, string> headers;
     auto i_encrypt = Singleton::Consume<I_Encryptor>::by<Messaging>();
     if (!settings.getProxyAuth().empty()) {
-        headers["Proxy-Authorization"] = i_encrypt->base64Encode(settings.getProxyAuth());
+        headers["Proxy-Authorization"] = "Basic " + i_encrypt->base64Encode(settings.getProxyAuth());
     }
 
     auto req = HTTPRequest::prepareRequest(*this, HTTPMethod::CONNECT, "", headers, "");

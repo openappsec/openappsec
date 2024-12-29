@@ -28,6 +28,7 @@ std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
 #include "health_check_status/health_check_status.h"
 #include "updates_process_event.h"
 #include "declarative_policy_utils.h"
+#include "mock/mock_env_details.h"
 
 using namespace testing;
 using namespace std;
@@ -324,6 +325,7 @@ public:
     StrictMock<MockOrchestrationTools> mock_orchestration_tools;
     StrictMock<MockDownloader> mock_downloader;
     StrictMock<MockShellCmd> mock_shell_cmd;
+    StrictMock<EnvDetailsMocker> mock_env_details;
     StrictMock<MockMessaging> mock_message;
     StrictMock<MockRestApi> rest;
     StrictMock<MockServiceController> mock_service_controller;
@@ -582,6 +584,8 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
     preload();
     env.init();
     init();
+
+    EXPECT_CALL(mock_env_details, getEnvType()).WillRepeatedly(Return(EnvType::LINUX));
 
     EXPECT_CALL(mock_service_controller, updateServiceConfiguration(_, _, _, _, _, _))
         .WillOnce(Return(Maybe<void>()));

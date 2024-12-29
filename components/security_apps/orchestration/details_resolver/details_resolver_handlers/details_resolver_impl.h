@@ -29,7 +29,7 @@
 // shell command execution output as its input
 
 #ifdef SHELL_PRE_CMD
-#if defined(gaia) || defined(smb)
+#if defined(gaia) || defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_PRE_CMD("read sdwan data",
     "(cpsdwan get_data > /tmp/cpsdwan_getdata_orch.json~) "
     "&& (mv /tmp/cpsdwan_getdata_orch.json~ /tmp/cpsdwan_getdata_orch.json)")
@@ -40,7 +40,7 @@ SHELL_PRE_CMD("gunzip local.cfg", "gunzip -c $FWDIR/state/local/FW1/local.cfg.gz
 #endif
 
 #ifdef SHELL_CMD_HANDLER
-#if defined(gaia) || defined(smb)
+#if defined(gaia) || defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtObjectUid",
@@ -51,6 +51,14 @@ SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
     "FS_PATH=<FILESYSTEM-PREFIX>; [ -f ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log ] "
     "&& head -1 ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
     checkIsInstallHorizonTelemetrySucceeded)
+SHELL_CMD_HANDLER(
+    "IS_AIOPS_RUNNING",
+    "FS_PATH=<FILESYSTEM-PREFIX>; "
+    "PID=$(ps auxf | grep -v grep | grep -E ${FS_PATH}.*cp-nano-horizon-telemetry | awk -F' ' '{printf $2}'); "
+    "[ -z \"${PID}\" ] && echo 'false' || echo 'true'",
+    getIsAiopsRunning)
+#endif
+#if defined(gaia)
 SHELL_CMD_HANDLER("GLOBAL_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo ''",
     getQUID)
@@ -76,12 +84,21 @@ SHELL_CMD_HANDLER("MGMT_QUID", "[ -d /opt/CPquid ] "
 SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "[ -d /opt/CPOtlpAgent/custom_scripts ] "
     "&& ENV_NO_FORMAT=1 /opt/CPOtlpAgent/custom_scripts/agent_role.sh",
     getOtlpAgentGaiaOsRole)
-SHELL_CMD_HANDLER(
-    "IS_AIOPS_RUNNING",
-    "FS_PATH=<FILESYSTEM-PREFIX>; "
-    "PID=$(ps auxf | grep -v grep | grep -E ${FS_PATH}.*cp-nano-horizon-telemetry | awk -F' ' '{printf $2}'); "
-    "[ -z \"{PID}\" ] && echo 'false' || echo 'true'",
-    getIsAiopsRunning)
+#endif
+#if defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
+SHELL_CMD_HANDLER("GLOBAL_QUID",
+    "cat $FWDIR/database/myown.C "
+    "| awk -F'[()]' '/:name/ { found=1; next } found && /:uuid/ { uid=tolower($2); print uid; exit }'",
+    getQUID)
+SHELL_CMD_HANDLER("QUID",
+    "cat $FWDIR/database/myown.C "
+    "| awk -F'[()]' '/:name/ { found=1; next } found && /:uuid/ { uid=tolower($2); print uid; exit }'",
+    getQUID)
+SHELL_CMD_HANDLER("SMO_QUID", "echo ''", getQUID)
+SHELL_CMD_HANDLER("MGMT_QUID", "echo ''", getQUID)
+SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "echo 'SMB'", getOtlpAgentGaiaOsRole)
+#endif
+#if defined(gaia) || defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
@@ -194,7 +211,7 @@ SHELL_CMD_HANDLER(
 )
 #endif //gaia
 
-#if defined(smb)
+#if defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
     "jq -r .cluster_name /tmp/cpsdwan_getdata_orch.json",
@@ -252,7 +269,6 @@ SHELL_CMD_HANDLER(
 
 SHELL_CMD_OUTPUT("kernel_version", "uname -r")
 SHELL_CMD_OUTPUT("helloWorld", "cat /tmp/agentHelloWorld 2>/dev/null")
-SHELL_CMD_OUTPUT("report_timestamp", "date -u +\%s")
 #endif // SHELL_CMD_OUTPUT
 
 
@@ -282,7 +298,7 @@ FILE_CONTENT_HANDLER("AppSecModelVersion", "<FILESYSTEM-PREFIX>/conf/waap/waap.d
 #endif // FILE_CONTENT_HANDLER
 
 #ifdef SHELL_POST_CMD
-#if defined(smb)
+#if defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_POST_CMD("remove local.cfg", "rm -rf /tmp/local.cfg")
 #endif  //smb
 #endif

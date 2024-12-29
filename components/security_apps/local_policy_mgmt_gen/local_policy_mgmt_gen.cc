@@ -36,6 +36,7 @@
 #include "customized_cereal_map.h"
 #include "include/appsec_practice_section.h"
 #include "include/ingress_data.h"
+#include "include/policy_activation_data.h"
 #include "include/settings_section.h"
 #include "include/triggers_section.h"
 #include "include/local_policy_common.h"
@@ -85,7 +86,7 @@ public:
         K8sPolicyUtils k8s_policy_utils;
         k8s_policy_utils.init();
 
-        auto appsec_policies = k8s_policy_utils.createAppsecPoliciesFromIngresses();
+        auto appsec_policies = k8s_policy_utils.createAppsecPolicies();
         if (!std::get<0>(appsec_policies).empty()) {
             return policy_maker_utils.proccesMultipleAppsecPolicies<AppsecLinuxPolicy, ParsedRule>(
                 std::get<0>(appsec_policies),

@@ -246,6 +246,27 @@ public:
         return matched_rule;
     }
 
+    void
+    fetchReplicaCount()
+    {
+        string curl_cmd =
+            "curl -H \"Authorization: Bearer " + kubernetes_token + "\" "
+            "https://kubernetes.default.svc.cluster.local/apis/apps/v1/namespaces/" + kubernetes_namespace +
+            "/deployments/${AGENT_DEPLOYMENT_NAME} -k  -s | jq .status.replicas";
+        auto maybe_replicas = i_shell_cmd->getExecOutput(curl_cmd);
+        if (maybe_replicas.ok()) {
+            try {
+                replicas = std::stoi(maybe_replicas.unpack());
+            } catch (const std::exception &e) {
+                dbgWarning(D_RATE_LIMIT) << "error while converting replicas: " << e.what();
+            }
+        }
+        if (replicas == 0) {
+            dbgWarning(D_RATE_LIMIT) << "replicas is set to 0, setting replicas to 1";
+            replicas = 1;
+        }
+    }
+
     EventVerdict
     respond(const HttpRequestHeaderEvent &event) override
     {
@@ -271,10 +292,72 @@ public:
         dbgDebug(D_RATE_LIMIT) << "source identifier value: " << source_identifier;
 
         auto maybe_source_ip = env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
+        set<string> ip_set;
         string source_ip = "";
-        if (maybe_source_ip.ok()) source_ip = ipAddrToStr(maybe_source_ip.unpack());
+        if (maybe_source_ip.ok()) {
+            source_ip = ipAddrToStr(maybe_source_ip.unpack());
 
-        unordered_map<string, set<string>> condition_map = createConditionMap(uri, source_ip, source_identifier);
+            if (getProfileAgentSettingWithDefault<bool>(false, "agent.rateLimit.ignoreSourceIP")) {
+                dbgDebug(D_RATE_LIMIT) << "Rate limit ignoring source ip: " << source_ip;
+            } else {
+                ip_set.insert(source_ip);
+            }
+        }
+
+        auto maybe_xff = env->get<string>(HttpTransactionData::xff_vals_ctx);
+        if (!maybe_xff.ok()) {
+            dbgTrace(D_RATE_LIMIT) << "Rate limit failed to get xff vals from env";
+        } else {
+            auto ips = split(maybe_xff.unpack(), ',');
+            ip_set.insert(ips.begin(), ips.end());
+        }
+
+        EnumArray<I_GeoLocation::GeoLocationField, string> geo_location_data;
+        set<string> country_codes;
+        set<string> country_names;
+        for (const string& source : ip_set) {
+            Maybe<IPAddr> maybe_source_ip = IPAddr::createIPAddr(source);
+            if (!maybe_source_ip.ok()){
+                dbgWarning(D_RATE_LIMIT)
+                    << "Rate limit failed to create ip address from source: "
+                    << source
+                    << ", Error: "
+                    << maybe_source_ip.getErr();
+                continue;
+            }
+            auto asset_location =
+                Singleton::Consume<I_GeoLocation>::by<RateLimit>()->lookupLocation(maybe_source_ip.unpack());
+            if (!asset_location.ok()) {
+                dbgWarning(D_RATE_LIMIT)
+                    << "Rate limit lookup location failed for source: "
+                    << source_ip
+                    << ", Error: "
+                    << asset_location.getErr();
+                continue;
+            }
+            geo_location_data = asset_location.unpack();
+            auto code = geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_CODE];
+            auto name =  geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_NAME];
+            country_codes.insert(code);
+            country_names.insert(name);
+            dbgTrace(D_RATE_LIMIT)
+                << "Rate limit found "
+                << "country code: "
+                << code
+                << ", country name: "
+                << name
+                << ", source ip address: "
+                << source;
+        }
+
+
+        unordered_map<string, set<string>> condition_map = createConditionMap(
+            uri,
+            source_ip,
+            source_identifier,
+            country_codes,
+            country_names
+        );
         if (shouldApplyException(condition_map)) {
             dbgDebug(D_RATE_LIMIT) << "found accept exception, not enforcing rate limit on this URI: " << uri;
             return ACCEPT;
@@ -293,11 +376,6 @@ public:
             return ACCEPT;
         }
 
-        auto replicas = getenv("REPLICA_COUNT") ? std::stoi(getenv("REPLICA_COUNT")) : 1;
-        if (replicas == 0) {
-            dbgWarning(D_RATE_LIMIT) << "REPLICA_COUNT environment variable is set to 0, setting REPLICA_COUNT to 1";
-            replicas = 1;
-        }
         burst = static_cast<float>(rule.getRateLimit()) / replicas;
         limit = static_cast<float>(calcRuleLimit(rule)) / replicas;
 
@@ -476,10 +554,18 @@ public:
     }
 
     unordered_map<string, set<string>>
-    createConditionMap(const string &uri, const string &source_ip, const string &source_identifier)
+    createConditionMap(
+        const string &uri,
+        const string &source_ip,
+        const string &source_identifier,
+        const set<string> &country_codes,
+        const set<string> &country_names
+    )
     {
         unordered_map<string, set<string>> condition_map;
         if (!source_ip.empty()) condition_map["sourceIP"].insert(source_ip);
+        if (!country_codes.empty()) condition_map["countryCode"].insert(country_codes.begin(), country_codes.end());
+        if (!country_names.empty()) condition_map["countryName"].insert(country_names.begin(), country_names.end());
         condition_map["sourceIdentifier"].insert(source_identifier);
         condition_map["url"].insert(uri);
 
@@ -616,6 +702,21 @@ public:
             "Initialize rate limit component",
             false
         );
+
+        i_shell_cmd = Singleton::Consume<I_ShellCmd>::by<RateLimit>();
+        i_env_details = Singleton::Consume<I_EnvDetails>::by<RateLimit>();
+        env_type = i_env_details->getEnvType();
+        if (env_type == EnvType::K8S) {
+            kubernetes_token = i_env_details->getToken();
+            kubernetes_namespace = i_env_details->getNameSpace();
+            fetchReplicaCount();
+            Singleton::Consume<I_MainLoop>::by<RateLimit>()->addRecurringRoutine(
+                I_MainLoop::RoutineType::Offline,
+                chrono::seconds(120),
+                [this]() { fetchReplicaCount(); },
+                "Fetch current replica count from the Kubernetes cluster"
+            );
+        }
     }
 
     void
@@ -623,6 +724,9 @@ public:
     {
         disconnectRedis();
     }
+
+    I_ShellCmd *i_shell_cmd = nullptr;
+    I_EnvDetails* i_env_details = nullptr;
 
 private:
     static constexpr auto DROP = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
@@ -634,6 +738,10 @@ private:
     int burst;
     float limit;
     redisContext* redis = nullptr;
+    int replicas = 1;
+    EnvType env_type;
+    string kubernetes_namespace = "";
+    string kubernetes_token = "";
 };
 
 RateLimit::RateLimit() : Component("RateLimit"), pimpl(make_unique<Impl>()) {}

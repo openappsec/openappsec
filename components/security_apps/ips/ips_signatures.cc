@@ -219,10 +219,16 @@ IPSSignatureMetaData::getYear() const
 void
 CompleteSignature::load(cereal::JSONInputArchive &ar)
 {
-    ar(cereal::make_nvp("protectionMetadata", metadata));
-    RuleDetection rule_detection(metadata.getName());
-    ar(cereal::make_nvp("detectionRules", rule_detection));
-    rule = rule_detection.getRule();
+    try {
+        ar(cereal::make_nvp("protectionMetadata", metadata));
+        RuleDetection rule_detection(metadata.getName());
+        ar(cereal::make_nvp("detectionRules", rule_detection));
+        rule = rule_detection.getRule();
+        is_loaded = true;
+    } catch (cereal::Exception &e) {
+        is_loaded = false;
+        dbgWarning(D_IPS) << "Failed to load signature: " << e.what();
+    }
 }
 
 MatchType
@@ -367,7 +373,16 @@ SignatureAndAction::matchSilent(const Buffer &sample) const
     if (method.ok()) log << LogField("httpMethod", method.unpack());
 
     auto path  = env->get<Buffer>("HTTP_PATH_DECODED");
-    if (path.ok()) log << LogField("httpUriPath", getSubString(path, 1536), LogFieldOption::XORANDB64);
+    if (path.ok()) {
+        log << LogField("httpUriPath", getSubString(path, 1536), LogFieldOption::XORANDB64);
+    } else {
+        auto transaction_path = env->get<string>(HttpTransactionData::uri_path_decoded);
+        if (transaction_path.ok()) {
+            auto uri_path = transaction_path.unpack();
+            auto question_mark = uri_path.find('?');
+            log << LogField("httpUriPath", uri_path.substr(0, question_mark), LogFieldOption::XORANDB64);
+        }
+    }
 
     auto req_header = ips_state.getTransactionData(IPSCommonTypes::requests_header_for_log);
     if (req_header.ok()) log << LogField("httpRequestHeaders", getSubString(req_header), LogFieldOption::XORANDB64);
@@ -485,13 +500,30 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
     auto method = env->get<string>(HttpTransactionData::method_ctx);
     if (method.ok()) log << LogField("httpMethod", method.unpack());
     uint max_size = getConfigurationWithDefault<uint>(1536, "IPS", "Max Field Size");
-    auto path  = env->get<Buffer>("HTTP_PATH_DECODED");
-    if (path.ok() && trigger.isWebLogFieldActive(url_path)) {
-        log << LogField("httpUriPath", getSubString(path, max_size), LogFieldOption::XORANDB64);
+
+    if (trigger.isWebLogFieldActive(url_path)) {
+        auto path  = env->get<Buffer>("HTTP_PATH_DECODED");
+        if (path.ok()) {
+            log << LogField("httpUriPath", getSubString(path, max_size), LogFieldOption::XORANDB64);
+        } else {
+            auto transaction_path = env->get<string>(HttpTransactionData::uri_path_decoded);
+            if (transaction_path.ok()) {
+                auto uri_path = transaction_path.unpack();
+                auto question_mark = uri_path.find('?');
+                log << LogField("httpUriPath", uri_path.substr(0, question_mark), LogFieldOption::XORANDB64);
+            }
+        }
     }
-    auto query = env->get<Buffer>("HTTP_QUERY_DECODED");
-    if (query.ok() && trigger.isWebLogFieldActive(url_query)) {
-        log << LogField("httpUriQuery", getSubString(query, max_size), LogFieldOption::XORANDB64);
+    if (trigger.isWebLogFieldActive(url_query)) {
+        auto query = env->get<Buffer>("HTTP_QUERY_DECODED");
+        if (query.ok()) {
+            log << LogField("httpUriQuery", getSubString(query, max_size), LogFieldOption::XORANDB64);
+        } else {
+            auto transaction_query = env->get<string>(HttpTransactionData::uri_query_decoded);
+            if (transaction_query.ok()) {
+                log << LogField("httpUriQuery", transaction_query.unpack());
+            }
+        }
     }
 
     auto res_code = env->get<Buffer>("HTTP_RESPONSE_CODE");
@@ -533,7 +565,9 @@ IPSSignaturesResource::load(cereal::JSONInputArchive &ar)
 
     all_signatures.reserve(sigs.size());
     for (auto &sig : sigs) {
-        all_signatures.emplace_back(make_shared<CompleteSignature>(move(sig)));
+        if (sig.isOk()) {
+            all_signatures.emplace_back(make_shared<CompleteSignature>(move(sig)));
+        }
     }
 }
 

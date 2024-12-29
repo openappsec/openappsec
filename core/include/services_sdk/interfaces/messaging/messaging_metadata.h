@@ -229,6 +229,18 @@ public:
     }
 
     void
+    setDnHostName(const std::string &_dn_host_name)
+    {
+        dn_host_name = _dn_host_name;
+    }
+
+    Maybe<std::string>
+    getDnHostName() const
+    {
+        return dn_host_name;
+    }
+
+    void
     setRateLimitBlock(uint block_time)
     {
         is_rate_limit_block = true;
@@ -273,6 +285,7 @@ public:
 private:
     std::string host_name = "";
     Maybe<std::string> sni_host_name = genError("SNI host name not set");
+    Maybe<std::string> dn_host_name = genError("DN host name not set");
     std::string ca_path = "";
     std::string client_cert_path = "";
     std::string client_key_path = "";

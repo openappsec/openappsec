@@ -104,6 +104,12 @@ public:
             cereal::JSONInputArchive ar(ss);
             high_medium_confidance_signatures.load(ar);
         }
+        {
+            stringstream ss;
+            ss << "[" << signature_performance_high << ", " << signature_broken << "]";
+            cereal::JSONInputArchive ar(ss);
+            single_broken_signature.load(ar);
+        }
     }
 
     ~SignatureTest()
@@ -250,6 +256,7 @@ public:
     IPSSignaturesResource performance_signatures1;
     IPSSignaturesResource performance_signatures2;
     IPSSignaturesResource performance_signatures3;
+    IPSSignaturesResource single_broken_signature;
     NiceMock<MockTable> table;
     MockAgg mock_agg;
 
@@ -483,6 +490,26 @@ private:
                 "\"context\": [\"HTTP_REQUEST_BODY\", \"HTTP_RESPONSE_BODY\"]"
             "}"
         "}";
+
+    string signature_broken =
+    "{"
+        "\"protectionMetadata\": {"
+            "\"protectionName\": \"BrokenTest\","
+            "\"maintrainId\": \"101\","
+            "\"severity\": \"Medium High\","
+            "\"confidenceLevel\": \"Low\","
+            "\"performanceImpact\": \"High\","
+            "\"lastUpdate\": \"20210420\","
+            "\"tags\": [],"
+            "\"cveList\": []"
+        "},"
+        "\"detectionRules\": {"
+            "\"type\": \"simple\","
+            "\"SSM\": \"\","
+            "\"keywosrds\": \"data: \\\"www\\\";\","
+            "\"context\": [\"HTTP_REQUEST_BODY\", \"HTTP_RESPONSE_BODY\"]"
+        "}"
+    "}";
 };
 
 TEST_F(SignatureTest, basic_load_of_signatures)
@@ -664,4 +691,15 @@ TEST_F(SignatureTest, high_confidance_signatures_matching)
 
     expectLog("\"protectionId\": \"Test4\"", "\"matchedSignatureConfidence\": \"Medium\"");
     EXPECT_FALSE(checkData("mmm"));
+}
+
+TEST_F(SignatureTest, broken_signature)
+{
+    load(single_broken_signature, "Low or above", "Low");
+    EXPECT_FALSE(checkData("ggg"));
+
+    expectLog("\"matchedSignaturePerformance\": \"High\"");
+    EXPECT_TRUE(checkData("fff"));
+
+    EXPECT_FALSE(checkData("www"));
 }

@@ -23,6 +23,13 @@
 #include "logging_metric.h"
 #include "i_logging.h"
 #include "i_socket_is.h"
+#include "logging_comp.h"
+
+static const int RETRY_CONNECT_INTERVAL = 120;
+static const std::string SYSLOG_CONNECT_NAME = "connecting to Syslog server";
+static const std::string CEF_CONNECT_NAME = "connecting to CEF server";
+static const int NUMBER_OF_LOGS_PER_SEND = 15;
+static size_t MAX_LOG_QUEUE = 1000;
 
 USE_DEBUG_FLAG(D_REPORT);
 
@@ -93,43 +100,77 @@ private:
     I_Messaging *i_msg = nullptr;
 };
 
-class SyslogStream : public Stream
+class LogStreamConnector : public Stream
+{
+public:
+    LogStreamConnector(
+        const std::string &_address,
+        int _port,
+        I_Socket::SocketType _protocol,
+        const std::string &_log_name) :
+        mainloop(Singleton::Consume<I_MainLoop>::by<LoggingComp>()),
+        i_socket(Singleton::Consume<I_Socket>::by<LoggingComp>()),
+        address(_address),
+        port(_port),
+        protocol(_protocol),
+        logs_in_queue(),
+        log_name(_log_name) {}
+    virtual ~LogStreamConnector() {}
+
+protected:
+    virtual void connect() = 0;
+    virtual void updateSettings() = 0;
+
+    void maintainConnection();
+    void addLogToQueue(const std::vector<char> &data);
+    void writeFail();
+    bool basicWriteLog(const std::vector<char> &data);
+    void sendLogWithQueue(const std::vector<char> &data);
+    void sendAllLogs();
+
+    I_MainLoop *mainloop = nullptr;
+    I_Socket *i_socket = nullptr;
+    std::string address;
+    int port;
+    I_Socket::SocketType protocol = I_Socket::SocketType::UDP;
+    Maybe<I_Socket::socketFd> socket = genError("Not set yet");
+    bool did_write_fail_in_this_window = false;
+    std::vector<std::vector<char>> logs_in_queue;
+    I_MainLoop::RoutineID connecting_routine = -1;
+    int max_logs_per_send = NUMBER_OF_LOGS_PER_SEND;
+    std::string log_name;
+    uint max_data_in_queue = MAX_LOG_QUEUE;
+};
+
+class SyslogStream : public LogStreamConnector
 {
 public:
     SyslogStream(const std::string &_address, int _port, I_Socket::SocketType protocol);
     ~SyslogStream();
-
     void sendLog(const Report &log) override;
 
-private:
-    void sendLog(const std::vector<char> &data);
-    void connect();
+protected:
+    void connect() override;
+    void updateSettings() override;
 
-    I_Socket *i_socket = nullptr;
-    I_MainLoop *mainloop = nullptr;
-    std::string address;
-    int port;
-    I_Socket::SocketType protocol = I_Socket::SocketType::UDP;
+private:
+    void init();
+    void sendLog(const std::vector<char> &data);
     I_MainLoop::RoutineID log_send_routine = -1;
-    Maybe<I_Socket::socketFd> socket = genError("Not set yet");
 };
 
-class CefStream : public Stream
+class CefStream : public LogStreamConnector
 {
 public:
     CefStream(const std::string &_address, int _port, I_Socket::SocketType _protocol);
     ~CefStream();
-
     void sendLog(const Report &log) override;
 
+protected:
+    void connect() override;
+    void updateSettings() override;
 private:
-    void connect();
-
-    I_Socket *i_socket = nullptr;
-    std::string address;
-    int port;
-    I_Socket::SocketType protocol = I_Socket::SocketType::UDP;
-    Maybe<I_Socket::socketFd> socket = genError("Not set yet");
+    void init();
 };
 
 #endif // __LOG_STREAMS_H__
