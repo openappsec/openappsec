@@ -84,42 +84,45 @@ spec:
         threatPreventionPractices: [threat-prevention-practice-example]
         triggers: [log-trigger-example]
         customResponse: custom-response-response-code-example
-        sourceIdentifiers: ""
-        trustedSources: ""
+        sourceIdentifiers: sources-identifier-example
+        trustedSources: trusted-sources-example
         exceptions:
         - exception-example
-
 ---
 apiVersion: openappsec.io/v1beta2
 kind: ThreatPreventionPractice
 metadata:
   name: threat-prevention-practice-example
 spec:
-  name: custom-web-protection
-  practiceMode: prevent
+  practiceMode: inherited
   webAttacks:
-    overrideMode: prevent-learn
+    overrideMode: inherited
     minimumConfidence: high
-    maxUrlSizeBytes: 4096
-    maxObjectDepth: 10
-    maxBodySizeKb: 1024
-    maxHeaderSizeBytes: 8192
-    protections:
-      csrfProtection: prevent
-      errorDisclosure: detect
-      openRedirect: inactive
-      nonValidHttpMethods: true
-  antiBot:
-    overrideMode: detect
-    injectedUris:
-      - /admin/login
-      - /user/auth
-    validatedUris:
-      - /secure-area
+  intrusionPrevention:
+  # intrusion prevention (IPS) requires "Premium Edition"
+    overrideMode: inherited
+    maxPerformanceImpact: medium
+    minSeverityLevel: medium
+    minCveYear: 2016
+    highConfidenceEventAction: inherited
+    mediumConfidenceEventAction: inherited
+    lowConfidenceEventAction: detect
+  fileSecurity:
+  # file security requires "Premium Edition"
+    overrideMode: inherited
+    minSeverityLevel: medium
+    highConfidenceEventAction: inherited
+    mediumConfidenceEventAction: inherited
+    lowConfidenceEventAction: detect
   snortSignatures:
+    # you must specify snort signatures in configmap or file to activate snort inspection
     overrideMode: inherited
     configmap: []
+    # relevant for deployments on kubernetes
+    # 0 or 1 configmaps supported in array
     files: []
+    # relevant for docker and linux embedded deployments
+    # 0 or 1 files supported in array
   schemaValidation: # schema validation requires "Premium Edition"
     overrideMode: inherited
     configmap: []
@@ -128,13 +131,10 @@ spec:
     files: []
     # relevant for docker and linux embedded deployments
     # 0 or 1 files supported in array
-  intrusionPrevention:
-    overrideMode: detect
-    maxPerformanceImpact: medium
-    minSeverityLevel: high
-    minCveYear: 2015
-    highConfidenceEventAction: prevent
-    mediumConfidenceEventAction: detect
+  antiBot: # antibot requires "Premium Edition"
+    overrideMode: inherited
+    injectedUris: []
+    validatedUris: []
 
 ---
 apiVersion: openappsec.io/v1beta2
@@ -147,3 +147,15 @@ spec:
     - 1.0.0.27
     - 1.0.0.28
     - 1.0.0.29
+
+---
+kind: SourcesIdentifier
+metadata:
+  name: sources-identifier-example
+spec:
+  sourcesIdentifiers:
+    - identifier: sourceip
+      value:
+        - "192.168.1.1" 
+        - "10.0.0.1"
+
