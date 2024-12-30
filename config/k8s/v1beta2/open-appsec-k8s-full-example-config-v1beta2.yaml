@@ -84,19 +84,10 @@ spec:
         threatPreventionPractices: [threat-prevention-practice-example]
         triggers: [log-trigger-example]
         customResponse: custom-response-response-code-example
-        sourceIdentifiers: "sources-identifier-example"
+        sourceIdentifiers: ""
         trustedSources: ""
         exceptions:
         - exception-example
-
----
-apiVersion: openappsec.io/v1beta2
-kind: SourcesIdentifier
-metadata:
-  name: sources-identifier-example
-spec:
-  sourcesIdentifiers:
-    - identifier: sourceip
 
 ---
 apiVersion: openappsec.io/v1beta2
