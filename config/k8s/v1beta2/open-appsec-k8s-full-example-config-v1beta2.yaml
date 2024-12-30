@@ -11,14 +11,14 @@ spec:
       comment: Limiting access to the resource
       limit: 100
       triggers:
-      - appsec-log-trigger
+      - log-trigger-example
       unit: minute
       uri: /api/resource
     - action: inherited
       comment: Rate limiting for authentication requests
       limit: 50
       triggers:
-      - appsec-log-trigger
+      - log-trigger-example
       unit: second
       uri: /api/auth
 
@@ -84,7 +84,7 @@ spec:
         accessControlPractices: [access-control-practice-example]
         threatPreventionPractices: [threat-prevention-practice-example]
         triggers: [log-trigger-example]
-        customResponse: custom-response-response-code-example
+        customResponse: custom-response-block-page-example
         sourceIdentifiers: sources-identifier-example
         trustedSources: trusted-sources-example
         exceptions:
