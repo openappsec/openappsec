@@ -100,7 +100,7 @@ spec:
 
 ---
 apiVersion: openappsec.io/v1beta2
-kind: ThreatPreventionPractices
+kind: ThreatPreventionPractice
 metadata:
   name: threat-prevention-practice-example
 spec:
@@ -144,7 +144,7 @@ spec:
 
 ---
 apiVersion: openappsec.io/v1beta2
-kind: SourcesIdentifier
+kind: TrustedSource
 metadata:
   name: trusted-sources-example
 spec:
