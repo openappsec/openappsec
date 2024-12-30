@@ -14,7 +14,7 @@ spec:
     - default-threat-prevention-practice
     accessControlPractices:
     - default-access-control-practice
-    customResponses: default-web-user-response
+    customResponse: default-web-user-response
     triggers:
     - default-log-trigger
   specificRules:
@@ -62,7 +62,7 @@ spec:
     files: []
     # relevant for docker and linux embedded deployments
     # 0 or 1 files supported in array
-  openapiSchemaValidation: # schema validation requires "Premium Edition"
+  schemaValidation: # schema validation requires "Premium Edition"
     overrideMode: inherited
     configmap: []
     # relevant for deployments on kubernetes
