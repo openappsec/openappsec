@@ -5,9 +5,9 @@ metadata:
 spec:
   practiceMode: prevent
   rateLimit:
-    overrideMode: prevent
+    overrideMode: inherited
     rules:
-    - action: inherited
+    - action: prevent
       comment: Limiting access to the resource
       limit: 100
       triggers:
@@ -69,6 +69,7 @@ spec:
     requestBody: false
   logDestination:
     cloud: true
+    logToAgent: true
     stdout:
       format: json-formatted
 
@@ -149,6 +150,7 @@ spec:
     - 1.0.0.29
 
 ---
+apiVersion: openappsec.io/v1beta2
 kind: SourcesIdentifier
 metadata:
   name: sources-identifier-example
