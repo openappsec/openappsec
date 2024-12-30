@@ -1,0 +1,155 @@
+apiVersion: openappsec.io/v1beta2
+kind: AccessControlPractice
+metadata:
+  name: access-control-practice-example
+spec:
+  practiceMode: prevent
+  rateLimit:
+    overrideMode: prevent
+    rules:
+    - action: inherited
+      comment: Limiting access to the resource
+      limit: 100
+      triggers:
+      - appsec-log-trigger
+      unit: minute
+      uri: /api/resource
+    - action: inherited
+      comment: Rate limiting for authentication requests
+      limit: 50
+      triggers:
+      - appsec-log-trigger
+      unit: second
+      uri: /api/auth
+
+---
+apiVersion: openappsec.io/v1beta2
+kind: CustomResponse
+metadata:
+  name: custom-response-block-page-example
+spec:
+  mode: block-page
+  messageTitle: "Access Denied"
+  messageBody: "Your request was blocked for security reasons."
+  httpResponseCode: 403
+
+---
+apiVersion: openappsec.io/v1beta2
+kind: Exception
+metadata:
+  name: exception-example
+spec:
+  action: accept
+  condition:
+    - key: countryCode
+      value: US
+
+---
+apiVersion: openappsec.io/v1beta2
+kind: LogTrigger
+metadata:
+  name: log-trigger-example
+spec:
+  accessControlLogging:
+    allowEvents: false
+    dropEvents: true
+  appsecLogging:
+    detectEvents: true
+    preventEvents: true
+    allWebRequests: false
+  additionalSuspiciousEventsLogging:
+    enabled: true
+    minSeverity: high # {high|critical}
+    responseBody: false
+    responseCode: true
+  extendedLogging:
+    urlPath: true
+    urlQuery: true
+    httpHeaders: false
+    requestBody: false
+  logDestination:
+    cloud: true
+    stdout:
+      format: json-format
+
+---
+apiVersion: openappsec.io/v1beta2
+kind: Policy
+metadata:
+    name: policy-example
+spec:
+    default:
+        mode: prevent-learn
+        accessControlPractices: [access-control-practice-example]
+        threatPreventionPractices: [threat-prevention-practice-example]
+        triggers: [log-trigger-example]
+        customResponse: custom-response-response-code-example
+        sourceIdentifiers: ""
+        trustedSources: ""
+        exceptions:
+        - exception-example
+
+---
+apiVersion: openappsec.io/v1beta2
+kind: SourcesIdentifier
+metadata:
+  name: sources-identifier-example
+spec:
+  sourcesIdentifiers:
+    - identifier: sourceip
+
+---
+apiVersion: openappsec.io/v1
+kind: ThreatPreventionPractices
+metadata:
+  name: threat-prevention-practice-example
+spec:
+  name: custom-web-protection
+  practiceMode: prevent
+  webAttacks:
+    overrideMode: prevent-learn
+    minimumConfidence: high
+    maxUrlSizeBytes: 4096
+    maxObjectDepth: 10
+    maxBodySizeKb: 1024
+    maxHeaderSizeBytes: 8192
+    protections:
+      csrfProtection: prevent
+      errorDisclosure: detect
+      openRedirect: inactive
+      nonValidHttpMethods: true
+  antiBot:
+    overrideMode: detect
+    injectedUris:
+      - /admin/login
+      - /user/auth
+    validatedUris:
+      - /secure-area
+  snortSignatures:
+    overrideMode: detect-learn
+    configmap:
+      - name: custom-snort-rules
+        path: /config/snort
+  schemaValidation:
+    overrideMode: prevent
+    enforcementLevel: strict
+    configmap: [custom-schema-rules]
+  intrusionPrevention:
+    overrideMode: detect
+    maxPerformanceImpact: medium
+    minSeverityLevel: high
+    minCveYear: 2015
+    highConfidenceEventAction: prevent
+    mediumConfidenceEventAction: detect
+
+---
+apiVersion: openappsec.io/v1
+kind: SourcesIdentifier
+metadata:
+  name: trusted-sources-example
+spec:
+  minNumOfSources: 3
+  sourcesIdentifiers:
+    - 1.0.0.27
+    - 1.0.0.28
+    - 1.0.0.29
