@@ -119,10 +119,15 @@ spec:
   snortSignatures:
     overrideMode: inherited
     configmap: []
-  schemaValidation:
-    overrideMode: prevent
-    enforcementLevel: strict
-    configmap: [custom-schema-rules]
+    files: []
+  schemaValidation: # schema validation requires "Premium Edition"
+    overrideMode: inherited
+    configmap: []
+    # relevant for deployments on kubernetes
+    # 0 or 1 configmaps supported in array
+    files: []
+    # relevant for docker and linux embedded deployments
+    # 0 or 1 files supported in array
   intrusionPrevention:
     overrideMode: detect
     maxPerformanceImpact: medium
