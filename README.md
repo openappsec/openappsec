@@ -74,7 +74,7 @@ For Linux, if you’ve built your own package use the following commands:
 
 ```bash
 $ install-cp-nano-agent.sh --install --hybrid_mode
-$ install-cp-nano-service-http-transaction-handler.sh –install
+$ install-cp-nano-service-http-transaction-handler.sh --install
 $ install-cp-nano-attachment-registration-manager.sh --install
 ```
 You can add the ```--token <token>``` and ```--email <email address>``` options to the first command, to get a token follow [documentation](https://docs.openappsec.io/getting-started/using-the-web-ui-saas/connect-deployed-agents-to-saas-management-k8s-and-linux). 
