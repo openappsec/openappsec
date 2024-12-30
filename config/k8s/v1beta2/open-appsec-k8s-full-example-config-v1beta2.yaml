@@ -70,7 +70,7 @@ spec:
   logDestination:
     cloud: true
     stdout:
-      format: json-format
+      format: json-formatted
 
 ---
 apiVersion: openappsec.io/v1beta2
@@ -84,7 +84,7 @@ spec:
         threatPreventionPractices: [threat-prevention-practice-example]
         triggers: [log-trigger-example]
         customResponse: custom-response-response-code-example
-        sourceIdentifiers: ""
+        sourceIdentifiers: [sources-identifier-example]
         trustedSources: ""
         exceptions:
         - exception-example
