@@ -117,10 +117,8 @@ spec:
     validatedUris:
       - /secure-area
   snortSignatures:
-    overrideMode: detect-learn
-    configmap:
-      - name: custom-snort-rules
-        path: /config/snort
+    overrideMode: inherited
+    configmap: []
   schemaValidation:
     overrideMode: prevent
     enforcementLevel: strict
