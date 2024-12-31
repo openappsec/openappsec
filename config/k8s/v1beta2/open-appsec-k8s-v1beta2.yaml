@@ -1,0 +1,106 @@
+apiVersion: openappsec.io/v1beta2
+kind: Policy
+metadata:
+    name: open-appsec-best-practice-policy
+spec:
+    default:
+        mode: prevent-learn
+        accessControlPractices: []
+        threatPreventionPractices: []
+        triggers: [appsec-log-trigger]
+        customResponse: 403-forbidden
+        sourceIdentifiers: ""
+        trustedSources: ""
+        exceptions: []
+---
+
+apiVersion: openappsec.io/v1beta2
+kind: ThreatPreventionPractice
+metadata:
+  name: appsec-best-practice
+spec:
+  antiBot:
+    injectedUris: []
+    overrideMode: prevent
+    validatedUris: []
+  fileSecurity:
+    archiveInspection:
+      archivedFilesWhereContentExtractionFailed: detect
+      archivedFilesWithinArchivedFiles: prevent
+      extractArchiveFiles: true
+      scanMaxFileSize: 30
+      scanMaxFileSizeUnit: GB
+    largeFileInspection:
+      fileSizeLimit: 50
+      fileSizeLimitUnit: KB
+      filesExceedingSizeLimitAction: detect
+    highConfidenceEventAction: prevent
+    lowConfidenceEventAction: detect
+    mediumConfidenceEventAction: prevent
+    minSeverityLevel: medium
+    overrideMode: prevent
+    threatEmulationEnabled: false
+    unnamedFilesAction: prevent
+  intrusionPrevention:
+    highConfidenceEventAction: prevent
+    lowConfidenceEventAction: detect
+    maxPerformanceImpact: medium
+    mediumConfidenceEventAction: prevent
+    minCveYear: 2016
+    minSeverityLevel: medium
+    overrideMode: prevent
+  practiceMode: prevent
+  schemaValidation:
+    configmap:
+    - openapi-config
+    enforcementLevel: fullSchema
+    overrideMode: prevent
+  snortSignatures:
+    configmap:
+    - alert-config
+    overrideMode: prevent
+  webAttacks:
+    maxBodySizeKb: 1000000
+    maxHeaderSizeBytes: 102400
+    maxObjectDepth: 40
+    maxUrlSizeBytes: 32768
+    minimumConfidence: high
+    overrideMode: prevent
+---
+apiVersion: openappsec.io/v1beta2
+kind: LogTrigger
+metadata:
+  name: appsec-log-trigger
+spec:
+  accessControlLogging:
+    allowEvents: false
+    dropEvents: true
+  appsecLogging:
+    detectEvents: true
+    preventEvents: true
+    allWebRequests: false
+  additionalSuspiciousEventsLogging:
+    enabled: true
+    minSeverity: high # {high|critical}
+    responseBody: false
+    responseCode: true
+  extendedLogging:
+    urlPath: true
+    urlQuery: true
+    httpHeaders: false
+    requestBody: false
+  logDestination:
+    cloud: true
+    logToAgent: true
+    stdout:
+      format: json-formatted
+---
+apiVersion: openappsec.io/v1beta2
+kind: CustomResponse
+metadata:
+  name: 403-forbidden
+spec:
+  mode: response-code-only ## configurable modes: {block-page|redirect|response-code-only}
+  messageTitle: ""
+  messageBody: ""
+  httpResponseCode: 403
