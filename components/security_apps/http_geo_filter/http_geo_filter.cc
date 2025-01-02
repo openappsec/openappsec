@@ -88,9 +88,17 @@ public:
             dbgWarning(D_GEO_FILTER) << "failed to get source ip from env";
             return EventVerdict(default_action);
         }
-
         auto source_ip = convertIpAddrToString(maybe_source_ip.unpack());
-        ip_set.insert(source_ip);
+
+        // saas profile setting
+        bool ignore_source_ip =
+            getProfileAgentSettingWithDefault<bool>(false, "agent.geoProtaction.ignoreSourceIP");
+        if (ignore_source_ip){
+            dbgDebug(D_GEO_FILTER) << "Geo protection ignoring source ip: " << source_ip;
+        } else {
+            ip_set.insert(convertIpAddrToString(maybe_source_ip.unpack()));
+        }
+
 
         ngx_http_cp_verdict_e exception_verdict = getExceptionVerdict(ip_set);
         if (exception_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
@@ -343,7 +351,7 @@ private:
 
             auto asset_location = i_geo_location->lookupLocation(maybe_source_ip.unpack());
             if (!asset_location.ok()) {
-                dbgWarning(D_GEO_FILTER) << "Lookup location failed for source: " <<
+                dbgDebug(D_GEO_FILTER) << "Lookup location failed for source: " <<
                 source <<
                 ", Error: " <<
                 asset_location.getErr();

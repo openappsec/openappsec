@@ -173,6 +173,12 @@ getReqBodySizeTrigger()
     return conf_data.getNumericalValue("body_size_trigger");
 }
 
+unsigned int
+getRemoveResServerHeader()
+{
+    return conf_data.getNumericalValue("remove_server_header");
+}
+
 int
 isIPAddress(c_str ip_str)
 {

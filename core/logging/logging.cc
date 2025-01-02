@@ -171,6 +171,7 @@ public:
         } else {
             LogEventLogsSent(true).notify();
             for (auto &iter : streams) {
+                dbgTrace(D_REPORT) << "Sending log to stream: " << TagAndEnumManagement::convertToString(iter.first);
                 if (log.isStreamActive(iter.first)) iter.second->sendLog(log);
             }
         }

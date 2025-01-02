@@ -22,4 +22,5 @@ add_library(local_policy_mgmt_gen
     access_control_practice.cc
     configmaps.cc
     reverse_proxy_section.cc
+    policy_activation_data.cc
 )

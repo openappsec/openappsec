@@ -57,6 +57,7 @@ unsigned int getResBodyThreadTimeout();
 unsigned int getMinRetriesForVerdict();
 unsigned int getMaxRetriesForVerdict();
 unsigned int getReqBodySizeTrigger();
+unsigned int getRemoveResServerHeader();
 
 unsigned int getWaitingForVerdictThreadTimeout();
 

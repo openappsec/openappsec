@@ -48,7 +48,7 @@ public:
     void init();
 
     std::tuple<std::map<std::string, AppsecLinuxPolicy>, std::map<std::string, V1beta2AppsecLinuxPolicy>>
-    createAppsecPoliciesFromIngresses();
+    createAppsecPolicies();
     void getClusterId() const;
 
 private:
@@ -101,11 +101,17 @@ private:
     ) const;
 
     template<class T, class K>
-    void createPolicy(
+    void createPolicyFromIngress(
         T &appsec_policy,
         std::map<std::string, T> &policies,
         std::map<AnnotationKeys, std::string> &annotations_values,
         const SingleIngressData &item) const;
+
+    template<class T, class K>
+    void createPolicyFromActivation(
+        T &appsec_policy,
+        std::map<std::string, T> &policies,
+        const EnabledPolicy &policy) const;
 
     std::tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>> createAppsecPolicyK8s(
         const std::string &policy_name,

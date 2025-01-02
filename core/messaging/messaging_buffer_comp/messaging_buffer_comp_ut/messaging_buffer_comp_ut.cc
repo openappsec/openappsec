@@ -282,3 +282,51 @@ TEST_F(TestMessagingBuffer, testRoutinInMemory)
     msg = buffer_provider->peekMessage();
     ASSERT_FALSE(msg.ok());
 }
+
+TEST_F(TestMessagingBuffer, testRoutinInMemoryOverflow)
+{
+    string config_json =
+        "{"
+        "   \"agentSettings\": [\n"
+        "   {\n"
+        "       \"id\": \"123\",\n"
+        "       \"key\": \"eventBuffer.maxMemoryMessagesToStore\",\n"
+        "       \"value\": \"5\"\n"
+        "   },\n"
+        "   {\n"
+        "       \"id\": \"123\",\n"
+        "       \"key\": \"eventBuffer.additionalBufferSize\",\n"
+        "       \"value\": \"1\"\n"
+        "   }]\n"
+        "}";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss);
+
+    MessageCategory category = MessageCategory::GENERIC;
+    MessageMetadata message_metadata = MessageMetadata();
+    message_metadata.setShouldBufferMessage(true);
+    HTTPMethod method = HTTPMethod::POST;
+    HTTPResponse res(HTTPStatusCode::HTTP_OK, "");
+
+    for (int i = 0; i < 6; i++) {
+        string body = "body" + to_string(i);
+        buffer_provider->pushNewBufferedMessage(body, method,  "/" + to_string(i), category, message_metadata, false);
+        EXPECT_CALL(mock_messaging, sendSyncMessage(method,  "/" + to_string(i), body, _, _)).WillOnce(Return(res));
+    }
+
+    for (int i = 0; i < 2; i++) {
+        string body = "body" + to_string(i);
+        buffer_provider->pushNewBufferedMessage(body, method,  "/" + to_string(i), category, message_metadata, false);
+    }
+
+    memory_routine();
+
+    for (int i = 0; i < 2; i++) {
+        auto msg = buffer_provider->peekMessage();
+        ASSERT_TRUE(msg.ok());
+        buffer_provider->popMessage();
+    }
+    auto msg = buffer_provider->peekMessage();
+    ASSERT_FALSE(msg.ok());
+}

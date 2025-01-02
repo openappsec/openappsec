@@ -577,7 +577,7 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
 
 template<class T, class K>
 void
-K8sPolicyUtils::createPolicy(
+K8sPolicyUtils::createPolicyFromIngress(
     T &appsec_policy,
     map<std::string, T> &policies,
     map<AnnotationKeys, string> &annotations_values,
@@ -615,10 +615,35 @@ K8sPolicyUtils::createPolicy(
     }
 }
 
-std::tuple<map<string, AppsecLinuxPolicy>, map<string, V1beta2AppsecLinuxPolicy>>
-K8sPolicyUtils::createAppsecPoliciesFromIngresses()
+template<class T, class K>
+void
+K8sPolicyUtils::createPolicyFromActivation(
+    T &appsec_policy,
+    map<std::string, T> &policies,
+    const EnabledPolicy &policy) const
 {
-    dbgFlow(D_LOCAL_POLICY) << "Getting all policy object from Ingresses";
+    if (policies.find(policy.getName()) == policies.end()) {
+        policies[policy.getName()] = appsec_policy;
+    }
+    auto default_mode = appsec_policy.getAppsecPolicySpec().getDefaultRule().getMode();
+
+    for (const string &host : policy.getHosts()) {
+        if (!appsec_policy.getAppsecPolicySpec().isAssetHostExist(host)) {
+            dbgTrace(D_LOCAL_POLICY)
+                << "Inserting Host data to the specific asset set:"
+                << "URL: '"
+                << host
+                << "'";
+            K ingress_rule = K(host, default_mode);
+            policies[policy.getName()].addSpecificRule(ingress_rule);
+        }
+    }
+}
+
+std::tuple<map<string, AppsecLinuxPolicy>, map<string, V1beta2AppsecLinuxPolicy>>
+K8sPolicyUtils::createAppsecPolicies()
+{
+    dbgFlow(D_LOCAL_POLICY) << "Getting all policy object from Ingresses and PolicyActivation";
     map<string, AppsecLinuxPolicy> v1bet1_policies;
     map<string, V1beta2AppsecLinuxPolicy> v1bet2_policies;
     auto maybe_ingress = getObjectFromCluster<IngressData>("/apis/networking.k8s.io/v1/ingresses");
@@ -628,7 +653,7 @@ K8sPolicyUtils::createAppsecPoliciesFromIngresses()
         dbgWarning(D_LOCAL_POLICY)
             << "Failed to retrieve K8S Ingress configurations. Error: "
             << maybe_ingress.getErr();
-        return make_tuple(v1bet1_policies, v1bet2_policies);
+        maybe_ingress = IngressData{};
     }
 
 
@@ -658,19 +683,50 @@ K8sPolicyUtils::createAppsecPoliciesFromIngresses()
 
         if (!std::get<0>(maybe_appsec_policy).ok()) {
             auto appsec_policy=std::get<1>(maybe_appsec_policy).unpack();
-            createPolicy<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+            createPolicyFromIngress<V1beta2AppsecLinuxPolicy, NewParsedRule>(
                 appsec_policy,
                 v1bet2_policies,
                 annotations_values,
                 item);
         } else {
             auto appsec_policy=std::get<0>(maybe_appsec_policy).unpack();
-            createPolicy<AppsecLinuxPolicy, ParsedRule>(
+            createPolicyFromIngress<AppsecLinuxPolicy, ParsedRule>(
                 appsec_policy,
                 v1bet1_policies,
                 annotations_values,
                 item);
         }
     }
+
+    auto maybe_policy_activation =
+        getObjectFromCluster<PolicyActivationData>("/apis/openappsec.io/v1beta2/policyactivations");
+
+    if (!maybe_policy_activation.ok()) {
+        dbgWarning(D_LOCAL_POLICY)
+            << "Failed to retrieve K8S PolicyActivation configurations. Error: "
+            << maybe_policy_activation.getErr();
+        return make_tuple(v1bet1_policies, v1bet2_policies);
+    }
+
+    PolicyActivationData policy_activation = maybe_policy_activation.unpack();
+    for (const SinglePolicyActivationData &item : policy_activation.getItems()) {
+        for (const auto &policy : item.getSpec().getPolicies()) {
+            auto maybe_appsec_policy = createAppsecPolicyK8s(policy.getName(), "");
+
+            if (!std::get<1>(maybe_appsec_policy).ok()) {
+                dbgWarning(D_LOCAL_POLICY)
+                    << "Failed to create appsec policy. v1beta2 Error: "
+                    << std::get<1>(maybe_appsec_policy).getErr();
+                continue;
+            } else {
+                auto appsec_policy=std::get<1>(maybe_appsec_policy).unpack();
+                createPolicyFromActivation<V1beta2AppsecLinuxPolicy, NewParsedRule>(
+                    appsec_policy,
+                    v1bet2_policies,
+                    policy);
+            }
+        }
+    }
+
     return make_tuple(v1bet1_policies, v1bet2_policies);
 }

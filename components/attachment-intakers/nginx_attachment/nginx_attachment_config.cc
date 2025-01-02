@@ -203,6 +203,13 @@ HttpAttachmentConfig::setFailOpenTimeout()
         "NGINX wait thread timeout msec"
     ));
 
+    conf_data.setNumericalValue("remove_server_header", getAttachmentConf<uint>(
+        0,
+        "agent.removeServerHeader.nginxModule",
+        "HTTP manager",
+        "Response server header removal"
+    ));
+
     uint inspection_mode = getAttachmentConf<uint>(
         static_cast<uint>(ngx_http_inspection_mode_e::NON_BLOCKING_THREAD),
         "agent.inspectionMode.nginxModule",

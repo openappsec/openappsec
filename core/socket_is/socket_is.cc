@@ -26,9 +26,16 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include "debug.h"
+#include "config.h"
+#include "singleton.h"
+#include "i_time_get.h"
 
 static const uint udp_max_packet_size = 1024 * 64;
 static const AlertInfo alert(AlertTeam::CORE, "socket i/s");
+static const uint CONNECT_TIMEOUT_MICROSECOUNDS(10000000); //10 seconds
+static const uint CHECK_CONNECTION_INTERVAL_MICROSECONDS(250000);  //0.25 seconds
+static const std::chrono::microseconds CHRONO_CHECK_CONNECTION_INTERVAL =
+    std::chrono::microseconds(CHECK_CONNECTION_INTERVAL_MICROSECONDS);
 
 USE_DEBUG_FLAG(D_SOCKET);
 
@@ -235,9 +242,117 @@ private:
     }
 };
 
+int setNonBlocking(int socket) {
+    dbgTrace(D_SOCKET) << "Setting socket to non-blocking mode";
+    int flags = fcntl(socket, F_GETFL, 0);
+    if (flags == -1) return -1;
+    return fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+}
+
+int setBlocking(int socket) {
+    dbgTrace(D_SOCKET) << "Setting socket to blocking mode";
+    int flags = fcntl(socket, F_GETFL, 0);
+    if (flags == -1) return -1;
+    return fcntl(socket, F_SETFL, flags & ~O_NONBLOCK);
+}
+
 class TCPSocket : public SocketInternal
 {
 public:
+    static Maybe<unique_ptr<TCPSocket>>
+    connectAsClient(unique_ptr<TCPSocket> &tcp_socket)
+    {
+        if (setNonBlocking(tcp_socket->getSocket()) < 0) {
+            dbgTrace(D_SOCKET) << "Failed to set the socket to non-blocking mode";
+            return genError("Failed to set the socket to non-blocking mode");
+        }
+
+        chrono::microseconds time_before_connect =
+            Singleton::Consume<I_TimeGet>::by<SocketIS>()->getWalltime();
+
+
+        if (connect(
+                tcp_socket->getSocket(),
+                reinterpret_cast<struct sockaddr *>(&tcp_socket->server),
+                sizeof(struct sockaddr_in)
+            ) >= 0
+        ) {
+            dbgTrace(D_SOCKET) << "Successfully connected to socket";
+            if (setBlocking(tcp_socket->getSocket()) < 0) {
+                dbgWarning(D_SOCKET) << "Failed to set the socket to blocking mode";
+                close(tcp_socket->getSocket());
+                return genError("Failed to set the socket to blocking mode");
+            }
+            return move(tcp_socket);
+        }
+
+        if (setBlocking(tcp_socket->getSocket()) < 0) {
+            dbgWarning(D_SOCKET) << "Failed to set the socket to blocking mode";
+            close(tcp_socket->getSocket());
+            return genError("Failed to set the socket to blocking mode");
+        }
+
+        auto connection_timeout_to_server = getProfileAgentSettingWithDefault<uint>(
+            CONNECT_TIMEOUT_MICROSECOUNDS,
+            "agent.config.log.TCP.connectTimeout");
+
+        dbgTrace(D_SOCKET)
+            << "Waiting for the socket connection to be established"
+            << " with a timeout of "
+            << connection_timeout_to_server
+            << " microseconds and each iteration in this timeout is "
+            << CHECK_CONNECTION_INTERVAL_MICROSECONDS
+            << " microseconds";
+
+        int ready_fds = 0; // parameters for select
+        int err;
+        socklen_t len;
+        fd_set writefds;
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 0;
+
+        while (
+            Singleton::Consume<I_TimeGet>::by<SocketIS>()->getWalltime() - time_before_connect
+            < chrono::microseconds(connection_timeout_to_server))
+        {
+            dbgTrace(D_SOCKET) << "Iterating to check the connection status";
+            Singleton::Consume<I_MainLoop>::by<SocketIS>()->yield(CHRONO_CHECK_CONNECTION_INTERVAL);
+
+            FD_ZERO(&writefds);
+            FD_SET(tcp_socket->getSocket(), &writefds);
+
+            ready_fds = select(tcp_socket->getSocket() + 1, NULL, &writefds, NULL, &timeout);
+
+            if (ready_fds > 0) {
+                len = sizeof(err);
+                if (getsockopt(tcp_socket->getSocket(), SOL_SOCKET, SO_ERROR, &err, &len) >= 0) {
+                    if (err == 0) {
+                        dbgTrace(D_SOCKET) << "Connected to socket";
+                        return move(tcp_socket);
+                    }
+                }
+            }
+        }
+
+        if (ready_fds > 0) {
+            // there is at least one file descriptor ready for IO operation
+            if (getsockopt(tcp_socket->getSocket(), SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
+                dbgWarning(D_SOCKET) << "Failed to get socket options";
+                close(tcp_socket->getSocket());
+                return genError("Failed to get socket options");
+            }
+            if (err != 0) {
+                dbgWarning(D_SOCKET) << "Failed to connect socket. Error number: " << err;
+                close(tcp_socket->getSocket());
+                return genError("Failed to connect socket");
+            }
+        }
+        dbgWarning(D_SOCKET) << "No file descriptor is ready for IO operation";
+        close(tcp_socket->getSocket());
+        return genError("Failed to connect socket");
+    }
+
     static Maybe<unique_ptr<TCPSocket>>
     connectSock(bool _is_blocking, bool _is_server, const string &_address)
     {
@@ -262,15 +377,7 @@ public:
         tcp_socket->server.sin_port = htons(port);
 
         if (!tcp_socket->isServerSock()) {
-            if (connect(
-                    tcp_socket->getSocket(),
-                    reinterpret_cast<struct sockaddr *>(&tcp_socket->server),
-                    sizeof(struct sockaddr_in)
-                ) == -1
-            ) {
-                return genError("Failed to connect socket");
-            }
-            return move(tcp_socket);
+            return tcp_socket->connectAsClient(tcp_socket);
         }
 
         static const int on = 1;
@@ -638,7 +745,10 @@ SocketIS::Impl::genSocket(
         socketTypeName = "UNIXDG";
     } else if (type == SocketType::TCP) {
         Maybe<unique_ptr<SocketInternal>> tcp_sock = TCPSocket::connectSock(is_blocking, is_server, address);
-        if (!tcp_sock.ok()) return tcp_sock.passErr();
+        if (!tcp_sock.ok()) {
+            dbgWarning(D_SOCKET) << "Failed to initialize TCP socket. Error: " << tcp_sock.getErr();
+            return tcp_sock.passErr();
+        }
         new_sock = tcp_sock.unpackMove();
         socketTypeName = "TCP";
     } else if (type == SocketType::UDP) {

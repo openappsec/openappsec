@@ -32,6 +32,7 @@
 #include "i_messaging.h"
 #include "appsec_practice_section.h"
 #include "ingress_data.h"
+#include "policy_activation_data.h"
 #include "settings_section.h"
 #include "triggers_section.h"
 #include "local_policy_common.h"

@@ -24,22 +24,21 @@ USE_DEBUG_FLAG(D_REPORT);
 static string lookup_cmd = "nslookup ";
 static string line_selection_cmd = "| grep Address | sed -n 2p";
 static string parsing_cmd = "| cut -f2 -d' ' | tr -d '\n'";
+static string CEF_NAME = "CEF";
 
 CefStream::CefStream(const string &_address, int _port, I_Socket::SocketType _protocol)
         :
-    i_socket(Singleton::Consume<I_Socket>::by<LoggingComp>()),
-    address(_address),
-    port(_port),
-    protocol(_protocol)
+    LogStreamConnector(_address, _port, _protocol, CEF_NAME)
 {
-    connect();
-    if (!socket.ok()) {
-        dbgWarning(D_REPORT) << "Failed to connect to the CEF server";
-    }
+    init();
+    socket = genError("Not set yet");
 }
 
 CefStream::~CefStream()
 {
+    sendAllLogs();
+    if (mainloop != nullptr && mainloop->doesRoutineExist(connecting_routine)) mainloop->stop(connecting_routine);
+
     if (socket.ok()) {
         i_socket->closeSocket(const_cast<int &>(*socket));
         socket = genError("Closed socket");
@@ -49,50 +48,60 @@ CefStream::~CefStream()
 void
 CefStream::sendLog(const Report &log)
 {
-    if (!socket.ok()) {
-        connect();
-        if (!socket.ok()) {
-            dbgWarning(D_REPORT) << "Failed to connect to the CEF server, log will not be sent.";
-            return;
-        }
-    }
-    dbgTrace(D_REPORT) << "Connected to socket.";
     string cef_report = log.getCef();
     if (protocol == I_Socket::SocketType::TCP) {
         cef_report = to_string(cef_report.length()) + " " + cef_report;
     }
     vector<char> data(cef_report.begin(), cef_report.end());
-    for (size_t tries = 0; tries < 3; tries++) {
-        if (i_socket->writeData(socket.unpack(), data)) {
-            dbgTrace(D_REPORT) << "log was sent to CEF server";
-            return;
-        } else {
-            dbgWarning(D_REPORT) << "Failed to send log to CEF server";
-        }
-    }
+    sendLogWithQueue(data);
+}
+
+void
+CefStream::init()  {
+    updateSettings();
+    maintainConnection();
+
+    auto ceflog_retry_interval = getProfileAgentSettingWithDefault<uint>(
+        RETRY_CONNECT_INTERVAL,
+        "agent.config.log.cefServer.connect_retry_interval");
+    dbgTrace(D_REPORT) << "retry interval: " << ceflog_retry_interval;
+    chrono::seconds connect_retry_interval = chrono::seconds(ceflog_retry_interval);
+    connecting_routine = mainloop->addRecurringRoutine(
+        I_MainLoop::RoutineType::Offline,
+        connect_retry_interval,
+        [this] ()
+        {
+            dbgTrace(D_REPORT) << CEF_CONNECT_NAME;
+            maintainConnection();
+        },
+        CEF_CONNECT_NAME
+    );
 }
 
 void
 CefStream::connect()
 {
-    auto cef_address = getProfileAgentSettingWithDefault<string>(address, "agent.config.log.cefServer.IP");
-    auto cef_port = getProfileAgentSettingWithDefault<uint>(port, "agent.config.log.cefServer.port");
-
-    if (cef_address.empty()) {
+    dbgDebug(D_REPORT)
+        << "Connecting to CEF server"
+        << " Address: "
+        << address
+        << " Port: "
+        << port;
+    if (address.empty()) {
         dbgWarning(D_REPORT) << "Cannot connect to CEF server, IP/Domain is not configured.";
         return;
     }
 
     struct in_addr addr;
-    if (inet_pton(AF_INET, cef_address.data(), &addr) != 1) {
+    if (inet_pton(AF_INET, address.data(), &addr) != 1) {
         I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<LoggingComp>();
-        string host_cmd = lookup_cmd + cef_address + line_selection_cmd + parsing_cmd;
+        string host_cmd = lookup_cmd + address + line_selection_cmd + parsing_cmd;
         Maybe<string> res = shell_cmd->getExecOutput(host_cmd, 500);
         if (!res.ok()) {
             dbgWarning(D_REPORT)
                 << "Failed to execute domain lookup command. "
                 << "CEF Domain: "
-                << cef_address
+                << address
                 << "Error: "
                 << res.getErr();
             return;
@@ -102,7 +111,7 @@ CefStream::connect()
             dbgWarning(D_REPORT)
                 << "Got en empty ip address from lookup command. "
                 << "CEF Domain: "
-                << cef_address
+                << address
                 << "Got bad ip address: "
                 << res.unpack();
             return;
@@ -113,19 +122,47 @@ CefStream::connect()
             dbgWarning(D_REPORT)
                 << "Got a faulty ip address from lookup command. "
                 << "CEF Domain: "
-                << cef_address
+                << address
                 << "Got bad ip address: "
                 << res.unpack();
             return;
         }
         
-        cef_address = res.unpack();
+        address = res.unpack();
     }
 
     socket = i_socket->genSocket(
         protocol,
         false,
         false,
-        cef_address + ":" + to_string(cef_port)
+        address + ":" + to_string(port)
     );
+}
+
+void
+CefStream::updateSettings()
+{
+    max_logs_per_send = getProfileAgentSettingWithDefault<int>(
+        NUMBER_OF_LOGS_PER_SEND,
+        "agent.config.log.cefServer.MaxLogsPerSend"
+    );
+    if (max_logs_per_send < 0) {
+        max_logs_per_send = NUMBER_OF_LOGS_PER_SEND;
+    }
+    address = getProfileAgentSettingWithDefault<string>(address, "agent.config.log.cefServer.IP");
+    port = getProfileAgentSettingWithDefault<uint>(port, "agent.config.log.cefServer.port");
+    max_data_in_queue = getProfileAgentSettingWithDefault<uint>(
+        MAX_LOG_QUEUE,
+        "agent.config.log.cefServer.MaxDataInQueue"
+    );
+    dbgTrace(D_REPORT)
+        << "CEF server settings updated. "
+        << "Address: "
+        << address
+        << " Port: "
+        << port
+        << " Max logs per send: "
+        << max_logs_per_send
+        << " Max data in queue: "
+        << max_data_in_queue;
 }

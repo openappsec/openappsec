@@ -336,9 +336,16 @@ public:
         return metadata.getYear();
     }
 
+    bool
+    isOk() const
+    {
+        return is_loaded;
+    }
+
 private:
     IPSSignatureMetaData metadata;
     std::shared_ptr<BaseSignature> rule;
+    bool is_loaded;
 };
 
 /// \class SignatureAndAction

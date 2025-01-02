@@ -194,6 +194,10 @@ void SerializeToFileBase::saveData()
         dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to gzip data";
     } else {
         ss.str(string((const char *)res.output, res.num_output_bytes));
+        // free the memory allocated by compressData
+        if (res.output) free(res.output);
+        res.output = nullptr;
+        res.num_output_bytes = 0;
     }
     if (res.output) free(res.output);
     res.output = nullptr;

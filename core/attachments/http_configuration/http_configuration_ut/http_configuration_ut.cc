@@ -63,7 +63,8 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"waiting_for_verdict_thread_timeout_msec\": 60,\n"
             "\"req_header_thread_timeout_msec\": 10,\n"
             "\"ip_ranges\": " + createIPRangesString(ip_ranges) + ",\n"
-            "\"static_resources_path\": \"" + static_resources_path + "\""
+            "\"static_resources_path\": \"" + static_resources_path + "\",\n"
+            "\"remove_server_header\": 0"
         "}\n";
     ofstream valid_configuration_file(attachment_configuration_file_name);
     valid_configuration_file << valid_configuration;
@@ -89,6 +90,7 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(conf_data_out.getNumericalValue("res_body_thread_timeout_msec"), 80u);
     EXPECT_EQ(conf_data_out.getNumericalValue("waiting_for_verdict_thread_timeout_msec"), 60u);
     EXPECT_EQ(conf_data_out.getNumericalValue("nginx_inspection_mode"), 1u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("remove_server_header"), 0u);
 }
 
 TEST_F(HttpAttachmentUtilTest, GetMalformedAttachmentConfiguration)

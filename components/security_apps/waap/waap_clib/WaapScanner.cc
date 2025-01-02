@@ -112,20 +112,6 @@ double Waap::Scanner::getScoreData(Waf2ScanResult& res, const std::string &poolN
     }
     double res_score = getScoreFromPool(res, newKeywords, poolName);
 
-    std::string other_pool_name = Waap::Scores::getOtherScorePoolName();
-    Waap::Scores::ModelLoggingSettings modelLoggingSettings = Waap::Scores::getModelLoggingSettings();
-
-    if (applyLearning && poolName != other_pool_name &&
-        modelLoggingSettings.logLevel != Waap::Scores::ModelLogLevel::OFF) {
-        double other_score = getScoreFromPool(res, newKeywords, other_pool_name);
-        dbgDebug(D_WAAP_SCANNER) << "Comparing score from pool " << poolName << ": " << res_score
-                                << ", vs. pool " << other_pool_name << ": " << other_score
-                                << ", score difference: " << res_score - other_score
-                                << ", sample: " << res.unescaped_line;
-        res.other_model_score = other_score;
-    } else {
-        res.other_model_score = res_score;
-    }
     return res_score;
 }
 

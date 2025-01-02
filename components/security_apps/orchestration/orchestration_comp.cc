@@ -1630,7 +1630,7 @@ private:
 
         string server_name = getAttribute("registered-server", "registered_server");
         auto server = TagAndEnumManagement::convertStringToTag(server_name);
-        if (server_name == "'SWAG'") server = Tags::WEB_SERVER_SWAG;
+        if (server_name == "'SWAG'" || server_name == "'SWAG Server'") server = Tags::WEB_SERVER_SWAG;
         if (server.ok()) tags.insert(*server);
 
         if (getAttribute("no-setting", "CROWDSEC_ENABLED") == "true") tags.insert(Tags::CROWDSEC);
@@ -2055,7 +2055,6 @@ private:
     OrchestrationPolicy policy;
     UpdatesProcessReporter updates_process_reporter_listener;
     HybridModeMetric hybrid_mode_metric;
-    EnvDetails env_details;
     chrono::minutes upgrade_delay_time;
 
     string filesystem_prefix = "";

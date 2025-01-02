@@ -15,18 +15,32 @@
 
 #include "config.h"
 #include "debug.h"
-#include "orchestration_tools.h"
+
+#include <sys/stat.h>
 
 using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
 static const string k8s_service_account = "/var/run/secrets/kubernetes.io/serviceaccount";
-// LCOV_EXCL_START Reason: can't use on the pipline environment
-EnvDetails::EnvDetails() : env_type(EnvType::LINUX)
+
+static bool
+checkExistence(const string &path, bool is_dir)
 {
-    auto tools = Singleton::Consume<I_OrchestrationTools>::from<OrchestrationTools>();
-    if (tools->doesFileExist("/.dockerenv")) env_type = EnvType::DOCKER;
+    try {
+        struct stat info;
+        if (stat(path.c_str(), &info) != 0) return false;
+        int flag = is_dir ? S_IFDIR : S_IFREG;
+        return info.st_mode & flag;
+    } catch (exception &e) {
+        return false;
+    }
+}
+
+// LCOV_EXCL_START Reason: can't use on the pipline environment
+EnvDetails::EnvDetails() : Component("EnvDetails")
+{
+    if (doesFileExist("/.dockerenv")) env_type = EnvType::DOCKER;
     token = retrieveToken();
     agent_namespace = retrieveNamespace();
     if (!token.empty()) {
@@ -80,6 +94,12 @@ EnvDetails::readFileContent(const string &file_path)
             << " Error: " << f.what();
         return "";
     }
+}
+
+bool
+EnvDetails::doesFileExist(const string &file_path) const
+{
+    return checkExistence(file_path, false);
 }
 
 // LCOV_EXCL_STOP
