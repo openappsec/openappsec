@@ -388,8 +388,9 @@ AgentDetails::convertProxyProtocolToString(ProxyProtocol proto) const
         case ProxyProtocol::HTTP: return "http";
         case ProxyProtocol::HTTPS: return "https";
     }
-    dbgAssert(false) << alert << "Unsupported Proxy Protocol " << static_cast<int>(proto);
-    return "";
+    dbgAssertOpt(false) << alert << "Unsupported Proxy Protocol " << static_cast<int>(proto);
+    dbgWarning(D_ORCHESTRATOR) << "Using https proxy as default";
+    return "https";
 }
 
 Maybe<void>
@@ -475,11 +476,14 @@ Maybe<void>
 AgentDetails::loadProxyType(ProxyProtocol protocol)
 {
     dbgFlow(D_ORCHESTRATOR) << "Loading proxy type: " << convertProxyProtocolToString(protocol);
-    dbgAssert(protocol == ProxyProtocol::HTTP || protocol == ProxyProtocol::HTTPS)
-        << alert
-        << "Unsupported Proxy Protocol "
-        << static_cast<int>(protocol);
-
+    if (!(protocol == ProxyProtocol::HTTP || protocol == ProxyProtocol::HTTPS)) {
+        dbgAssertOpt(false)
+            << alert
+            << "Unsupported Proxy Protocol "
+            << static_cast<int>(protocol);
+        protocol = ProxyProtocol::HTTPS;
+        dbgWarning(D_ORCHESTRATOR) << "Using https proxy as default";
+    }
     static const map<ProxyProtocol, string> env_var_name = {
         {ProxyProtocol::HTTPS, "https_proxy"},
         {ProxyProtocol::HTTP, "http_proxy"}

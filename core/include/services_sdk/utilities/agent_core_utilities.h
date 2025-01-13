@@ -33,6 +33,7 @@ bool makeDir(const std::string &path, mode_t permission = S_IRWXU);
 bool makeDirRecursive(const std::string &path, mode_t permission = S_IRWXU);
 bool deleteDirectory(const std::string &path, bool delete_content = false);
 bool touchFile(const std::string &path);
+std::string resolveFullPath(const std::string &input_path);
 
 bool
 copyFile(
@@ -43,11 +44,8 @@ copyFile(
 );
 
 bool deleteFile(const std::string &path);
-
 std::string convertToHumanReadable(uint64_t size_in_bytes);
-
 std::string getFileName(const std::string &path);
-
 bool copyDirectory(const std::string &src_dir_path, const std::string &dst_dir_path);
 
 }// namespace Filesystem
@@ -85,6 +83,8 @@ namespace Strings
 {
 
 std::string removeTrailingWhitespaces(std::string str);
+std::string removeLeadingWhitespaces(std::string str);
+std::string trim(std::string str);
 
 } // namespace Strings
 

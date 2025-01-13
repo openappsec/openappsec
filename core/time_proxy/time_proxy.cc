@@ -52,9 +52,12 @@ public:
     setMonotonicTime(microseconds new_time) override
     {
         if (is_monotomic_set) {
-            dbgAssert((new_time+monotonic_delta) >= monotonic_now)
-                << AlertInfo(AlertTeam::CORE, "time proxy")
-                << "Monotonic time must not go back!";
+            if ((new_time+monotonic_delta) < monotonic_now) {
+                dbgAssertOpt((new_time+monotonic_delta) >= monotonic_now)
+                    << AlertInfo(AlertTeam::CORE, "time proxy")
+                    << "Monotonic time must not go back!";
+                return;
+            }
         } else {
             // The first time that the monotonic time is been set, we take the current value to be the base line.
             // This is in order to avoid the clock going backwards.

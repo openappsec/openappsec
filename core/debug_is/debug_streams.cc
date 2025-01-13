@@ -396,14 +396,18 @@ LogLevel
 DebugFogStream::getLogLevel() const
 {
     switch (level) {
-        case Debug::DebugLevel::NOISE:     dbgAssert(false) << alert << "Impossible LogLevel 'Noise'"; break;
+        case Debug::DebugLevel::NOISE:
+            dbgAssertOpt(false) << alert << "Impossible LogLevel 'Noise'";
+            return LogLevel::TRACE;
         case Debug::DebugLevel::TRACE:     return LogLevel::TRACE;
         case Debug::DebugLevel::DEBUG:     return LogLevel::DEBUG;
         case Debug::DebugLevel::WARNING:   return LogLevel::WARNING;
         case Debug::DebugLevel::INFO:      return LogLevel::INFO;
         case Debug::DebugLevel::ERROR:     return LogLevel::ERROR;
         case Debug::DebugLevel::ASSERTION: return LogLevel::ERROR;
-        case Debug::DebugLevel::NONE:      dbgAssert(false) << alert << "Impossible LogLevel 'None'"; break;
+        case Debug::DebugLevel::NONE:
+            dbgAssertOpt(false) << alert << "Impossible LogLevel 'None'";
+            return LogLevel::ERROR;
     }
 
     return LogLevel::INFO;

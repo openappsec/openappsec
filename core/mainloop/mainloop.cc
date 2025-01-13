@@ -227,7 +227,10 @@ MainloopComponent::Impl::reportStartupEvent()
 void
 MainloopComponent::Impl::run()
 {
-    dbgAssert(!is_running) << alert << "MainloopComponent::Impl::run was called while it was already running";
+    if (is_running) {
+        dbgAssertOpt(!is_running) << alert << "MainloopComponent::Impl::run was called while it was already running";
+        return;
+    }
     is_running = true;
 
     bool has_primary_routines = true;
@@ -467,7 +470,10 @@ MainloopComponent::Impl::getCurrentRoutineId() const
 void
 MainloopComponent::Impl::yield(bool force)
 {
-    dbgAssert(curr_iter != routines.end()) << alert << "Calling 'yield' without a running current routine";
+    if (curr_iter == routines.end()) {
+        dbgAssertOpt(curr_iter != routines.end()) << alert << "Calling 'yield' without a running current routine";
+        return;
+    }
     if (do_stop) throw MainloopStop();
     if (!force && getTimer()->getMonotonicTime() < stop_time) return;
 
@@ -508,7 +514,10 @@ MainloopComponent::Impl::stopAll()
 void
 MainloopComponent::Impl::stop()
 {
-    dbgAssert(curr_iter != routines.end()) << alert << "Attempting to stop a routine when none is running";
+    if (curr_iter == routines.end()) {
+        dbgAssertOpt(curr_iter != routines.end()) << alert << "Attempting to stop a routine when none is running";
+        return;
+    }
     stop(curr_iter);
 }
 
@@ -526,7 +535,10 @@ MainloopComponent::Impl::stop(RoutineID id)
 void
 MainloopComponent::Impl::halt()
 {
-    dbgAssert(curr_iter != routines.end()) << alert << "Calling 'halt' without a running current routine";
+    if (curr_iter == routines.end()) {
+        dbgAssertOpt(curr_iter != routines.end()) << alert << "Calling 'halt' without a running current routine";
+        return;
+    }
     curr_iter->second.halt();
     yield(true);
 }
@@ -535,7 +547,10 @@ void
 MainloopComponent::Impl::halt(RoutineID id)
 {
     auto iter = routines.find(id);
-    dbgAssert(iter != routines.end()) << alert << "No routine " << id << " to halt";
+    if (iter == routines.end()) {
+        dbgAssertOpt(iter != routines.end()) << alert << "No routine " << id << " to halt";
+        return;
+    }
     iter->second.halt();
     if (iter == curr_iter) yield(true);
 }
@@ -544,7 +559,10 @@ void
 MainloopComponent::Impl::resume(RoutineID id)
 {
     auto iter = routines.find(id);
-    dbgAssert(iter != routines.end()) << alert << "No routine " << id << " to resume";
+    if (iter == routines.end()) {
+        dbgAssertOpt(iter != routines.end()) << alert << "No routine " << id << " to resume";
+        return;
+    }
     iter->second.resume();
 }
 

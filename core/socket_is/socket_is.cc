@@ -182,9 +182,11 @@ public:
     Maybe<unique_ptr<SocketInternal>>
     acceptConn(bool is_blocking, const string &authorized_ip = "")
     {
-        dbgAssert(is_server_socket) << alert << "Failed to accept new connections from a client socket";
-        dbgAssert(socket_int > 0) << alert << "Called with uninitialized server socket";
-
+        if (!(is_server_socket) || !(socket_int > 0)) {
+            dbgAssertOpt(is_server_socket) << alert << "Failed to accept new connections from a client socket";
+            dbgAssertOpt(socket_int > 0) << alert << "Called with uninitialized server socket";
+            return genError("Failed due to internal error");
+        }
         dbgDebug(D_SOCKET) << "Attempt to accept new socket. Server Socket FD: " << socket_int;
         int client_socket;
         if (!authorized_ip.empty()) {

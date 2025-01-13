@@ -87,9 +87,12 @@ public:
     bool
     operator==(const IPAddr &other) const
     {
-        dbgAssert(type!=IPType::UNINITIALIZED && other.type!=IPType::UNINITIALIZED)
-            << AlertInfo(AlertTeam::CORE, "connkey")
-            << "Called on an uninitialized IPType object";
+        if (type == IPType::UNINITIALIZED || other.type == IPType::UNINITIALIZED) {
+            dbgAssertOpt(type!=IPType::UNINITIALIZED && other.type!=IPType::UNINITIALIZED)
+                << AlertInfo(AlertTeam::CORE, "connkey")
+                << "Called on an uninitialized IPType object";
+            return false;
+        }
         // Always compairing as if IPv6, in case of Ipv4 the rest of the address is zeroed out.
         int ip_len = (other.type == IPType::V4) ? sizeof(v4.s_addr) : sizeof(v6.s6_addr);
         return (type == other.type) && (memcmp(v6.s6_addr, other.v6.s6_addr, ip_len) == 0);
@@ -308,9 +311,12 @@ public:
     IPType
     getType() const
     {
-        dbgAssert(src.type == dst.type)
-            << AlertInfo(AlertTeam::CORE, "connkey")
-            << "Mismatch in connection types (Src and Dst types are not identical)";
+        if (src.type != dst.type) {
+            dbgAssertOpt(src.type == dst.type)
+                << AlertInfo(AlertTeam::CORE, "connkey")
+                << "Mismatch in connection types (Src and Dst types are not identical)";
+            return IPType::V6;
+        }
         return src.type;
     }
 

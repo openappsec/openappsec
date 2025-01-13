@@ -49,6 +49,10 @@ public:
     }
 
     virtual bool addGetCall(const std::string &uri, const std::function<std::string()> &callback) = 0;
+    virtual bool addWildcardGetCall(
+        const std::string &uri,
+        const std::function<std::string(const std::string &)> &callback
+    ) = 0;
 
     virtual uint16_t getListeningPort() const = 0;
 

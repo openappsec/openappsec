@@ -386,7 +386,7 @@ OrchestrationTools::Impl::calculateChecksum(Package::ChecksumTypes checksum_type
         return genError("Error while reading file " + path + ", " + e.what());
     }
 
-    dbgAssert(false)
+    dbgAssertOpt(false)
         << AlertInfo(AlertTeam::CORE, "service configuration")
         << "Checksum type is not supported. Checksum type: "
         << static_cast<unsigned int>(checksum_type);

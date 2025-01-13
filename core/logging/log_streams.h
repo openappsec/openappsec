@@ -26,7 +26,9 @@
 #include "logging_comp.h"
 
 static const int RETRY_CONNECT_INTERVAL = 120;
+static const std::string FIRST_SYSLOG_CONNECT_NAME = "first connecting to Syslog server";
 static const std::string SYSLOG_CONNECT_NAME = "connecting to Syslog server";
+static const std::string FIRST_CEF_CONNECT_NAME = "first connecting to CEF server";
 static const std::string CEF_CONNECT_NAME = "connecting to CEF server";
 static const int NUMBER_OF_LOGS_PER_SEND = 15;
 static size_t MAX_LOG_QUEUE = 1000;

@@ -184,3 +184,27 @@ TEST_F(AgentCoreUtilUT, removeTrailingWhitespacesTest)
     string str_with_trailing_whitespace = "str_with_trailing_whitespace\n\n\n\r    \n\n\r";
     EXPECT_EQ(NGEN::Strings::removeTrailingWhitespaces(str_with_trailing_whitespace), "str_with_trailing_whitespace");
 }
+
+TEST_F(AgentCoreUtilUT, removeLeadingWhitespacesTest)
+{
+    string str_with_leading_whitespace = "\n\n\n\r    \n\n\rstr_with_leading_whitespace";
+    EXPECT_EQ(NGEN::Strings::removeLeadingWhitespaces(str_with_leading_whitespace), "str_with_leading_whitespace");
+}
+
+TEST_F(AgentCoreUtilUT, trimTest)
+{
+    string str_with_leading_and_trailing_whitespace = "\n\n \r  \rstr_with_whitespace\n\r \n\n\r";
+    EXPECT_EQ(NGEN::Strings::trim(str_with_leading_and_trailing_whitespace), "str_with_whitespace");
+}
+
+TEST_F(AgentCoreUtilUT, resolveFullPathTest)
+{
+    string working_dir = cptestFnameInExeDir("");
+    ofstream file(working_dir + "test.txt");
+    ASSERT_TRUE(file.is_open());
+    file.close();
+    string relative_path = "test.txt";
+    string full_path = NGEN::Filesystem::resolveFullPath(relative_path);
+    EXPECT_EQ(full_path, working_dir + "test.txt");
+    ASSERT_TRUE(NGEN::Filesystem::deleteFile(working_dir + "test.txt"));
+}

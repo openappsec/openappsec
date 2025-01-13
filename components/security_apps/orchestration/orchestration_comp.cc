@@ -1587,6 +1587,7 @@ private:
         }
 
         setDelayedUpgradeTime();
+
         while (true) {
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->startNewTrace(false);
             if (shouldReportAgentDetailsMetadata()) {
@@ -1695,13 +1696,19 @@ private:
         auto backup_installation_file = current_installation_file + backup_ext;
         auto temp_ext = getConfigurationWithDefault<string>("_temp", "orchestration", "Temp file extension");
 
-        dbgAssert(i_orchestration_tools->doesFileExist(backup_installation_file))
-            << AlertInfo(AlertTeam::CORE, "orchestration backup")
-            << "There is no backup installation package";
+        if (!i_orchestration_tools->doesFileExist(backup_installation_file)) {
+            dbgAssertOpt(false)
+                << AlertInfo(AlertTeam::CORE, "orchestration backup")
+                << "There is no backup installation package";
+            return;
+        }
 
-        dbgAssert(i_orchestration_tools->copyFile(backup_installation_file, current_installation_file))
-            << AlertInfo(AlertTeam::CORE, "orchestration backup")
-            << "Failed to copy backup installation package";
+        if (!i_orchestration_tools->copyFile(backup_installation_file, current_installation_file)) {
+            dbgAssertOpt(false)
+                << AlertInfo(AlertTeam::CORE, "orchestration backup")
+                << "Failed to copy backup installation package";
+            return;
+        }
 
         // Copy the backup manifest file to the default manifest file path.
         auto manifest_file_path = getConfigurationWithDefault<string>(
@@ -1716,12 +1723,18 @@ private:
 
         auto package_handler = Singleton::Consume<I_PackageHandler>::by<OrchestrationComp>();
         // Install the backup orchestration service installation package.
-        dbgAssert(package_handler->preInstallPackage(service_name, current_installation_file))
-            << AlertInfo(AlertTeam::CORE, "orchestration backup")
-            << "Failed to restore from backup, pre install test failed";
-        dbgAssert(package_handler->installPackage(service_name, current_installation_file, true))
-            << AlertInfo(AlertTeam::CORE, "orchestration backup")
-            << "Failed to restore from backup, installation failed";
+        if (!package_handler->preInstallPackage(service_name, current_installation_file)) {
+            dbgAssertOpt(false)
+                << AlertInfo(AlertTeam::CORE, "orchestration backup")
+                << "Failed to restore from backup, pre install test failed";
+            return;
+        }
+        if (!package_handler->installPackage(service_name, current_installation_file, true)) {
+            dbgAssertOpt(false)
+                << AlertInfo(AlertTeam::CORE, "orchestration backup")
+                << "Failed to restore from backup, installation failed";
+            return;
+        }
     }
     // LCOV_EXCL_STOP
 

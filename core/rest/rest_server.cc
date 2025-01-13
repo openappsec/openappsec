@@ -50,6 +50,7 @@ public:
     bool bindRestServerSocket(struct sockaddr_in6 &addr, vector<uint16_t> port_range);
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
     bool addGetCall(const string &uri, const function<string()> &cb) override;
+    bool addWildcardGetCall(const string &uri, const function<string(const string &)> &callback);
     uint16_t getListeningPort() const override { return listening_port; }
     Maybe<string> getSchema(const string &uri) const override;
     Maybe<string> invokeRest(const string &uri, istream &in) const override;
@@ -67,6 +68,7 @@ private:
     I_MainLoop *mainloop;
     map<string, unique_ptr<RestInit>> rest_calls;
     map<string, function<string()>> get_calls;
+    map<string, function<string(const string &)>> wildcard_get_calls;
     uint16_t listening_port = 0;
     vector<uint16_t> port_range;
 };
@@ -128,11 +130,14 @@ RestServer::Impl::prepareConfiguration()
     } else {
         auto range_start = getPortConfig("Nano service API Port Range start");
         auto range_end = getPortConfig("Nano service API Port Range end");
-        dbgAssert(range_start.ok() && range_end.ok()) << alert << "Rest port configuration was not provided";
-        dbgAssert(*range_start < *range_end)
-            << alert
-            << "Rest port range corrupted (lower bound higher then upper bound)";
-
+        if (!(range_start.ok() && range_end.ok()) || !(*range_start < *range_end)) {
+            dbgAssertOpt(range_start.ok() && range_end.ok()) << alert << "Rest port configuration was not provided";
+            dbgAssertOpt(*range_start < *range_end)
+                << alert
+                << "Rest port range corrupted (lower bound higher then upper bound)";
+            range_start = 0;
+            range_end = 1;
+        }
         port_range.resize(*range_end - *range_start);
         for (uint16_t i = 0, port = *range_start; i < port_range.size(); i++, port++) {
             port_range[i] = port;
@@ -283,6 +288,13 @@ RestServer::Impl::addGetCall(const string &uri, const function<string()> &callba
     return get_calls.emplace(uri, callback).second;
 }
 
+bool
+RestServer::Impl::addWildcardGetCall(const string &uri, const function<string(const string&)> &callback)
+{
+    if (rest_calls.find(uri) != rest_calls.end()) return false;
+    return wildcard_get_calls.emplace(uri, callback).second;
+}
+
 Maybe<string>
 RestServer::Impl::getSchema(const string &uri) const
 {
@@ -307,14 +319,26 @@ RestServer::Impl::invokeRest(const string &uri, istream &in) const
 bool
 RestServer::Impl::isGetCall(const string &uri) const
 {
-    return get_calls.find(uri) != get_calls.end();
+    if (get_calls.find(uri) != get_calls.end()) return true;
+
+    for (const auto &wildcard : wildcard_get_calls) {
+        if (!uri.find(wildcard.first)) return true;
+    }
+
+    return false;
 }
 
 string
 RestServer::Impl::invokeGet(const string &uri) const
 {
     auto instance = get_calls.find(uri);
-    return instance != get_calls.end() ? instance->second() : "";
+    if (instance != get_calls.end()) return instance->second();
+
+    for (const auto &wildcard : wildcard_get_calls) {
+        if (!uri.find(wildcard.first)) return wildcard.second(uri);
+    }
+
+    return "";
 }
 
 string
@@ -334,8 +358,8 @@ RestServer::Impl::changeActionToString(RestAction oper)
             return "delete-";
         }
         default: {
-            dbgAssert(false) << alert << "Unknown REST action";
-            return "";
+            dbgAssertOpt(false) << alert << "Unknown REST action";
+            return "unknown-";
         }
     }
 }

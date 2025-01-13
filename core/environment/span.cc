@@ -97,8 +97,8 @@ Span::convertSpanContextTypeToString(ContextType type)
             return "Follows from";
         }
     }
-    dbgAssert(false) << AlertInfo(AlertTeam::CORE, "tracing") << "Span context not supported";
-    return string();
+    dbgAssertOpt(false) << AlertInfo(AlertTeam::CORE, "tracing") << "Span context not supported";
+    return "Invalid context type";
 }
 
 SpanWrapper::SpanWrapper(string _trace_id, Span::ContextType _type, string _prev_span)

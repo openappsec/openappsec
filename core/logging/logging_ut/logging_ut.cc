@@ -135,6 +135,16 @@ public:
         );
 
         EXPECT_CALL(
+            mock_mainloop,
+            addOneTimeRoutine(_, _, "first connecting to Syslog server", _)
+        ).WillRepeatedly(DoAll(SaveArg<1>(&first_connect_syslog_routine), Return(0)));
+
+        EXPECT_CALL(
+            mock_mainloop,
+            addOneTimeRoutine(_, _, "first connecting to CEF server", _)
+        ).WillRepeatedly(DoAll(SaveArg<1>(&first_connect_cef_routine), Return(0)));
+
+        EXPECT_CALL(
                 mock_mainloop,
                 addRecurringRoutine(_, _, _, "connecting to Syslog server", _)
             ).WillRepeatedly(DoAll(SaveArg<2>(&connect_syslog_routine), Return(2)));
@@ -303,6 +313,8 @@ public:
     ConfigComponent           config;
     vector<string>            capture_syslog_cef_data;
     I_MainLoop::Routine       sysog_routine = nullptr;
+    I_MainLoop::Routine       first_connect_syslog_routine = nullptr;
+    I_MainLoop::Routine       first_connect_cef_routine = nullptr;
     I_MainLoop::Routine       connect_syslog_routine = nullptr;
     I_MainLoop::Routine       connect_cef_routine = nullptr;
     StrictMock<MockShellCmd>  mock_shell_cmd;
@@ -1517,6 +1529,8 @@ TEST_F(LogTest, ObfuscationCefSysLogTest)
     I_Socket::SocketType protocol = I_Socket::SocketType::TCP;
     // for cef
     CefStream cef_stream(address, port, protocol);
+    ASSERT_NE(first_connect_cef_routine, nullptr);
+    first_connect_cef_routine();
     ASSERT_NE(connect_cef_routine, nullptr);
     connect_cef_routine();
     cef_stream.sendLog(CreateReport(tag1, tag2));
@@ -1525,6 +1539,8 @@ TEST_F(LogTest, ObfuscationCefSysLogTest)
     SyslogStream syslog_stream(address, port, protocol);
 
     // connection to socket before send log
+    ASSERT_NE(first_connect_syslog_routine, nullptr);
+    first_connect_syslog_routine();
     ASSERT_NE(connect_syslog_routine, nullptr);
     connect_syslog_routine();
     
@@ -1554,6 +1570,8 @@ TEST_F(LogTest, SysLogWriteFailTest)
     I_Socket::SocketType protocol = I_Socket::SocketType::TCP;
     SyslogStream syslog_stream(address, port, protocol);
 
+    ASSERT_NE(first_connect_syslog_routine, nullptr);
+    first_connect_syslog_routine();
     ASSERT_NE(connect_syslog_routine, nullptr);
     connect_syslog_routine();
 
@@ -1599,6 +1617,8 @@ TEST_F(LogTest, CefWriteFailTest)
     I_Socket::SocketType protocol = I_Socket::SocketType::TCP;
     CefStream cef_stream(address, port, protocol);
 
+    ASSERT_NE(first_connect_cef_routine, nullptr);
+    first_connect_cef_routine();
     ASSERT_NE(connect_cef_routine, nullptr);
     connect_cef_routine();
 
