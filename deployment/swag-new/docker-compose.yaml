@@ -58,13 +58,11 @@ services:
       - ONLY_SUBDOMAINS=${SWAG_ONLY_SUBDOMAINS}
 ## see https://docs.linuxserver.io/images/docker-swag/ for
 ## more cert generation/validation options
-      - STAGING=${SWAG_STAGING} ## switch to 'false' after successful testing
+      - STAGING=${SWAG_STAGING}
     volumes:
       - ${SWAG_CONFIG}:/config
-## when mounting own external nginx config uncomment the line below, place the config in {SWAG_NGINX_CONFIG} folder
-#     - ${SWAG_NGINX_SITE_CONFS}:/config/nginx/site-confs
-## when mounting own proxy.conf files uncomment the line below, place the proxy config files in {SWAG_PROXY_CONFS} folder
-#     - ${SWAG_PROXY_CONFS}:/config/nginx/proxy-confs
+      - ${SWAG_NGINX_SITE_CONFS}:/config/nginx/site-confs
+      - ${SWAG_PROXY_CONFS}:/config/nginx/proxy-confs
     ports:
       - 443:443
       - 80:80 ## optional
@@ -129,17 +127,9 @@ services:
       - ${APPSEC_POSTGRES_STORAGE}:/var/lib/postgresql/data
 
 ## example juice-shop backend container (vulnerable webserver, USE ONLY FOR TESTING AND IN LAB ENV)
-##
-## uncomment this block for testing purposes only, make sure to put a juiceshop.subfolder.conf file in {SWAG_PROXY_CONFS} folder
-## for proxying external traffic to the juiceshop-backend container and also adjust the NGINX default.conf file in {SWAG_NGINX_SITE_CONFS} folder
-## you can use the example files available here:
-## https://raw.githubusercontent.com/openappsec/openappsec/main/examples/juiceshop/swag/juiceshop.subfolder.conf
-## https://raw.githubusercontent.com/openappsec/openappsec/main/examples/juiceshop/swag/default.conf
-## note that juiceshop container listens on HTTP port 3000 by default
-#
-# juiceshop-backend:
-#   image: bkimminich/juice-shop:latest
-#   container_name: juiceshop-backend
+  juiceshop-backend:
+    image: bkimminich/juice-shop:latest
+    container_name: juiceshop-backend
 
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
