@@ -13,6 +13,7 @@
 
 ##
 ## Docker compose file for open-appsec integrated with NGINX Proxy Manager
+## with open-appsec management via NGINX Proxy Manager WebUI
 ##
 
 version: '3.9'
@@ -45,9 +46,9 @@ services:
     ipc: service:appsec-agent
     restart: unless-stopped
     ports:
-      - '80:80' # Public HTTP Port
-      - '443:443' # Public HTTPS Port
-      - '81:81' # Admin Web Port
+      - 80:80 # Public HTTP Port
+      - 443:443 # Public HTTPS Port
+      - 81:81 # Admin Web Port
     volumes:
       - ${NPM_DATA}:/data
       - ${NPM_LETSENCRYPT}:/etc/letsencrypt
@@ -114,15 +115,11 @@ services:
       - ${APPSEC_POSTGRES_STORAGE}:/var/lib/postgresql/data
 
 ## example juice-shop backend container (vulnerable webserver, USE ONLY FOR TESTING AND IN LAB ENV)
-##
-## uncomment this block for testing purposes only, make sure to also create a new proxy host in the NGINX Proxy Manager WebUI 
-## which accepts traffic on http port 80 and proxies traffic to juiceshop-backend on port 3000.
-## note that juiceshop container listens on HTTP port 3000 by default
-#
-# juiceshop-backend:
-#   image: bkimminich/juice-shop:latest
-#   container_name: juiceshop-backend
-
+  juiceshop-backend:
+    image: bkimminich/juice-shop:latest
+    container_name: juiceshop-backend
+    profiles:
+      - juiceshop
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
 ##
