@@ -39,18 +39,16 @@ services:
     command: /cp-nano-agent
 
   appsec-kong:
-    image: ghcr.io/openappsec/kong-attachment:${APPSEC_VERSION}
-## If you want to deploy Kong Gateway Enterprise Edition comment out the line above and uncomment the following line:
-#   image: ghcr.io/openappsec/kong-gateway-attachment:${APPSEC_VERSION}
+    image: ghcr.io/openappsec/${KONG_IMAGE}:${APPSEC_VERSION}
     container_name: appsec-kong
     ipc: service:appsec-agent
-## If you want to deploy Kong in DB-less mode with declarative configuration
-## please comment out the following five lines below and place the config in {KONG_CONF_DIR}:
-#   environment:
-#     - KONG_DATABASE=off
-#     - KONG_DECLARATIVE_CONFIG=/opt/kong/kong.yaml
-#   volumes:
-#     - ${KONG_CONFIG}:/opt/kong
+## This docker compose deploys Kong in DB-less mode with declarative Kong configuration
+## please make sure to have a valid config present in {KONG_CONFIG}:
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/opt/kong/kong.yaml
+    volumes:
+      - ${KONG_CONFIG}:/opt/kong
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -118,19 +116,11 @@ services:
       - ${APPSEC_POSTGRES_STORAGE}:/var/lib/postgresql/data
 
 ## example juice-shop backend container (vulnerable webserver, USE ONLY FOR TESTING AND IN LAB ENV)
-##
-## uncomment this block for testing purposes only, make sure to also adjust the kong.yaml file in {KONG_CONFIG} folder
-## to include service and route configuration for forwarding external traffic to the juiceshop-backend container
-## (kong listens by default for HTTP/HTTPS on port 8000/8443) 
-## you can use the example file available here:
-## https://raw.githubusercontent.com/openappsec/openappsec/refs/heads/main/examples/juiceshop/kong.yaml
-## in the appsec-kong service definition
-## note that juiceshop container listens on HTTP port 3000 by default
-##
-# juiceshop-backend:
-#   image: bkimminich/juice-shop:latest
-#   container_name: juiceshop-backend
-
+  juiceshop-backend:
+    image: bkimminich/juice-shop:latest
+    container_name: juiceshop-backend
+    profiles:
+      - juiceshop
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
 ##
