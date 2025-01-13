@@ -35,9 +35,7 @@ services:
       - ${APPSEC_DATA}:/etc/cp/data
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
-## when mounting own external nginx config uncomment the line below, place the config in {NGINX_CONFIG}
-#     - ${NGINX_CONFIG}:/etc/nginx/conf.d
-##
+      - ${NGINX_CONFIG}:/etc/nginx/conf.d
 ## advanced configuration - volume mount for nginx.conf file:
 ## to change global instructions it's possible to also mount your own nginx.conf file by uncommenting the two lines below
 ## make sure to include the line starting with "load_module" which loads the appsec attachment
@@ -108,18 +106,11 @@ services:
       - ${APPSEC_POSTGRES_STORAGE}:/var/lib/postgresql/data
 
 ## example juice-shop backend container (vulnerable webserver, USE ONLY FOR TESTING AND IN LAB ENV)
-##
-## uncomment this block for testing purposes only, make sure to also adjust the nginx.conf file in {NGINX_CONFIG} folder
-## to include a proxy_pass directive forwarding external traffic on e.g. port 80 to the juiceshop-backend container
-## you can use the example file available here:
-## https://raw.githubusercontent.com/openappsec/openappsec/refs/heads/main/examples/juiceshop/default.conf
-## place the file above in {NGINX_CONF_DIR} and uncomment the two lines for creating a volume mount
-## in the appsec-nginx service definition
-## note that juiceshop container listens on HTTP port 3000 by default
-#
-# juiceshop-backend:
-#   image: bkimminich/juice-shop:latest
-#   container_name: juiceshop-backend
+  juiceshop-backend:
+    image: bkimminich/juice-shop:latest
+    container_name: juiceshop-backend
+    profiles:
+      - juiceshop
 
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
