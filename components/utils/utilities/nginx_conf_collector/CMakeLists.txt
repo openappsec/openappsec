@@ -11,17 +11,13 @@ SET(EXECUTABLE_NAME "nginx_conf_collector_bin")
 add_executable(${EXECUTABLE_NAME} nginx_conf_collector.cc)
 target_compile_definitions(${EXECUTABLE_NAME} PRIVATE "NGINX_CONF_COLLECTOR_VERSION=\"$ENV{CI_PIPELINE_ID}\"")
 
-# if("${PLATFORM_TYPE}" STREQUAL "x86")
-set_target_properties(${EXECUTABLE_NAME} PROPERTIES
-        LINK_FLAGS "-static -static-libgcc -static-libstdc++"
-)
 target_link_libraries(${EXECUTABLE_NAME}
         shell_cmd
         mainloop
         messaging
         event_is
         metric
-        static_compression_utils
+        compression_utils
         z
         nginx_utils
         time_proxy
@@ -33,31 +29,8 @@ target_link_libraries(${EXECUTABLE_NAME}
         singleton
         rest
         boost_context
-        boost_regex
         pthread
 )
-# endif()
-
-
-# target_link_libraries(${EXECUTABLE_NAME}
-#         shell_cmd
-#         mainloop
-#         messaging
-#         event_is
-#         metric
-#         compression_utils
-#         -lz
-#         nginx_utils
-#         time_proxy
-#         debug_is
-#         version
-#         report
-#         config
-#         environment
-#         singleton
-#         rest
-#         boost_context
-# )
 
 install(TARGETS ${EXECUTABLE_NAME} DESTINATION bin)
 install(PROGRAMS ${EXECUTABLE_NAME} DESTINATION central_nginx_manager/bin RENAME cp-nano-nginx-conf-collector)
