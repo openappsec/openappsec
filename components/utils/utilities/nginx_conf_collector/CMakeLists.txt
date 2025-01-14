@@ -29,6 +29,7 @@ target_link_libraries(${EXECUTABLE_NAME}
         singleton
         rest
         boost_context
+        boost_regex
         pthread
 )
 
