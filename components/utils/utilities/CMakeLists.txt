@@ -1,0 +1,1 @@
+add_subdirectory(nginx_conf_collector)

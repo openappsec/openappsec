@@ -7,5 +7,5 @@ while true; do
         sleep 5
         continue
     fi
-    tail -q -f /var/log/nano_agent/cp-nano-http-transaction-handler.log? >> /proc/1/fd/1
+    tail -q -f /var/log/nano_agent/cp-nano-http-transaction-handler.log* >> /proc/1/fd/1
 done

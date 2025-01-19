@@ -203,6 +203,18 @@ deleteFile(const string &path)
     return true;
 }
 
+string
+resolveFullPath(const string &input_path) {
+    dbgTrace(D_INFRA_UTILS) << "Resolving absolute path: " << input_path;
+    char resolved_path[PATH_MAX];
+    if (!realpath(input_path.c_str(), resolved_path)) {
+        dbgWarning(D_INFRA_UTILS) << "Error resolving path: " << input_path << ", errno: " << errno;
+        return "";
+    }
+
+    return string(resolved_path);
+}
+
 bool
 deleteDirectory(const string &path, bool delete_content)
 {
@@ -508,6 +520,23 @@ removeTrailingWhitespaces(string str)
     );
 
     return str;
+}
+
+string
+removeLeadingWhitespaces(string str)
+{
+    str.erase(
+        str.begin(),
+        find_if(str.begin(), str.end(), [] (char c) { return !isspace(c); })
+    );
+
+    return str;
+}
+
+string
+trim(string str)
+{
+    return removeLeadingWhitespaces(removeTrailingWhitespaces(str));
 }
 
 } // namespace Strings

@@ -467,9 +467,9 @@ getDeplymentType()
         case EnvType::COUNT: break;
     }
 
-    dbgAssert(false)
+    dbgAssertOpt(false)
         << AlertInfo(AlertTeam::CORE, "fog communication")
-        << "Failed to get a legitimate deplyment type: "
+        << "Failed to get a legitimate deployment type: "
         << static_cast<uint>(deplyment_type);
     return "Embedded";
 }

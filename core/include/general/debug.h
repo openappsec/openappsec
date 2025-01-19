@@ -159,7 +159,8 @@ public:
     Debug(
         const std::string &file_name,
         const std::string &func_name,
-        const uint &line
+        const uint &line,
+        bool force_assert
     );
 
     Debug(
@@ -273,6 +274,7 @@ private:
     static bool debug_override_exist;
     static std::string default_debug_file_stream_path;
     static std::vector<std::string> streams_from_mgmt;
+    static bool should_assert_optional;
 
     bool do_assert;
     bool is_communication = false;
@@ -328,7 +330,11 @@ getBaseName(const char *iter, const char *base)
 
 #define dbgAssert(cond) \
     if (CP_LIKELY(cond)) { \
-    } else Debug::DebugAlert(__FILENAME__, __FUNCTION__, __LINE__).getStreamAggr()
+    } else Debug::DebugAlert(__FILENAME__, __FUNCTION__, __LINE__, true).getStreamAggr()
+
+#define dbgAssertOpt(cond) \
+    if (CP_LIKELY(cond)) { \
+    } else Debug::DebugAlert(__FILENAME__, __FUNCTION__, __LINE__, false).getStreamAggr()
 
 // Macros to allow simple debug messaging
 #define DBG_GENERIC(level, ...) \

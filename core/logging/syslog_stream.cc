@@ -71,7 +71,14 @@ SyslogStream::sendLog(const vector<char> &data)
 void
 SyslogStream::init() {
     updateSettings();
-    maintainConnection();
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::Offline,
+        [this] ()
+        {
+            dbgTrace(D_REPORT) << FIRST_SYSLOG_CONNECT_NAME;
+        },
+        FIRST_SYSLOG_CONNECT_NAME
+    );
 
     auto syslog_retry_interval = getProfileAgentSettingWithDefault<uint>(
         RETRY_CONNECT_INTERVAL,

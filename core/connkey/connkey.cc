@@ -64,12 +64,12 @@ IPAddr::print(ostream &os) const
     switch (type) {
         case IPType::V4: {
             formatted_addr = inet_ntop(AF_INET, &v4, buf, sizeof(buf));
-            dbgAssert(formatted_addr == buf) << alert("conversion error") << "Failed to convert an IPv4 address";
+            dbgAssertOpt(formatted_addr == buf) << alert("conversion error") << "Failed to convert an IPv4 address";
             break;
         }
         case IPType::V6: {
             formatted_addr = inet_ntop(AF_INET6, &v6, buf, sizeof(buf));
-            dbgAssert(formatted_addr == buf) << alert("conversion error") << "Failed to convert an IPv6 address";
+            dbgAssertOpt(formatted_addr == buf) << alert("conversion error") << "Failed to convert an IPv6 address";
             break;
         }
         case IPType::UNINITIALIZED: {
@@ -116,7 +116,7 @@ ConnKey::reverse()
 size_t
 ConnKey::hash() const
 {
-    dbgAssert(src.type != IPType::UNINITIALIZED)
+    dbgAssertOpt(src.type != IPType::UNINITIALIZED)
         << alert("hashing")
         << "ConnKey::hash was called on an uninitialized object";
     size_t seed = 0;

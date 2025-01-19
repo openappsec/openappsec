@@ -46,7 +46,7 @@ panicCFmt(const string &func, uint line, const char *fmt, ...)
 {
     va_list va;
     va_start(va, fmt);
-    Debug("PM", func, line).getStreamAggr() << CFmtPrinter(fmt, va);
+    Debug("PM", func, line, true).getStreamAggr() << CFmtPrinter(fmt, va);
     va_end(va);
 }
 

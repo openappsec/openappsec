@@ -27,6 +27,7 @@
 #include "i_instance_awareness.h"
 #include "i_signal_handler.h"
 #include "hash_combine.h"
+#include "version.h"
 
 using namespace std;
 
@@ -298,12 +299,17 @@ AlertInfo::evalParams()
 Debug::Debug(
     const string &file_name,
     const string &func_name,
-    const uint &line)
+    const uint &line,
+    bool force_assert)
 {
-    if (Singleton::exists<Config::I_Config>()) {
-        do_assert = getConfigurationWithDefault<bool>(true, "Debug I/S", "Abort on assertion");
+    if (!force_assert && !should_assert_optional) {
+        do_assert = false;
     } else {
         do_assert = true;
+    }
+
+    if (Singleton::exists<Config::I_Config>()) {
+        do_assert = getConfigurationWithDefault<bool>(do_assert, "Debug I/S", "Abort on assertion");
     }
 
     auto current_configuration =
@@ -519,6 +525,13 @@ Debug::preload()
 
     active_streams["STDOUT"] = make_shared<Debug::DebugStream>(&cout);
     active_streams["FOG"] = make_shared<DebugFogStream>();
+
+    string branch = Version::getBranch();
+    if (branch == "open-source" || branch == "master" || branch.substr(0, 6) == "hotfix") {
+        should_assert_optional = false;
+    } else {
+        should_assert_optional = true;
+    }
 }
 
 void
@@ -844,3 +857,4 @@ bool Debug::is_fail_open_mode = false;
 bool Debug::debug_override_exist = false;
 string Debug::default_debug_file_stream_path = "";
 vector<string> Debug::streams_from_mgmt;
+bool Debug::should_assert_optional = true;

@@ -94,10 +94,13 @@ string
 HTTPResponse::toString() const
 {
     auto code = status_code_to_string.find(status_code);
-    dbgAssert(code != status_code_to_string.end())
-        << AlertInfo(AlertTeam::CORE, "messaging i/s")
-        << "Unknown status code "
-        << int(status_code);
+    if (code == status_code_to_string.end()) {
+        dbgAssertOpt(code != status_code_to_string.end())
+            << AlertInfo(AlertTeam::CORE, "messaging i/s")
+            << "Unknown status code "
+            << int(status_code);
+        return "[Status-code]: 500 - HTTP_INTERNAL_SERVER_ERROR, [Body]: " + (body.empty() ? "{}" : body);
+    }
 
     return "[Status-code]: " + code->second + ", [Body]: " + (body.empty() ? "{}" : body);
 }

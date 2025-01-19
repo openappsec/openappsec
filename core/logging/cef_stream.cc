@@ -59,7 +59,14 @@ CefStream::sendLog(const Report &log)
 void
 CefStream::init()  {
     updateSettings();
-    maintainConnection();
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::Offline,
+        [this] ()
+        {
+            dbgTrace(D_REPORT) << FIRST_CEF_CONNECT_NAME;
+        },
+        FIRST_CEF_CONNECT_NAME
+    );
 
     auto ceflog_retry_interval = getProfileAgentSettingWithDefault<uint>(
         RETRY_CONNECT_INTERVAL,

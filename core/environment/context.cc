@@ -60,10 +60,11 @@ Context::convertToString(MetaDataType type)
         case MetaDataType::Direction: return "direction";
         case MetaDataType::Email: return "email";
         case MetaDataType::COUNT:
-            dbgAssert(false) << alert << "COUNT is not a valid meta data type";
+            dbgAssertOpt(false) << alert << "COUNT is not a valid meta data type";
+            return "invalid_count";
     }
-    dbgAssert(false) << alert << "Reached impossible case with type=" << static_cast<int>(type);
-    return "";
+    dbgAssertOpt(false) << alert << "Reached impossible case with type=" << static_cast<int>(type);
+    return "invalid_metadata_type";
 }
 
 map<string, uint64_t>

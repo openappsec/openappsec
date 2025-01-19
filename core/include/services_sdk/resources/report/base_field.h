@@ -162,7 +162,7 @@ class LogField : Singleton::Consume<I_Environment>
         void
         addFields(const LogField &)
         {
-            dbgAssert(false)
+            dbgAssertOpt(false)
                 << AlertInfo(AlertTeam::CORE, "report i/s")
                 << "Trying to add a log field to a 'type'ed field";
         }

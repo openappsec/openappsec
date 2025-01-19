@@ -171,11 +171,16 @@ TEST_F(RestConfigTest, basic_flow)
     auto i_rest = Singleton::Consume<I_RestApi>::from(rest_server);
     ASSERT_TRUE(i_rest->addRestCall<TestServer>(RestAction::ADD, "test"));
     ASSERT_TRUE(i_rest->addGetCall("stuff", [] () { return string("blabla"); }));
+    ASSERT_TRUE(
+        i_rest->addWildcardGetCall("api/", [] (const string &uri) { return uri.substr(uri.find_last_of('/') + 1); })
+    );
 
     int file_descriptor1 = socket(AF_INET, SOCK_STREAM, 0);
     EXPECT_NE(file_descriptor1, -1);
     int file_descriptor2 = socket(AF_INET, SOCK_STREAM, 0);
     EXPECT_NE(file_descriptor2, -1);
+    int file_descriptor3 = socket(AF_INET, SOCK_STREAM, 0);
+    EXPECT_NE(file_descriptor3, -1);
 
     auto primary_port = getConfiguration<uint>("connection", "Nano service API Port Alternative");
     struct sockaddr_in sa;
@@ -185,6 +190,7 @@ TEST_F(RestConfigTest, basic_flow)
     int socket_enable = 1;
     EXPECT_EQ(setsockopt(file_descriptor1, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
     EXPECT_EQ(setsockopt(file_descriptor2, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
+    EXPECT_EQ(setsockopt(file_descriptor3, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
 
     EXPECT_CALL(messaging, sendSyncMessage(_, _, _, _, _))
         .WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
@@ -203,6 +209,11 @@ TEST_F(RestConfigTest, basic_flow)
         string msg2 = "POST /add-test HTTP/1.1\r\nContent-Length: 10\r\n\r\n{\"num\": 5}";
         EXPECT_EQ(write(file_descriptor2, msg2.data(), msg2.size()), static_cast<int>(msg2.size()));
 
+        EXPECT_EQ(connect(file_descriptor3, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0)
+            << "file_descriptor3 Error: "
+            << strerror(errno);
+        string msg3 = "GET /api/123 HTTP/1.1\r\n\r\n";
+        EXPECT_EQ(write(file_descriptor3, msg3.data(), msg3.size()), static_cast<int>(msg3.size()));
         while(!TestServer::g_num) {
             mainloop->yield(true);
         }
@@ -212,6 +223,14 @@ TEST_F(RestConfigTest, basic_flow)
         s_poll.events = POLLIN;
         s_poll.revents = 0;
         while(poll(&s_poll, 1, 0) <= 0) {
+            mainloop->yield(true);
+        }
+
+        struct pollfd s_poll3;
+        s_poll3.fd = file_descriptor3;
+        s_poll3.events = POLLIN;
+        s_poll3.revents = 0;
+        while(poll(&s_poll3, 1, 0) <= 0) {
             mainloop->yield(true);
         }
 
@@ -232,6 +251,11 @@ TEST_F(RestConfigTest, basic_flow)
     EXPECT_EQ(
         string(respose, 76),
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 6\r\n\r\nblabla"
+    );
+    EXPECT_EQ(read(file_descriptor3, respose, 1000), 73);
+    EXPECT_EQ(
+        string(respose, 73),
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 3\r\n\r\n123"
     );
 }
 
