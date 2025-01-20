@@ -1,0 +1,56 @@
+static_resources:
+  listeners:
+  - name: listener_0
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 80
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          http_filters:
+          ## The following 10 lines are required to load the envoy attachment filter for open-appsec
+          - name: envoy.filters.http.golang
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+              library_id: cp_nano_filter
+              library_path: "/usr/lib/libenvoy_attachment.so"
+              plugin_name: cp_nano_filter
+              plugin_config:
+                "@type": type.googleapis.com/xds.type.v3.TypedStruct
+                value:
+                  prefix_localreply_body: "Configured local reply from go"
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+##
+## The following lines allow you to deploy routing of ingress traffic to the optional juice-shop example container available in the open-appsec docker-compose.yaml file.
+##
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: juiceshop
+
+  clusters:
+  - name: juiceshop
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: juiceshop
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: juiceshop-backend
+                port_value: 3000

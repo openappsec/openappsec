@@ -12,7 +12,7 @@
 # limitations under the License.
 
 ##
-## Docker compose file for open-appsec integrated with NGINX
+## Docker compose file for open-appsec integrated with Kong
 ##
 
 version: "3.9"
@@ -28,7 +28,7 @@ services:
       - user_email=${APPSEC_USER_EMAIL}
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
-      - registered_server="NGINX Server"
+      - registered_server=Kong Server
     ipc: shareable
     restart: unless-stopped
     volumes:
@@ -37,25 +37,24 @@ services:
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
     command: /cp-nano-agent
-    
-  appsec-nginx:
-    image: ghcr.io/openappsec/nginx-attachment:${APPSEC_VERSION}
-    container_name: appsec-nginx
+
+  appsec-kong:
+    image: ghcr.io/openappsec/${KONG_IMAGE}:${APPSEC_VERSION}
+    container_name: appsec-kong
     ipc: service:appsec-agent
-    restart: unless-stopped
+## This docker compose deploys Kong in DB-less mode with declarative Kong configuration
+## please make sure to have a valid config present in {KONG_CONFIG}:
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/opt/kong/kong.yaml
     volumes:
-      - ${NGINX_CONFIG}:/etc/nginx/conf.d
-
-## advanced configuration - volume mount for nginx.conf file:
-## To change global instructions it's possible to also mount your own nginx.conf file by uncommenting the line below
-## then specify a desired local folder for NGINX_CONF_FILE in the .env file.
-## In the nginx.conf file make sure to include the line starting with "load_module" which loads the appsec attachment
-## and is included in /etc/nginx/conf.d/nginx.conf file as part of the nginx-attachment container.
-#     - ${NGINX_CONF_FILE}:/etc/nginx/nginx.conf
-
+      - ${KONG_CONFIG}:/opt/kong
+    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "8000:8000"
+      - "8443:8443"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8444:8444"
 
   appsec-smartsync:
     profiles:
@@ -103,7 +102,7 @@ services:
     depends_on:
       - appsec-shared-storage
       - appsec-db
-
+      
   appsec-db:
     profiles:
       - standalone

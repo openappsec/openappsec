@@ -12,7 +12,7 @@
 # limitations under the License.
 
 ##
-## Docker compose file for open-appsec integrated with NGINX
+## Docker compose file for open-appsec integrated with Envoy
 ##
 
 version: "3.9"
@@ -28,7 +28,7 @@ services:
       - user_email=${APPSEC_USER_EMAIL}
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
-      - registered_server="NGINX Server"
+      - registered_server="Envoy Server"
     ipc: shareable
     restart: unless-stopped
     volumes:
@@ -37,21 +37,22 @@ services:
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
     command: /cp-nano-agent
-    
-  appsec-nginx:
-    image: ghcr.io/openappsec/nginx-attachment:${APPSEC_VERSION}
-    container_name: appsec-nginx
+
+  appsec-envoy:
+    image: openappsec-envoy:${APPSEC_VERSION}
+# for docs:    image: ghcr.io/openappsec/envoy-attachment:${APPSEC_VERSION}
+    container_name: appsec-envoy
     ipc: service:appsec-agent
     restart: unless-stopped
+    environment:
+      - ENVOY_UID=0
+      - CONCURRENCY_CALC=${ENVOY_CONCURRENCY_CALC}
+      - CONCURRENCY_NUMBER=${ENVOY_CONCURRENCY_NUMBER}
     volumes:
-      - ${NGINX_CONFIG}:/etc/nginx/conf.d
-
-## advanced configuration - volume mount for nginx.conf file:
-## To change global instructions it's possible to also mount your own nginx.conf file by uncommenting the line below
-## then specify a desired local folder for NGINX_CONF_FILE in the .env file.
-## In the nginx.conf file make sure to include the line starting with "load_module" which loads the appsec attachment
-## and is included in /etc/nginx/conf.d/nginx.conf file as part of the nginx-attachment container.
-#     - ${NGINX_CONF_FILE}:/etc/nginx/nginx.conf
+      - ${ENVOY_CONFIG}:/envoy.yaml
+    command: -c /envoy.yaml
+##  adjustment of threads is possible as follows:
+#   command: -c /envoy.yaml --concurrency ${ENVOY_CONCURRENCY}
 
     ports:
       - "80:80"
@@ -120,8 +121,6 @@ services:
   juiceshop-backend:
     image: bkimminich/juice-shop:latest
     container_name: juiceshop-backend
-    profiles:
-      - juiceshop
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
 ##

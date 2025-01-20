@@ -12,7 +12,7 @@
 # limitations under the License.
 
 ##
-## Docker compose file for open-appsec integrated with NGINX
+## Docker compose file for open-appsec integrated with SWAG
 ##
 
 version: "3.9"
@@ -20,6 +20,7 @@ services:
   appsec-agent:
     image: ghcr.io/openappsec/agent:${APPSEC_VERSION}
     container_name: appsec-agent
+    restart: unless-stopped
     environment:
       - SHARED_STORAGE_HOST=appsec-shared-storage
       - LEARNING_HOST=appsec-smartsync
@@ -28,34 +29,43 @@ services:
       - user_email=${APPSEC_USER_EMAIL}
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
-      - registered_server="NGINX Server"
+      - registered_server=SWAG Server
     ipc: shareable
-    restart: unless-stopped
     volumes:
       - ${APPSEC_CONFIG}:/etc/cp/conf
       - ${APPSEC_DATA}:/etc/cp/data
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
     command: /cp-nano-agent
-    
-  appsec-nginx:
-    image: ghcr.io/openappsec/nginx-attachment:${APPSEC_VERSION}
-    container_name: appsec-nginx
+
+  appsec-swag:
+    image: ghcr.io/openappsec/swag-attachment:latest
+    container_name: appsec-swag
     ipc: service:appsec-agent
     restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${SWAG_TZ}
+      - URL=${SWAG_URL}
+      - VALIDATION=${SWAG_VALIDATION}
+      - DNSPLUGIN=${SWAG_DNSPLUGIN}
+      - AWS_ACCESS_KEY_ID=${SWAG_AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${SWAG_AWS_SECRET_ACCESS_KEY}
+      - SUBDOMAINS=${SWAG_SUBDOMAINS}
+      - ONLY_SUBDOMAINS=${SWAG_ONLY_SUBDOMAINS}
+## see https://docs.linuxserver.io/images/docker-swag/ for
+## more cert generation/validation options
+      - STAGING=${SWAG_STAGING}
     volumes:
-      - ${NGINX_CONFIG}:/etc/nginx/conf.d
-
-## advanced configuration - volume mount for nginx.conf file:
-## To change global instructions it's possible to also mount your own nginx.conf file by uncommenting the line below
-## then specify a desired local folder for NGINX_CONF_FILE in the .env file.
-## In the nginx.conf file make sure to include the line starting with "load_module" which loads the appsec attachment
-## and is included in /etc/nginx/conf.d/nginx.conf file as part of the nginx-attachment container.
-#     - ${NGINX_CONF_FILE}:/etc/nginx/nginx.conf
-
+      - ${SWAG_CONFIG}:/config
+      - ${SWAG_NGINX_SITE_CONFS}:/config/nginx/site-confs
+      - ${SWAG_PROXY_CONFS}:/config/nginx/proxy-confs
     ports:
-      - "80:80"
-      - "443:443"
+      - 443:443
+      - 80:80 ## optional
 
   appsec-smartsync:
     profiles:
@@ -103,7 +113,7 @@ services:
     depends_on:
       - appsec-shared-storage
       - appsec-db
-
+      
   appsec-db:
     profiles:
       - standalone
@@ -120,8 +130,7 @@ services:
   juiceshop-backend:
     image: bkimminich/juice-shop:latest
     container_name: juiceshop-backend
-    profiles:
-      - juiceshop
+
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
 ##

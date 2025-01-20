@@ -12,14 +12,18 @@
 # limitations under the License.
 
 ##
-## Docker compose file for open-appsec integrated with NGINX
+## Docker compose file for open-appsec integrated with NGINX Proxy Manager
+## with open-appsec management via central open-appsec WebUI (SaaS)
 ##
 
-version: "3.9"
+version: '3.9'
+
 services:
   appsec-agent:
     image: ghcr.io/openappsec/agent:${APPSEC_VERSION}
     container_name: appsec-agent
+    ipc: shareable
+    restart: unless-stopped
     environment:
       - SHARED_STORAGE_HOST=appsec-shared-storage
       - LEARNING_HOST=appsec-smartsync
@@ -28,34 +32,26 @@ services:
       - user_email=${APPSEC_USER_EMAIL}
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
-      - registered_server="NGINX Server"
-    ipc: shareable
-    restart: unless-stopped
+      - nginxproxymanager=true
     volumes:
       - ${APPSEC_CONFIG}:/etc/cp/conf
       - ${APPSEC_DATA}:/etc/cp/data
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
     command: /cp-nano-agent
-    
-  appsec-nginx:
-    image: ghcr.io/openappsec/nginx-attachment:${APPSEC_VERSION}
-    container_name: appsec-nginx
+
+  appsec-nginx-proxy-manager:
+    container_name: appsec-nginx-proxy-manager
+    image: ghcr.io/openappsec/nginx-proxy-manager-centrally-managed-attachment:${APPSEC_VERSION}
     ipc: service:appsec-agent
     restart: unless-stopped
-    volumes:
-      - ${NGINX_CONFIG}:/etc/nginx/conf.d
-
-## advanced configuration - volume mount for nginx.conf file:
-## To change global instructions it's possible to also mount your own nginx.conf file by uncommenting the line below
-## then specify a desired local folder for NGINX_CONF_FILE in the .env file.
-## In the nginx.conf file make sure to include the line starting with "load_module" which loads the appsec attachment
-## and is included in /etc/nginx/conf.d/nginx.conf file as part of the nginx-attachment container.
-#     - ${NGINX_CONF_FILE}:/etc/nginx/nginx.conf
-
     ports:
-      - "80:80"
-      - "443:443"
+      - 80:80 # Public HTTP Port
+      - 443:443 # Public HTTPS Port
+      - 81:81 # Admin Web Port
+    volumes:
+      - ${NPM_DATA}:/data
+      - ${NPM_LETSENCRYPT}:/etc/letsencrypt
 
   appsec-smartsync:
     profiles:
@@ -103,7 +99,7 @@ services:
     depends_on:
       - appsec-shared-storage
       - appsec-db
-
+      
   appsec-db:
     profiles:
       - standalone
