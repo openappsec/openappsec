@@ -1,9 +1,0 @@
-routes:
-  -
-    uri: /
-    upstream:
-        nodes:
-            "juiceshop-backend:3000": 1
-        type: roundrobin
-
-#END
