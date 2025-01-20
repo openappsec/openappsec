@@ -1,0 +1,12 @@
+
+# example local declarative configuration file for apisix in standalone mode
+
+routes:
+  -
+    uri: /anything
+    upstream:
+        nodes:
+            "httpbin.org:80": 1
+        type: roundrobin
+
+#END
