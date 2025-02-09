@@ -22,7 +22,8 @@ services:
   appsec-agent:
     image: ghcr.io/openappsec/agent:${APPSEC_VERSION}
     container_name: appsec-agent
-    ipc: shareable
+    ipc: service:appsec-nginx-proxy-manager
+    network_mode: service:appsec-nginx-proxy-manager
     restart: unless-stopped
     environment:
       - SHARED_STORAGE_HOST=appsec-shared-storage
@@ -43,7 +44,7 @@ services:
   appsec-nginx-proxy-manager:
     container_name: appsec-nginx-proxy-manager
     image: ghcr.io/openappsec/nginx-proxy-manager-attachment:${APPSEC_VERSION}
-    ipc: service:appsec-agent
+    ipc: shareable
     restart: unless-stopped
     ports:
       - 80:80 # Public HTTP Port
