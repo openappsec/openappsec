@@ -13,7 +13,7 @@
 
 ##
 ## Docker compose file for open-appsec integrated with NGINX Proxy Manager
-## with open-appsec management via central open-appsec WebUI (SaaS)
+## with open-appsec management via NGINX Proxy Manager WebUI
 ##
 
 version: '3.9'
@@ -22,7 +22,8 @@ services:
   appsec-agent:
     image: ghcr.io/openappsec/agent:${APPSEC_VERSION}
     container_name: appsec-agent
-    ipc: shareable
+    ipc: service:appsec-nginx-proxy-manager
+    network_mode: service:appsec-nginx-proxy-manager
     restart: unless-stopped
     environment:
       - SHARED_STORAGE_HOST=appsec-shared-storage
@@ -42,8 +43,8 @@ services:
 
   appsec-nginx-proxy-manager:
     container_name: appsec-nginx-proxy-manager
-    image: ghcr.io/openappsec/nginx-proxy-manager-centrally-managed-attachment:${APPSEC_VERSION}
-    ipc: service:appsec-agent
+    image: ghcr.io/openappsec/nginx-proxy-manager-attachment:${APPSEC_VERSION}
+    ipc: shareable
     restart: unless-stopped
     ports:
       - 80:80 # Public HTTP Port
@@ -52,6 +53,8 @@ services:
     volumes:
       - ${NPM_DATA}:/data
       - ${NPM_LETSENCRYPT}:/etc/letsencrypt
+      - ${APPSEC_LOGS}:/ext/appsec-logs
+      - ${APPSEC_LOCALCONFIG}:/ext/appsec
 
   appsec-smartsync:
     profiles:
