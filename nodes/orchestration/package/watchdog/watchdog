@@ -36,6 +36,8 @@ TMP_VOL_SRVS_FILE_PRE_DEL=watchdog/wd.volatile_services.del
 SRVS_HALTED=watchdog/wd.services.halt
 SERVICE_LOG_FILE_TTL_MINUTES=10080
 PIDOF_CMD_EXISTS=0
+CONFIG_FILE="${FILESYSTEM_PATH}/conf/cp-nano-orchestration-conf.json"
+SETTINGS_FILE="${FILESYSTEM_PATH}/conf/settings.json"
 
 env_details_file=conf/environment-details.cfg
 
@@ -47,6 +49,41 @@ VS_EVAL_PREFIX=
 
 var_service_startup=
 var_upgarde=false
+
+get_profile_agent_setting_with_default() {
+    key="$1"
+    default_value="$2"
+    value=$(grep -oP "\"key\":\s*\"$key\".*?\"value\":\s*\"[^\"]+\"" $SETTINGS_FILE | sed -E 's/.*"value":\s*"([^"]+)".*/\1/')
+    if [ "$value" = "null" ] || [ -z "$value" ]; then
+        echo "$default_value"
+    else
+        echo "$value"
+    fi
+}
+
+MAX_ORCH_RESTARTS=$(get_profile_agent_setting_with_default "maxOrchestrationRestartsWithinThreeMin" "10")
+MAX_AGE_MINUTES=$(get_profile_agent_setting_with_default "upgradeProcessTimeoutMin" "90")
+MAX_AGE_SECONDS=$((MAX_AGE_MINUTES * 60))
+
+update_orchestrations_counters()
+{
+    current_time=$(date +%s)
+    elapsed_time=$((current_time - last_update))
+    intervals_passed=$((elapsed_time / interval_duration))
+
+    if [ "$intervals_passed" -gt 0 ]; then
+        shifts=$((intervals_passed > 3 ? 3 : intervals_passed))
+        for _ in $(seq 1 "$shifts"); do
+            orch_counters="0 $(echo "$orch_counters" | cut -d' ' -f1-2)"
+        done
+        last_update=$((last_update + intervals_passed * interval_duration))
+    fi
+
+    first=$(echo "$orch_counters" | cut -d' ' -f1)
+    rest=$(echo "$orch_counters" | cut -d' ' -f2-)
+    first=$((first + 1))
+    orch_counters="$first $rest"
+}
 
 get_basename()
 {
@@ -830,6 +867,16 @@ load_services()
             else
                 var_service_startup=false
             fi
+
+            crashes_revert=$(get_profile_agent_setting_with_default "allowCrashesRevert" "true")
+            if [ "$crashes_revert" = "true" ] && [ "$(get_basename $service)" = "cp-nano-orchestration" ] && [ -f ${FILESYSTEM_PATH}/revert/upgrade_status ]; then
+                update_orchestrations_counters
+                total_orch_restarts=$(echo "$orch_counters" | awk '{print $1 + $2 + $3}')
+                log "load_services" "orchestrator restart no. ${total_orch_restarts}"
+                if [ "$total_orch_restarts" -ge "$MAX_ORCH_RESTARTS" ]; then
+                    ${SCRIPT_FOLDER}/revert_orchestrator_version.sh ${LOG_FILE_PATH}/$LOG_FILE
+                fi
+            fi
             run_service $service $gaia_ld_path
             increment_watchdog_process_restart_counter
             echo "running" > $AGENT_RUN_STATUS_FILE
@@ -1010,6 +1057,12 @@ else
 fi
 IS_SERVICE_STARTED=false
 echo "" >${FILESYSTEM_PATH}/$SRVS_HALTED
+
+last_update=$(date +%s)
+interval_duration=60
+orch_counters="0 0 0"
+iteration_count=0
+
 while $(true); do
     if [ -z $IS_CONTAINER_ENV ] && [ -f ${FILESYSTEM_PATH}/orchestration/restart_watchdog ]; then
         rm -f ${FILESYSTEM_PATH}/orchestration/restart_watchdog
@@ -1028,5 +1081,21 @@ while $(true); do
 
     rotate_service_log
     daily_log_files_cleanup
+
+    file_age_revert=$(get_profile_agent_setting_with_default "allowFileAgeRevert" "false")
+    iteration_count=$((iteration_count + 1))
+    if [ $((iteration_count % 10)) -eq 0 ]; then
+        if [ "$file_age_revert" = "true" ] && [ -f ${FILESYSTEM_PATH}/revert/upgrade_status ]; then
+            file_mtime=$(stat -c %Y "${FILESYSTEM_PATH}/revert/upgrade_status")
+            current_time=$(date +%s)
+            file_age=$((current_time - file_mtime))
+
+            if [ "$file_age" -gt "$MAX_AGE_SECONDS" ]; then
+                log "monitor_upgrade_status_file_age" "The file has existed for more than $MAX_AGE_MINUTES minutes."
+                ${SCRIPT_FOLDER}/revert_orchestrator_version.sh ${LOG_FILE_PATH}/$LOG_FILE
+            fi
+        fi
+    fi
+
     sleep 5
 done
