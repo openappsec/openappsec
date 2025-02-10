@@ -80,15 +80,26 @@ metadata:
     name: policy-example
 spec:
     default:
-        mode: prevent-learn
+        mode: detect-learn
         accessControlPractices: [access-control-practice-example]
         threatPreventionPractices: [threat-prevention-practice-example]
         triggers: [log-trigger-example]
-        customResponse: custom-response-block-page-example
-        sourceIdentifiers: sources-identifier-example
-        trustedSources: trusted-sources-example
+        customResponse: custom-response-code-example
+        sourceIdentifiers: ""
+        trustedSources: ""
         exceptions:
         - exception-example
+    specificRules:
+        - host: "example.com"
+          mode: prevent-learn
+          threatPreventionPractices: [threat-prevention-practice-example]
+          accessControlPractices: [access-control-practice-example]
+          triggers: [log-trigger-example]
+          customResponse: custom-response-code-example
+          sourceIdentifiers: ""
+          trustedSources: ""
+          exceptions:
+          - exception-example
 ---
 apiVersion: openappsec.io/v1beta2
 kind: ThreatPreventionPractice
