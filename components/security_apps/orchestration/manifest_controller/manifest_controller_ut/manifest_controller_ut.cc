@@ -58,6 +58,9 @@ public:
         Debug::setUnitTestFlag(D_ORCHESTRATOR, Debug::DebugLevel::TRACE);
         const string ignore_packages_file = "/etc/cp/conf/ignore-packages.txt";
         EXPECT_CALL(mock_orchestration_tools, doesFileExist(ignore_packages_file)).WillOnce(Return(false));
+        Maybe<string> forbidden_versions(string("a1\na2"));
+        EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/revert/forbidden_versions"))
+            .WillOnce(Return(forbidden_versions));
         manifest_controller.init();
         manifest_file_path = getConfigurationWithDefault<string>(
             "/etc/cp/conf/manifest.json",
@@ -224,6 +227,10 @@ TEST_F(ManifestControllerTest, createNewManifest)
     EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -363,6 +370,11 @@ TEST_F(ManifestControllerTest, updateManifest)
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).Times(2).WillRepeatedly(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).Times(2).WillRepeatedly(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
+
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
     manifest =
@@ -417,6 +429,9 @@ TEST_F(ManifestControllerTest, updateManifest)
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
     EXPECT_CALL(mock_orchestration_tools,
                 loadPackagesFromJson(manifest_file_path)).WillOnce(Return(old_services));
+
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillRepeatedly(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -478,6 +493,11 @@ TEST_F(ManifestControllerTest, selfUpdate)
 
     EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file", path +
                                                     temp_ext)).WillOnce(Return(true));
+
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -607,6 +627,10 @@ TEST_F(ManifestControllerTest, removeCurrentErrorPackage)
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     corrupted_packages.clear();
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
@@ -666,6 +690,10 @@ TEST_F(ManifestControllerTest, selfUpdateWithOldCopy)
 
     EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file", path +
                                                     temp_ext)).WillOnce(Return(true));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -722,6 +750,10 @@ TEST_F(ManifestControllerTest, selfUpdateWithOldCopyWithError)
     EXPECT_CALL(mock_orchestration_tools, doesFileExist(path)).WillOnce(Return(false)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile(path, path + backup_ext + temp_ext)).WillOnce(Return(false));
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(hostname));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -798,6 +830,10 @@ TEST_F(ManifestControllerTest, installAndRemove)
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).Times(2).WillRepeatedly(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).Times(2).WillRepeatedly(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
     string new_manifest =
@@ -858,6 +894,63 @@ TEST_F(ManifestControllerTest, installAndRemove)
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/packages/my1/my1")).Times(2)
         .WillOnce(Return(false));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillRepeatedly(Return(true));
+    EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
+}
+
+TEST_F(ManifestControllerTest, manifestWithForbiddenVersion)
+{
+    new_services.clear();
+    old_services.clear();
+
+    string manifest =
+        "{"
+        "   \"packages\": ["
+        "       {"
+        "           \"download-path\": \"http://172.23.92.135/my.sh\","
+        "           \"relative-path\": \"\","
+        "           \"name\": \"my\","
+        "           \"version\": \"a1\","
+        "           \"checksum-type\": \"sha1sum\","
+        "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c805\","
+        "           \"package-type\": \"service\","
+        "           \"require\": []"
+        "       },"
+        "       {"
+        "           \"download-path\": \"http://172.23.92.135/my.sh\","
+        "           \"relative-path\": \"\","
+        "           \"name\": \"orchestration\","
+        "           \"version\": \"a1\","
+        "           \"checksum-type\": \"sha1sum\","
+        "           \"checksum\": \"a58bbab8020b0e6d08568714b5e582a3adf9c805\","
+        "           \"package-type\": \"service\","
+        "           \"require\": []"
+        "       },"
+        "       {"
+        "           \"download-path\": \"\","
+        "           \"relative-path\": \"\","
+        "           \"name\": \"waap\","
+        "           \"version\": \"a1\","
+        "           \"checksum-type\": \"sha1sum\","
+        "           \"checksum\": \"\","
+        "           \"package-type\": \"service\","
+        "           \"status\": false,\n"
+        "           \"message\": \"This security app isn't valid for this agent\"\n"
+        "       }"
+        "   ]"
+        "}";
+
+    map<string, Package> manifest_services;
+    load(manifest, manifest_services);
+    checkIfFileExistsCall(manifest_services.at("my"));
+
+
+    load(manifest, new_services);
+    load(old_manifest, old_services);
+
+    EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
+
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -947,6 +1040,10 @@ TEST_F(ManifestControllerTest, badInstall)
     EXPECT_CALL(mock_orchestration_tools,
         packagesToJsonFile(corrupted_packages, corrupted_file_list)).WillOnce(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1112,6 +1209,12 @@ TEST_F(ManifestControllerTest, requireUpdate)
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile("new_manifest.json")).WillOnce(Return(true));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(false))
+        .WillRepeatedly(Return(true));;
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1212,6 +1315,10 @@ TEST_F(ManifestControllerTest, sharedObjectNotInstalled)
     ).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, copyFile("/tmp/temp_file1", path +
         temp_ext)).WillOnce(Return(true));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1313,6 +1420,12 @@ TEST_F(ManifestControllerTest, requireSharedObjectUpdate)
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile("new_manifest.json"))
         .WillOnce(Return(true));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(false))
+        .WillRepeatedly(Return(true));;
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1389,6 +1502,7 @@ TEST_F(ManifestControllerTest, failureOnDownloadSharedObject)
     EXPECT_CALL(mock_details_resolver, getHostname()).WillOnce(Return(string("hostname")));
     EXPECT_CALL(mock_orchestration_tools, removeFile("/tmp/temp_file1")).WillOnce(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
     EXPECT_FALSE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1524,6 +1638,12 @@ TEST_F(ManifestControllerTest, multiRequireUpdate)
         .WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile("new_manifest.json"))
         .WillOnce(Return(true));
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(false))
+        .WillRepeatedly(Return(true));;
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1610,6 +1730,12 @@ TEST_F(ManifestControllerTest, createNewManifestWithUninstallablePackage)
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(false))
+        .WillRepeatedly(Return(true));;
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1624,7 +1750,7 @@ TEST_F(ManifestControllerTest, updateUninstallPackage)
         "           \"download-path\": \"\","
         "           \"relative-path\": \"\","
         "           \"name\": \"my\","
-        "           \"version\": \"\","
+        "           \"version\": \"c\","
         "           \"checksum-type\": \"sha1sum\","
         "           \"checksum\": \"\","
         "           \"package-type\": \"service\","
@@ -1721,6 +1847,11 @@ TEST_F(ManifestControllerTest, updateUninstallPackage)
     EXPECT_CALL(mock_orchestration_tools, loadPackagesFromJson(file_name)).WillOnce(Return(new_services));
     EXPECT_CALL(mock_orchestration_tools,
                 loadPackagesFromJson(manifest_file_path)).WillOnce(Return(old_services));
+
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillOnce(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -1744,6 +1875,9 @@ public:
         setConfiguration<string>(ignore_packages_file, "orchestration", "Ignore packages list file path");
         writeIgnoreList(ignore_packages_file, ignore_services);
         EXPECT_CALL(mock_orchestration_tools, doesFileExist(ignore_packages_file)).WillOnce(Return(true));
+        Maybe<string> forbidden_versions(string("a1\na2"));
+        EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/revert/forbidden_versions"))
+            .WillOnce(Return(forbidden_versions));
         manifest_controller.init();
         manifest_file_path = getConfigurationWithDefault<string>(
             "/etc/cp/conf/manifest.json",
@@ -1839,6 +1973,7 @@ public:
     StrictMock<MockOrchestrationStatus> mock_status;
     StrictMock<MockDownloader> mock_downloader;
     StrictMock<MockOrchestrationTools> mock_orchestration_tools;
+    StrictMock<MockDetailsResolver> mock_details_resolver;
     NiceMock<MockShellCmd> mock_shell_cmd;
 
     ManifestController manifest_controller;
@@ -2122,6 +2257,12 @@ TEST_F(ManifestControllerIgnorePakckgeTest, addIgnorePackageAndUpdateNormal)
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(false))
+        .WillRepeatedly(Return(true));;
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 }
 
@@ -2387,6 +2528,12 @@ TEST_F(ManifestControllerIgnorePakckgeTest, overrideIgnoredPackageFromProfileSet
     EXPECT_CALL(mock_orchestration_tools, isNonEmptyFile(manifest_file_path)).WillOnce(Return(true));
     EXPECT_CALL(mock_orchestration_tools, removeFile(file_name)).WillOnce(Return(true));
 
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("b"));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(false))
+        .WillRepeatedly(Return(true));;
+    EXPECT_CALL(mock_orchestration_tools, writeFile(_, "/etc/cp/revert/upgrade_status", false))
+        .WillOnce(Return(true));
     EXPECT_TRUE(i_manifest_controller->updateManifest(file_name));
 
     EXPECT_THAT(capture_debug.str(), Not(HasSubstr("Ignoring a package from the manifest. Package name: my")));
@@ -2411,6 +2558,9 @@ public:
             doesFileExist("/etc/cp/conf/ignore-packages.txt")
         ).WillOnce(Return(false));
 
+        Maybe<string> forbidden_versions(string("a1\na2"));
+        EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/revert/forbidden_versions"))
+            .WillOnce(Return(forbidden_versions));
         manifest_controller.init();
     }
 

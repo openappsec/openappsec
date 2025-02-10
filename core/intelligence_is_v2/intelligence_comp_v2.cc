@@ -492,9 +492,9 @@ private:
             return genError("Local intelligence server ip not configured");
         }
 
-        auto res = sendLocalIntelligenceToLocalServer(rest_req, *server, primary_port_setting);
+        auto res = sendLocalIntelligenceToLocalServer(rest_req, *server, primary_port_setting, false);
         if (res.ok()) return res;
-        return sendLocalIntelligenceToLocalServer(rest_req, *server, secondary_port_setting);
+        return sendLocalIntelligenceToLocalServer(rest_req, *server, secondary_port_setting, false);
     }
 
     template <typename IntelligenceRest>
@@ -502,8 +502,9 @@ private:
     sendLocalIntelligenceToLocalServer(
         const IntelligenceRest &rest_req,
         const string &server,
-        const string &port_setting
-    ) const
+        const string &port_setting,
+        const bool should_send_access_token = false
+) const
     {
         auto port = getSetting<uint>("intelligence", port_setting);
         if (!port.ok()) {
@@ -519,6 +520,7 @@ private:
         req_md.insertHeaders(getHTTPHeaders());
         req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+        req_md.setShouldSendAccessToken(should_send_access_token);
         return sendIntelligenceRequestImpl(rest_req, req_md);
     }
 

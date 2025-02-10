@@ -593,8 +593,10 @@ install_watchdog()
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${WATCHDOG_PATH}"
     cp_copy watchdog/watchdog ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog
     cp_copy watchdog/wait-for-networking-inspection-modules.sh ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh
+    cp_copy watchdog/revert_orchestrator_version.sh ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/revert_orchestrator_version.sh
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog"
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh"
+    cp_exec "chmod 700 ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/revert_orchestrator_version.sh"
     cp_exec "touch ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wd.services"
 
     cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"

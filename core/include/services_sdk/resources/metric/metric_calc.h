@@ -25,6 +25,9 @@
 #include "customized_cereal_map.h"
 #include "compression_utils.h"
 #include "i_encryptor.h"
+#include "event.h"
+
+USE_DEBUG_FLAG(D_METRICS);
 
 class GenericMetric;
 
@@ -32,11 +35,33 @@ enum class MetricType { GAUGE, COUNTER };
 
 struct PrometheusData
 {
+    template <typename Archive>
+    void
+    serialize(Archive &ar)
+    {
+        try {
+            ar(cereal::make_nvp("metric_name", name));
+            ar(cereal::make_nvp("metric_type", type));
+            ar(cereal::make_nvp("metric_description", description));
+            ar(cereal::make_nvp("labels", label));
+            ar(cereal::make_nvp("value", value));
+        } catch (const cereal::Exception &e) {
+            dbgTrace(D_METRICS) << "Error in serialize Prometheus data: " << e.what();
+        }
+    }
+
     std::string name;
     std::string type;
-    std::string desc;
+    std::string description;
     std::string label;
     std::string value;
+};
+
+class MetricScrapeEvent : public Event<MetricScrapeEvent, std::vector<PrometheusData>>
+{
+public:
+    MetricScrapeEvent() {}
+
 };
 
 class AiopsMetricData
@@ -228,7 +253,10 @@ public:
     std::string getMetircDescription() const { return getMetadata("Description"); }
     std::string getMetadata(const std::string &metadata) const;
     virtual MetricType getMetricType() const { return MetricType::GAUGE; }
-    virtual std::vector<PrometheusData> getPrometheusMetrics() const;
+    virtual std::vector<PrometheusData> getPrometheusMetrics(
+        const std::string &metric_name,
+        const std::string &asset_id = ""
+    ) const;
     virtual float getValue() const = 0;
     virtual std::vector<AiopsMetricData> getAiopsMetrics() const;
 
@@ -240,7 +268,10 @@ public:
 
 protected:
     void addMetric(GenericMetric *metric);
-    std::map<std::string, std::string> getBasicLabels() const;
+    std::map<std::string, std::string> getBasicLabels(
+        const std::string &metric_name,
+        const std::string &asset_id = ""
+    ) const;
 
     template <typename Metadata, typename ... OtherMetadata>
     void

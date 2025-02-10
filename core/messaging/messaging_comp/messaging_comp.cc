@@ -142,7 +142,13 @@ MessagingComp::sendMessage(
         metadata.insertHeaders(i_env->getCurrentHeadersMap());
     }
 
-    auto req = HTTPRequest::prepareRequest(conn, method, uri, metadata.getHeaders(), body);
+    auto req = HTTPRequest::prepareRequest(
+        conn,
+        method,
+        uri,
+        metadata.getHeaders(),
+        body,
+        metadata.shouldSendAccessToken());
     if (!req.ok()) return genError(HTTPResponse(HTTPStatusCode::HTTP_UNKNOWN, req.getErr()));
 
     auto response = i_conn->sendRequest(conn, *req);

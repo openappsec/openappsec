@@ -14,6 +14,7 @@
 #include "mock/mock_instance_awareness.h"
 #include "config.h"
 #include "config_component.h"
+#include "metric/metric_scraper.h"
 
 using namespace std;
 using namespace chrono;
@@ -191,9 +192,11 @@ public:
     MetricTest()
     {
         EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "declare-boolean-variable", _)).WillOnce(Return(true));
+        env.init();
+        conf.preload();
+
         ON_CALL(instance, getUniqueID()).WillByDefault(Return(string("87")));
         ON_CALL(instance, getFamilyID()).WillByDefault(Return(string("")));
-        env.init();
         Debug::setNewDefaultStdout(&debug_output);
         Debug::setUnitTestFlag(D_METRICS, Debug::DebugLevel::TRACE);
         setConfiguration<bool>(true, string("metric"), string("fogMetricSendEnable"));
@@ -531,9 +534,12 @@ TEST_F(MetricTest, printMetricsTest)
     GenericMetric::fini();
 }
 
-TEST_F(MetricTest, printPromeathus)
+TEST_F(MetricTest, getPromeathusMetric)
 {
-    conf.preload();
+    MetricScraper metric_scraper;
+    function<string()> get_metrics_func;
+    EXPECT_CALL(rest, addGetCall("service-metrics", _)).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
+    metric_scraper.init();
 
     stringstream configuration;
     configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
@@ -546,20 +552,21 @@ TEST_F(MetricTest, printPromeathus)
         ReportIS::AudienceTeam::AGENT_CORE,
         ReportIS::IssuingEngine::AGENT_CORE,
         seconds(5),
-        false
+        false,
+        ReportIS::Audience::INTERNAL,
+        false,
+        "asset id"
     );
     cpu_mt.turnOffStream(GenericMetric::Stream::FOG);
     cpu_mt.turnOffStream(GenericMetric::Stream::DEBUG);
-    cpu_mt.turnOnStream(GenericMetric::Stream::PROMETHEUS);
     cpu_mt.registerListener();
 
     CPUEvent cpu_event;
     cpu_event.setProcessCPU(89);
     cpu_event.notify();
 
-    string message_body;
-    EXPECT_CALL(messaging_mock, sendSyncMessage(_, "/add-metrics", _, _, _))
-        .WillOnce(DoAll(SaveArg<2>(&message_body), Return(HTTPResponse())));
+    string message_body = get_metrics_func();
+
     routine();
 
     string res =
@@ -569,42 +576,48 @@ TEST_F(MetricTest, printPromeathus)
         "            \"metric_name\": \"cpuMax\",\n"
         "            \"metric_type\": \"gauge\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"89\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"cpuMin\",\n"
         "            \"metric_type\": \"gauge\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"89\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"cpuAvg\",\n"
         "            \"metric_type\": \"gauge\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"89\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"cpuCurrent\",\n"
         "            \"metric_type\": \"gauge\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"89\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"cpuCounter\",\n"
         "            \"metric_type\": \"gauge\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"1\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"cpuTotalCounter\",\n"
         "            \"metric_type\": \"counter\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"1\"\n"
         "        }\n"
         "    ]\n"
@@ -613,9 +626,12 @@ TEST_F(MetricTest, printPromeathus)
     EXPECT_EQ(message_body, res);
 }
 
-TEST_F(MetricTest, printPromeathusMultiMap)
+TEST_F(MetricTest, getPromeathusMultiMap)
 {
-    conf.preload();
+    MetricScraper metric_scraper;
+    function<string()> get_metrics_func;
+    EXPECT_CALL(rest, addGetCall("service-metrics", _)).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
+    metric_scraper.init();
 
     stringstream configuration;
     configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
@@ -628,18 +644,18 @@ TEST_F(MetricTest, printPromeathusMultiMap)
         ReportIS::AudienceTeam::AGENT_CORE,
         ReportIS::IssuingEngine::AGENT_CORE,
         seconds(5),
-        true
+        true,
+        ReportIS::Audience::INTERNAL,
+        false,
+        "asset id"
     );
-    metric.turnOnStream(GenericMetric::Stream::PROMETHEUS);
     metric.registerListener();
 
     HttpTransaction("/index.html", "GET", 10).notify();
     HttpTransaction("/index2.html", "GET", 20).notify();
     HttpTransaction("/index.html", "POST", 40).notify();
 
-    string message_body;
-    EXPECT_CALL(messaging_mock, sendSyncMessage(_, "/add-metrics", _, _, _))
-        .WillOnce(DoAll(SaveArg<2>(&message_body), Return(HTTPResponse())));
+    string message_body = get_metrics_func();
     routine();
 
     string res =
@@ -649,24 +665,156 @@ TEST_F(MetricTest, printPromeathusMultiMap)
         "            \"metric_name\": \"request.total\",\n"
         "            \"metric_type\": \"counter\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\","
-                                "method=\\\"GET\\\",url=\\\"/index.html\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"Bytes per URL\\\",method=\\\"GET\\\",url=\\\"/index.html\\\"}\",\n"
         "            \"value\": \"1\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"request.total\",\n"
         "            \"metric_type\": \"counter\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\","
-                                "method=\\\"POST\\\",url=\\\"/index.html\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"Bytes per URL\\\",method=\\\"POST\\\",url=\\\"/index.html\\\"}\",\n"
         "            \"value\": \"1\"\n"
         "        },\n"
         "        {\n"
         "            \"metric_name\": \"request.total\",\n"
         "            \"metric_type\": \"counter\",\n"
         "            \"metric_description\": \"\",\n"
-        "            \"labels\": \"{agent=\\\"Unknown\\\",id=\\\"87\\\","
-                                "method=\\\"GET\\\",url=\\\"/index2.html\\\"}\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"Bytes per URL\\\",method=\\\"GET\\\",url=\\\"/index2.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        }\n"
+        "    ]\n"
+        "}";
+
+    EXPECT_EQ(message_body, res);
+}
+
+TEST_F(MetricTest, getPromeathusTwoMetrics)
+{
+    MetricScraper metric_scraper;
+    function<string()> get_metrics_func;
+    EXPECT_CALL(rest, addGetCall("service-metrics", _)).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
+    metric_scraper.init();
+
+    stringstream configuration;
+    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
+
+    EXPECT_TRUE(Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration));
+
+    CPUMetric cpu_mt;
+    cpu_mt.init(
+        "CPU usage",
+        ReportIS::AudienceTeam::AGENT_CORE,
+        ReportIS::IssuingEngine::AGENT_CORE,
+        seconds(5),
+        false,
+        ReportIS::Audience::INTERNAL,
+        false,
+        "asset id"
+    );
+    cpu_mt.turnOffStream(GenericMetric::Stream::FOG);
+    cpu_mt.turnOffStream(GenericMetric::Stream::DEBUG);
+    cpu_mt.registerListener();
+
+    CPUEvent cpu_event;
+    cpu_event.setProcessCPU(89);
+    cpu_event.notify();
+
+    UrlMetric2 metric;
+    metric.init(
+        "Bytes per URL",
+        ReportIS::AudienceTeam::AGENT_CORE,
+        ReportIS::IssuingEngine::AGENT_CORE,
+        seconds(5),
+        true,
+        ReportIS::Audience::INTERNAL,
+        false,
+        "asset id"
+    );
+    metric.registerListener();
+
+    HttpTransaction("/index.html", "GET", 10).notify();
+    HttpTransaction("/index2.html", "GET", 20).notify();
+    HttpTransaction("/index.html", "POST", 40).notify();
+
+    string message_body = get_metrics_func();
+    routine();
+
+    string res =
+        "{\n"
+        "    \"metrics\": [\n"
+        "        {\n"
+        "            \"metric_name\": \"request.total\",\n"
+        "            \"metric_type\": \"counter\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"Bytes per URL\\\",method=\\\"GET\\\",url=\\\"/index.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"request.total\",\n"
+        "            \"metric_type\": \"counter\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"Bytes per URL\\\",method=\\\"POST\\\",url=\\\"/index.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"request.total\",\n"
+        "            \"metric_type\": \"counter\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"Bytes per URL\\\",method=\\\"GET\\\",url=\\\"/index2.html\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"cpuMax\",\n"
+        "            \"metric_type\": \"gauge\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"cpuMin\",\n"
+        "            \"metric_type\": \"gauge\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"cpuAvg\",\n"
+        "            \"metric_type\": \"gauge\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"cpuCurrent\",\n"
+        "            \"metric_type\": \"gauge\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
+        "            \"value\": \"89\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"cpuCounter\",\n"
+        "            \"metric_type\": \"gauge\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
+        "            \"value\": \"1\"\n"
+        "        },\n"
+        "        {\n"
+        "            \"metric_name\": \"cpuTotalCounter\",\n"
+        "            \"metric_type\": \"counter\",\n"
+        "            \"metric_description\": \"\",\n"
+        "            \"labels\": \"{agent=\\\"Unknown\\\",assetId=\\\"asset id\\\",id=\\\"87\\\","
+                        "metricName=\\\"CPU usage\\\"}\",\n"
         "            \"value\": \"1\"\n"
         "        }\n"
         "    ]\n"

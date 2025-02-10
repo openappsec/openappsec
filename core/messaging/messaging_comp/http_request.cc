@@ -79,7 +79,8 @@ HTTPRequest::prepareRequest(
     HTTPMethod method,
     const string &uri,
     const map<string, string> &headers,
-    const string &body
+    const string &body,
+    const bool should_send_access_token
 )
 {
     HTTPRequest req(method, uri, headers, body);
@@ -94,6 +95,7 @@ HTTPRequest::prepareRequest(
         dont_add_access_token = true;
         dbgTrace(D_MESSAGING) << "Request is for agent authentication";
     }
+    if (!should_send_access_token) dont_add_access_token = true;
     auto res = req.addAccessToken(conn, dont_add_access_token);
     if (!res.ok()) return res.passErr();
 

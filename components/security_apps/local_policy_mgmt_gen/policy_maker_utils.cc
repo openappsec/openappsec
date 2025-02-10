@@ -928,7 +928,6 @@ createMultiRulesSections(
     PracticeSection practice = PracticeSection(practice_id, practice_type, practice_name);
     vector<ParametersSection> exceptions_result;
     for (auto exception : exceptions) {
-
         const auto &exception_name = exception.first;
         for (const auto &inner_exception : exception.second) {
             exceptions_result.push_back(ParametersSection(inner_exception.getBehaviorId(), exception_name));
@@ -1220,7 +1219,8 @@ PolicyMakerUtils::createWebAppSection(
     const string &practice_id,
     const string &full_url,
     const string &default_mode,
-    map<AnnotationTypes, string> &rule_annotations)
+    map<AnnotationTypes, string> &rule_annotations,
+    vector<InnerException> rule_inner_exceptions)
 {
     auto apssec_practice =
         getAppsecPracticeSpec<V1beta2AppsecLinuxPolicy, NewAppSecPracticeSpec>(
@@ -1255,7 +1255,8 @@ PolicyMakerUtils::createWebAppSection(
         apssec_practice.getAntiBot(),
         log_triggers[rule_annotations[AnnotationTypes::TRIGGER]],
         trusted_sources[rule_annotations[AnnotationTypes::TRUSTED_SOURCES]],
-        apssec_practice.getWebAttacks().getProtections()
+        apssec_practice.getWebAttacks().getProtections(),
+        rule_inner_exceptions
     );
     web_apps[rule_config.getAssetName()] = web_app;
 }
@@ -1366,7 +1367,8 @@ PolicyMakerUtils::createThreatPreventionPracticeSections(
             practice_id,
             asset_name,
             default_mode,
-            rule_annotations);
+            rule_annotations,
+            inner_exceptions[rule_annotations[AnnotationTypes::EXCEPTION]]);
     }
 
 }

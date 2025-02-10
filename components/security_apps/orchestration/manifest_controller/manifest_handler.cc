@@ -14,6 +14,7 @@
 #include "manifest_handler.h"
 
 #include <algorithm>
+#include <ctime>
 
 #include "debug.h"
 #include "config.h"
@@ -201,18 +202,29 @@ ManifestHandler::installPackage(
     auto span_scope = i_env->startNewSpanScope(Span::ContextType::CHILD_OF);
     auto orchestration_status = Singleton::Consume<I_OrchestrationStatus>::by<ManifestHandler>();
 
+    auto details_resolver = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>();
+    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ManifestHandler>();
+
     auto &package = package_downloaded_file.first;
     auto &package_name = package.getName();
     auto &package_handler_path = package_downloaded_file.second;
 
     dbgInfo(D_ORCHESTRATOR) << "Handling package installation. Package: " << package_name;
 
+    string upgrade_info =
+        details_resolver->getAgentVersion() + " " + package.getVersion() + " " + getCurrentTimestamp();
+    if (!orchestration_tools->doesFileExist(getFilesystemPathConfig() + "/revert/upgrade_status") &&
+        !orchestration_tools->writeFile(upgrade_info, getFilesystemPathConfig() + "/revert/upgrade_status")
+    ) {
+        dbgWarning(D_ORCHESTRATOR) << "Failed to write to " + getFilesystemPathConfig() + "/revert/upgrade_status";
+    }
+
     if (package_name.compare(orch_service_name) == 0) {
         orchestration_status->writeStatusToFile();
         bool self_update_status = selfUpdate(package, current_packages, package_handler_path);
         if (!self_update_status) {
             auto details = Singleton::Consume<I_AgentDetails>::by<ManifestHandler>();
-            auto hostname = Singleton::Consume<I_DetailsResolver>::by<ManifestHandler>()->getHostname();
+            auto hostname = details_resolver->getHostname();
             string err_hostname = (hostname.ok() ? "on host '" + *hostname : "'" + details->getAgentId()) + "'";
             string install_error =
                 "Warning: Agent/Gateway " +
@@ -246,7 +258,6 @@ ManifestHandler::installPackage(
         return true;
     }
     string current_installation_file = packages_dir + "/" + package_name + "/" + package_name;
-    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ManifestHandler>();
     bool is_clean_installation = !orchestration_tools->doesFileExist(current_installation_file);
 
 
@@ -367,4 +378,14 @@ ManifestHandler::selfUpdate(
     return
         package_handler->preInstallPackage(orch_service_name, current_installation_file) &&
         package_handler->installPackage(orch_service_name, current_installation_file, false);
+}
+
+string
+ManifestHandler::getCurrentTimestamp()
+{
+    time_t now = time(nullptr);
+    tm* now_tm = localtime(&now);
+    char timestamp[20];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", now_tm);
+    return string(timestamp);
 }

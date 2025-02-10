@@ -239,6 +239,7 @@ public:
     const Buffer & getValue() const { return value; }
 
     bool isLastHeader() const { return is_last_header; }
+    void setIsLastHeader() { is_last_header = true; }
     uint8_t getHeaderIndex() const { return header_index; }
 
 private:

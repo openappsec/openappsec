@@ -237,6 +237,12 @@ AgentDetails::getAgentId() const
     return agent_id;
 }
 
+string
+AgentDetails::getRegisteredServer() const
+{
+    return server;
+}
+
 Maybe<string>
 AgentDetails::getProxy() const
 {

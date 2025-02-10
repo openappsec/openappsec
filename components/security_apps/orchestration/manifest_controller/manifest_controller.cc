@@ -100,6 +100,7 @@ private:
     string packages_dir;
     string orch_service_name;
     set<string> ignore_packages;
+    Maybe<string> forbidden_versions = genError("Forbidden versions file does not exist");
 };
 
 void
@@ -135,7 +136,8 @@ ManifestController::Impl::init()
         "Ignore packages list file path"
     );
 
-    if (Singleton::Consume<I_OrchestrationTools>::by<ManifestController>()->doesFileExist(ignore_packages_path)) {
+    auto orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ManifestController>();
+    if (orchestration_tools->doesFileExist(ignore_packages_path)) {
         try {
             ifstream input_stream(ignore_packages_path);
             if (!input_stream) {
@@ -156,6 +158,9 @@ ManifestController::Impl::init()
                 << " Error: " << f.what();
         }
     }
+
+    const string forbidden_versions_path = getFilesystemPathConfig() + "/revert/forbidden_versions";
+    forbidden_versions = orchestration_tools->readFile(forbidden_versions_path);
 }
 
 bool
@@ -271,6 +276,17 @@ ManifestController::Impl::updateManifest(const string &new_manifest_file)
     }
 
     map<string, Package> new_packages = parsed_manifest.unpack();
+    if (!new_packages.empty()) {
+        const Package &package = new_packages.begin()->second;
+        if (forbidden_versions.ok() &&
+            forbidden_versions.unpack().find(package.getVersion()) != string::npos
+        ) {
+            dbgWarning(D_ORCHESTRATOR)
+                << "Packages version is in the forbidden versions list. No upgrade will be performed.";
+            return true;
+        }
+    }
+
     map<string, Package> all_packages = parsed_manifest.unpack();
     map<string, Package> current_packages;
     parsed_manifest = orchestration_tools->loadPackagesFromJson(manifest_file_path);

@@ -69,7 +69,7 @@ Identifier::load(cereal::JSONInputArchive &archive_in)
         dbgWarning(D_LOCAL_POLICY) << "AppSec identifier invalid: " << identifier;
         identifier = "sourceip";
     }
-    parseMandatoryAppsecJSONKey<vector<string>>("value", value, archive_in);
+    parseAppsecJSONKey<vector<string>>("value", value, archive_in);
 }
 
 const string &

@@ -89,6 +89,11 @@ public:
 
         EXPECT_CALL(mock_service_controller, isServiceInstalled("Access Control")).WillRepeatedly(Return(false));
 
+        EXPECT_CALL(
+            mock_ml,
+            addOneTimeRoutine(_, _, "Orchestration successfully updated (One-Time After Interval)", true)
+        ).WillOnce(DoAll(SaveArg<1>(&upgrade_routine), Return(0)));
+
         // This Holding the Main Routine of the Orchestration.
         EXPECT_CALL(
             mock_ml,
@@ -156,6 +161,7 @@ public:
     runRoutine()
     {
         routine();
+        upgrade_routine();
     }
 
     void
@@ -235,6 +241,7 @@ private:
     }
 
     I_MainLoop::Routine routine;
+    I_MainLoop::Routine upgrade_routine;
     I_MainLoop::Routine status_routine;
 };
 

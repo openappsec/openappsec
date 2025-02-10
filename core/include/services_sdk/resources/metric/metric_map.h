@@ -55,12 +55,17 @@ class MetricMap : public MetricCalc
         }
 
         std::vector<PrometheusData>
-        getPrometheusMetrics(const std::string &label, const std::string &name) const
+        getPrometheusMetrics(
+            const std::string &metric_name,
+            const std::string &label,
+            const std::string &name,
+            const std::string &asset_id
+        ) const
         {
             std::vector<PrometheusData> res;
 
             for (auto &metric : inner_map) {
-                auto sub_res =  metric.second.getPrometheusMetrics();
+                auto sub_res =  metric.second.getPrometheusMetrics(metric_name, asset_id);
                 for (auto &sub_metric : sub_res) {
                     sub_metric.label += "," + label + "=\"" + metric.first + "\"";
                     sub_metric.name = name;
@@ -155,9 +160,9 @@ public:
     }
 
     std::vector<PrometheusData>
-    getPrometheusMetrics() const override
+    getPrometheusMetrics(const std::string &metric_name, const std::string &asset_id) const override
     {
-        return metric_map.getPrometheusMetrics(label, getMetricName());
+        return metric_map.getPrometheusMetrics(metric_name, label, getMetricName(), asset_id);
     }
 
     std::vector<AiopsMetricData>

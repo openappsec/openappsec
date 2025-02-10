@@ -42,6 +42,9 @@ unsigned int getFailOpenTimeout();
 int isFailOpenHoldMode();
 unsigned int getFailOpenHoldTimeout();
 
+unsigned int getHoldVerdictPollingTime();
+unsigned int getHoldVerdictRetries();
+
 unsigned int getMaxSessionsPerMinute();
 int isFailOpenOnSessionLimit();
 

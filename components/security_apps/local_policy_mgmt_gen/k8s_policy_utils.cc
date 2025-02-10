@@ -698,8 +698,12 @@ K8sPolicyUtils::createAppsecPolicies()
         }
     }
 
-    auto maybe_policy_activation =
-        getObjectFromCluster<PolicyActivationData>("/apis/openappsec.io/v1beta2/policyactivations");
+
+    string ns_suffix = getAppSecScopeType() == "namespaced" ? "ns" : "";
+    string ns = getAppSecScopeType() == "namespaced" ? "namespaces/" : "";
+    auto maybe_policy_activation = getObjectFromCluster<PolicyActivationData>(
+        "/apis/openappsec.io/v1beta2/" + ns + agent_ns + "policyactivations" + ns_suffix
+    );
 
     if (!maybe_policy_activation.ok()) {
         dbgWarning(D_LOCAL_POLICY)

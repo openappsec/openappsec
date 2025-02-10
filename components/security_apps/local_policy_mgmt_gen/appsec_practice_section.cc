@@ -497,7 +497,8 @@ WebAppSection::WebAppSection(
     const AppsecPracticeAntiBotSection &_anti_bots,
     const LogTriggerSection &parsed_log_trigger,
     const AppSecTrustedSources &parsed_trusted_sources,
-    const NewAppSecWebAttackProtections &protections)
+    const NewAppSecWebAttackProtections &protections,
+    const vector<InnerException> &exceptions)
     :
     application_urls(_application_urls),
     asset_id(_asset_id),
@@ -539,6 +540,10 @@ WebAppSection::WebAppSection(
     triggers.push_back(TriggersInWaapSection(parsed_log_trigger));
     for (const SourcesIdentifiers &source_ident : parsed_trusted_sources.getSourcesIdentifiers()) {
         overrides.push_back(AppSecOverride(source_ident));
+    }
+
+    for (const auto &exception : exceptions) {
+        overrides.push_back(AppSecOverride(exception));
     }
 
 }

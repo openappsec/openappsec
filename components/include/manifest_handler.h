@@ -62,6 +62,7 @@ public:
 
 private:
     Maybe<std::string> downloadPackage(const Package &package, bool is_clean_installation);
+    std::string getCurrentTimestamp();
 
     std::string manifest_file_path;
     std::string temp_ext;

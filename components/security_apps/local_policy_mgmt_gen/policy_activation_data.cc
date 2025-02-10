@@ -18,14 +18,6 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_LOCAL_POLICY);
 
-static const set<string> valid_modes = {
-    "prevent-learn",
-    "detect-learn",
-    "prevent",
-    "detect",
-    "inactive"
-};
-
 void
 PolicyActivationMetadata::load(cereal::JSONInputArchive &archive_in)
 {
@@ -39,11 +31,6 @@ EnabledPolicy::load(cereal::JSONInputArchive &archive_in)
     dbgTrace(D_LOCAL_POLICY) << "Loading policyActivation enabled policy";
     parseMandatoryAppsecJSONKey<vector<string>>("hosts", hosts, archive_in);
     parseAppsecJSONKey<string>("name", name, archive_in);
-    parseAppsecJSONKey<string>("mode", mode, archive_in, "detect");
-    if (valid_modes.count(mode) == 0) {
-        dbgWarning(D_LOCAL_POLICY) << "AppSec policy activation mode invalid: " << mode;
-        mode = "detect";
-    }
 }
 
 const string &

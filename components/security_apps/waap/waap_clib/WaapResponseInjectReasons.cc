@@ -23,6 +23,7 @@ ResponseInjectReasons::ResponseInjectReasons()
 :
 csrf(false),
 antibot(false),
+captcha(false),
 securityHeaders(false)
 {
 }
@@ -54,6 +55,13 @@ ResponseInjectReasons::setAntibot(bool flag)
 }
 
 void
+ResponseInjectReasons::setCaptcha(bool flag)
+{
+    dbgTrace(D_WAAP) << "Change ResponseInjectReasons(Captcha) " << captcha << " to " << flag;
+    captcha = flag;
+}
+
+void
 ResponseInjectReasons::setCsrf(bool flag)
 {
     dbgTrace(D_WAAP) << "Change ResponseInjectReasons(CSRF) " << csrf << " to " << flag;
@@ -72,6 +80,13 @@ ResponseInjectReasons::shouldInjectAntibot() const
 {
     dbgTrace(D_WAAP) << "shouldInjectAntibot():: " << antibot;
     return antibot;
+}
+
+bool
+ResponseInjectReasons::shouldInjectCaptcha() const
+{
+    dbgTrace(D_WAAP) << "shouldInjectCaptcha():: " << captcha;
+    return captcha;
 }
 
 bool

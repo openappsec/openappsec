@@ -135,6 +135,7 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
     m_Signatures(signatures),
     m_waapDataFileName(waapDataFileName),
     m_assetId(assetId),
+    m_requestsMonitor(nullptr),
     scoreBuilder(this),
     m_rateLimitingState(nullptr),
     m_errorLimitingState(nullptr),
@@ -152,10 +153,14 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
             I_AgentDetails* agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
             std::string path = agentDetails->getTenantId() + "/" + assetId;
             m_filtersMngr = std::make_shared<IndicatorsFiltersManager>(path, assetId, this);
+            m_requestsMonitor = std::make_shared<SourcesRequestMonitor>
+                (getWaapDataDir() + "/monitor.data", path, assetId, "State");
         }
         else
         {
             m_filtersMngr = std::make_shared<IndicatorsFiltersManager>("", "", this);
+            m_requestsMonitor = std::make_shared<SourcesRequestMonitor>
+                (getWaapDataDir() + "/monitor.data", "", assetId, "State");
         }
         // Load keyword scores - copy from ScoreBuilder
         updateScores();

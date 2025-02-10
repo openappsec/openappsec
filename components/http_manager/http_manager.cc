@@ -15,18 +15,14 @@
 
 #include <string>
 #include <map>
-#include <sys/stat.h>
-#include <climits>
 #include <unordered_map>
 #include <unordered_set>
-#include <boost/range/iterator_range.hpp>
 #include <boost/algorithm/string.hpp>
 #include <fstream>
 #include <algorithm>
 
 #include "common.h"
 #include "config.h"
-#include "table_opaque.h"
 #include "http_manager_opaque.h"
 #include "log_generator.h"
 #include "http_inspection_events.h"
@@ -69,22 +65,6 @@ public:
         i_transaction_table = Singleton::Consume<I_Table>::by<HttpManager>();
 
         Singleton::Consume<I_Logging>::by<HttpManager>()->addGeneralModifier(compressAppSecLogs);
-        
-        const char* ignored_headers_env = getenv("SAAS_IGNORED_UPSTREAM_HEADERS");
-        if (ignored_headers_env) {
-            string ignored_headers_str = ignored_headers_env;
-            ignored_headers_str = NGEN::Strings::removeTrailingWhitespaces(ignored_headers_str);
-
-            if (!ignored_headers_str.empty()) {
-                dbgInfo(D_HTTP_MANAGER)
-                    << "Ignoring SAAS_IGNORED_UPSTREAM_HEADERS environment variable: "
-                    << ignored_headers_str;
-
-                vector<string> ignored_headers_vec;
-                boost::split(ignored_headers_vec, ignored_headers_str, boost::is_any_of(";"));
-                for (const string &header : ignored_headers_vec) ignored_headers.insert(header);
-            }
-        }
     }
 
     FilterVerdict
@@ -109,19 +89,12 @@ public:
             return FilterVerdict(default_verdict);
         }
 
-        if (is_request && ignored_headers.find(static_cast<string>(event.getKey())) != ignored_headers.end()) {
-            dbgTrace(D_HTTP_MANAGER)
-                << "Ignoring header key - "
-                << static_cast<string>(event.getKey())
-                << " - as it is in the ignored headers list";
-            return FilterVerdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
-        }
-
         ScopedContext ctx;
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
 
         HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
         string event_key = static_cast<string>(event.getKey());
+
         if (event_key == getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging")) {
             string event_value = static_cast<string>(event.getValue());
             dbgTrace(D_HTTP_MANAGER)
@@ -421,7 +394,6 @@ private:
     I_Table *i_transaction_table;
     static const ngx_http_cp_verdict_e default_verdict;
     static const string app_sec_marker_key;
-    unordered_set<string> ignored_headers;
 };
 
 const ngx_http_cp_verdict_e HttpManager::Impl::default_verdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);

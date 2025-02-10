@@ -49,7 +49,7 @@ MetricCalc::getAiopsMetrics() const
     string description = getMetircDescription();
     string type = getMetricType() == MetricType::GAUGE ? "Gauge" : "Counter";
 
-    return { AiopsMetricData(name, type, units, description, getBasicLabels(), value) };
+    return { AiopsMetricData(name, type, units, description, getBasicLabels(getMetricName()), value) };
 }
 
 string
@@ -77,7 +77,7 @@ MetricCalc::addMetric(GenericMetric *metric)
 }
 
 vector<PrometheusData>
-MetricCalc::getPrometheusMetrics() const
+MetricCalc::getPrometheusMetrics(const std::string &metric_name, const string &asset_id) const
 {
     float value = getValue();
     if (isnan(value)) return {};
@@ -86,10 +86,10 @@ MetricCalc::getPrometheusMetrics() const
 
     res.name = getMetricDotName() != "" ? getMetricDotName() : getMetricName();
     res.type = getMetricType() == MetricType::GAUGE ? "gauge" : "counter";
-    res.desc = getMetircDescription();
+    res.description = getMetircDescription();
 
     stringstream labels;
-    const auto &label_pairs = getBasicLabels();
+    const auto &label_pairs = getBasicLabels(metric_name, asset_id);
     bool first = true;
     for (auto &pair : label_pairs) {
         if (!first) labels << ',';
@@ -106,7 +106,7 @@ MetricCalc::getPrometheusMetrics() const
 }
 
 map<string, string>
-MetricCalc::getBasicLabels() const
+MetricCalc::getBasicLabels(const string &metric_name, const string &asset_id) const
 {
     map<string, string> res;
 
@@ -120,6 +120,9 @@ MetricCalc::getBasicLabels() const
     auto env = Singleton::Consume<I_Environment>::by<GenericMetric>();
     auto executable = env->get<string>("Base Executable Name");
     if (executable.ok()) res["process"] = *executable;
+
+    if (!asset_id.empty()) res["assetId"] = asset_id;
+    res["metricName"] = metric_name;
 
     return res;
 }
@@ -158,7 +161,8 @@ GenericMetric::init(
     chrono::seconds _report_interval,
     bool _reset,
     Audience _audience,
-    bool _force_buffering
+    bool _force_buffering,
+    const string &_asset_id
 )
 {
     turnOnStream(Stream::FOG);
@@ -173,6 +177,7 @@ GenericMetric::init(
     issuing_engine = _issuing_engine;
     audience = _audience;
     force_buffering = _force_buffering;
+    asset_id = _asset_id;
 
     i_mainloop->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
@@ -185,13 +190,13 @@ GenericMetric::init(
         },
         "Metric Fog stream messaging for " + _metric_name
     );
+    registerListener();
 }
 
 void
 GenericMetric::handleMetricStreamSending()
 {
     if (active_streams.isSet(Stream::DEBUG)) generateDebug();
-    if (active_streams.isSet(Stream::PROMETHEUS)) generatePrometheus();
     if (active_streams.isSet(Stream::FOG)) generateLog();
     if (active_streams.isSet(Stream::AIOPS)) generateAiopsLog();
 
@@ -237,6 +242,7 @@ void
 GenericMetric::addCalc(MetricCalc *calc)
 {
     calcs.push_back(calc);
+    prometheus_calcs.push_back(calc);
 }
 
 void
@@ -252,6 +258,12 @@ GenericMetric::respond(const AllMetricEvent &event)
     auto res = generateReport();
     if (event.getReset()) resetMetrics();
     return res;
+}
+
+vector<PrometheusData>
+GenericMetric::respond(const MetricScrapeEvent &)
+{
+    return getPromMetricsData();
 }
 
 string GenericMetric::getListenerName() const { return metric_name; }
@@ -316,70 +328,19 @@ GenericMetric::generateLog()
     sendLog(metric_client_rest);
 }
 
-class PrometheusRest : public ClientRest
+vector<PrometheusData>
+GenericMetric::getPromMetricsData()
 {
-    class Metric : public ClientRest
-    {
-    public:
-        Metric(const string &n, const string &t, const string &d, const string &l, const string &v)
-                :
-            metric_name(n),
-            metric_type(t),
-            metric_description(d),
-            labels(l),
-            value(v)
-        {}
-
-    private:
-        C2S_PARAM(string, metric_name);
-        C2S_PARAM(string, metric_type);
-        C2S_PARAM(string, metric_description);
-        C2S_PARAM(string, labels);
-        C2S_PARAM(string, value);
-    };
-
-public:
-    PrometheusRest() : metrics(vector<Metric>()) {}
-
-    void
-    addMetric(const vector<PrometheusData> &vec)
-    {
-        auto &metric_vec = metrics.get();
-        metric_vec.reserve(vec.size());
-        for (auto &metric : vec) {
-            metric_vec.emplace_back(metric.name, metric.type, metric.desc, "{" + metric.label + "}", metric.value);
-        }
-    }
-
-private:
-    C2S_PARAM(vector<Metric>, metrics);
-};
-
-void
-GenericMetric::generatePrometheus()
-{
-    if (!getProfileAgentSettingWithDefault(false, "prometheus")) return;
-    dbgTrace(D_METRICS) << "Generate prometheus metric";
-
     vector<PrometheusData> all_metrics;
-    for (auto &calc : calcs) {
-        const auto &cal_metrics = calc->getPrometheusMetrics();
-        all_metrics.insert(all_metrics.end(), cal_metrics.begin(), cal_metrics.end());
+    if (!getProfileAgentSettingWithDefault(false, "prometheus")) return all_metrics;
+    dbgTrace(D_METRICS) << "Get prometheus metrics";
+
+    for (auto &calc : prometheus_calcs) {
+        const auto &calc_prom_metrics = calc->getPrometheusMetrics(metric_name, asset_id);
+        all_metrics.insert(all_metrics.end(), calc_prom_metrics.begin(), calc_prom_metrics.end());
+        calc->reset();
     }
-
-    PrometheusRest rest;
-    rest.addMetric(all_metrics);
-
-    MessageMetadata new_config_req_md("127.0.0.1", 7465);
-    new_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
-    new_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
-    Singleton::Consume<I_Messaging>::by<GenericMetric>()->sendSyncMessage(
-        HTTPMethod::POST,
-        "/add-metrics",
-        rest,
-        MessageCategory::GENERIC,
-        new_config_req_md
-    );
+    return all_metrics;
 }
 
 void

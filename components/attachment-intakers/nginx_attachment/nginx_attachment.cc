@@ -31,6 +31,7 @@
 #include <stdarg.h>
 
 #include <boost/range/iterator_range.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
 
 #include "nginx_attachment_config.h"
@@ -258,6 +259,22 @@ public:
                 },
                 "Nginx Attachment IPC initializer"
             );
+        }
+
+        const char* ignored_headers_env = getenv("SAAS_IGNORED_UPSTREAM_HEADERS");
+        if (ignored_headers_env) {
+            string ignored_headers_str = ignored_headers_env;
+            ignored_headers_str = NGEN::Strings::trim(ignored_headers_str);
+
+            if (!ignored_headers_str.empty()) {
+                dbgInfo(D_HTTP_MANAGER)
+                    << "Ignoring SAAS_IGNORED_UPSTREAM_HEADERS environment variable: "
+                    << ignored_headers_str;
+
+                vector<string> ignored_headers_vec;
+                boost::split(ignored_headers_vec, ignored_headers_str, boost::is_any_of(";"));
+                for (const string &header : ignored_headers_vec) ignored_headers.insert(header);
+            }
         }
 
         dbgInfo(D_NGINX_ATTACHMENT) << "Successfully initialized NGINX Attachment";
@@ -1034,7 +1051,11 @@ private:
             case ChunkType::REQUEST_START:
                 return handleStartTransaction(data, opaque);
             case ChunkType::REQUEST_HEADER:
-                return handleMultiModifiableChunks(NginxParser::parseRequestHeaders(data), "request header", true);
+                return handleMultiModifiableChunks(
+                    NginxParser::parseRequestHeaders(data, ignored_headers),
+                    "request header",
+                    true
+                );
             case ChunkType::REQUEST_BODY:
                 return handleModifiableChunk(NginxParser::parseRequestBody(data), "request body", true);
             case ChunkType::REQUEST_END: {
@@ -1814,6 +1835,7 @@ private:
     HttpAttachmentConfig attachment_config;
     I_MainLoop::RoutineID attachment_routine_id = 0;
     bool traffic_indicator = false;
+    unordered_set<string> ignored_headers;
 
     // Interfaces
     I_Socket *i_socket                              = nullptr;

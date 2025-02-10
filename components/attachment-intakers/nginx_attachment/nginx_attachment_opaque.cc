@@ -19,11 +19,14 @@
 
 #include "config.h"
 #include "virtual_modifiers.h"
+#include "agent_core_utilities.h"
 
 using namespace std;
 using namespace boost::uuids;
 
 USE_DEBUG_FLAG(D_HTTP_MANAGER);
+
+extern bool is_keep_alive_ctx;
 
 NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_data)
         :
@@ -118,4 +121,48 @@ NginxAttachmentOpaque::setSavedData(const string &name, const string &data, EnvK
 {
     saved_data[name] = data;
     ctx.registerValue(name, data, log_ctx);
+}
+
+bool
+NginxAttachmentOpaque::setKeepAliveCtx(const string &hdr_key, const string &hdr_val)
+{
+    if (!is_keep_alive_ctx) return false;
+
+    static pair<string, string> keep_alive_hdr;
+    static bool keep_alive_hdr_initialized = false;
+
+    if (keep_alive_hdr_initialized) {
+        if (!keep_alive_hdr.first.empty() && hdr_key == keep_alive_hdr.first && hdr_val == keep_alive_hdr.second) {
+            dbgTrace(D_HTTP_MANAGER) << "Registering keep alive context";
+            ctx.registerValue("keep_alive_request_ctx", true);
+            return true;
+        }
+        return false;
+    }
+
+    const char* saas_keep_alive_hdr_name_env = getenv("SAAS_KEEP_ALIVE_HDR_NAME");
+    if (saas_keep_alive_hdr_name_env) {
+        keep_alive_hdr.first = NGEN::Strings::trim(saas_keep_alive_hdr_name_env);
+        dbgInfo(D_HTTP_MANAGER) << "Using SAAS_KEEP_ALIVE_HDR_NAME environment variable: " << keep_alive_hdr.first;
+    }
+
+    if (!keep_alive_hdr.first.empty()) {
+        const char* saas_keep_alive_hdr_value_env = getenv("SAAS_KEEP_ALIVE_HDR_VALUE");
+        if (saas_keep_alive_hdr_value_env) {
+            keep_alive_hdr.second = NGEN::Strings::trim(saas_keep_alive_hdr_value_env);
+            dbgInfo(D_HTTP_MANAGER)
+                << "Using SAAS_KEEP_ALIVE_HDR_VALUE environment variable: "
+                << keep_alive_hdr.second;
+        }
+
+        if (!keep_alive_hdr.second.empty() && (hdr_key == keep_alive_hdr.first && hdr_val == keep_alive_hdr.second)) {
+            dbgTrace(D_HTTP_MANAGER) << "Registering keep alive context";
+            ctx.registerValue("keep_alive_request_ctx", true);
+            keep_alive_hdr_initialized = true;
+            return true;
+        }
+    }
+
+    keep_alive_hdr_initialized = true;
+    return false;
 }

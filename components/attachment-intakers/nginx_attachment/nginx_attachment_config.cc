@@ -240,6 +240,21 @@ HttpAttachmentConfig::setRetriesForVerdict()
         "Max retries for verdict"
     ));
 
+    conf_data.setNumericalValue("hold_verdict_retries", getAttachmentConf<uint>(
+        3,
+        "agent.retriesForHoldVerdict.nginxModule",
+        "HTTP manager",
+        "Retries for hold verdict"
+    ));
+
+    conf_data.setNumericalValue("hold_verdict_polling_time", getAttachmentConf<uint>(
+        1,
+        "agent.holdVerdictPollingInterval.nginxModule",
+        "HTTP manager",
+        "Hold verdict polling interval seconds"
+    ));
+
+
     conf_data.setNumericalValue("body_size_trigger", getAttachmentConf<uint>(
         200000,
         "agent.reqBodySizeTrigger.nginxModule",

@@ -48,6 +48,7 @@
 #include "intelligence_comp_v2.h"
 #include "messaging.h"
 #include "env_details.h"
+#include "metric/metric_scraper.h"
 
 USE_DEBUG_FLAG(D_COMP_IS);
 
@@ -216,6 +217,7 @@ class ComponentListCore
         Version,
         Buffer,
         ShellCmd,
+        MetricScraper,
         GenericMetric,
         Messaging,
         MainloopComponent,

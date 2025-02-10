@@ -137,9 +137,13 @@ public:
     void setRemoteSyncEnabled(bool enabled);
 protected:
     void mergeProcessedFromRemote();
+    std::string getWindowId();
+    void waitSync();
     std::string getPostDataUrl();
     std::string getUri();
     size_t getIntervalsCount();
+    void incrementIntervalsCount();
+    bool isBase();
 
     template<typename T>
     bool sendObject(T &obj, HTTPMethod method, std::string uri)
@@ -252,14 +256,13 @@ protected:
     const std::string m_remotePath; // Created from tenentId + / + assetId + / + class
     std::chrono::seconds m_interval;
     std::string m_owner;
+    const std::string m_assetId;
 
 private:
     bool localSyncAndProcess();
     void updateStateFromRemoteService();
     RemoteFilesList getProcessedFilesList();
     RemoteFilesList getRemoteProcessedFilesList();
-    std::string getWindowId();
-    bool isBase();
     std::string getLearningHost();
     std::string getSharedStorageHost();
 
@@ -270,7 +273,6 @@ private:
     size_t m_windowsCount;
     size_t m_intervalsCounter;
     bool m_remoteSyncEnabled;
-    const std::string m_assetId;
     const bool m_isAssetIdUuid;
     std::string m_type;
     std::string m_lastProcessedModified;

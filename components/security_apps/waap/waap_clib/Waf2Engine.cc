@@ -1098,6 +1098,7 @@ void Waf2Transaction::end_request_hdrs() {
         // but the State itself is not needed now
         Waap::Override::State overrideState = getOverrideState(m_siteConfig);
     }
+    m_pWaapAssetState->m_requestsMonitor->logSourceHit(m_source_identifier);
     IdentifiersEvent ids(m_source_identifier, m_pWaapAssetState->m_assetId);
     ids.notify();
     // Read relevant headers and extract meta information such as host name
@@ -1421,6 +1422,15 @@ Waf2Transaction::completeInjectionResponseBody(std::string& strInjection)
         m_responseInjectReasons.setAntibot(false);
     }
 
+    if(m_responseInjectReasons.shouldInjectCaptcha()) {
+        dbgTrace(D_WAAP_BOT_PROTECTION) <<
+            "Waf2Transaction::completeInjectionResponseBody(): Injecting data (captcha)";
+        //todo add captcha script
+        strInjection += "<script src=\"cp-cp.js\"></script>";
+        // No need to inject more than once
+        m_responseInjectReasons.setCaptcha(false);
+    }
+
     if (m_responseInjectReasons.shouldInjectCsrf()) {
         dbgTrace(D_WAAP) << "Waf2Transaction::completeInjectionResponseBody(): Injecting data (csrf)";
         strInjection += "<script src=\"cp-csrf.js\"></script>";
@@ -1646,7 +1656,9 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     const std::shared_ptr<Waap::Trigger::Log> &triggerLog,
     bool shouldBlock,
     const std::string& logOverride,
-    const std::string& incidentType) const
+    const std::string& incidentType,
+    const std::string& practiceID,
+    const std::string& practiceName) const
 {
     auto env = Singleton::Consume<I_Environment>::by<WaapComponent>();
     auto active_id = env->get<std::string>("ActiveTenantId");
@@ -1737,8 +1749,8 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     waapLog << LogField("practiceType", "Threat Prevention");
     waapLog << LogField("practiceSubType", m_siteConfig->get_PracticeSubType());
     waapLog << LogField("ruleName", m_siteConfig->get_RuleName());
-    waapLog << LogField("practiceId", m_siteConfig->get_PracticeId());
-    waapLog << LogField("practiceName", m_siteConfig->get_PracticeName());
+    waapLog << LogField("practiceId", practiceID);
+    waapLog << LogField("practiceName", practiceName);
     waapLog << LogField("waapIncidentType", incidentType);
 
     // Registering this value would append the list of matched override IDs to the unified log
@@ -1805,8 +1817,8 @@ Waf2Transaction::sendLog()
 
     telemetryData.source = getSourceIdentifier();
     telemetryData.assetName = m_siteConfig->get_AssetName();
-    telemetryData.practiceId = m_siteConfig->get_PracticeId();
-    telemetryData.practiceName = m_siteConfig->get_PracticeName();
+    telemetryData.practiceId = m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION);
+    telemetryData.practiceName = m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION);
     if (m_scanResult) {
         telemetryData.attackTypes = m_scanResult->attack_types;
     }
@@ -1947,7 +1959,11 @@ Waf2Transaction::sendLog()
                                 shouldBlock);
 
         LogGen& waap_log = logGenWrapper.getLogGen();
-        appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType);
+        appendCommonLogFields(
+            waap_log, triggerLog, shouldBlock, logOverride, incidentType,
+            m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
+            m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
+        );
         waap_log << LogField("waapIncidentDetails", incidentDetails);
         waap_log << LogField("eventConfidence", "High");
         break;
@@ -1980,7 +1996,11 @@ Waf2Transaction::sendLog()
             waap_log << LogField("waapFoundIndicators", getKeywordMatchesStr(), LogFieldOption::XORANDB64);
         }
 
-        appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType);
+        appendCommonLogFields(
+            waap_log, triggerLog, shouldBlock, logOverride, incidentType,
+            m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
+            m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
+        );
 
         waap_log << LogField("waapIncidentDetails", incidentDetails);
         break;
@@ -1996,7 +2016,11 @@ Waf2Transaction::sendLog()
                                 shouldBlock);
 
         LogGen& waap_log = logGenWrapper.getLogGen();
-        appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, "Cross Site Request Forgery");
+        appendCommonLogFields(
+            waap_log, triggerLog, shouldBlock, logOverride, "Cross Site Request Forgery",
+            m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
+            m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
+        );
         waap_log << LogField("waapIncidentDetails", "CSRF Attack discovered.");
         break;
     }
@@ -2177,19 +2201,13 @@ Waf2Transaction::decideAutonomousSecurity(
     " effective overrides count: " << m_effectiveOverrideIds.size() <<
     " learned overrides count: " << m_exceptionLearned.size();
 
-
-
     bool log_all = false;
     const std::shared_ptr<Waap::Trigger::Policy> triggerPolicy = sitePolicy.get_TriggerPolicy();
     if (triggerPolicy) {
         const std::shared_ptr<Waap::Trigger::Log> triggerLog = getTriggerLog(triggerPolicy);
         if (triggerLog && triggerLog->webRequests) log_all = true;
     }
-    if(decision->getThreatLevel() <= ThreatLevel::THREAT_INFO && !log_all) {
-        decision->setLog(false);
-    } else {
-        decision->setLog(true);
-    }
+
 
     return decision->shouldBlock();
 }
