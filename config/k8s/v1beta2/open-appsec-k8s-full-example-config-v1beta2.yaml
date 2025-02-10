@@ -3,7 +3,7 @@ kind: AccessControlPractice
 metadata:
   name: access-control-practice-example
 spec:
-  practiceMode: prevent
+  practiceMode: inherited
   rateLimit:
     overrideMode: inherited
     rules:
