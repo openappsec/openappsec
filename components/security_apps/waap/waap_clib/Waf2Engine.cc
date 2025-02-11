@@ -1577,7 +1577,7 @@ Waf2Transaction::decideFinal(
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant API configuration from the I/S";
         sitePolicy = &ngenAPIConfig;
         m_overrideState = getOverrideState(sitePolicy);
-
+        shouldBlock = (getUserLimitVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
     }
     else if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant Application configuration from the I/S";
@@ -2208,6 +2208,11 @@ Waf2Transaction::decideAutonomousSecurity(
         if (triggerLog && triggerLog->webRequests) log_all = true;
     }
 
+    if(decision->getThreatLevel() <= ThreatLevel::THREAT_INFO && !log_all) {
+        decision->setLog(false);
+    } else {
+        decision->setLog(true);
+    }
 
     return decision->shouldBlock();
 }
