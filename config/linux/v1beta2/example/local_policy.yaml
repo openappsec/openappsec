@@ -1,0 +1,113 @@
+apiVersion: v1beta2
+
+policies:
+  default:
+    mode: detect-learn
+    accessControlPractices: [access-control-practice-example]
+    threatPreventionPractices: [threat-prevention-practice-example]
+    triggers: [log-trigger-example]
+    customResponse: web-user-response-exmaple
+    sourceIdentifiers: ""
+    trustedSources: ""
+    exceptions:
+      - exception-example
+  specificRules:
+    - host: "example.com"
+      mode: prevent-learn
+      threatPreventionPractices: [threat-prevention-practice-example]
+      accessControlPractices: [access-control-practice-example]
+      triggers: [log-trigger-example]
+      customResponse: web-user-response-exmaple
+      sourceIdentifiers: ""
+      trustedSources: ""
+      exceptions:
+        - exception-example
+
+threatPreventionPractices:
+  - name: threat-prevention-practice-example
+    practiceMode: inherited
+    webAttacks:
+      overrideMode: inherited
+      minimumConfidence: high
+    intrusionPrevention:
+    # intrusion prevention (IPS) requires "Premium Edition"
+      overrideMode: inherited
+      maxPerformanceImpact: medium
+      minSeverityLevel: medium
+      minCveYear: 2016
+      highConfidenceEventAction: inherited
+      mediumConfidenceEventAction: inherited
+      lowConfidenceEventAction: detect
+    fileSecurity:
+    # file security requires "Premium Edition"
+      overrideMode: inherited
+      minSeverityLevel: medium
+      highConfidenceEventAction: inherited
+      mediumConfidenceEventAction: inherited
+      lowConfidenceEventAction: detect
+    snortSignatures:
+      # you must specify snort signatures in configmap or file to activate snort inspection
+      overrideMode: inherited
+      configmap: []
+      # relevant for deployments on kubernetes
+      # 0 or 1 configmaps supported in array
+      files: []
+      # relevant for docker and linux embedded deployments
+      # 0 or 1 files supported in array
+    schemaValidation: # schema validation requires "Premium Edition" 
+      overrideMode: inherited
+      configmap: []
+      # relevant for deployments on kubernetes
+      # 0 or 1 configmaps supported in array
+      files: []
+      # relevant for docker and linux embedded deployments
+      # 0 or 1 files supported in array
+    antiBot: # antibot requires "Premium Edition" 
+      overrideMode: inherited
+      injectedUris: []
+      validatedUris: []
+
+accessControlPractices:
+  - name: access-control-practice-example
+    practiceMode: inherited
+    rateLimit:
+    # specify one or more rules below to use rate limiting
+      overrideMode: inherited
+      rules: []
+
+customResponses:
+  - name: web-user-response-exmaple
+    mode: response-code-only
+    httpResponseCode: 403
+
+logTriggers:
+  - name: log-trigger-example
+    accessControlLogging:
+      allowEvents: false
+      dropEvents: true
+    appsecLogging:
+      detectEvents: true
+      preventEvents: true
+      allWebRequests: false
+    extendedLogging:
+      urlPath: true
+      urlQuery: true
+      httpHeaders: false
+      requestBody: false
+    additionalSuspiciousEventsLogging:
+      enabled: true
+      minSeverity: high
+      responseBody: false
+      responseCode: true
+    logDestination:
+      cloud: true
+      logToAgent: false
+      stdout:
+        format: json
+
+exceptions:
+  - name: exception-example
+    action: "accept"
+    condition:
+      - key: "countryCode"
+        value: "US"
