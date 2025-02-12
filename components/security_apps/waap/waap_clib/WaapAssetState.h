@@ -33,6 +33,7 @@
 #include "KeywordTypeValidator.h"
 #include "ScanResult.h"
 #include "WaapSampleValue.h"
+#include "RequestsMonitor.h"
 
 enum space_stage {SPACE_SYNBOL, BR_SYMBOL, BN_SYMBOL, BRN_SEQUENCE, BNR_SEQUENCE, NO_SPACES};
 
@@ -67,6 +68,8 @@ public:
 
     const std::string m_assetId;
 
+    std::shared_ptr<SourcesRequestMonitor> m_requestsMonitor;
+
     ScoreBuilder scoreBuilder;
     std::shared_ptr<Waap::RateLimiting::State> m_rateLimitingState;
     std::shared_ptr<Waap::RateLimiting::State> m_errorLimitingState;
@@ -90,6 +93,7 @@ public:
     void logIndicatorsInFilters(const std::string &param, Waap::Keywords::KeywordsSet& keywords,
         IWaf2Transaction* pTransaction);
     void logParamHit(Waf2ScanResult& res, IWaf2Transaction* pTransaction);
+    void logSourceHit(const std::string& source);
     void filterKeywords(const std::string &param, Waap::Keywords::KeywordsSet& keywords,
         std::vector<std::string>& filteredKeywords);
     void clearFilterVerbose();

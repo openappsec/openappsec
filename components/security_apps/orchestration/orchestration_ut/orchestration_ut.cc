@@ -83,6 +83,12 @@ public:
         EXPECT_CALL(mock_orchestration_tools, readFile(orchestration_policy_file_path)).WillOnce(Return(response));
         EXPECT_CALL(mock_status, setFogAddress(host_url)).WillRepeatedly(Return());
         EXPECT_CALL(mock_orchestration_tools, setClusterId());
+
+        EXPECT_CALL(
+            mock_ml,
+            addOneTimeRoutine(_, _, "Orchestration successfully updated (One-Time After Interval)", true)
+        ).WillOnce(DoAll(SaveArg<1>(&upgrade_routine), Return(0)));
+
         EXPECT_CALL(
             mock_ml,
             addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Orchestration runner", true)
@@ -282,6 +288,12 @@ public:
     }
 
     void
+    runUpgradeRoutine()
+    {
+        upgrade_routine();
+    }
+
+    void
     preload()
     {
         env.preload();
@@ -359,6 +371,7 @@ private:
 
     I_MainLoop::Routine routine;
     I_MainLoop::Routine status_routine;
+    I_MainLoop::Routine upgrade_routine;
 };
 
 
@@ -601,14 +614,6 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
 
     string version = "1";
     EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
-
-    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
-        .WillOnce(Return())
-        .WillOnce(Invoke([] (chrono::microseconds) { throw invalid_argument("stop while loop"); }));
-    try {
-        runRoutine();
-    } catch (const invalid_argument& e) {}
-
     string config_json =
         "{\n"
         "    \"email-address\": \"fake@example.com\",\n"
@@ -617,9 +622,19 @@ TEST_F(OrchestrationTest, check_sending_registration_data)
 
     istringstream ss(config_json);
     Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([] (chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+    try {
+        runRoutine();
+    } catch (const invalid_argument& e) {}
+
+
     sending_routine();
 
     EXPECT_THAT(message_body, HasSubstr("\"userDefinedId\": \"fake@example.com\""));
+    EXPECT_THAT(message_body, HasSubstr("\"eventCategory\""));
+
     EXPECT_THAT(message_body, AnyOf(HasSubstr("\"Embedded Deployment\""), HasSubstr("\"Kubernetes Deployment\"")));
     EXPECT_THAT(message_body, HasSubstr("\"NGINX Server\""));
 }
@@ -1006,6 +1021,11 @@ TEST_F(OrchestrationTest, loadOrchestrationPolicyFromBackup)
 
     EXPECT_CALL(
         mock_ml,
+        addOneTimeRoutine(_, _, "Orchestration successfully updated (One-Time After Interval)", true)
+    );
+
+    EXPECT_CALL(
+        mock_ml,
         addOneTimeRoutine(I_MainLoop::RoutineType::System, _, "Orchestration runner", true)
     );
 
@@ -1170,6 +1190,29 @@ TEST_F(OrchestrationTest, manifestUpdate)
     try {
         runRoutine();
     } catch (const invalid_argument& e) {}
+
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/upgrade_status")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/last_known_working_orchestrator"))
+        .WillOnce(Return(true));
+
+    Maybe<string> upgrade_status(string("1.1.1 1.1.2 2025-01-28 07:53:23"));
+    EXPECT_CALL(mock_orchestration_tools, readFile("/etc/cp/revert/upgrade_status"))
+        .WillOnce(Return(upgrade_status));
+    EXPECT_CALL(mock_orchestration_tools, removeFile("/etc/cp/revert/upgrade_status")).WillOnce(Return(true));
+
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/revert/failed_upgrade_info"))
+        .WillOnce(Return(false));
+
+    EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("1.1.2"));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(_, "/etc/cp/revert/last_known_working_orchestrator"))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(_, "/etc/cp/revert/last_known_manifest")).WillOnce(Return(true));
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        writeFile("1.1.1 1.1.2 2025-01-28 07:53:23\n", "/var/log/nano_agent/prev_upgrades", true)
+    ).WillOnce(Return(true));
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>())).WillOnce(Return());
+    runUpgradeRoutine();
 }
 
 TEST_F(OrchestrationTest, getBadPolicyUpdate)

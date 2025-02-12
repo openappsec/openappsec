@@ -30,7 +30,8 @@ public:
         HTTPMethod method,
         const std::string &uri,
         const std::map<std::string, std::string> &headers,
-        const std::string &body
+        const std::string &body,
+        const bool should_send_access_token = true
     );
 
     Maybe<void> setConnectionHeaders(const Connection &conn, bool is_access_token_needed);

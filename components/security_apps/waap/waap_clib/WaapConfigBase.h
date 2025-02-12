@@ -39,8 +39,8 @@ public:
     virtual const std::string&   get_AssetId() const;
     virtual const std::string&   get_AssetName() const;
     virtual const BlockingLevel& get_BlockingLevel() const;
-    virtual const std::string&   get_PracticeId() const;
-    virtual const std::string&   get_PracticeName() const;
+    virtual const std::string&   get_PracticeIdByPactice(DecisionType practiceType) const;
+    virtual const std::string&   get_PracticeNameByPactice(DecisionType practiceType) const;
     virtual const std::string&   get_RuleId() const;
     virtual const std::string&   get_RuleName() const;
     virtual const bool&          get_WebAttackMitigation() const;

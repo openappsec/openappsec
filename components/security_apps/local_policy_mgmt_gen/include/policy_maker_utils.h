@@ -206,7 +206,8 @@ private:
         const RulesConfigRulebase& rule_config,
         const std::string &practice_id, const std::string &full_url,
         const std::string &default_mode,
-        std::map<AnnotationTypes, std::string> &rule_annotations
+        std::map<AnnotationTypes, std::string> &rule_annotations,
+        std::vector<InnerException>
     );
 
     void

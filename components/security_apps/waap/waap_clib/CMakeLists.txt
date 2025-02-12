@@ -91,6 +91,7 @@ add_library(waap_clib
     ParserScreenedJson.cc
     ParserBinaryFile.cc
     RegexComparator.cc
+    RequestsMonitor.cc
 )
 
 add_definitions("-Wno-unused-function")

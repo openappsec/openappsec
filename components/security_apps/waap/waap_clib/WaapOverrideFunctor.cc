@@ -89,7 +89,7 @@ bool WaapOverrideFunctor::operator()(
         }
         else if (tagLower == "url") {
             for (const auto &rx : rxes) {
-                if (W2T_REGX_MATCH(getUriStr)) return true;
+                if (W2T_REGX_MATCH(getUri)) return true;
             }
             return false;
         }

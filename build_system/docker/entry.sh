@@ -98,19 +98,19 @@ while true; do
         init=true
         /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
         sleep 5
-        active_watchdog_pid=$(pgrep -f -x -o "/bin/bash /etc/cp/watchdog/cp-nano-watchdog")
+        active_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
     fi
 
-    current_watchdog_pid=$(pgrep -f -x -o "/bin/bash /etc/cp/watchdog/cp-nano-watchdog")
+    current_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
     if [ ! -f /tmp/restart_watchdog ] && [ "$current_watchdog_pid" != "$active_watchdog_pid" ]; then
         echo "Error: Watchdog exited abnormally"
         exit 1
     elif [ -f /tmp/restart_watchdog ]; then
         rm -f /tmp/restart_watchdog
-        kill -9 "$(pgrep -f -x -o "/bin/bash /etc/cp/watchdog/cp-nano-watchdog")"
+        kill -9 "$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")"
         /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
         sleep 5
-        active_watchdog_pid=$(pgrep -f -x -o "/bin/bash /etc/cp/watchdog/cp-nano-watchdog")
+        active_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
     fi
 
     sleep 5

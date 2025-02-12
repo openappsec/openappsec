@@ -45,7 +45,6 @@ public:
 
 private:
     std::string name;
-    std::string mode;
     std::vector<std::string> hosts;
 };
 

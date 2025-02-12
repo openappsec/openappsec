@@ -329,14 +329,37 @@ const std::string& WaapConfigBase::get_AssetName() const
     return m_assetName;
 }
 
-const std::string& WaapConfigBase::get_PracticeId() const
+const std::string& WaapConfigBase::get_PracticeIdByPactice(DecisionType practiceType) const
 {
-    return m_practiceId;
+
+    switch (practiceType)
+    {
+    case DecisionType::AUTONOMOUS_SECURITY_DECISION:
+        return m_practiceId;
+    default:
+        dbgError(D_WAAP)
+        << "Can't find practice type for practice ID by practice: "
+        << practiceType
+        << ", return web app practice ID";
+        return m_practiceId;
+    }
+
 }
 
-const std::string& WaapConfigBase::get_PracticeName() const
+const std::string& WaapConfigBase::get_PracticeNameByPactice(DecisionType practiceType) const
 {
-    return m_practiceName;
+    switch (practiceType)
+    {
+    case DecisionType::AUTONOMOUS_SECURITY_DECISION:
+        return m_practiceName;
+    default:
+        dbgError(D_WAAP)
+        << "Can't find practice type for practice name by practice: "
+        << practiceType
+        << ", return web app practice name";
+        return m_practiceName;
+    }
+
 }
 
 const std::string& WaapConfigBase::get_RuleId() const

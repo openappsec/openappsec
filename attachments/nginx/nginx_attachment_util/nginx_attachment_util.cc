@@ -96,6 +96,18 @@ getFailOpenHoldTimeout()
 }
 
 unsigned int
+getHoldVerdictPollingTime()
+{
+    return conf_data.getNumericalValue("hold_verdict_polling_time");
+}
+
+unsigned int
+getHoldVerdictRetries()
+{
+    return conf_data.getNumericalValue("hold_verdict_retries");
+}
+
+unsigned int
 getMaxSessionsPerMinute()
 {
     return conf_data.getNumericalValue("max_sessions_per_minute");

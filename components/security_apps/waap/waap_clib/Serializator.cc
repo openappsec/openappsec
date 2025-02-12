@@ -407,6 +407,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     m_remotePath(replaceAllCopy(remotePath, "//", "/")),
     m_interval(0),
     m_owner(owner),
+    m_assetId(replaceAllCopy(assetId, "/", "")),
     m_pMainLoop(nullptr),
     m_waitForSync(waitForSync),
     m_workerRoutineId(0),
@@ -414,7 +415,6 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     m_windowsCount(0),
     m_intervalsCounter(0),
     m_remoteSyncEnabled(true),
-    m_assetId(replaceAllCopy(assetId, "/", "")),
     m_isAssetIdUuid(Waap::Util::isUuid(assetId)),
     m_shared_storage_host(genError("not set")),
     m_learning_host(genError("not set"))
@@ -469,6 +469,15 @@ bool SerializeToLocalAndRemoteSyncBase::isBase()
     return m_remotePath == "";
 }
 
+void SerializeToLocalAndRemoteSyncBase::waitSync()
+{
+    if (m_pMainLoop == nullptr)
+    {
+        return;
+    }
+    m_pMainLoop->yield(m_waitForSync);
+}
+
 string SerializeToLocalAndRemoteSyncBase::getUri()
 {
     static const string hybridModeUri = "/api";
@@ -482,6 +491,11 @@ string SerializeToLocalAndRemoteSyncBase::getUri()
 size_t SerializeToLocalAndRemoteSyncBase::getIntervalsCount()
 {
     return m_intervalsCounter;
+}
+
+void SerializeToLocalAndRemoteSyncBase::incrementIntervalsCount()
+{
+    m_intervalsCounter++;
 }
 
 SerializeToLocalAndRemoteSyncBase::~SerializeToLocalAndRemoteSyncBase()
@@ -659,7 +673,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
 {
     dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Running the sync worker for assetId='" << m_assetId << "', owner='" <<
         m_owner << "'" << " last modified state: " << m_lastProcessedModified;
-    m_intervalsCounter++;
+    incrementIntervalsCount();
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
@@ -678,7 +692,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     }
 
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Waiting for all agents to post their data";
-    m_pMainLoop->yield(m_waitForSync);
+    waitSync();
     // check if learning service is operational
     if (m_lastProcessedModified == "")
     {

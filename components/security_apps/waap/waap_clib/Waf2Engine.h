@@ -247,7 +247,9 @@ private:
         const std::shared_ptr<Waap::Trigger::Log> &triggerLog,
         bool shouldBlock,
         const std::string& logOverride,
-        const std::string& incidentType) const;
+        const std::string& incidentType,
+        const std::string& practiceID,
+        const std::string& practiceName) const;
     std::string getUserReputationStr(double relativeReputation) const;
     bool isTrustedSource() const;
 

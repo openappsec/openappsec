@@ -298,7 +298,8 @@ public:
         const AppsecPracticeAntiBotSection &_anti_bots,
         const LogTriggerSection &parsed_log_trigger,
         const AppSecTrustedSources &parsed_trusted_sources,
-        const NewAppSecWebAttackProtections &protections);
+        const NewAppSecWebAttackProtections &protections,
+        const std::vector<InnerException> &exceptions);
 
     void save(cereal::JSONOutputArchive &out_ar) const;
 

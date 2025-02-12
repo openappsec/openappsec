@@ -381,7 +381,11 @@ void Waf2Transaction::sendAutonomousSecurityLog(
         waap_log << LogField("eventConfidence", confidence);
     }
 
-    appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, attackTypes);
+    appendCommonLogFields(
+        waap_log, triggerLog, shouldBlock, logOverride, attackTypes,
+        m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
+        m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
+    );
 
     std::string sampleString = getSample();
     if (sampleString.length() > MAX_LOG_FIELD_SIZE) {

@@ -75,8 +75,15 @@ public:
         port_num(_port_num),
         conn_flags(_conn_flags),
         should_buffer(_should_buffer),
-        is_to_fog(_is_to_fog)
+        is_to_fog(_is_to_fog),
+        should_send_access_token(true)
     {}
+
+    const bool &
+    shouldSendAccessToken() const
+    {
+        return should_send_access_token;
+    }
 
     const std::string &
     getHostName() const
@@ -88,6 +95,12 @@ public:
     getPort() const
     {
         return port_num;
+    }
+
+    void
+    setShouldSendAccessToken(const bool &_should_send_access_token)
+    {
+        should_send_access_token = _should_send_access_token;
     }
 
     void
@@ -300,6 +313,7 @@ private:
     bool is_to_fog = false;
     bool is_rate_limit_block = false;
     uint rate_limit_block_time = 0;
+    bool should_send_access_token = true;
 };
 
 #endif // __MESSAGING_METADATA_H__

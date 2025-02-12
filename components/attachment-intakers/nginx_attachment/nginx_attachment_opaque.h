@@ -85,6 +85,7 @@ public:
         EnvKeyAttr::LogSection log_ctx = EnvKeyAttr::LogSection::NONE
     );
     void setApplicationState(const ApplicationState &app_state) { application_state = app_state; }
+    bool setKeepAliveCtx(const std::string &hdr_key, const std::string &hdr_val);
 
 private:
     CompressionStream       *response_compression_stream;

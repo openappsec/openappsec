@@ -59,10 +59,11 @@ class GenericMetric
     Singleton::Consume<I_Messaging>,
     Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_Encryptor>,
-    public Listener<AllMetricEvent>
+    public Listener<AllMetricEvent>,
+    public Listener<MetricScrapeEvent>
 {
 public:
-    enum class Stream { FOG, DEBUG, PROMETHEUS, AIOPS, COUNT };
+    enum class Stream { FOG, DEBUG, AIOPS, COUNT };
 
     void
     init(
@@ -72,7 +73,8 @@ public:
         std::chrono::seconds _report_interval,
         bool _reset,
         ReportIS::Audience _audience = ReportIS::Audience::INTERNAL,
-        bool _force_buffering = false
+        bool _force_buffering = false,
+        const std::string &_asset_id = ""
     );
 
     template <typename Value>
@@ -96,6 +98,7 @@ public:
     void resetMetrics();
     void upon(const AllMetricEvent &) override;
     std::string respond(const AllMetricEvent &event) override;
+    std::vector<PrometheusData> respond(const MetricScrapeEvent &event) override;
     std::string getListenerName() const override;
 
     std::string getMetricName() const;
@@ -113,9 +116,10 @@ private:
     friend class MetricCalc;
     void addCalc(MetricCalc *calc);
 
+    std::vector<PrometheusData> getPromMetricsData();
+
     void handleMetricStreamSending();
     void generateLog();
-    void generatePrometheus();
     void generateDebug();
     void generateAiopsLog();
 
@@ -127,10 +131,12 @@ private:
     ReportIS::Audience audience;
     std::chrono::seconds report_interval;
     std::vector<MetricCalc *> calcs;
+    std::vector<MetricCalc *> prometheus_calcs;
     Flags<Stream> active_streams;
     bool reset;
     bool force_buffering = false;
     Context ctx;
+    std::string asset_id;
 };
 
 #include "metric/counter.h"

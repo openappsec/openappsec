@@ -36,6 +36,7 @@ public:
     virtual Maybe<std::string> getFogDomain()             const = 0;
     virtual std::string getTenantId()                     const = 0;
     virtual std::string getProfileId()                    const = 0;
+    virtual std::string  getRegisteredServer()            const = 0;
 
     // Agent Details
     virtual Maybe<std::string> getProxy()                             const = 0;
@@ -43,6 +44,7 @@ public:
     virtual void setAgentId(const std::string &_agent_id)                   = 0;
     virtual std::string getAgentId()                                  const = 0;
     virtual void setOrchestrationMode(OrchestrationMode _orchstration_mode) = 0;
+    virtual void setRegisteredServer(const std::string &_server)            = 0;
     virtual OrchestrationMode getOrchestrationMode()                  const = 0;
     virtual std::string getAccessToken()                              const = 0;
     virtual void loadAccessToken()                                          = 0;

@@ -33,6 +33,7 @@ WaapTelemetryBase::sendLog(const LogRest &metric_client_rest) const
     OrchestrationMode mode = Singleton::Consume<I_AgentDetails>::by<GenericMetric>()->getOrchestrationMode();
 
     GenericMetric::sendLog(metric_client_rest);
+    dbgTrace(D_WAAP) << "Waap telemetry log sent: " << metric_client_rest.genJson().unpack();
 
     if (mode == OrchestrationMode::ONLINE) {
         return;
@@ -79,7 +80,16 @@ void
 WaapTelemetrics::updateMetrics(const string &asset_id, const DecisionTelemetryData &data)
 {
     initMetrics();
-    requests.report(1);
+
+    auto is_keep_alive_ctx = Singleton::Consume<I_Environment>::by<GenericMetric>()->get<bool>(
+        "keep_alive_request_ctx"
+    );
+    if (!is_keep_alive_ctx.ok() || !*is_keep_alive_ctx) {
+        requests.report(1);
+    } else {
+        dbgTrace(D_WAAP) << "Not increasing the number of requests due to keep alive";
+    }
+
     if (sources_seen.find(data.source) == sources_seen.end()) {
         if (sources.getCounter() == 0) sources_seen.clear();
         sources_seen.insert(data.source);
@@ -274,7 +284,9 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
                 ReportIS::IssuingEngine::AGENT_CORE,
                 chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
                 true,
-                ReportIS::Audience::INTERNAL
+                ReportIS::Audience::INTERNAL,
+                false,
+                asset_id
             );
             metrics[asset_id]->registerListener();
         }
@@ -286,7 +298,9 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
                 ReportIS::IssuingEngine::AGENT_CORE,
                 chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
                 true,
-                ReportIS::Audience::INTERNAL
+                ReportIS::Audience::INTERNAL,
+                false,
+                asset_id
             );
             attack_types[asset_id]->registerListener();
         }

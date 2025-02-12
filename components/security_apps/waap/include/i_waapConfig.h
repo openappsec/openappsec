@@ -19,11 +19,13 @@
 #include "../waap_clib/WaapParameters.h"
 #include "../waap_clib/WaapOpenRedirectPolicy.h"
 #include "../waap_clib/WaapErrorDisclosurePolicy.h"
+#include "../waap_clib/DecisionType.h"
 #include "../waap_clib/CsrfPolicy.h"
 #include "../waap_clib/UserLimitsPolicy.h"
 #include "../waap_clib/RateLimiting.h"
 #include "../waap_clib/SecurityHeadersPolicy.h"
 #include <memory>
+
 
 enum class BlockingLevel {
     NO_BLOCKING = 0,
@@ -44,8 +46,8 @@ public:
     virtual const std::string&   get_AssetId() const = 0;
     virtual const std::string&   get_AssetName() const = 0;
     virtual const BlockingLevel& get_BlockingLevel() const = 0;
-    virtual const std::string&   get_PracticeId() const = 0;
-    virtual const std::string&   get_PracticeName() const = 0;
+    virtual const std::string&   get_PracticeIdByPactice(DecisionType practiceType) const = 0;
+    virtual const std::string&   get_PracticeNameByPactice(DecisionType practiceType) const = 0;
     virtual const std::string&   get_PracticeSubType() const = 0;
     virtual const std::string&   get_RuleId() const = 0;
     virtual const std::string&   get_RuleName() const = 0;

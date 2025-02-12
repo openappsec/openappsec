@@ -66,6 +66,8 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"static_resources_path\": \"" + static_resources_path + "\",\n"
             "\"min_retries_for_verdict\": 1,\n"
             "\"max_retries_for_verdict\": 3,\n"
+            "\"hold_verdict_retries\": 3,\n"
+            "\"hold_verdict_polling_time\": 1,\n"
             "\"body_size_trigger\": 777,\n"
             "\"remove_server_header\": 1\n"
         "}\n";
@@ -97,6 +99,8 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(getWaitingForVerdictThreadTimeout(), 75u);
     EXPECT_EQ(getInspectionMode(), ngx_http_inspection_mode::BLOCKING_THREAD);
     EXPECT_EQ(getRemoveResServerHeader(), 1u);
+    EXPECT_EQ(getHoldVerdictRetries(), 3u);
+    EXPECT_EQ(getHoldVerdictPollingTime(), 1u);
 
     EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/abc"), 1);
     EXPECT_EQ(isDebugContext("1.2.3.9", "5.6.7.8", 80, "GET", "test", "/abc"), 0);

@@ -30,6 +30,7 @@
 #include "generic_metric.h"
 
 #define LOGGING_INTERVAL_IN_MINUTES 10
+USE_DEBUG_FLAG(D_WAAP);
 enum class AssetType { API, WEB, ALL, COUNT };
 
 class WaapTelemetryEvent : public Event<WaapTelemetryEvent>
@@ -132,6 +133,7 @@ private:
         std::map<std::string, std::shared_ptr<T>>& telemetryMap
     ) {
         if (!telemetryMap.count(asset_id)) {
+            dbgTrace(D_WAAP) << "creating telemetry data for asset: " << data.assetName;
             telemetryMap.emplace(asset_id, std::make_shared<T>());
             telemetryMap[asset_id]->init(
                 telemetryName,
@@ -139,7 +141,9 @@ private:
                 ReportIS::IssuingEngine::AGENT_CORE,
                 std::chrono::minutes(LOGGING_INTERVAL_IN_MINUTES),
                 true,
-                ReportIS::Audience::SECURITY
+                ReportIS::Audience::SECURITY,
+                false,
+                asset_id
             );
 
             telemetryMap[asset_id]->template registerContext<std::string>(
@@ -152,29 +156,30 @@ private:
                 std::string("Web Application"),
                 EnvKeyAttr::LogSection::SOURCE
             );
-            telemetryMap[asset_id]->template registerContext<std::string>(
-                "assetId",
-                asset_id,
-                EnvKeyAttr::LogSection::SOURCE
-            );
-            telemetryMap[asset_id]->template registerContext<std::string>(
-                "assetName",
-                data.assetName,
-                EnvKeyAttr::LogSection::SOURCE
-            );
-            telemetryMap[asset_id]->template registerContext<std::string>(
-                "practiceId",
-                data.practiceId,
-                EnvKeyAttr::LogSection::SOURCE
-            );
-            telemetryMap[asset_id]->template registerContext<std::string>(
-                "practiceName",
-                data.practiceName,
-                EnvKeyAttr::LogSection::SOURCE
-            );
-
             telemetryMap[asset_id]->registerListener();
         }
+        dbgTrace(D_WAAP) << "updating telemetry data for asset: " << data.assetName;
+
+        telemetryMap[asset_id]->template registerContext<std::string>(
+            "assetId",
+            asset_id,
+            EnvKeyAttr::LogSection::SOURCE
+        );
+        telemetryMap[asset_id]->template registerContext<std::string>(
+            "assetName",
+            data.assetName,
+            EnvKeyAttr::LogSection::SOURCE
+        );
+        telemetryMap[asset_id]->template registerContext<std::string>(
+            "practiceId",
+            data.practiceId,
+            EnvKeyAttr::LogSection::SOURCE
+        );
+        telemetryMap[asset_id]->template registerContext<std::string>(
+            "practiceName",
+            data.practiceName,
+            EnvKeyAttr::LogSection::SOURCE
+        );
     }
 };
 

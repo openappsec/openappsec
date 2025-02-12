@@ -11,28 +11,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#ifndef __METRIC_SCRAPER_H__
+#define __METRIC_SCRAPER_H__
 
-namespace Waap {
+#include <string>
+#include <fstream>
+#include <vector>
+#include <streambuf>
 
-class ResponseInjectReasons {
+#include "singleton.h"
+#include "debug.h"
+#include "component.h"
+#include "event.h"
+#include "i_rest_api.h"
+#include "generic_metric.h"
+
+class MetricScraper
+        :
+    public Component,
+    Singleton::Consume<I_RestApi>
+{
 public:
-    ResponseInjectReasons();
-    void clear();
-    bool shouldInject() const;
-    void setAntibot(bool flag);
-    void setCaptcha(bool flag);
-    void setCsrf(bool flag);
-    void setSecurityHeaders(bool flag);
-    bool shouldInjectAntibot() const;
-    bool shouldInjectCaptcha() const;
-    bool shouldInjectCsrf() const;
-    bool shouldInjectSecurityHeaders() const;
+    MetricScraper();
+    ~MetricScraper();
+
+    void init();
+
 private:
-    bool csrf;
-    bool antibot;
-    bool captcha;
-    bool securityHeaders;
+    class Impl;
+    std::unique_ptr<Impl> pimpl;
 };
 
-}
+#endif // __METRIC_SCRAPER_H__

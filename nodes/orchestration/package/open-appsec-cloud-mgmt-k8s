@@ -125,6 +125,20 @@ generate_policy()
         done
     done
 
+    all_policyactivations=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+        -X GET ${APISERVER}/apis/openappsec.io/v1beta2/policyactivations)
+    policyactivation_list=$(echo $all_policyactivations | /etc/cp/bin/yq eval '.items[].metadata.name' -)
+    for policyactivation_name in ${policyactivation_list}; do
+        policyactivation_crd=$(curl -s --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" \
+            -X GET ${APISERVER}/apis/openappsec.io/v1beta2/policyactivations/${policyactivation_name})
+        policyactivation_crd=$(echo $policyactivation_crd | tr -d '\n')
+        if [ "$FIRST" = "0" ]; then
+            POLICY="$POLICY ,"
+        fi
+        POLICY="$POLICY $policyactivation_crd"
+        FIRST="0"
+    done
+
     POLICY="$POLICY ] } } }"
     echo $POLICY > $POLICY_CRDS_PATH
 }

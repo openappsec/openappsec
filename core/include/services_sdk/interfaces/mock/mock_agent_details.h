@@ -20,11 +20,13 @@ public:
     MOCK_CONST_METHOD0(getFogDomain, Maybe<std::string>());
     MOCK_CONST_METHOD0(getTenantId, std::string());
     MOCK_CONST_METHOD0(getProfileId, std::string());
+    MOCK_CONST_METHOD0(getRegisteredServer, std::string());
 
     // Agent Details
     MOCK_CONST_METHOD0(getProxy, Maybe<std::string>());
     MOCK_METHOD1(setProxy, void(const std::string&));
     MOCK_METHOD1(setAgentId, void(const std::string&));
+    MOCK_METHOD1(setRegisteredServer, void(const std::string&));
     MOCK_CONST_METHOD0(getAgentId, std::string());
     MOCK_METHOD0(loadAccessToken, void());
     MOCK_CONST_METHOD0(getAccessToken, std::string());

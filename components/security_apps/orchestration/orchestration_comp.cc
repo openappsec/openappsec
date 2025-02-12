@@ -55,6 +55,8 @@ USE_DEBUG_FLAG(D_ORCHESTRATOR);
 static string fw_last_update_time = "";
 #endif // gaia || smb
 
+static const size_t MAX_SERVER_NAME_LENGTH = 253;
+
 class SetAgentUninstall
         :
     public ServerRest,
@@ -103,6 +105,19 @@ public:
             << "Initializing Orchestration component, file system path prefix: "
             << filesystem_prefix;
 
+        int check_upgrade_success_interval = getSettingWithDefault<uint>(10, "successUpgradeInterval");
+        Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
+            I_MainLoop::RoutineType::Timer,
+            [this, check_upgrade_success_interval]()
+            {
+                Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(
+                    std::chrono::minutes(check_upgrade_success_interval)
+                );
+                processUpgradeCompletion();
+            },
+            "Orchestration successfully updated (One-Time After Interval)",
+            true
+        );
         auto orch_policy = loadDefaultOrchestrationPolicy();
         if (!orch_policy.ok()) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to load Orchestration Policy. Error: " << orch_policy.getErr();
@@ -141,6 +156,113 @@ public:
     }
 
 private:
+    void
+    saveLastKnownOrchInfo(string curr_agent_version)
+    {
+        static const string upgrades_dir = filesystem_prefix + "/revert";
+        static const string last_known_orchestrator = upgrades_dir + "/last_known_working_orchestrator";
+        static const string current_orchestration_package =
+            filesystem_prefix + "/packages/orchestration/orchestration";
+        static const string last_known_manifest = upgrades_dir + "/last_known_manifest";
+        static const string current_manifest_file = getConfigurationWithDefault<string>(
+            filesystem_prefix + "/conf/manifest.json",
+            "orchestration",
+            "Manifest file path"
+        );
+
+        if (!i_orchestration_tools->copyFile(current_orchestration_package, last_known_orchestrator)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to copy the orchestration package to " << upgrades_dir;
+        } else {
+            dbgInfo(D_ORCHESTRATOR) << "last known orchestrator version updated to: " << curr_agent_version;
+        }
+
+        if (!i_orchestration_tools->copyFile(current_manifest_file, last_known_manifest)) {
+            dbgWarning(D_ORCHESTRATOR) << "Failed to copy " << current_manifest_file << " to " << upgrades_dir;
+        } else {
+            dbgInfo(D_ORCHESTRATOR) << "last known manifest updated";
+        }
+        return;
+    }
+
+    void
+    processUpgradeCompletion()
+    {
+        if (!is_first_check_update_success) {
+            int check_upgrade_success_interval = getSettingWithDefault<uint>(10, "successUpgradeInterval");
+            // LCOV_EXCL_START
+            Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->addOneTimeRoutine(
+                I_MainLoop::RoutineType::Timer,
+                [this, check_upgrade_success_interval]()
+                {
+                    Singleton::Consume<I_MainLoop>::by<OrchestrationComp>()->yield(
+                        std::chrono::minutes(check_upgrade_success_interval)
+                    );
+                    processUpgradeCompletion();
+                },
+                "Orchestration successfully updated",
+                true
+            );
+            // LCOV_EXCL_STOP
+            return;
+        }
+
+        static const string upgrades_dir = filesystem_prefix + "/revert";
+        static const string upgrade_status = upgrades_dir + "/upgrade_status";
+        static const string last_known_orchestrator = upgrades_dir + "/last_known_working_orchestrator";
+        static const string upgrade_failure_info_path = upgrades_dir + "/failed_upgrade_info";
+
+        I_DetailsResolver *i_details_resolver = Singleton::Consume<I_DetailsResolver>::by<OrchestrationComp>();
+
+        bool is_upgrade_status_exist = i_orchestration_tools->doesFileExist(upgrade_status);
+        bool is_last_known_orchestrator_exist = i_orchestration_tools->doesFileExist(last_known_orchestrator);
+
+        if (!is_upgrade_status_exist) {
+            if (!is_last_known_orchestrator_exist) {
+                saveLastKnownOrchInfo(i_details_resolver->getAgentVersion());
+            }
+            return;
+        }
+
+        auto maybe_upgrade_data = i_orchestration_tools->readFile(upgrade_status);
+        string upgrade_data, from_version, to_version;
+        if (maybe_upgrade_data.ok()) {
+            upgrade_data = maybe_upgrade_data.unpack();
+            istringstream stream(upgrade_data);
+            stream >> from_version >> to_version;
+        }
+        i_orchestration_tools->removeFile(upgrade_status);
+
+        if (i_orchestration_tools->doesFileExist(upgrade_failure_info_path)) {
+            string info = "Orchestration revert. ";
+            auto failure_info = i_orchestration_tools->readFile(upgrade_failure_info_path);
+            if (failure_info.ok()) info.append(failure_info.unpack());
+            LogGen(
+                info,
+                ReportIS::Level::ACTION,
+                ReportIS::Audience::INTERNAL,
+                ReportIS::Severity::CRITICAL,
+                ReportIS::Priority::URGENT,
+                ReportIS::Tags::ORCHESTRATOR
+            );
+            dbgError(D_ORCHESTRATOR) <<
+                "Error in orchestration version: " << to_version <<
+                ". Orchestration reverted to version: " << i_details_resolver->getAgentVersion();
+            i_orchestration_tools->removeFile(upgrade_failure_info_path);
+            return;
+        }
+
+        saveLastKnownOrchInfo(i_details_resolver->getAgentVersion());
+        i_orchestration_tools->writeFile(
+            upgrade_data + "\n",
+            getLogFilesPathConfig() + "/nano_agent/prev_upgrades",
+            true
+        );
+        dbgWarning(D_ORCHESTRATOR) <<
+            "Upgrade process from version: " << from_version <<
+            " to version: " << to_version <<
+            " completed successfully";
+    }
+
     Maybe<void>
     registerToTheFog()
     {
@@ -1022,6 +1144,7 @@ private:
             UpdatesProcessResult::SUCCESS,
             UpdatesConfigType::GENERAL
         ).notify();
+        if (!is_first_check_update_success) is_first_check_update_success = true;
         return Maybe<void>();
     }
 
@@ -1389,6 +1512,8 @@ private:
 
         agent_data_report << AgentReportFieldWithLabel("userEdition", FogCommunication::getUserEdition());
 
+        agent_data_report << make_pair("registeredServer", i_agent_details->getRegisteredServer());
+
 #if defined(gaia) || defined(smb)
         if (i_details_resolver->compareCheckpointVersion(8100, greater_equal<int>())) {
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER81", "true");
@@ -1403,6 +1528,7 @@ private:
         } else {
             curr_agent_data_report = agent_data_report;
             curr_agent_data_report.disableReportSending();
+            agent_data_report << AgentReportFieldWithLabel("report_timestamp", i_time->getWalltimeStr());
         }
     }
 
@@ -1549,6 +1675,11 @@ private:
             << LogField("agentType", "Orchestration")
             << LogField("agentVersion", Version::get());
 
+        string registered_server = getAttribute("registered-server", "registered_server");
+        dbgTrace(D_ORCHESTRATOR) << "Registered server: " << registered_server;
+        if (!registered_server.empty()) {
+            i_agent_details->setRegisteredServer(registered_server.substr(0, MAX_SERVER_NAME_LENGTH));
+        }
         auto mainloop = Singleton::Consume<I_MainLoop>::by<OrchestrationComp>();
         mainloop->addOneTimeRoutine(
             I_MainLoop::RoutineType::Offline,
@@ -1629,7 +1760,7 @@ private:
             }
         }
 
-        string server_name = getAttribute("registered-server", "registered_server");
+        string server_name = Singleton::Consume<I_AgentDetails>::by<OrchestrationComp>()->getRegisteredServer();
         auto server = TagAndEnumManagement::convertStringToTag(server_name);
         if (server_name == "'SWAG'" || server_name == "'SWAG Server'") server = Tags::WEB_SERVER_SWAG;
         if (server.ok()) tags.insert(*server);
@@ -1653,7 +1784,7 @@ private:
             tags
         );
 
-        if (server_name != "") registration_report.addToOrigin(LogField("eventCategory", server_name));
+        registration_report.addToOrigin(LogField("eventCategory", server_name));
 
         auto email = getAttribute("email-address", "user_email");
         if (email != "") registration_report << LogField("userDefinedId", email);
@@ -2065,6 +2196,7 @@ private:
     int failure_count = 0;
     unsigned int sleep_interval = 0;
     bool is_new_success = false;
+    bool is_first_check_update_success = false;
     OrchestrationPolicy policy;
     UpdatesProcessReporter updates_process_reporter_listener;
     HybridModeMetric hybrid_mode_metric;
@@ -2130,6 +2262,7 @@ OrchestrationComp::preload()
     registerExpectedSetting<vector<string>>("upgradeDay");
     registerExpectedSetting<string>("email-address");
     registerExpectedSetting<string>("registered-server");
+    registerExpectedSetting<uint>("successUpgradeInterval");
     registerExpectedConfigFile("orchestration", Config::ConfigFileType::Policy);
     registerExpectedConfigFile("registration-data", Config::ConfigFileType::Policy);
 }

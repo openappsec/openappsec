@@ -28,7 +28,10 @@ public:
     static Maybe<HttpTransactionData> parseStartTrasaction(const Buffer &data);
     static Maybe<ResponseCode> parseResponseCode(const Buffer &data);
     static Maybe<uint64_t> parseContentLength(const Buffer &data);
-    static Maybe<std::vector<HttpHeader>> parseRequestHeaders(const Buffer &data);
+    static Maybe<std::vector<HttpHeader>> parseRequestHeaders(
+        const Buffer &data,
+        const std::unordered_set<std::string> &ignored_headers
+    );
     static Maybe<std::vector<HttpHeader>> parseResponseHeaders(const Buffer &data);
     static Maybe<HttpBody> parseRequestBody(const Buffer &data);
     static Maybe<HttpBody> parseResponseBody(const Buffer &raw_response_body, CompressionStream *compression_stream);

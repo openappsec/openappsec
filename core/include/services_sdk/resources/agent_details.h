@@ -73,6 +73,7 @@ public:
     Maybe<std::string> getOpenSSLDir()       const;
     std::string getClusterId()               const;
     OrchestrationMode getOrchestrationMode() const;
+    std::string getRegisteredServer()        const;
     bool isOpenAppsecAgent()                 const;
     std::string getAccessToken()             const;
     void loadAccessToken();
@@ -86,6 +87,7 @@ public:
     void setOpenSSLDir(const std::string &_openssl_dir) { openssl_dir = _openssl_dir; }
     void setSSLFlag(const bool _encrypted_connection)   { encrypted_connection  = _encrypted_connection; }
     void setOrchestrationMode(OrchestrationMode _orchstration_mode)  { orchestration_mode = _orchstration_mode; }
+    void setRegisteredServer(const std::string &_server) { server = _server; }
     bool getSSLFlag() const                             { return encrypted_connection; }
 
     bool readAgentDetails();
@@ -117,6 +119,7 @@ private:
     uint16_t fog_port           = 0;
     bool encrypted_connection   = false;
     OrchestrationMode orchestration_mode = OrchestrationMode::ONLINE;
+    std::string server          = "Unknown";
     bool is_proxy_configured_via_settings = false;
     std::map<ProxyProtocol, ProxyData> proxies;
 

@@ -377,9 +377,13 @@ FogAuthenticator::registerLocalAgentToFog()
 {
     auto local_reg_token = getRegistrationToken();
     if (!local_reg_token.ok()) return;
+
+    string reg_token = local_reg_token.unpack().getData();
+    if (reg_token.empty()) return;
+
     dbgInfo(D_ORCHESTRATOR) << "Start local agent registration to the fog";
 
-    string exec_command = "open-appsec-ctl --set-mode --online_mode --token " + local_reg_token.unpack().getData();
+    string exec_command = "open-appsec-ctl --set-mode --online_mode --token " + reg_token;
 
     auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<FogAuthenticator>();
     auto fog_address = i_agent_details->getFogDomain();
