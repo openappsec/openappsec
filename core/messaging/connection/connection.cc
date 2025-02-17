@@ -184,18 +184,6 @@ public:
     establishConnection()
     {
         dbgFlow(D_CONNECTION) << "Establishing a new connection";
-        // check if connection already established
-        I_MainLoop *i_mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
-        while (lock) {
-            i_mainloop->yield(true);
-        }
-        lock = true;
-        auto unlock = make_scope_exit([&] () { lock = false; });
-
-        if (is_connected && !should_close_connection) {
-            dbgTrace(D_CONNECTION) << "Connection already established";
-            return Maybe<void>();
-        }
         auto set_socket = setSocket();
         if (!set_socket.ok()) {
             dbgWarning(D_CONNECTION) << "Failed to set socket: " << set_socket.getErr();
@@ -233,7 +221,6 @@ public:
             << (isOverProxy() ? ", Over proxy: " + settings.getProxyHost() + ":" + to_string(key.getPort()) : "");
         active = Maybe<void, chrono::seconds>();
         should_close_connection = false;
-        is_connected = true;
         return Maybe<void>();
     }
 
@@ -596,13 +583,11 @@ private:
 
         if (BIO_should_retry(bio.get())) return string();
 
-        auto fd = BIO_get_fd(bio.get(), nullptr);
-
         char error_buf[256];
         ERR_error_string(ERR_get_error(), error_buf);
         string error = receive_len == 0 ?
-            "Connection closed by peer (BIO fd: " + to_string(fd) + "). Error: " + string(error_buf) :
-            "Failed to read data from BIO socket (fd: " + to_string(fd) + "). Error: " + string(error_buf);
+            "Connection closed by peer" :
+            "Failed to read data from BIO socket. Error: " + string(error_buf);
         dbgWarning(D_CONNECTION) << error;
         return genError(HTTPResponse(HTTPStatusCode::HTTP_UNKNOWN, error));
     }
@@ -636,28 +621,17 @@ private:
     Maybe<HTTPResponse, HTTPResponse>
     sendAndReceiveData(const string &request, bool is_connect)
     {
-        dbgFlow(D_CONNECTION) << "Sending and receiving data, lock: " << lock;
+        dbgFlow(D_CONNECTION) << "Sending and receiving data";
         I_MainLoop *i_mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
-        while (lock && !is_connect) {
+        while (lock) {
             i_mainloop->yield(true);
         }
         lock = true;
-        dbgTrace(D_CONNECTION) << "acquire lock";
-        auto unlock = make_scope_exit([&] () {
-            lock = false;
-        });
+        auto unlock = make_scope_exit([&] () { lock = false; });
 
         if (should_close_connection) {
-            dbgTrace(D_CONNECTION) << "reconnect in progress";
-            while (lock) {
-                i_mainloop->yield(true);
-            }
-            if (!is_connected) {
-                dbgWarning(D_CONNECTION) << close_error.getBody();
-                return genError(close_error);
-            }
-            dbgTrace(D_CONNECTION) << "reconnected by other routine";
-            lock = true;
+            dbgWarning(D_CONNECTION) << close_error.getBody();
+            return genError(close_error);
         }
 
         I_TimeGet *i_time = Singleton::Consume<I_TimeGet>::by<Messaging>();
@@ -677,13 +651,11 @@ private:
         dbgTrace(D_CONNECTION) << "Sent the message, now waiting for response";
         while (!http_parser.hasReachedError()) {
             if (i_time->getMonotonicTime() > receiving_end_time) {
-                is_connected = false;
                 should_close_connection = true;
                 return genError(receving_timeout);
             };
             auto receieved = receiveData();
             if (!receieved.ok()) {
-                is_connected = false;
                 should_close_connection = true;
                 return receieved.passErr();
             }
@@ -734,7 +706,6 @@ private:
     bool lock = false;
     bool should_close_connection = false;
     bool is_dual_auth = false;
-    bool is_connected = false;
     Maybe<string> sni_hostname = genError<string>("Uninitialized");
     Maybe<string> dn_host_name = genError<string>("Uninitialized");
 

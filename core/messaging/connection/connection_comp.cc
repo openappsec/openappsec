@@ -92,12 +92,12 @@ private:
             << metadata.getPort();
         MessageConnectionKey conn_key(metadata.getHostName(), metadata.getPort(), category);
         Connection conn(conn_key, metadata);
-        persistent_connections.emplace(conn_key, conn);
 
         const auto &external_certificate = metadata.getExternalCertificate();
         if (!external_certificate.empty()) conn.setExternalCertificate(external_certificate);
 
         auto connected = conn.establishConnection();
+        persistent_connections.emplace(conn_key, conn);
 
         if (!connected.ok()) {
             string connection_err = "Failed to establish connection. Error: " + connected.getErr();
