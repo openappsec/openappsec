@@ -11,3 +11,58 @@ spec:
         source-identifiers: ""
         trusted-sources: ""
         exceptions: []
+---
+apiVersion: openappsec.io/v1beta1
+kind: LogTrigger
+metadata:
+    name: appsec-log-trigger
+spec:
+    access-control-logging:
+        allow-events: false
+        drop-events: true
+    appsec-logging:
+        detect-events: false
+        prevent-events: true
+        all-web-requests: false
+    additional-suspicious-events-logging:
+        enabled: true
+        minimum-severity: high
+        response-body: false
+    extended-logging:
+        url-path: false
+        url-query: false
+        http-headers: false
+        request-body: false
+    log-destination:
+        cloud: true
+        syslog-service: []
+        file: ""
+        stdout:
+            format: json
+        cef-service: []
+--
+apiVersion: openappsec.io/v1beta1
+kind: Practice
+metadata:
+  name: appsec-best-practice
+spec:
+  anti-bot:
+    injected-URIs: []
+    validated-URIs: []
+  openapi-schema-validation:
+    configmap: []
+  snort-signatures:
+    configmap: []
+  web-attacks:
+    minimum-confidence: high
+    override-mode: detect-learn
+--
+apiVersion: openappsec.io/v1beta1
+kind: CustomResponse
+metadata:
+  name: 403-forbidden
+spec:
+  http-response-code: 403
+  message-body: ""
+  message-title: ""
+  mode: response-code-only
