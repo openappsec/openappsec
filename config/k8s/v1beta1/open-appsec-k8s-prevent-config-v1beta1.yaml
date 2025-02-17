@@ -15,7 +15,7 @@ spec:
 apiVersion: openappsec.io/v1beta1
 kind: LogTrigger
 metadata:
-    name: appsec-log-trigger-cloud
+    name: appsec-log-trigger
 spec:
     access-control-logging:
         allow-events: false
