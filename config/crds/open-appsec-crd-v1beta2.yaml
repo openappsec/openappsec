@@ -1173,3 +1173,46 @@ spec:
     kind: TrustedSource
     shortNames:
       - trustedsource
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata :
+  name: policyactivations.openappsec.io
+spec:
+  group: openappsec.io
+  versions:
+    - name: v1beta2
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                appsecClassName:
+                  type: string
+                enabledPolicies:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      hosts:
+                        type: array
+                        items:
+                          type: string
+                    required:
+                      - hosts
+              required:
+                - enabledPolicies
+  scope: Cluster
+  names:
+    plural: policyactivations
+    singular: policyactivation
+    kind: PolicyActivation
+    shortNames:
+      - policyactivation
