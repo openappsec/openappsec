@@ -112,7 +112,7 @@ spec:
     responseCode: true
   logDestination:
     cloud: true
-    logToAgent: false
+    logToAgent: true
     stdout:
       format: json
     
