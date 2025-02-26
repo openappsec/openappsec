@@ -17,16 +17,6 @@ spec:
     customResponse: default-web-user-response
     triggers:
     - default-log-trigger
-  specificRules:
-    - host: www.example.com
-      # this is an example for specific rule, adjust the values as required for the protected app
-      mode: prevent-learn
-      threatPreventionPractices:
-      - default-threat-prevention-practice
-      accessControlPractices:
-      - default-access-control-practice
-      triggers:
-      - default-log-trigger
 ---
 apiVersion: openappsec.io/v1beta2
 kind: ThreatPreventionPractice
