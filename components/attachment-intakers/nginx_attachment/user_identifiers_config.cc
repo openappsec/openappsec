@@ -285,17 +285,21 @@ Maybe<string>
 UsersAllIdentifiersConfig::parseXForwardedFor(const string &str, ExtractType type) const
 {
     vector<string> header_values = split(str);
-
     if (header_values.empty()) return genError("No IP found in the xff header list");
 
     vector<string> xff_values = getHeaderValuesFromConfig("x-forwarded-for");
     vector<CIDRSData> cidr_values(xff_values.begin(), xff_values.end());
+    string last_valid_ip;
 
     for (auto it = header_values.rbegin(); it != header_values.rend() - 1; ++it) {
         if (!IPAddr::createIPAddr(*it).ok()) {
             dbgWarning(D_NGINX_ATTACHMENT_PARSER) << "Invalid IP address found in the xff header IPs list: " << *it;
-            return genError("Invalid IP address");
+            if (last_valid_ip.empty()) {
+                return genError("Invalid IP address");
+            }
+            return last_valid_ip;
         }
+        last_valid_ip = *it;
         if (type == ExtractType::PROXYIP) continue;
         if (!isIpTrusted(*it, cidr_values)) {
             dbgDebug(D_NGINX_ATTACHMENT_PARSER) << "Found untrusted IP in the xff header IPs list: " << *it;
@@ -307,7 +311,10 @@ UsersAllIdentifiersConfig::parseXForwardedFor(const string &str, ExtractType typ
         dbgWarning(D_NGINX_ATTACHMENT_PARSER)
             << "Invalid IP address found in the xff header IPs list: "
             << header_values[0];
-        return genError("Invalid IP address");
+        if (last_valid_ip.empty()) {
+            return genError("No Valid Ip address was found");
+        }
+        return last_valid_ip;
     }
 
     return header_values[0];

@@ -110,8 +110,14 @@ if [ $retval -eq 0 ]; then
 fi
 
 if [ $var_gaia_release -eq 0 ] || [ $var_mds_release -eq 0 ]; then
-    var_arch="gaia"
-    var_arch_flag="--gaia"
+    arch=$(uname -a | awk '{print $(NF -1) }')
+    if test "${arch}" == "aarch64"; then
+        var_arch="gaia_arm"
+        var_arch_flag="--gaia_arm"
+    else
+        var_arch="gaia"
+        var_arch_flag="--gaia"
+    fi
 elif [ $var_alpine_release -eq 0 ]; then
     var_is_alpine=true
 else
@@ -322,7 +328,7 @@ while true; do
             LOG_FILE_PATH=$1
         fi
         echo "Log files path: ${LOG_FILE_PATH}"
-    elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--smb_sve_v2" ] || [ "$1" = "--smb_thx_v3" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
+    elif [ "$1" = "--arm64_trustbox" ] || [ "$1" = "--arm64_linaro" ] || [ "$1" = "--arm32_rpi" ] || [ "$1" = "--gaia" ] || [ "$1" = "--gaia_arm" ] || [ "$1" = "--smb_mrv_v1" ] || [ "$1" = "--smb_sve_v2" ] || [ "$1" = "--smb_thx_v3" ] || [ "$1" = "--x86" ] || [ "$1" = "./orchestration_package.sh" ]; then
         shift
 		continue
     elif [ "$1" = "--skip_registration" ]; then
@@ -416,7 +422,7 @@ if command -v which &>/dev/null; then
     var_which_cmd_exists=1
 fi
 
-if [ $var_arch != "gaia" ] && [ $var_which_cmd_exists -eq 1 ]; then
+if [ $var_arch != "gaia" ] && [ $var_arch != "gaia_arm" ] && [ $var_which_cmd_exists -eq 1 ]; then 
     if [ -n "$(which systemctl)" ]; then
         var_startup_service="systemd"
     else
@@ -490,12 +496,12 @@ cp_copy() # Initials - cc
 
 update_cloudguard_appsec_manifest()
 {
-    if [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; then
+    if [ -z ${INFINITY_NEXT_NANO_AGENT} ] && { [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; }; then
         return
     fi
 
     selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/cloudguard_appsec_manifest.json"
-    if [ "${DOCKER_RPM_ENABLED}" = "false" ]; then
+    if [ "${DOCKER_RPM_ENABLED}" = "false" ] || [ "${INFINITY_NEXT_NANO_AGENT}" = "TRUE" ]; then
         selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/self_managed_cloudguard_appsec_manifest.json"
     fi
 
@@ -564,7 +570,7 @@ install_watchdog_gaia()
     # Add cp-nano-watchdog to DB
     dbset process:${watchdog_pm_name} t
     dbset process:${watchdog_pm_name}:path ${FILESYSTEM_PATH}/${WATCHDOG_PATH}
-    dbset process:${watchdog_pm_name}:arg:1 --gaia
+    dbset process:${watchdog_pm_name}:arg:1 ${var_arch_flag}
     dbset process:${watchdog_pm_name}:runlevel 1
     dbset :save
     tellpm ${watchdog_pm_name} t
@@ -616,7 +622,7 @@ install_watchdog()
         cp_copy service/smb/nano_agent.init /storage/nano_agent/etc/nano_agent.init
         chmod +rx /storage/nano_agent/etc/nano_agent.init
     elif [ $var_container_mode = false ]; then
-        if [ $var_arch = "gaia" ]; then
+        if [ $var_arch = "gaia" ] || [ $var_arch = "gaia_arm" ]; then
             cp_exec "ln -s ${FWDIR}/bin/curl_cli ${FWDIR}/bin/curl"
             cp_exec "ln -s ${CPDIR}/bin/cpopenssl ${CPDIR}/bin/openssl"
             cp_copy watchdog/access_pre_init $INIT_D_PATH/access_pre_init
@@ -657,7 +663,7 @@ install_watchdog()
             cp_exec "$INIT_D_PATH/nano_agent.init start"
         elif [ "$is_smb" = "1" ]; then
             cp_exec "/storage/nano_agent/etc/nano_agent.init start"
-        elif [ $var_arch = "gaia" ]; then
+        elif [ $var_arch = "gaia" ] || [ $var_arch = "gaia_arm" ]; then
             install_watchdog_gaia
         else
             cp_exec "service $NANO_AGENT_SERVICE_NAME start"
@@ -785,7 +791,7 @@ upgrade_conf_if_needed()
         cp_exec "cp -f configuration/orchestration.cfg ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
         execution_flags="execution_flags=\"--orchestration-mode=${var_orchestration_mode}\""
         echo $execution_flags >> ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg
-        if [ $var_arch = "gaia" -o "$is_smb" = "1" ]; then
+        if [ $var_arch = "gaia" -o $var_arch = "gaia_arm" -o "$is_smb" = "1" ]; then
             if [ -z "${gaia_ld_path}" ]; then
                 gaia_ld_path="${LD_LIBRARY_PATH}"
             fi
@@ -1001,7 +1007,7 @@ install_orchestration()
         cp_exec "cp -f configuration/orchestration.cfg ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
         execution_flags="execution_flags=\"--orchestration-mode=${var_orchestration_mode}\""
         echo $execution_flags >> ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg
-        if [ $var_arch = "gaia" -o "$is_smb" = "1" ]; then
+        if [ $var_arch = "gaia" -o $var_arch = "gaia_arm" -o "$is_smb" = "1" ]; then
             if [ -z "${gaia_ld_path}" ]; then
                 gaia_ld_path="${LD_LIBRARY_PATH}"
             fi
@@ -1101,7 +1107,14 @@ install_orchestration()
     if [ -z "${var_token}" ] && [ ${var_hybrid_mode} = false ] && [ ${var_offline_mode} = false ] && [ -z ${EGG_MODE} ] && [ ${var_no_otp} = false ]; then
         cp_print "Please enter OTP token []:" ${FORCE_STDOUT}
         read -r var_token
+        attempts=0
+        max_attempts=3
         while [ -z "$var_token" ]; do
+            attempts=$((attempts + 1))
+            if [ "$attempts" -gt "$max_attempts" ]; then
+                cp_print "Maximum attempts exceeded. open-appsec Nano Agent registration failed. Failed to get token" ${FORCE_STDOUT}
+                exit 1
+            fi
             cp_print "You must enter OTP token[]:" ${FORCE_STDOUT}
             read -r var_token
         done
@@ -1201,7 +1214,7 @@ install_orchestration()
 
     execution_flags="execution_flags=\"--orchestration-mode=${var_orchestration_mode}\""
     echo $execution_flags >> ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg
-    if [ $var_arch = "gaia" -o "$is_smb" = "1" ]; then
+    if [ $var_arch = "gaia" -o $var_arch = "gaia_arm" -o "$is_smb" = "1" ]; then
         sed -i '1i gaia_ld_path='"$LD_LIBRARY_PATH"'' ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg
     fi
 

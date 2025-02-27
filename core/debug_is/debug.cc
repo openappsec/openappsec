@@ -527,7 +527,7 @@ Debug::preload()
     active_streams["FOG"] = make_shared<DebugFogStream>();
 
     string branch = Version::getBranch();
-    if (branch == "master" || branch.substr(0, 6) == "hotfix") {
+    if (branch == "open-source" || branch == "master" || branch.substr(0, 6) == "hotfix") {
         should_assert_optional = false;
     } else {
         should_assert_optional = true;

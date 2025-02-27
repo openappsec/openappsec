@@ -617,6 +617,17 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
 
 bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
 {
+    bool isBackupSyncEnabled = getProfileAgentSettingWithDefault<bool>(
+        true,
+        "appsecLearningSettings.backupLocalSync");
+
+    if (!isBackupSyncEnabled) {
+        dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Local sync is disabled";
+        processData();
+        saveData();
+        return true;
+    }
+
     RemoteFilesList rawDataFiles;
 
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Getting files of all agents";

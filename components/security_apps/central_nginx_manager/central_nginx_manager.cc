@@ -179,7 +179,7 @@ private:
     Maybe<void>
     configureSyslog()
     {
-        if (!getProfileAgentSettingWithDefault<bool>(true, "centralNginxManagement.syslogEnabled")) {
+        if (!getProfileAgentSettingWithDefault<bool>(false, "centralNginxManagement.syslogEnabled")) {
             dbgTrace(D_NGINX_MANAGER) << "Syslog is disabled via settings";
             return {};
         }
@@ -331,6 +331,8 @@ public:
             logError("Could not reload central NGINX configuration. Error: " + reload_result.getErr());
             return;
         }
+
+        logInfo("Central NGINX configuration has been successfully reloaded");
     }
 
     void
@@ -351,11 +353,37 @@ private:
     {
         LogGen log(
             error,
+            ReportIS::Level::ACTION,
             ReportIS::Audience::SECURITY,
             ReportIS::Severity::CRITICAL,
-            ReportIS::Priority::HIGH,
+            ReportIS::Priority::URGENT,
             ReportIS::Tags::POLICY_INSTALLATION
         );
+
+        log.addToOrigin(LogField("eventTopic", "Central NGINX Management"));
+        log << LogField("notificationId", "4165c3b1-e9bc-44c3-888b-863e204c1bfb");
+        log << LogField(
+            "eventRemediation",
+            "Please verify your NGINX configuration and enforce policy again. "
+            "Contact Check Point support if the issue persists."
+        );
+    }
+
+    void
+    logInfo(const string &info)
+    {
+        LogGen log(
+            info,
+            ReportIS::Level::ACTION,
+            ReportIS::Audience::SECURITY,
+            ReportIS::Severity::INFO,
+            ReportIS::Priority::LOW,
+            ReportIS::Tags::POLICY_INSTALLATION
+        );
+
+        log.addToOrigin(LogField("eventTopic", "Central NGINX Management"));
+        log << LogField("notificationId", "4165c3b1-e9bc-44c3-888b-863e204c1bfb");
+        log << LogField("eventRemediation", "No action required");
     }
 
     I_MainLoop *i_mainloop = nullptr;

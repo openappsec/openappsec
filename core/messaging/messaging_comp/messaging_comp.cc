@@ -125,7 +125,9 @@ MessagingComp::sendMessage(
     }
 
     Connection conn = maybe_conn.unpack();
-    if (conn.isSuspended()) return suspendMessage(body, method, uri, category, message_metadata);
+    if (message_metadata.shouldSuspend() && conn.isSuspended()) {
+        return suspendMessage(body, method, uri, category, message_metadata);
+    }
 
     bool is_to_fog = isMessageToFog(message_metadata);
     auto metadata = message_metadata;

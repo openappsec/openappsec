@@ -42,11 +42,6 @@ SHELL_PRE_CMD("gunzip local.cfg", "gunzip -c $FWDIR/state/local/FW1/local.cfg.gz
 #ifdef SHELL_CMD_HANDLER
 #if defined(gaia) || defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_CMD_HANDLER("cpProductIntegrationMgmtObjectType", "cpprod_util CPPROD_IsMgmtMachine", getMgmtObjType)
-SHELL_CMD_HANDLER(
-    "cpProductIntegrationMgmtObjectUid",
-    "mgmt_cli --format json -r true show-session | jq -r '.[\"connected-server\"].uid'",
-    getMgmtObjUid
-)
 SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
     "FS_PATH=<FILESYSTEM-PREFIX>; [ -f ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log ] "
     "&& head -1 ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
@@ -150,11 +145,16 @@ SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedB
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
 SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
 SHELL_CMD_HANDLER("hasIdaIdnEnabled", "fw ctl get int nac_pep_identity_next_enabled", checkPepIdaIdnStatus)
-SHELL_CMD_HANDLER("requiredNanoServices", "echo 'idaSaml_gaia;idaIdn_gaia;'", getRequiredNanoServices)
+SHELL_CMD_HANDLER("requiredNanoServices", "echo ida", getRequiredNanoServices)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtObjectName",
     "mgmt_cli --format json -r true show-session | jq -r '.[\"connected-server\"].name'",
     getMgmtObjName
+)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtObjectUid",
+    "mgmt_cli --format json -r true show-session | jq -r '.[\"connected-server\"].uid'",
+    getMgmtObjUid
 )
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectName",
@@ -226,6 +226,11 @@ SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtObjectName",
     "cpprod_util FwIsLocalMgmt",
     getSmbObjectName
+)
+SHELL_CMD_HANDLER(
+    "cpProductIntegrationMgmtObjectUid",
+    "cpprod_util FwIsLocalMgmt",
+    getSmbObjectUid
 )
 SHELL_CMD_HANDLER(
     "Application Control",

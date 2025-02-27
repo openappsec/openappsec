@@ -97,7 +97,9 @@ calcIndividualKeywords(
     std::sort(keywords.begin(), keywords.end());
 
     for (auto pKeyword = keywords.begin(); pKeyword != keywords.end(); ++pKeyword) {
-        addKeywordScore(scoreBuilder, poolName, *pKeyword, 2.0f, 0.3f, scoresArray, coefArray);
+        addKeywordScore(
+            scoreBuilder, poolName, *pKeyword, DEFAULT_KEYWORD_SCORE, DEFAULT_KEYWORD_COEF, scoresArray, coefArray
+        );
     }
 }
 
@@ -112,8 +114,6 @@ calcCombinations(
     std::vector<std::string>& keyword_combinations)
 {
     keyword_combinations.clear();
-    static const double max_combi_score = 1.0f;
-    double default_coef = 0.8f;
 
     for (size_t i = 0; i < keyword_matches.size(); ++i) {
         std::vector<std::string> combinations;
@@ -137,8 +137,10 @@ calcCombinations(
                 default_score += scoreBuilder.getSnapshotKeywordScore(*it, 0.0f, poolName);
             }
             // set default combination score to be the sum of its keywords, bounded by 1
-            default_score = std::min(default_score, max_combi_score);
-            addKeywordScore(scoreBuilder, poolName, combination, default_score, default_coef, scoresArray, coefArray);
+            default_score = std::min(default_score, DEFAULT_COMBI_SCORE);
+            addKeywordScore(
+                scoreBuilder, poolName, combination, default_score, DEFAULT_COMBI_COEF, scoresArray, coefArray
+            );
             keyword_combinations.push_back(combination);
         }
     }
@@ -155,7 +157,7 @@ calcArrayScore(std::vector<double>& scoreArray)
                                                     // *pScore is always positive and there's a +10 offset
         score = 10.0f - left * 10.0f / divisor;
     }
-    dbgTrace(D_WAAP_SCORE_BUILDER) << "calculated score: " << score;
+    dbgDebug(D_WAAP_SCORE_BUILDER) << "calculated score: " << score;
     return score;
 }
 
@@ -171,7 +173,9 @@ calcLogisticRegressionScore(std::vector<double> &coefArray, double intercept, do
     }
     // Apply the expit function to the log-odds to obtain the probability,
     // and multiply by 10 to obtain a 'score' in the range [0, 10]
-    return 1.0f / (1.0f + exp(-log_odds)) * 10.0f;
+    double score = 1.0f / (1.0f + exp(-log_odds)) * 10.0f;
+    dbgDebug(D_WAAP_SCORE_BUILDER) << "calculated score (log_odds): " << score << " (" << log_odds << ")";
+    return score;
 }
 
 }

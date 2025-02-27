@@ -28,6 +28,7 @@ public:
     void pop(const char* log, bool countDepth=true);
     bool empty() const { return m_key.empty(); }
     void clear() { m_key.clear(); m_stack.clear(); }
+    void print(std::ostream &os) const;
     size_t depth() const { return m_nameDepth; }
     size_t size() const {
         return str().size();

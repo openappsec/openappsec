@@ -34,7 +34,6 @@ private:
     enum state {
         s_start,
         s_body,
-        s_end,
         s_error
     };
 
@@ -42,6 +41,7 @@ private:
     enum state m_state;
     static const std::string m_parserName;
     size_t m_parser_depth;
+    size_t m_tailOffset = 0;
 };
 
 #endif // __PARSER_PDF_H__
