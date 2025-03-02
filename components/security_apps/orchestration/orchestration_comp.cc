@@ -1470,9 +1470,10 @@ private:
             string cc_opt;
             tie(config_opt, cc_opt, nginx_version) = nginx_data.unpack();
             agent_data_report
-                << make_pair("nginxVersion",     nginx_version)
-                << make_pair("configureOpt",     config_opt)
-                << make_pair("extraCompilerOpt", cc_opt);
+                << make_pair("attachmentVersion", "Legacy")
+                << make_pair("nginxVersion",      nginx_version)
+                << make_pair("configureOpt",      config_opt)
+                << make_pair("extraCompilerOpt",  cc_opt);
         } else {
             dbgDebug(D_ORCHESTRATOR) << nginx_data.getErr();
         }
@@ -1528,7 +1529,7 @@ private:
         } else {
             curr_agent_data_report = agent_data_report;
             curr_agent_data_report.disableReportSending();
-            agent_data_report << AgentReportFieldWithLabel("report_timestamp", i_time->getWalltimeStr());
+            agent_data_report << AgentReportFieldWithLabel("timestamp", i_time->getWalltimeStr());
         }
     }
 

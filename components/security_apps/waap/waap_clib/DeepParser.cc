@@ -113,6 +113,9 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
         << parser_depth
         << " v_len = "
         << v_len;
+
+    dbgTrace(D_WAAP_DEEP_PARSER) << m_key;
+
     // Decide whether to push/pop the value in the keystack.
     bool shouldUpdateKeyStack = (flags & BUFFERED_RECEIVER_F_UNNAMED) == 0;
 
@@ -275,13 +278,23 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     // Detect and decode potential base64 chunks in the value before further processing
 
     bool base64ParamFound = false;
+    size_t base64_offset = 0;
     Waap::Util::BinaryFileType base64BinaryFileType = Waap::Util::BinaryFileType::FILE_TYPE_NONE;
     if (m_depth == 1 && flags == BUFFERED_RECEIVER_F_MIDDLE && m_key.depth() == 1 && m_key.first() != "#base64"){
         dbgTrace(D_WAAP_DEEP_PARSER) << " === will not check base64 since prev data block was not b64-encoded ===";
     } else {
         dbgTrace(D_WAAP_DEEP_PARSER) << " ===Processing potential base64===";
+        if (isUrlPayload && m_depth == 1 && cur_val[0] == '/') {
+            dbgTrace(D_WAAP_DEEP_PARSER) << "removing leading '/' from URL param value";
+            base64_offset = 1;
+        }
         std::string decoded_val, decoded_key;
-        base64_variants base64_status = Waap::Util::b64Test(cur_val, decoded_key, decoded_val, base64BinaryFileType);
+        base64_variants base64_status = Waap::Util::b64Test(
+            cur_val,
+            decoded_key,
+            decoded_val,
+            base64BinaryFileType,
+            base64_offset);
 
         dbgTrace(D_WAAP_DEEP_PARSER)
             << " status = "
@@ -289,16 +302,50 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             << " key = "
             << decoded_key
             << " value = "
-            << decoded_val;
+            << decoded_val
+            << "m_depth = "
+            << m_depth;
 
         switch (base64_status) {
             case SINGLE_B64_CHUNK_CONVERT:
-                cur_val = decoded_val;
+                if (base64_offset) {
+                    cur_val = "/" + decoded_val;
+                } else {
+                    cur_val = decoded_val;
+                }
                 base64ParamFound = true;
+                break;
+            case CONTINUE_DUAL_SCAN:
+                if (decoded_val.size() > 0) {
+                    decoded_key = "#base64";
+                    base64ParamFound = false;
+                    if (base64_offset) {
+                        decoded_val = "/" + decoded_val;
+                    }
+                    dbgTrace(D_WAAP_DEEP_PARSER) << m_key;
+                    rc = onKv(
+                        decoded_key.c_str(),
+                        decoded_key.size(),
+                        decoded_val.data(),
+                        decoded_val.size(),
+                        flags,
+                        parser_depth
+                    );
+                    dbgTrace(D_WAAP_DEEP_PARSER) << "After call to onKv with suspected value rc = " << rc;
+                    dbgTrace(D_WAAP_DEEP_PARSER) << m_key;
+                    break;
+                } else {
+                    dbgTrace(D_WAAP) << "base64 decode suspected and empty value. Skipping.";
+                    base64ParamFound = false;
+                    break;
+                }
                 break;
             case KEY_VALUE_B64_PAIR:
                 // going deep with new pair in case value is not empty
                 if (decoded_val.size() > 0) {
+                    if (base64_offset) {
+                        decoded_key = "/" + decoded_key;
+                    }
                     cur_val = decoded_val;
                     base64ParamFound = true;
                     rc = onKv(
@@ -309,9 +356,13 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
                         flags,
                         parser_depth
                     );
-
-                    dbgTrace(D_WAAP_DEEP_PARSER) << " rc = " << rc;
+                    dbgTrace(D_WAAP_DEEP_PARSER) << "After call to onKv with suspected value rc = " << rc;
+                    dbgTrace(D_WAAP_DEEP_PARSER) << m_key;
                     if (rc != CONTINUE_PARSING) {
+                        if (shouldUpdateKeyStack) {
+                            m_key.pop("deep parser key");
+                        }
+                        m_depth--;
                         return rc;
                     }
                 }
@@ -323,7 +374,7 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
         }
 
         if (base64ParamFound) {
-            dbgTrace(D_WAAP_DEEP_PARSER) << "DeepParser::onKv(): pushing #base64 prefix to the key.";
+            dbgTrace(D_WAAP_DEEP_PARSER) << "pushing #base64 prefix to the key.";
             m_key.push("#base64", 7, false);
         }
     }
@@ -437,7 +488,6 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             if (shouldUpdateKeyStack) {
                 m_key.pop("deep parser key");
             }
-
             m_depth--;
             return rc;
         }
@@ -587,7 +637,6 @@ DeepParser::parseBuffer(
         if (shouldUpdateKeyStack) {
             m_key.pop("deep parser key");
         }
-
         m_depth--;
         return DONE_PARSING;
     }
@@ -909,7 +958,6 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
             return rc;
         }
     }
-
     return rc;
 }
 
@@ -1081,7 +1129,7 @@ DeepParser::createInternalParser(
         << " isBodyPayload = "
         << isBodyPayload;
     //Detect sensor_data format in body and just use dedicated filter for it
-    if (m_depth == 1
+    if ((m_depth == 1)
         && isBodyPayload
         && Waap::Util::detectKnownSource(cur_val) ==  Waap::Util::SOURCE_TYPE_SENSOR_DATA) {
         m_parsersDeque.push_back(

@@ -20,6 +20,7 @@
 #include <vector>
 #include <dirent.h>
 #include <boost/regex.hpp>
+#include <algorithm>
 
 #include "debug.h"
 #include "maybe_res.h"
@@ -75,13 +76,13 @@ NginxConfCollector::expandIncludes(const string &include_pattern) const {
     struct dirent *entry;
     while ((entry = readdir(dir)) != nullptr) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-
         if (NGEN::Regex::regexMatch(__FILE__, __LINE__, entry->d_name, pattern)) {
             matching_files.push_back(maybe_directory + "/" + entry->d_name);
             dbgTrace(D_NGINX_MANAGER) << "Matched file: " << maybe_directory << '/' << entry->d_name;
         }
     }
     closedir(dir);
+    sort(matching_files.begin(), matching_files.end());
 
     return matching_files;
 }

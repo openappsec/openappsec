@@ -203,6 +203,7 @@ private:
         MessageMetadata service_config_req_md("127.0.0.1", 7777);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        service_config_req_md.setSuspension(false);
         auto service_config_status = messaging->sendSyncMessage(
             HTTPMethod::POST,
             "/set-nano-service-config",
@@ -214,6 +215,7 @@ private:
             MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            secondary_port_req_md.setSuspension(false);
             service_config_status = messaging->sendSyncMessage(
                 HTTPMethod::POST,
                 "/set-nano-service-config",
@@ -251,6 +253,7 @@ private:
         MessageMetadata service_config_req_md("127.0.0.1", 7777);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        service_config_req_md.setSuspension(false);
         bool service_config_status = messaging->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             "/set-reconf-status",
@@ -262,6 +265,7 @@ private:
             MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            secondary_port_req_md.setSuspension(false);
             service_config_status = messaging->sendSyncMessageWithoutResponse(
                 HTTPMethod::POST,
                 "/set-reconf-status",

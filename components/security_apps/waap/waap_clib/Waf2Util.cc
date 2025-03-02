@@ -952,6 +952,145 @@ string filterUTF7(const string& text) {
     return result;
 }
 
+//  Decides the status of a Base64 decoded string based on various parameters.
+//  @param decoded The decoded string.
+//  @param entropy The entropy of the original encoded string.
+//  @param decoded_entropy The entropy of the decoded string.
+//  @param spacer_count The number of spacer characters in the decoded string.
+//  @param nonPrintableCharsCount The count of non-printable characters in the decoded string.
+//  @param clear_on_error Flag indicating whether to clear the decoded string on error.
+//  @param terminatorCharsSeen The number of terminator characters seen.
+//  @param called_with_prefix Flag indicating if the function was called with a prefix.
+//  @return The status of the Base64 decoding process.
+//
+//  Idea:
+//  Check if input chunk should be replaced by decoded, suspected to be checked both as encoded and decoded
+//  or cleaned as binary data. Additional case - define as not base64 encoded.
+//  - in case decoded size less 5 - return invalid
+//  - check entropy delta based on that base64 encoded data has higher entropy than decoded, usually delta = 0.25
+//  - this check should rize suspect but cannot work vice versa
+//  check if decoded chunk has more than 10% of non-printable characters - this is supect for binary data encoded
+//   - if no suspect for binary data and entropy is suspected, check empiric conditions to decide if this binary data
+//     or invalid decoding
+//   - if suspect for binary data, first check is we have entropy suspection
+//     - if entropy is suspected and chunk is short and it have more than 25% of nonprintables, return invalid
+//       since this is not base64 encoded data
+//     - if entropy is not suspected and chunk is short and it have more than 50% of nonprintables, return invalid
+//       since this is not base64 encoded data
+//     - if entropy is suspected and chunk size is between 64-1024, perform additional empiric test
+//       This test will define if  returm value should be treated as suspected or as binary data(cleared)
+
+base64_decode_status decideStatusBase64Decoded(
+    string& decoded,
+    double entropy,
+    double decoded_entropy,
+    size_t spacer_count,
+    size_t nonPrintableCharsCount,
+    bool clear_on_error,
+    double terminatorCharsSeen,
+    bool called_with_prefix
+)
+{
+    base64_decode_status tmp_status = B64_DECODE_OK;
+    if (entropy - decoded_entropy + terminatorCharsSeen < BASE64_ENTROPY_THRESHOLD_DELTA) {
+        dbgTrace(D_WAAP_BASE64)
+            << "The chunk is under suspect to be base64,"
+            << "use dual processing because entropy delta is too low";
+        tmp_status = B64_DECODE_SUSPECTED;
+    }
+
+    bool empiric_condition = false;
+    if (decoded.size() >= 5) {
+        if (spacer_count > 1) {
+            nonPrintableCharsCount = nonPrintableCharsCount - spacer_count + 1;
+        }
+        dbgTrace(D_WAAP_BASE64)
+                << "(before test for unprintables):  decoded.size="
+                << decoded.size()
+                << ", nonPrintableCharsCount="
+                << nonPrintableCharsCount
+                << ", clear_on_error="
+                << clear_on_error
+                << ", called_with_prefix="
+                << called_with_prefix;
+        if (nonPrintableCharsCount * 10 < decoded.size()) {
+            dbgTrace(D_WAAP_BASE64)
+                << "(decode/replace due  to small amount of nonprintables): will decide based on entropy values";
+        } else { // more than 10% of non-printable characters
+            dbgTrace(D_WAAP_BASE64) << "large amount of nonporintables";
+            if (tmp_status == B64_DECODE_SUSPECTED) {
+                // entropy - decoded_entropy + terminatorCharsSeen < 0.25
+                if (decoded.size() < 16 &&  nonPrintableCharsCount * 4 > decoded.size())  {
+                    decoded.clear();
+                    return B64_DECODE_INVALID;
+                }
+                dbgTrace(D_WAAP_BASE64)
+                    << "(large amount of nonporintables + entropy suspect), check emprirics because decoded."
+                    << " terminatorCharsSeen="
+                    << terminatorCharsSeen;
+                    // empiric test based on investigation of real payloads
+                empiric_condition = entropy < decoded_entropy
+                    && entropy > BASE64_ENTROPY_BASE_THRESHOLD
+                    && decoded_entropy > BASE64_ENTROPY_DECODED_THRESHOLD
+                    && !called_with_prefix
+                    && decoded.size() > BASE64_MIN_SIZE_LIMIT
+                    && decoded.size() < BASE64_MAX_SIZE_LIMIT
+                    && terminatorCharsSeen != 0;
+                if (!empiric_condition) {
+                    if (clear_on_error) decoded.clear();
+                    return B64_DECODE_SUSPECTED;
+                } else {
+                    if (clear_on_error) decoded.clear();
+                    tmp_status = B64_DECODE_OK;
+                }
+            } else { // entropy - decoded_entropy + terminatorCharsSeen >= 0.25
+                // one more empiric based on uT and real payloads
+                if (decoded.size() < 16
+                        && nonPrintableCharsCount * 2 > decoded.size()
+                        && terminatorCharsSeen == 0) {
+                    decoded.clear();
+                    return B64_DECODE_INVALID;
+                }
+                dbgTrace(D_WAAP_BASE64)
+                    << "(delete as binary content) because decoded. Return B64_DECODE_INCOMPLETE";
+                if (clear_on_error) decoded.clear();
+                return B64_DECODE_INCOMPLETE;
+            }
+        } // less than 10% of non-printable characters
+        dbgTrace(D_WAAP_BASE64)
+            << "After handling unprintables checking status";
+        if (tmp_status == B64_DECODE_OK) {
+            dbgTrace(D_WAAP_BASE64) <<  "replacing with decoded data, return B64_DECODE_OK";
+            return B64_DECODE_OK;
+        } else { // tmp_status == B64_DECODE_SUSPECTED, entropy - decoded_entropy + terminatorCharsSeen < 0.25
+            dbgTrace(D_WAAP_BASE64) << "Suspected due to entropy, making empiric test";
+            // and one more empiric test based on investigation of real payloads
+            empiric_condition = entropy < decoded_entropy
+                && entropy > BASE64_ENTROPY_BASE_THRESHOLD
+                && decoded_entropy > BASE64_ENTROPY_DECODED_THRESHOLD
+                && !called_with_prefix
+                && decoded.size() > BASE64_MIN_SIZE_LIMIT
+                && decoded.size() < BASE64_MAX_SIZE_LIMIT;
+            if (empiric_condition) {
+                dbgTrace(D_WAAP_BASE64) << "Empiric test failed, non-base64 chunk, return B64_DECODE_INVALID";
+                decoded.clear();
+                return B64_DECODE_INVALID;
+            }
+            dbgTrace(D_WAAP_BASE64) << "Empiric test passed, return B64_DECODE_SUSPECTED";
+            return B64_DECODE_SUSPECTED;
+        }
+        return B64_DECODE_OK; // successfully decoded. Returns decoded data in "decoded" parameter
+    }
+
+    // If decoded size is too small - leave the encoded value (return false)
+    decoded.clear(); // discard partial data
+    dbgTrace(D_WAAP_BASE64)
+        << "(leave as-is) because decoded too small. decoded.size="
+        << decoded.size();
+    return B64_DECODE_INVALID;
+}
+
+
 // Attempts to validate and decode base64-encoded chunk.
 // Value is the full value inside which potential base64-encoded chunk was found,
 // it and end point to start and end of that chunk.
@@ -980,18 +1119,28 @@ base64_decode_status decodeBase64Chunk(
     uint32_t spacer_count = 0;
     uint32_t length = end - it;
 
-    dbgTrace(D_WAAP) << "decodeBase64Chunk: value='" << value << "' match='" << string(it, end) << "'";
+    dbgTrace(D_WAAP)
+        << "value='"
+        << value
+        << "' match='"
+        << string(it, end)
+        << "' clear_on_error='"
+        << clear_on_error
+        << "' called_with_prefix='"
+        << called_with_prefix
+        << "'";
     string::const_iterator begin = it;
 
     // The encoded data length (without the "base64," prefix) should be exactly divisible by 4
     // len % 4 is not 0 i.e. this is not base64
-        if ((end - it) % 4 != 0) {
-            dbgTrace(D_WAAP_BASE64) <<
-                "b64DecodeChunk: (leave as-is) because encoded data length should be exactly divisible by 4.";
+        if ((end - it) % 4 == 1) {
+            dbgTrace(D_WAAP_BASE64)
+                << "(leave as-is) because encoded data length should not be <4*x + 1>.";
             return B64_DECODE_INVALID;
         }
 
-        std::unordered_map<char, double> frequency;
+        std::unordered_map<char, double> original_occurences_counter;
+        std::unordered_map<char, double> decoded_occurences_counter;
 
         while (it != end) {
             unsigned char c = *it;
@@ -999,9 +1148,8 @@ base64_decode_status decodeBase64Chunk(
             if (terminatorCharsSeen) {
                 // terminator characters must all be '=', until end of match.
                 if (c != '=') {
-                    dbgTrace(D_WAAP_BASE64) <<
-                        "decodeBase64Chunk: (leave as-is) because terminator characters must all be '='," <<
-                        "until end of match.";
+                    dbgTrace(D_WAAP_BASE64)
+                    << "(leave as-is) because terminator characters must all be '=' until end of match.";
                     return B64_DECODE_INVALID;
                 }
 
@@ -1009,13 +1157,13 @@ base64_decode_status decodeBase64Chunk(
                 terminatorCharsSeen++;
 
                 if (terminatorCharsSeen > 2) {
-                    dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (leave as-is) because terminatorCharsSeen > 2";
+                    dbgTrace(D_WAAP_BASE64) << "(leave as-is) because terminatorCharsSeen > 2";
                     return B64_DECODE_INVALID;
                 }
 
                 // allow for more terminator characters
                 it++;
-                frequency[c]++;
+                original_occurences_counter[c]++;
                 continue;
             }
 
@@ -1040,12 +1188,18 @@ base64_decode_status decodeBase64Chunk(
                 // Start tracking terminator characters
                 terminatorCharsSeen++;
                 it++;
-                frequency[c]++;
+                original_occurences_counter[c]++;
                 continue;
             }
             else {
-                dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (leave as-is) because of non-base64 character ('" <<
-                        c << "', ASCII " << (unsigned int)c << ", offset " << (it-begin) << ")";
+                dbgTrace(D_WAAP_BASE64)
+                    << "(leave as-is) because of non-base64 character ('"
+                    << c
+                    << "', ASCII "
+                    << (unsigned int)c
+                    << ", offset "
+                    << (it-begin)
+                    << ")";
                 return B64_DECODE_INVALID; // non-base64 character
             }
 
@@ -1068,18 +1222,19 @@ base64_decode_status decodeBase64Chunk(
                 }
 
                 decoded += (char)code;
+                decoded_occurences_counter[(char)code]++;
             }
 
             it++;
-            frequency[c]++;
+            original_occurences_counter[c]++;
         }
 
         // end of encoded sequence decoded.
 
         dbgTrace(D_WAAP_BASE64)
-            << "decodeBase64Chunk: decoded.size="
+            << "decoding done: decoded.size="
             << decoded.size()
-            << ", nonPrintableCharsCount="
+            << ", uncorrected nonPrintableCharsCount="
             << nonPrintableCharsCount
             << ", spacer_count = "
             << spacer_count
@@ -1088,56 +1243,42 @@ base64_decode_status decodeBase64Chunk(
             << "; decoded='"
             << decoded << "'";
 
-        // Check if entropy is correlates with b64 threshold (initially > 4.5)
-        if (!called_with_prefix) {
-            double entropy = 0;
-            double p = 0;
-            for (const auto& pair : frequency) {
-                p = pair.second / length;
-                entropy -= p * std::log2(p);
-            }
-            dbgTrace(D_WAAP_BASE64) << " ===b64Test===:  base entropy = " << entropy << "length = " << length;
-            // Add short payload factor
-            if (length < 16)
-                entropy = entropy * 16 / length;
-            // Enforce tailoring '=' characters
-            entropy+=terminatorCharsSeen;
-
-            dbgTrace(D_WAAP_BASE64) << " ===b64Test===:  corrected entropy = " << entropy << "length = " << length;
-            if (entropy <= base64_entropy_threshold) {
-                return B64_DECODE_INVALID;
-            }
+        double entropy = 0;
+        double p = 0;
+        double decoded_entropy = 0;
+        for (const auto& pair : original_occurences_counter) {
+            p = pair.second / length;
+            entropy -= p * std::log2(p);
         }
-
-        // Return success only if decoded.size>=5 and there are less than 10% of non-printable
-        // characters in output.
-        if (decoded.size() >= 5) {
-            if (spacer_count > 1) {
-                nonPrintableCharsCount = nonPrintableCharsCount - spacer_count + 1;
-            }
-            if (nonPrintableCharsCount * 10 < decoded.size()) {
-                dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (decode/replace) decoded.size=" << decoded.size() <<
-                        ", nonPrintableCharsCount=" << nonPrintableCharsCount << ": replacing with decoded data";
-            }
-            else {
-                dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (delete) because decoded.size=" << decoded.size() <<
-                        ", nonPrintableCharsCount=" << nonPrintableCharsCount <<
-                        ", clear_on_error=" << clear_on_error;
-                if (clear_on_error) decoded.clear();
-                return B64_DECODE_INCOMPLETE;
-            }
-            dbgTrace(D_WAAP_BASE64) << "returning true: successfully decoded."
-                << " Returns decoded data in \"decoded\" parameter";
-            return B64_DECODE_OK; // successfully decoded. Returns decoded data in "decoded" parameter
+        for (const auto &pair : decoded_occurences_counter) {
+            p = pair.second / decoded.size();
+            decoded_entropy -= p * std::log2(p);
         }
+        dbgTrace(D_WAAP_BASE64)
+            << "Base entropy = "
+            << entropy
+            << " Decoded_entropy = "
+            << decoded_entropy
+            << "length = "
+            << length;
 
-        // If decoded size is too small - leave the encoded value (return false)
-        decoded.clear(); // discard partial data
-        dbgTrace(D_WAAP_BASE64) << "decodeBase64Chunk: (leave as-is) because decoded too small. decoded.size=" <<
-                decoded.size() <<
-                ", nonPrintableCharsCount=" << nonPrintableCharsCount <<
-                ", clear_on_error=" << clear_on_error;
-        return B64_DECODE_INVALID;
+        base64_decode_status return_status = decideStatusBase64Decoded(
+            decoded,
+            entropy,
+            decoded_entropy,
+            spacer_count,
+            nonPrintableCharsCount,
+            clear_on_error,
+            terminatorCharsSeen,
+            called_with_prefix
+        );
+
+        dbgTrace(D_WAAP_BASE64)
+            << "After decideStatusBase64Decoded return_status="
+            << return_status;
+
+        return return_status;
+
 }
 
 // Attempts to detect and validate base64 chunk.
@@ -1180,8 +1321,9 @@ b64DecodeChunk(
             return false;
         }
     }
-
-    return decodeBase64Chunk(value, it, end, decoded) != B64_DECODE_INVALID;
+    base64_decode_status status = decodeBase64Chunk(value, it, end, decoded);
+    dbgTrace(D_WAAP_BASE64) << "b64DecodeChunk: status = " << status;
+    return status != B64_DECODE_INVALID;
 }
 
 vector<string> split(const string& s, char delim) {
@@ -1281,6 +1423,7 @@ static void b64TestChunk(const string &s,
         int &deletedCount,
         string &outStr)
 {
+    dbgTrace(D_WAAP_BASE64) << " ===b64TestChunk===:  starting with = '" << s << "'";
     size_t chunkLen = (chunkEnd - chunkStart);
 
     if ((chunkEnd - chunkStart) > static_cast<int>(b64_prefix.size()) &&
@@ -1289,11 +1432,9 @@ static void b64TestChunk(const string &s,
         chunkLen -= b64_prefix.size();
     }
 
-    size_t chunkRem = chunkLen % 4;
-
-    // Only match chunk whose length is divisible by 4
     string repl;
-    if (chunkRem == 0 && cb(s, chunkStart, chunkEnd, repl)) {
+    dbgTrace(D_WAAP_BASE64) << " ===b64TestChunk===:  chunkLen = " << chunkLen;
+    if (cb(s, chunkStart, chunkEnd, repl)) {
         // Succesfully matched b64 chunk
         if (!repl.empty()) {
             outStr += repl;
@@ -1340,9 +1481,7 @@ bool detectBase64Chunk(
         dbgTrace(D_WAAP_BASE64) << " ===detectBase64Chunk===:  isB64AlphaChar = true, '" << *it << "'";
         start = it;
         end = s.end();
-        if ((end - start) % 4 == 0) {
-            return true;
-        }
+        return true;
     }
     // non base64 before supposed chunk - will not process
     return false;
@@ -1381,17 +1520,31 @@ bool isBase64PrefixProcessingOK (
         if (detectBase64Chunk(s, start, end)) {
             dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: chunk detected";
             if ((start != s.end()) && (end == s.end())) {
+                dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: chunk detected but not complete";
                 retVal = processDecodedChunk(s, start, end, value, binaryFileType, true);
+                dbgTrace(D_WAAP_BASE64)
+                    << " ===isBase64PrefixProcessingOK===: after processDecodedChunk retVal = "
+                    << retVal
+                    << " binaryFileType = "
+                    << binaryFileType;
             }
         } else if (start != s.end()) {
-            dbgTrace(D_WAAP_BASE64) << " ===isBase64PrefixProcessingOK===: chunk not detected."
-                                        " searching for known file header only";
+            dbgTrace(D_WAAP_BASE64)
+                << " ===isBase64PrefixProcessingOK===: chunk not detected. searching for known file header only";
             end = (start + MAX_HEADER_LOOKUP < s.end()) ? start + MAX_HEADER_LOOKUP : s.end();
             processDecodedChunk(s, start, end, value, binaryFileType);
             value.clear();
+            dbgTrace(D_WAAP_BASE64)
+                << " ===isBase64PrefixProcessingOK===: after processDecodedChunk binaryFileType = "
+                << binaryFileType;
             return binaryFileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE;
         }
     }
+    dbgTrace(D_WAAP_BASE64)
+        << " ===isBase64PrefixProcessingOK===: retVal = "
+        << retVal
+        << " binaryFileType = "
+        << binaryFileType;
     return retVal != B64_DECODE_INVALID;
 }
 
@@ -1399,23 +1552,31 @@ base64_variants b64Test (
         const string &s,
         string &key,
         string &value,
-        BinaryFileType &binaryFileType)
+        BinaryFileType &binaryFileType,
+        const size_t offset)
 {
 
     key.clear();
-    bool retVal;
     binaryFileType = Waap::Util::BinaryFileType::FILE_TYPE_NONE;
+    auto begin = s.begin() + offset;
+    dbgTrace(D_WAAP_BASE64)
+        << " ===b64Test===: string =  "
+        << s
+        << " key = "
+        << key
+        << " value = "
+        << value
+        << " offset = "
+        << offset;
 
-    dbgTrace(D_WAAP_BASE64) << " ===b64Test===: string =  " << s
-            << " key = " << key << " value = " << value;
     // Minimal length
-    if (s.size() < 8) {
+    if (s.size() < 8 + offset) {
         return CONTINUE_AS_IS;
     }
     dbgTrace(D_WAAP_BASE64) << " ===b64Test===: minimal lenght test passed";
 
     std::string prefix_decoded_val;
-    string::const_iterator it = s.begin();
+    auto it = begin;
 
     // 1st check if we have key candidate
     if (base64_key_value_detector_re.hasMatch(s)) {
@@ -1433,7 +1594,7 @@ base64_variants b64Test (
                 break;
             case EQUAL:
                 if (*it == '=') {
-                    it = s.begin();
+                    it = begin;
                     state=MISDETECT;
                     continue;
                 }
@@ -1455,7 +1616,7 @@ base64_variants b64Test (
         if (it == s.end() || state == MISDETECT) {
             dbgTrace(D_WAAP_BASE64) << " ===b64Test===: detected  *it = s.end()" << *it;
             if (key.size() > 0) {
-                it = s.begin();
+                it = begin;
                 key.clear();
             }
         } else {
@@ -1479,7 +1640,7 @@ base64_variants b64Test (
         }
     }
 
-    string::const_iterator start = s.end();
+    auto start = s.end();
     dbgTrace(D_WAAP_BASE64) << " ===b64Test===:  B64 itself = " << *it << " =======";
     bool isB64AlphaChar = Waap::Util::isAlphaAsciiFast(*it) || isdigit(*it) || *it=='/' || *it=='+';
     if (isB64AlphaChar) {
@@ -1487,11 +1648,6 @@ base64_variants b64Test (
         dbgTrace(D_WAAP_BASE64) <<
             " ===b64Test===:  Start tracking potential b64 chunk = " << *it << " =======";
         start = it;
-        if ((s.end() - start) % 4 != 0) {
-            key.clear();
-            value.clear();
-            return CONTINUE_AS_IS;
-        }
     }
     else {
         dbgTrace(D_WAAP_BASE64) <<
@@ -1512,17 +1668,37 @@ base64_variants b64Test (
             key.pop_back();
             dbgTrace(D_WAAP_BASE64) << " ===b64Test===: FINAL key = '" << key << "'";
         }
-        retVal = decodeBase64Chunk(s, start, s.end(), value) != B64_DECODE_INVALID;
+        base64_decode_status decode_chunk_status = decodeBase64Chunk(s, start, s.end(), value);
 
-        dbgTrace(D_WAAP_BASE64) << " ===b64Test===: After testing and conversion value = "
-                << value << "retVal = '" << retVal <<"'";
-        if (!retVal) {
+        dbgTrace(D_WAAP_BASE64)
+            << " ===b64Test===: After testing and conversion value = "
+            << value
+            << "decode_chunk_status = '"
+            << decode_chunk_status
+            <<"'";
+        if (decode_chunk_status == B64_DECODE_INVALID) {
             key.clear();
             value.clear();
             return CONTINUE_AS_IS;
         }
-        dbgTrace(D_WAAP_BASE64) << " ===b64Test===: After tpassed retVal check = "
-            << value << "retVal = '" << retVal <<"'" << "key = '" << key << "'";
+
+        if (decode_chunk_status == B64_DECODE_INCOMPLETE) {
+                value.clear();
+        }
+
+        if (decode_chunk_status == B64_DECODE_SUSPECTED) {
+            return CONTINUE_DUAL_SCAN;
+        }
+
+        dbgTrace(D_WAAP_BASE64)
+            << " ===b64Test===: After tpassed retVal check = "
+            << value
+            << "decode_chunk_status = '"
+            << decode_chunk_status
+            <<"'"
+            << "key = '"
+            << key
+            << "'";
         if (key.empty()) {
             return SINGLE_B64_CHUNK_CONVERT;
         } else {
@@ -1548,7 +1724,7 @@ void b64Decode(
     deletedCount = 0;
     outStr = "";
     int offsetFix = 0;
-
+    dbgTrace(D_WAAP_BASE64) << " ===b64Decode===:  starting with = '" << s << "'";
     string::const_iterator it = s.begin();
 
     // Minimal length
@@ -1596,6 +1772,11 @@ void b64Decode(
                 }
 
                 // Decode and add chunk
+                dbgTrace(D_WAAP_BASE64)
+                    << " ===b64Decode===:  chunkStart = "
+                    << *chunkStart
+                    << " it = "
+                    << *it;
                 b64TestChunk(s, chunkStart, it, cb, decodedCount, deletedCount, outStr);
 
                 // stop tracking b64 chunk
@@ -1607,6 +1788,7 @@ void b64Decode(
     }
 
     if (chunkStart != s.end()) {
+        dbgTrace(D_WAAP_BASE64) << " ===b64Decode===:  chunkStart = " << *chunkStart;
         b64TestChunk(s, chunkStart, it, cb, decodedCount, deletedCount, outStr);
     }
 }

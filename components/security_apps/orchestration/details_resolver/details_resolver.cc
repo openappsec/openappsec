@@ -80,7 +80,9 @@ DetailsResolver::Impl::getHostname()
 Maybe<string>
 DetailsResolver::Impl::getPlatform()
 {
-#if defined(gaia)
+#if defined(gaia_arm)
+    return string("gaia_arm");
+#elif defined(gaia)
     return string("gaia");
 #elif defined(arm32_rpi)
     return string("glibc");

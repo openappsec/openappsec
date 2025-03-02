@@ -71,7 +71,18 @@ checkPepIdaIdnStatus(const string &command_output)
 Maybe<string>
 getRequiredNanoServices(const string &command_output)
 {
-    return command_output;
+    string idaRequiredServices[2] = {"idaSaml", "idaIdn"};
+    string platform_str = "gaia";
+#if defined(gaia_arm)
+    platform_str = "gaia_arm";
+#endif // gaia_arm
+    string result = "";
+    for(const string &serv : idaRequiredServices) {
+        string add_service = serv + "_" + platform_str;
+        result = result + add_service + ";";
+    }
+    command_output.empty(); // overcome unused variable
+    return result;
 }
 
 Maybe<string>
@@ -340,6 +351,28 @@ Maybe<string>
 getSMCBasedMgmtName(const string &command_output)
 {
     return getAttr(command_output, "Mgmt object Name was not found");
+}
+
+Maybe<string>
+getSmbObjectUid(const string &command_output)
+{
+    static const char centrally_managed_comd_output = '0';
+
+    if (command_output.empty() || command_output[0] != centrally_managed_comd_output) {
+        return genError("Object UUID was not found");
+    }
+
+    Maybe<string> obj_uuid = getAttrFromCpsdwanGetDataJson("uuid");
+    if (obj_uuid.ok()) {
+        return obj_uuid.unpack();
+    }
+
+    static const string obj_path = (getenv("FWDIR") ? string(getenv("FWDIR")) : "") + "/database/myown.C";
+    auto file_stream = std::make_shared<std::ifstream>(obj_path);
+    if (!file_stream->is_open()) {
+        return genError("Failed to open the object file");
+    }
+    return getMgmtObjAttr(file_stream, "uuid ");
 }
 
 Maybe<string>

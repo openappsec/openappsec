@@ -111,8 +111,7 @@ int BufferedReceiver::onKvDone()
     // This must be called even if m_value is empty in order to signal the BUFFERED_RECEIVER_F_LAST flag to the
     // receiver!
     dbgTrace(D_WAAP_PARSER)
-        << " Call onKv on the remainder of the buffer not yet pushed to the receiver "
-        << "calling onKv()";
+        << " Call onKv on the remainder of the buffer not yet pushed to the receiver calling onKv()";
     int rc = onKv(m_key.data(), m_key.size(), m_value.data(), m_value.size(), m_flags, m_parser_depth);
 
     // Reset the object's state to allow reuse for other parsers

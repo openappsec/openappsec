@@ -21,6 +21,7 @@ USE_DEBUG_FLAG(D_WAAP);
 
 const std::string ParserPDF::m_parserName = "ParserPDF";
 const char* PDF_TAIL = "%%EOF";
+const size_t PDF_TAIL_LEN = 5;
 
 ParserPDF::ParserPDF(
     IParserStreamReceiver &receiver,
@@ -44,16 +45,21 @@ ParserPDF::push(const char *buf, size_t len)
         << "' len="
         << len;
 
-    const char *c;
-
     if (m_state == s_error) {
         return 0;
     }
-    if (len == 0)
-    {
-        dbgTrace(D_WAAP_PARSER_PDF) << "ParserPDF::push(): end of stream. m_state=" << m_state;
 
-        if (m_state == s_end) {
+    if (len == 0) {
+        dbgTrace(D_WAAP_PARSER_PDF) << "ParserPDF::push(): end of stream. m_state=" << m_state;
+        if (m_state == s_body && m_tailOffset >= PDF_TAIL_LEN) {
+            if (m_receiver.onKey("PDF", 3) != 0) {
+                m_state = s_error;
+                return 0;
+            }
+            if (m_receiver.onValue("", 0) != 0) {
+                m_state = s_error;
+                return 0;
+            }
             m_receiver.onKvDone();
         } else {
             m_state = s_error;
@@ -61,38 +67,43 @@ ParserPDF::push(const char *buf, size_t len)
         return 0;
     }
 
+    size_t start = (len > MAX_PDF_TAIL_LOOKUP) ? len - MAX_PDF_TAIL_LOOKUP : 0;
     switch (m_state) {
             case s_start:
                 m_state = s_body;
                 CP_FALL_THROUGH;
             case s_body:
-                {
-                    size_t tail_lookup_offset = (len > MAX_PDF_TAIL_LOOKUP) ? len - MAX_PDF_TAIL_LOOKUP : 0;
-                    c = strstr(buf + tail_lookup_offset, PDF_TAIL);
+                for (size_t i = start; i < len; i++) {
                     dbgTrace(D_WAAP_PARSER_PDF)
-                        << "string to search: " << std::string(buf + tail_lookup_offset)
-                        << " c=" << c;
-                    if (c) {
-                        m_state = s_end;
-                        CP_FALL_THROUGH;
+                        << "ParserPDF::push(): m_tailOffset="
+                        << m_tailOffset
+                        << " buf[i]="
+                        << buf[i];
+                    if (m_tailOffset  <= PDF_TAIL_LEN - 1) {
+                        if (buf[i] == PDF_TAIL[m_tailOffset]) {
+                            m_tailOffset++;
+                        } else {
+                            m_tailOffset = 0;
+                        }
                     } else {
-                        break;
+                        if (buf[i] == '\r' || buf[i] == '\n' || buf[i] == ' ' || buf[i] == 0) {
+                            m_tailOffset++;
+                        } else {
+                            m_tailOffset = 0;
+                            i--;
+                        }
                     }
                 }
-            case s_end:
-                if (m_receiver.onKey("PDF", 3) != 0) {
-                    m_state = s_error;
-                    return 0;
-                }
-                if (m_receiver.onValue("", 0) != 0) {
-                    m_state = s_error;
-                    return 0;
-                }
+                dbgTrace(D_WAAP_PARSER_PDF)
+                    << "ParserPDF::push()->s_body: m_tailOffset="
+                    << m_tailOffset;
                 break;
             case s_error:
                 break;
             default:
-                dbgTrace(D_WAAP_PARSER_PDF) << "ParserPDF::push(): unknown state: " << m_state;
+                dbgTrace(D_WAAP_PARSER_PDF)
+                    << "ParserPDF::push(): unknown state: "
+                    << m_state;
                 m_state = s_error;
                 return 0;
     }

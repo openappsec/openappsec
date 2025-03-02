@@ -22,7 +22,7 @@ using namespace std;
 
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
-static const unsigned int upper_assets_limit = 50;
+static const unsigned int upper_assets_limit = 200;
 static const unsigned int upper_confidence_limit = 1000;
 
 Maybe<void>

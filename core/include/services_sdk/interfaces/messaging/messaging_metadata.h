@@ -69,14 +69,16 @@ public:
         uint16_t _port_num,
         Flags<MessageConnectionConfig> _conn_flags,
         bool _should_buffer = false,
-        bool _is_to_fog = false
+        bool _is_to_fog = false,
+        bool _should_suspend = true
     ) :
         host_name(_host_name),
         port_num(_port_num),
         conn_flags(_conn_flags),
         should_buffer(_should_buffer),
         is_to_fog(_is_to_fog),
-        should_send_access_token(true)
+        should_send_access_token(true),
+        should_suspend(_should_suspend)
     {}
 
     const bool &
@@ -194,6 +196,12 @@ public:
     }
 
     void
+    setSuspension(bool _should_suspend)
+    {
+        should_suspend = _should_suspend;
+    }
+
+    void
     setExternalCertificate(const std::string &_external_certificate)
     {
         external_certificate = _external_certificate;
@@ -209,6 +217,12 @@ public:
     shouldBufferMessage() const
     {
         return should_buffer;
+    }
+
+    bool
+    shouldSuspend() const
+    {
+        return should_suspend;
     }
 
     bool
@@ -314,6 +328,7 @@ private:
     bool is_rate_limit_block = false;
     uint rate_limit_block_time = 0;
     bool should_send_access_token = true;
+    bool should_suspend = true;
 };
 
 #endif // __MESSAGING_METADATA_H__

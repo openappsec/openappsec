@@ -40,6 +40,7 @@
 #include "WaapOpenRedirectPolicy.h"
 #include "WaapErrorDisclosurePolicy.h"
 #include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
 #include "generic_rulebase/parameters_config.h"
 #include <iostream>
 #include "ParserDelimiter.h"
@@ -1390,6 +1391,20 @@ Waf2Transaction::findHtmlTagToInject(const char* data, int data_len, int& pos)
         size_t tagHistPosCheck = m_tagHistPos;
         for (size_t i=0; i < tagSize; ++i) {
             if (tag[i] != ::tolower(m_tagHist[tagHistPosCheck])) {
+                if (i == tagSize - 1 && m_tagHist[tagHistPosCheck] == ' ') {
+                    // match regex on head element with attributes
+                    string dataStr = Waap::Util::charToString(data + pos, data_len - pos);
+                    dataStr = dataStr.substr(0, dataStr.find('>')+1);
+                    tagMatches = NGEN::Regex::regexMatch(
+                        __FILE__,
+                        __LINE__,
+                        dataStr,
+                        boost::regex("(?:\\s+[a-zA-Z_:][-a-zA-Z0-9_:.]*(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s\"'>]*))?)*\\s*>")
+                        );
+                        pos += dataStr.length() - 1;
+                        dbgTrace(D_WAAP_BOT_PROTECTION) << "matching head element with attributes: " << dataStr << ". match: " << tagMatches;
+                    break;
+                }
                 tagMatches = false;
                 break;
             }
@@ -1403,12 +1418,8 @@ Waf2Transaction::findHtmlTagToInject(const char* data, int data_len, int& pos)
         }
     }
 
-    if(!headFound)
-    {
-        return false;
-    }
-
-    return true;
+    dbgTrace(D_WAAP_BOT_PROTECTION) << "head element tag found: " << headFound;
+    return headFound;
 }
 
 void
@@ -1577,6 +1588,8 @@ Waf2Transaction::decideFinal(
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant API configuration from the I/S";
         sitePolicy = &ngenAPIConfig;
         m_overrideState = getOverrideState(sitePolicy);
+
+        // User limits
         shouldBlock = (getUserLimitVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
     }
     else if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
@@ -2322,10 +2335,11 @@ bool Waf2Transaction::decideResponse()
 
 bool
 Waf2Transaction::reportScanResult(const Waf2ScanResult &res) {
-    if (get_ignoreScore() || (res.score >= SCORE_THRESHOLD &&
-        (m_scanResult == nullptr || res.score > m_scanResult->score)))
+    if ((get_ignoreScore() || res.score >= SCORE_THRESHOLD) &&
+        (m_scanResult == nullptr || res.score > m_scanResult->score))
     {
-        // Forget any previous scan result and replace with new
+        dbgTrace(D_WAAP) << "Setting scan result. New score: " << res.score;
+        // Forget any previous scan result and replace wit, h new
         delete m_scanResult;
         m_scanResult = new Waf2ScanResult(res);
         return true;

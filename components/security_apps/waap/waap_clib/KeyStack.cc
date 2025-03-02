@@ -37,14 +37,24 @@ void KeyStack::push(const char* subkey, size_t subkeySize, bool countDepth) {
         m_nameDepth++;
     }
 
-    dbgTrace(D_WAAP) << "KeyStack(" << m_name << ")::push(): '" << std::string(subkey, subkeySize) <<
-        "' => full_key='" << std::string(m_key.data(), m_key.size()) << "'";
+    dbgTrace(D_WAAP)
+        << "KeyStack("
+        << m_name
+        << ")::push(): '"
+        << std::string(subkey, subkeySize)
+        << "' => full_key='"
+        << std::string(m_key.data(), m_key.size())
+        << "'";
 }
 
 void KeyStack::pop(const char* log, bool countDepth) {
     // Keep depth balanced even if m_key[] buffer is full
     if (m_key.empty() || m_stack.empty()) {
-        dbgDebug(D_WAAP) << "KeyStack(" << m_name << ")::pop(): [ERROR] ATTEMPT TO POP FROM EMPTY KEY STACK! " << log;
+        dbgDebug(D_WAAP)
+            << "KeyStack("
+            << m_name
+            << ")::pop(): [ERROR] ATTEMPT TO POP FROM EMPTY KEY STACK! "
+            << log;
         return;
     }
 
@@ -55,6 +65,22 @@ void KeyStack::pop(const char* log, bool countDepth) {
     // Remove last subkey.
     m_key.erase(m_stack.back());
     m_stack.pop_back();
-    dbgTrace(D_WAAP) << "KeyStack(" << m_name << ")::pop(): full_key='" <<
-        std::string(m_key.data(), (int)m_key.size()) << "': pop_key=" << log << "'";
+    dbgTrace(D_WAAP)
+        << "KeyStack("
+        << m_name
+        << ")::pop(): full_key='"
+        << std::string(m_key.data(), (int)m_key.size())
+        << "': pop_key="
+        << log
+        << "'";
+}
+
+void KeyStack::print(std::ostream &os) const
+{
+    os
+        << "KeyStack("
+        << m_name
+        << ")::show(): full_key='"
+        << std::string(m_key.data(), (int)m_key.size())
+        << "'";
 }

@@ -436,6 +436,7 @@ AgentDetails::loadProxyType(const string &proxy_type)
     }
 
 #ifdef gaia
+    (void)proxy_type;
     I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<AgentDetails>();
     auto proxy_ip = shell_cmd->getExecOutput("dbget proxy:ip-address| tr -d '\n'");
     if (!proxy_ip.ok()) return proxy_ip;

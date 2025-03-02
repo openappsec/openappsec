@@ -32,6 +32,11 @@ struct ModelLoggingSettings {
     bool logToStream;
 };
 
+static const double DEFAULT_KEYWORD_COEF = 0.3f;
+static const double DEFAULT_KEYWORD_SCORE = 2.0f;
+static const double DEFAULT_COMBI_COEF = 0.8f;
+static const double DEFAULT_COMBI_SCORE = 1.0f;
+
 std::string getScorePoolNameByLocation(const std::string &location);
 std::string getOtherScorePoolName();
 ModelLoggingSettings getModelLoggingSettings();

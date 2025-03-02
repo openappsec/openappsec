@@ -32,9 +32,15 @@
 
 #define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 
-enum base64_variants {SINGLE_B64_CHUNK_CONVERT, KEY_VALUE_B64_PAIR, CONTINUE_AS_IS};
+enum base64_variants {SINGLE_B64_CHUNK_CONVERT, KEY_VALUE_B64_PAIR, CONTINUE_AS_IS, CONTINUE_DUAL_SCAN};
 enum base64_stage {BEFORE_EQUAL, EQUAL, DONE, MISDETECT};
-enum base64_decode_status {B64_DECODE_INVALID, B64_DECODE_OK, B64_DECODE_INCOMPLETE};
+enum base64_decode_status {B64_DECODE_INVALID, B64_DECODE_OK, B64_DECODE_INCOMPLETE, B64_DECODE_SUSPECTED};
+
+#define BASE64_ENTROPY_BASE_THRESHOLD 5.0
+#define BASE64_ENTROPY_DECODED_THRESHOLD 5.4
+#define BASE64_ENTROPY_THRESHOLD_DELTA 0.25
+#define BASE64_MIN_SIZE_LIMIT 16
+#define BASE64_MAX_SIZE_LIMIT 1024
 
 // This is portable version of stricmp(), which is non-standard function (not even in C).
 // Contrary to stricmp(), for a slight optimization, s2 is ASSUMED to be already in lowercase.
@@ -866,6 +872,17 @@ void unescapeUnicode(std::string &text);
 std::string filterUTF7(const std::string &text);
 
 base64_decode_status
+decideStatusBase64Decoded(
+    std::string& decoded,
+    double entropy,
+    double decoded_entropy,
+    size_t spacer_count,
+    size_t nonPrintableCharsCount,
+    bool clear_on_error,
+    double terminatorCharsSeen,
+    bool called_with_prefix);
+
+base64_decode_status
 decodeBase64Chunk(
     const std::string &value,
     std::string::const_iterator it,
@@ -926,7 +943,8 @@ namespace Util {
             const std::string &s,
             std::string &key,
             std::string &value,
-            BinaryFileType &binaryFileType);
+            BinaryFileType &binaryFileType,
+            size_t offset = 0);
 
     // The original stdlib implementation of isalpha() supports locale settings which we do not really need.
     // It is also proven to contribute to slow performance in some of the algorithms using it.
