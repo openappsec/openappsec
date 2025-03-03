@@ -29,7 +29,7 @@ services:
       - user_email=${APPSEC_USER_EMAIL}
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
-      - registered_server=SWAG Server
+      - registered_server=SWAG
     ipc: shareable
     volumes:
       - ${APPSEC_CONFIG}:/etc/cp/conf
