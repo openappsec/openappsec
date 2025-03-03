@@ -37,7 +37,7 @@ services:
     environment:
       # adjust with your own email below
       - user_email=user@email.com
-      - registered_server="APISIX Server"
+      - registered_server="APISIX"
       - AGENT_TOKEN=<TOKEN>
     volumes:
       - ./appsec-config:/etc/cp/conf
