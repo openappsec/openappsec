@@ -137,6 +137,10 @@ spec:
                   type: array
                   items:
                     type: object
+                    required:
+                    - mode
+                    - threatPreventionPractices
+                    - accessControlPractices
                     properties:
                       name:
                         type: string
