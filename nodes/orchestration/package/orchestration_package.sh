@@ -353,7 +353,7 @@ done
 # VS ID argument is available only on install, for other actions, extract it from the package location
 if [ -z "$VS_ID" ]; then
     parent_pid=$PPID
-    parent_cmdline=$(ps -o cmd= -p "$parent_pid")
+    parent_cmdline=$(cat /proc/"$parent_pid"/cmdline | tr '\0' ' ')
     parent_dir=$(dirname "$parent_cmdline")
     packages_folder=$(dirname "$parent_dir")
     vs_folder=$(dirname "$packages_folder")
@@ -779,8 +779,9 @@ upgrade_conf_if_needed()
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
 
-        previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
- 		if ! [ -z "$previous_mode" ]; then
+        [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
+	previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
+	if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
         fi
 
@@ -994,7 +995,9 @@ install_orchestration()
         fi
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
-        previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
+
+	[ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
+	previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
 
         if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}

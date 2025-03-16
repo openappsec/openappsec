@@ -53,7 +53,12 @@ var_upgarde=false
 get_profile_agent_setting_with_default() {
     key="$1"
     default_value="$2"
-    value=$(grep -oP "\"key\":\s*\"$key\".*?\"value\":\s*\"[^\"]+\"" $SETTINGS_FILE | sed -E 's/.*"value":\s*"([^"]+)".*/\1/')
+
+    value=$(grep -o "\"key\":\s*\"$key\".*?\"value\":\s*\"[^\"]*\"" $SETTINGS_FILE | sed -E 's/.*"value":\s*"([^"]*)".*/\1/')
+    if [ -z "$value" ]; then
+        value=$(grep -o "\"$key\":\s*\"[^\"]*\"" $SETTINGS_FILE | sed -E 's/.*"'"$key"'":\s*"([^"]*)".*/\1/')
+    fi
+
     if [ "$value" = "null" ] || [ -z "$value" ]; then
         echo "$default_value"
     else
