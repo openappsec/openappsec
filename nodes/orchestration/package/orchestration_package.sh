@@ -1018,7 +1018,8 @@ install_orchestration()
             rm -f "${FILESYSTEM_PATH}/${CONF_PATH}/default_orchestration_flags"
         fi
 
-        upgrade_conf_if_needed
+        update_cloudguard_appsec_manifest
+	upgrade_conf_if_needed
 
         cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
         if [ "$IS_K8S_ENV" = "true" ]; then
