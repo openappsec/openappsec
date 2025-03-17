@@ -1,6 +1,6 @@
 FROM alpine
 
-ENV INFINITY_NEXT_NANO_AGENT=TRUE
+ENV OPENAPPSEC_NANO_AGENT=TRUE
 
 RUN apk add --no-cache -u busybox
 RUN apk add --no-cache -u zlib
@@ -15,7 +15,7 @@ RUN apk add --no-cache libxml2
 RUN apk add --no-cache pcre2
 RUN apk add --update coreutils
 
-COPY self_managed_cloudguard_appsec_manifest.json /tmp/self_managed_cloudguard_appsec_manifest.json
+COPY self_managed_openappsec_manifest.json /tmp/self_managed_openappsec_manifest.json
 
 COPY install*.sh /nano-service-installers/
 COPY entry.sh /entry.sh
