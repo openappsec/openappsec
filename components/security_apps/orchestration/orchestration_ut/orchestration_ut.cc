@@ -168,7 +168,7 @@ public:
     void
     expectDetailsResolver()
     {
-        Maybe<tuple<string, string, string>> no_nginx(genError("No nginx"));
+        Maybe<tuple<string, string, string, string>> no_nginx(genError("No nginx"));
         EXPECT_CALL(mock_details_resolver, getPlatform()).WillRepeatedly(Return(string("linux")));
         EXPECT_CALL(mock_details_resolver, getArch()).WillRepeatedly(Return(string("x86_64")));
         EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillRepeatedly(Return(false));

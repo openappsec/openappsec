@@ -43,6 +43,7 @@
 #include "agent_core_utilities.h"
 
 #define stack_trace_max_len 64
+#define STACK_SIZE (1024 * 1024) // 1 MB stack size
 
 using namespace std;
 using namespace ReportIS;
@@ -57,6 +58,12 @@ public:
     {
         if (out_trace_file_fd != -1) close(out_trace_file_fd);
         out_trace_file_fd = -1;
+
+        if (alt_stack.ss_sp != nullptr) {
+            free(alt_stack.ss_sp);
+            alt_stack.ss_sp = nullptr;
+            alt_stack_initialized = false;
+        }
     }
 
     void
@@ -69,6 +76,7 @@ public:
     void
     init()
     {
+        alt_stack.ss_sp = nullptr;
         addSignalHandlerRoutine();
         addReloadConfigurationRoutine();
     }
@@ -244,6 +252,28 @@ private:
         setHandlerPerSignalNum();
     }
 
+    bool
+    setupAlternateSignalStack()
+    {
+        if (alt_stack_initialized) return true;
+        alt_stack.ss_sp = malloc(STACK_SIZE);
+        if (alt_stack.ss_sp == nullptr) {
+            dbgWarning(D_SIGNAL_HANDLER) << "Failed to allocate alternate stack";
+            return false;
+        }
+        alt_stack.ss_size = STACK_SIZE;
+        alt_stack.ss_flags = 0;
+
+        if (sigaltstack(&alt_stack, nullptr) == -1) {
+            dbgWarning(D_SIGNAL_HANDLER) << "Failed to set up alternate stack";
+            free(alt_stack.ss_sp);
+            return false;
+        }
+        dbgInfo(D_SIGNAL_HANDLER) << "Alternate stack allocated successfully. Allocated size: " << STACK_SIZE;
+        alt_stack_initialized = true;
+        return true;
+    }
+
     void
     setHandlerPerSignalNum()
     {
@@ -261,8 +291,29 @@ private:
             SIGUSR2
         };
 
+        if (!setupAlternateSignalStack()) {
+            dbgWarning(D_SIGNAL_HANDLER) << "Failed to set up alternate signal stack";
+            for (int sig : signals) {
+                signal(sig, signalHandlerCB);
+            }
+            return;
+        }
+
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+        sa.sa_sigaction = signalActionHandlerCB;
+
+        sigemptyset(&sa.sa_mask);
+
         for (int sig : signals) {
-            signal(sig, signalHandlerCB);
+            if (sig == SIGKILL || sig == SIGSTOP) {
+                signal(sig, signalHandlerCB);
+                continue;
+            }
+            if (sigaction(sig, &sa, nullptr) == -1) {
+                dbgError(D_SIGNAL_HANDLER) << "Failed to set signal handler for signal " << sig;
+            }
         }
     }
 
@@ -284,55 +335,30 @@ private:
     static void
     signalHandlerCB(int _signal)
     {
-        const char *signal_name = "";
+        const char *signal_name = strsignal(_signal);
         char signal_num[3];
+        snprintf(signal_num, sizeof(signal_num), "%d", _signal);
+
+        if (out_trace_file_fd == -1) exit(_signal);
 
         reset_signal_handler = true;
 
         switch(_signal) {
-            case SIGABRT: {
-                signal_name = "SIGABRT";
-                fini_signal_flag = true;
-                return;
-            }
-            case SIGKILL: {
-                signal_name = "SIGKILL";
-                fini_signal_flag = true;
-                return;
-            }
-            case SIGQUIT: {
-                signal_name = "SIGQUIT";
-                fini_signal_flag = true;
-                return;
-            }
-            case SIGINT: {
-                signal_name = "SIGINT";
-                fini_signal_flag = true;
-                return;
-            }
+            case SIGABRT:
+            case SIGKILL:
+            case SIGQUIT:
+            case SIGINT:
             case SIGTERM: {
-                signal_name = "SIGTERM";
                 fini_signal_flag = true;
                 return;
             }
-            case SIGSEGV: {
-                signal_name = "SIGSEGV";
-                break;
-            }
-            case SIGBUS: {
-                signal_name = "SIGBUS";
-                break;
-            }
-            case SIGILL: {
-                signal_name = "SIGILL";
-                break;
-            }
+            case SIGSEGV:
+            case SIGBUS:
+            case SIGILL:
             case SIGFPE: {
-                signal_name = "SIGFPE";
                 break;
             }
             case SIGPIPE: {
-                signal_name = "SIGPIPE";
                 return;
             }
             case SIGUSR2: {
@@ -341,13 +367,6 @@ private:
             }
         }
 
-        if (out_trace_file_fd == -1) exit(_signal);
-
-        for (uint i = 0; i < sizeof(signal_num); ++i) {
-            uint placement = sizeof(signal_num) - 1 - i;
-            signal_num[placement] = _signal%10 + '0';
-            _signal /= 10;
-        }
         const char *signal_error_prefix = "Caught signal ";
         writeData(signal_error_prefix, strlen(signal_error_prefix));
         writeData(signal_num, sizeof(signal_num));
@@ -365,6 +384,12 @@ private:
         out_trace_file_fd = -1;
 
         exit(_signal);
+    }
+
+    static void
+    signalActionHandlerCB(int signum, siginfo_t *, void *)
+    {
+        signalHandlerCB(signum);
     }
 
     static void
@@ -391,15 +416,21 @@ private:
         for (uint i = 0 ; i < stack_trace_max_len ; i++) {
             unw_get_reg(&cursor, UNW_REG_IP, &ip);
             unw_get_reg(&cursor, UNW_REG_SP, &sp);
-
-            if (unw_get_proc_name(&cursor, name, sizeof(name), &off) == 0) {
+            int procNameRc = unw_get_proc_name(&cursor, name, sizeof(name), &off);
+            if (procNameRc == 0 || procNameRc == -UNW_ENOMEM) {
                 const char *open_braces = "<";
                 writeData(open_braces, strlen(open_braces));
-                writeData(name, strlen(name));
+                writeData(name, strnlen(name, sizeof(name)));
+                if (procNameRc != 0) {
+                    const char *dots = "...";
+                    writeData(dots, strlen(dots));
+                }
                 const char *close_braces = ">\n";
                 writeData(close_braces, strlen(close_braces));
+            } else {
+                const char *error = " -- error: unable to obtain symbol name for this frame\n";
+                writeData(error, strlen(error));
             }
-
 
             if (unw_step(&cursor) <= 0) return;
         }
@@ -444,12 +475,16 @@ private:
     static bool reload_settings_flag;
     static bool reset_signal_handler;
     static int out_trace_file_fd;
+    static stack_t alt_stack;
+    static bool alt_stack_initialized;
 };
 
 string SignalHandler::Impl::trace_file_path;
 bool SignalHandler::Impl::reload_settings_flag = false;
 bool SignalHandler::Impl::reset_signal_handler = false;
 int SignalHandler::Impl::out_trace_file_fd = -1;
+stack_t SignalHandler::Impl::alt_stack;
+bool SignalHandler::Impl::alt_stack_initialized = false;
 
 SignalHandler::SignalHandler() : Component("SignalHandler"), pimpl(make_unique<Impl>()) {}
 SignalHandler::~SignalHandler() {}

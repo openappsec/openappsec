@@ -1465,12 +1465,14 @@ private:
 
         auto nginx_data = i_details_resolver->parseNginxMetadata();
         if (nginx_data.ok()) {
+            string nginx_signature;
             string nginx_version;
             string config_opt;
             string cc_opt;
-            tie(config_opt, cc_opt, nginx_version) = nginx_data.unpack();
+            tie(config_opt, cc_opt, nginx_version, nginx_signature) = nginx_data.unpack();
             agent_data_report
                 << make_pair("attachmentVersion", "Legacy")
+                << make_pair("nginxSignature",    nginx_signature)
                 << make_pair("nginxVersion",      nginx_version)
                 << make_pair("configureOpt",      config_opt)
                 << make_pair("extraCompilerOpt",  cc_opt);
@@ -1529,7 +1531,6 @@ private:
         } else {
             curr_agent_data_report = agent_data_report;
             curr_agent_data_report.disableReportSending();
-            agent_data_report << AgentReportFieldWithLabel("timestamp", i_time->getWalltimeStr());
         }
     }
 

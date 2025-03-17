@@ -21,7 +21,7 @@
 #include "maybe_res.h"
 
 std::ostream &
-operator<<(std::ostream &os, const Maybe<std::tuple<std::string, std::string, std::string>> &)
+operator<<(std::ostream &os, const Maybe<std::tuple<std::string, std::string, std::string, std::string>> &)
 {
     return os;
 }
@@ -48,7 +48,7 @@ public:
     MOCK_METHOD0(isGwNotVsx,                 bool());
     MOCK_METHOD0(getResolvedDetails,         std::map<std::string, std::string>());
     MOCK_METHOD0(isVersionAboveR8110, bool());
-    MOCK_METHOD0(parseNginxMetadata, Maybe<std::tuple<std::string, std::string, std::string>>());
+    MOCK_METHOD0(parseNginxMetadata, Maybe<std::tuple<std::string, std::string, std::string, std::string>>());
     MOCK_METHOD0(
         readCloudMetadata, Maybe<std::tuple<std::string, std::string, std::string, std::string, std::string>>());
 };

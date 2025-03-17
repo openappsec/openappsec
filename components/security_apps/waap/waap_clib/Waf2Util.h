@@ -227,59 +227,66 @@ inline bool isHexDigit(const char ch) {
 
 template<class _IT>
 _IT escape_backslashes(_IT first, _IT last) {
-    _IT result = first;
+    _IT src = first;
+    _IT dst = first;
+    _IT mark = first;
+    
     enum { STATE_COPY, STATE_ESCAPE, STATE_OCTAL, STATE_HEX } state = STATE_COPY;
     unsigned char accVal = 0;
     unsigned char digitsCount = 0;
-    _IT mark = first;
 
-    for (; first != last; ++first) {
+    for (; src != last && dst < last; ++src) {
         switch (state) {
             case STATE_COPY:
-                if (*first == '\\') {
-                    mark = first;
+                if (*src == '\\') {
+                    mark = src;
                     state = STATE_ESCAPE;
-                }
-                else {
-                    *result++ = *first;
+                } else {
+                    *dst++ = *src;
                 }
                 break;
             case STATE_ESCAPE: {
-                if (*first >= '0' && *first <= '7') {
-                    accVal = *first - '0';
+                if (*src >= '0' && *src <= '7') {
+                    accVal = *src - '0';
                     digitsCount = 1;
                     state = STATE_OCTAL;
                     break;
-                } else if (*first == 'x') {
+                } else if (*src == 'x') {
                     accVal = 0;
                     digitsCount = 0;
                     state = STATE_HEX;
                     break;
-                }
-                else {
-                    switch (*first) {
-                        case 'a': *result++ = 7; break; // BELL
-                        case 'b': *result++ = 8; break; // BACKSPACE
-                        case 't': *result++ = 9; break; // HORIZONTAL TAB
-                        case 'n': *result++ = 10; break; // LINEFEED
-                        case 'v': *result++ = 11; break; // VERTICAL TAB
-                        case 'f': *result++ = 12; break; // FORMFEED
-                        case 'r': *result++ = 13; break; // CARRIAGE RETURN
-                        case '\\': *result++ = '\\'; break; // upon seeing double backslash - output only one
-                        case '\"': *result++ = '"'; break;  // backslash followed by '"' - output only '"'
+                } else {
+                    switch (*src) {
+                        // Copy a matching character without the backslash before it
+                        case 'a': *dst++ = 7; break; // BELL
+                        case 'b': *dst++ = 8; break; // BACKSPACE
+                        case 'e': *dst++ = 27; break; // ESCAPE
+                        case 't': *dst++ = 9; break; // HORIZONTAL TAB
+                        case 'n': *dst++ = 10; break; // LINEFEED
+                        case 'v': *dst++ = 11; break; // VERTICAL TAB
+                        case 'f': *dst++ = 12; break; // FORMFEED
+                        case 'r': *dst++ = 13; break; // CARRIAGE RETURN
+                        case '\?': *dst++ = '\?'; break; // QUESTION MARK
+                        case '\\': *dst++ = '\\'; break; // upon seeing double backslash - output only one
+                        case '\"': *dst++ = '\"'; break; // DOUBLE QUOTE
+                        case '\'': *dst++ = '\''; break; // SINGLE QUOTE
                         default:
                             // invalid escape sequence - do not replace it (return original characters)
                             // Copy from back-track, not including current character, and continue
-                            while (mark < first) {
-                                *result++ = *mark++;
+                            while (dst <= mark && mark < src) {
+                                *dst++ = *mark++;
                             }
 
                             // Copy current (terminator) character which is not "escape" and return to copy state
                             // If current character is escape - stay is "escape" state
-                            if (*first != '\\') {
-                                *result++ = *mark++;
+                            if (*src != '\\') {
+                                *dst++ = *src;
                                 state = STATE_COPY;
+                            } else {
+                                mark = src;
                             }
+                            break;
                     }
 
                     state = STATE_COPY;
@@ -288,28 +295,26 @@ _IT escape_backslashes(_IT first, _IT last) {
                 break;
             }
             case STATE_OCTAL: {
-                if (*first >='0' && *first<='7') {
-                    accVal = (accVal << 3) | (*first - '0');
+                if (*src >= '0' && *src <= '7') {
+                    accVal = (accVal << 3) | (*src - '0');
                     digitsCount++;
-
                     // Up to 3 octal digits imposed by C standard, so after 3 digits accumulation stops.
                     if (digitsCount == 3) {
-                        *result++ = accVal; // output character corresponding to collected accumulated value
+                        *dst++ = accVal; // output character corresponding to collected accumulated value
                         digitsCount = 0;
                         state = STATE_COPY;
                     }
-                }
-                else {
+                } else {
                     // invalid octal digit stops the accumulation
-                    *result++ = accVal; // output character corresponding to collected accumulated value
+                    *dst++ = accVal; // output character corresponding to collected accumulated value
                     digitsCount = 0;
-                    if (*first != '\\') {
+                    if (*src != '\\') {
                         // If terminating character is not backslash output the terminating character
-                        *result++ = *first;
+                        *dst++ = *src;
                         state = STATE_COPY;
-                    }
-                    else {
+                    } else {
                         // If terminating character is backslash start next escape sequence
+                        mark = src;
                         state = STATE_ESCAPE;
                     }
                 }
@@ -317,36 +322,33 @@ _IT escape_backslashes(_IT first, _IT last) {
                 break;
             }
             case STATE_HEX: {
-                if (!isHexDigit(*first)) {
-                    // Copy from back-track, not including current character (which is absent), and continue
-                    while (mark < first) {
-                        *result++ = *mark++;
+                if (!isHexDigit(*src)) {
+                    // Copy from back-track, not including *src character (which is absent), and continue
+                    while (dst <= mark && mark < src) {
+                        *dst++ = *mark++;
                     }
-                    if (*first != '\\') {
+                    if (*src != '\\') {
                         // If terminating character is not backslash output the terminating character
-                        *result++ = *first;
+                        *dst++ = *src;
                         state = STATE_COPY;
-                    }
-                    else {
+                    } else {
                         // If terminating character is backslash start next escape sequence
+                        mark = src;
                         state = STATE_ESCAPE;
                     }
-                }
-                else {
+                } else {
                     accVal = accVal << 4;
-                    if (isdigit(*first)) {
-                        accVal += *first - '0';
-                    }
-                    else if (*first >= 'a' && *first <= 'f') {
-                        accVal += *first - 'a' + 10;
-                    }
-                    else if (*first >= 'A' && *first <= 'F') {
-                        accVal += *first - 'A' + 10;
+                    if (isdigit(*src)) {
+                        accVal += *src - '0';
+                    } else if (*src >= 'a' && *src <= 'f') {
+                        accVal += *src - 'a' + 10;
+                    } else if (*src >= 'A' && *src <= 'F') {
+                        accVal += *src - 'A' + 10;
                     }
                     digitsCount++;
                     // exactly 2 hex digits are anticipated, so after 2 digits accumulation stops.
                     if (digitsCount == 2) {
-                        *result++ = accVal; // output character corresponding to collected accumulated value
+                        *dst++ = accVal; // output character corresponding to collected accumulated value
                         digitsCount = 0;
                         state = STATE_COPY;
                     }
@@ -356,34 +358,36 @@ _IT escape_backslashes(_IT first, _IT last) {
         }
     }
 
-    // Handle state at end of input
-    bool copyBackTrack = true;
-    switch (state) {
-        case STATE_HEX:
-            // this can only happen on this sequence '\xH' where H is a single hex digit.
-            // in this case the sequence is considered invalid and should be copied verbatim (copyBackTrack=true)
-            break;
-        case STATE_OCTAL:
-            // this can only happen when less than 3 octal digits are found at the value end, like '\1' or '\12'
-            *result++ = accVal; // output character corresponding to collected accumulated value
-            copyBackTrack = false;
-            break;
-        case STATE_COPY:
-            copyBackTrack = false;
-            break;
-        case STATE_ESCAPE:
-            break;
-    }
+    if (dst < last) {
+        // Handle state at end of input
+        bool copyBackTrack = true;
+        switch (state) {
+            case STATE_HEX:
+                // this can only happen on this sequence '\xH' where H is a single hex digit.
+                // in this case the sequence is considered invalid and should be copied verbatim (copyBackTrack=true)
+                break;
+            case STATE_OCTAL:
+                // this can only happen when less than 3 octal digits are found at the value end, like '\1' or '\12'
+                *dst++ = accVal; // output character corresponding to collected accumulated value
+                copyBackTrack = false;
+                break;
+            case STATE_COPY:
+                copyBackTrack = false;
+                break;
+            case STATE_ESCAPE:
+                break;
+        }
 
-    if (copyBackTrack) {
-        // invalid escape sequence - do not replace it (return original characters)
-        // Copy from back-track
-        while (mark < first) {
-            *result++ = *mark++;
+        if (copyBackTrack) {
+            // invalid escape sequence - do not replace it (return original characters)
+            // Copy from back-track
+            while (dst <= mark && mark < src) {
+                *dst++ = *mark++;
+            }
         }
     }
 
-    return result;
+    return dst;
 }
 
 inline bool str_contains(const std::string &haystack, const std::string &needle)
@@ -401,7 +405,8 @@ extern const size_t g_htmlEntitiesCount;
 
 template<class _IT>
 _IT escape_html(_IT first, _IT last) {
-    _IT result = first;
+    _IT dst = first;
+    _IT src = first;
     enum {
         STATE_COPY,
         STATE_ESCAPE,
@@ -414,26 +419,26 @@ _IT escape_html(_IT first, _IT last) {
     std::list<size_t> potentialMatchIndices;
     size_t matchLength = 0;
     size_t lastKnownMatchIndex = -1;
-    _IT mark = first;
+    _IT mark = src;
 
-    for (; first != last; ++first) {
+    for (; src != last && dst < last; ++src) {
         switch (state) {
             case STATE_COPY:
-                if (*first == '&') {
-                    mark = first;
+                if (*src == '&') {
+                    mark = src;
                     state = STATE_ESCAPE;
                 }
                 else {
-                    *result++ = *first;
+                    *dst++ = *src;
                 }
                 break;
             case STATE_ESCAPE:
-                if (isalpha(*first)) {
+                if (isalpha(*src)) {
                     // initialize potential matches list
                     potentialMatchIndices.clear();
 
                     for (size_t index = 0; index < g_htmlEntitiesCount; ++index) {
-                        if (*first == g_htmlEntities[index].name[0]) {
+                        if (*src == g_htmlEntities[index].name[0]) {
                             potentialMatchIndices.push_back(index);
                             lastKnownMatchIndex = index;
                         }
@@ -441,8 +446,8 @@ _IT escape_html(_IT first, _IT last) {
 
                     // No potential matches - send ampersand and current character to output
                     if (potentialMatchIndices.size()  == 0) {
-                        *result++ = '&';
-                        *result++ = *first;
+                        *dst++ = '&';
+                        *dst++ = *src;
                         state = STATE_COPY;
                         break;
                     }
@@ -451,7 +456,7 @@ _IT escape_html(_IT first, _IT last) {
                     matchLength = 1;
                     state = STATE_NAMED_CHARACTER_REFERENCE;
                 }
-                else if (*first == '#') {
+                else if (*src == '#') {
                     digitsSeen = 0;
                     accVal = 0;
                     state = STATE_NUMERIC_START;
@@ -459,8 +464,8 @@ _IT escape_html(_IT first, _IT last) {
                 else {
                     // not isalpha and not '#' - this is invalid character reference - do not replace it
                     // (return original characters)
-                    *result++ = '&';
-                    *result++ = *first;
+                    *dst++ = '&';
+                    *dst++ = *src;
                     state = STATE_COPY;
                 }
                 break;
@@ -479,7 +484,7 @@ _IT escape_html(_IT first, _IT last) {
 
                         // If there are no more characters in the potntial match name,
                         // or the next tested character doesn't match - kill the match
-                        if ((matchName[matchLength] == '\0') || (matchName[matchLength] != *first)) {
+                        if ((matchName[matchLength] == '\0') || (matchName[matchLength] != *src)) {
                             // remove current element from the list of potential matches
                             pPotentialMatchIndex = potentialMatchIndices.erase(pPotentialMatchIndex);
                         }
@@ -495,15 +500,15 @@ _IT escape_html(_IT first, _IT last) {
                 // No more potential matches: unsuccesful match -> flush all consumed characters back to output stream
                 if (potentialMatchIndices.size() == 0) {
                     // Send consumed ampersand to the output
-                    *result++ = '&';
+                    *dst++ = '&';
 
                     // Send those matched characters (these are the same that we consumed) - to the output
                     for (size_t i = 0; i < matchLength; i++) {
-                        *result++ = g_htmlEntities[lastKnownMatchIndex].name[i];
+                        *dst++ = g_htmlEntities[lastKnownMatchIndex].name[i];
                     }
 
                     // Send the character that terminated our search for possible matches
-                    *result++ = *first;
+                    *dst++ = *src;
 
                     // Continue copying text verbatim
                     state = STATE_COPY;
@@ -511,23 +516,23 @@ _IT escape_html(_IT first, _IT last) {
                 }
 
                 // There are still potential matches and ';' is hit
-                if (*first == ';') {
+                if (*src == ';') {
                     // longest match found for the named character reference.
                     // translate it into output character(s) and we're done.
                     unsigned short value = g_htmlEntities[lastKnownMatchIndex].value;
 
                     // Encode UTF code point as UTF-8 bytes
                     if (value < 0x80) {
-                        *result++ = value;
+                        *dst++ = value;
                     }
                     else if (value < 0x800 ) {
-                        *result++ = (value >> 6)    | 0xC0;
-                        *result++ = (value & 0x3F) | 0x80;
+                        *dst++ = (value >> 6)    | 0xC0;
+                        *dst++ = (value & 0x3F) | 0x80;
                     }
                     else { // (value <= 0xFFFF : always true because value type is unsigned short which is 16-bit
-                        *result++ = (value >> 12) | 0xE0;
-                        *result++ = ((value >> 6) & 0x3F) | 0x80;
-                        *result++ = (value & 0x3F) | 0x80;
+                        *dst++ = (value >> 12) | 0xE0;
+                        *dst++ = ((value >> 6) & 0x3F) | 0x80;
+                        *dst++ = (value & 0x3F) | 0x80;
                     }
 
                     // Continue copying text verbatim
@@ -538,178 +543,179 @@ _IT escape_html(_IT first, _IT last) {
             case STATE_NUMERIC_START:
                 digitsSeen = false;
                 accVal = 0;
-                if (*first == 'x' || *first == 'X') {
+                if (*src == 'x' || *src == 'X') {
                     state = STATE_HEX;
                 }
-                else if (isdigit(*first)) {
+                else if (isdigit(*src)) {
                     digitsSeen = true;
-                    accVal = *first - '0';
+                    accVal = *src - '0';
                     state = STATE_NUMERIC;
                 }
                 else {
                     // Sequence started with these two characters: '&#', and here is the third, non-digit character
 
                     // Copy from back-track, not including current character, and continue
-                    while (mark < first) {
-                        *result++ = *mark++;
+                    while (dst <= mark && mark < src) {
+                        *dst++ = *mark++;
                     }
 
-                    if (*first == '&') {
+                    if (*src == '&') {
                         // Terminator is also start of next escape sequence
-                        mark = first;
+                        mark = src;
                         state = STATE_ESCAPE;
                         break;
                     }
                     else {
                         // Copy the terminating character too
-                        *result++ = *first;
+                        *dst++ = *src;
                     }
                     state = STATE_COPY;
                 }
                 break;
             case STATE_NUMERIC:
-                if (!isdigit(*first)) {
+                if (!isdigit(*src)) {
                     if (digitsSeen) {
                         // Encode UTF code point as UTF-8 bytes
                         if (accVal < 0x80) {
-                            *result++ = accVal;
+                            *dst++ = accVal;
                         }
                         else if (accVal < 0x800 ) {
-                            *result++ = (accVal >> 6)    | 0xC0;
-                            *result++ = (accVal & 0x3F) | 0x80;
+                            *dst++ = (accVal >> 6)    | 0xC0;
+                            *dst++ = (accVal & 0x3F) | 0x80;
                         }
                         else { // (accVal <= 0xFFFF : always true because accVal type is unsigned short which is 16-bit
-                            *result++ = (accVal >> 12) | 0xE0;
-                            *result++ = ((accVal >> 6) & 0x3F) | 0x80;
-                            *result++ = (accVal & 0x3F) | 0x80;
+                            *dst++ = (accVal >> 12) | 0xE0;
+                            *dst++ = ((accVal >> 6) & 0x3F) | 0x80;
+                            *dst++ = (accVal & 0x3F) | 0x80;
                         }
                     }
                     else {
                         // Copy from back-track, not including current character (which is absent), and continue
-                        while (mark < first) {
-                            *result++ = *mark++;
+                        while (dst <= mark && mark < src) {
+                            *dst++ = *mark++;
                         }
                     }
 
-                    if (*first == '&') {
+                    if (*src == '&') {
                         // Terminator is also start of next escape sequence
-                        mark = first;
+                        mark = src;
                         state = STATE_ESCAPE;
                         break;
                     }
-                    else if (!digitsSeen || *first != ';') {
+                    else if (!digitsSeen || *src != ';') {
                         // Do not copy the ';' but do copy any other terminator
                         // Note: the ';' should remain in the output if there were no digits seen.
-                        *result++ = *first;
+                        *dst++ = *src;
                     }
                     state = STATE_COPY;
                 }
                 else {
                     digitsSeen = true;
-                    accVal = accVal * 10 + *first - '0'; // TODO:: beware of integer overflow?
+                    accVal = accVal * 10 + *src - '0'; // TODO:: beware of integer overflow?
                 }
                 break;
             case STATE_HEX:
-                if (!isHexDigit(*first)) {
+                if (!isHexDigit(*src)) {
                     if (digitsSeen) {
                         // Encode UTF code point as UTF-8 bytes
                         if (accVal < 0x80) {
-                            *result++ = accVal;
+                            *dst++ = accVal;
                         }
                         else if (accVal < 0x800 ) {
-                            *result++ = (accVal >> 6)    | 0xC0;
-                            *result++ = (accVal & 0x3F) | 0x80;
+                            *dst++ = (accVal >> 6)    | 0xC0;
+                            *dst++ = (accVal & 0x3F) | 0x80;
                         }
                         else { // (accVal <= 0xFFFF : always true because accVal type is unsigned short which is 16-bit
-                            *result++ = (accVal >> 12) | 0xE0;
-                            *result++ = ((accVal >> 6) & 0x3F) | 0x80;
-                            *result++ = (accVal & 0x3F) | 0x80;
+                            *dst++ = (accVal >> 12) | 0xE0;
+                            *dst++ = ((accVal >> 6) & 0x3F) | 0x80;
+                            *dst++ = (accVal & 0x3F) | 0x80;
                         }
                     }
                     else {
                         // Copy from back-track, not including current character (which is absent), and continue
-                        while (mark < first) {
-                            *result++ = *mark++;
+                        while (dst <= mark && mark < src) {
+                            *dst++ = *mark++;
                         }
                     }
 
-                    if (*first == '&') {
+                    if (*src == '&') {
                         // Terminator is also start of next escape sequence
-                        mark = first;
+                        mark = src;
                         state = STATE_ESCAPE;
                         break;
                     }
-                    else if (!digitsSeen || *first != ';') {
+                    else if (!digitsSeen || *src != ';') {
                         // Do not copy the ';' but do copy any other terminator
                         // Note: the ';' should remain in the output if there were no digits seen.
-                        *result++ = *first;
+                        *dst++ = *src;
                     }
                     state = STATE_COPY;
                 }
                 else {
                     digitsSeen = true;
                     accVal = accVal << 4;
-                    if (isdigit(*first)) {
-                        accVal += *first - '0';
+                    if (isdigit(*src)) {
+                        accVal += *src - '0';
                     }
-                    else if (*first >= 'a' && *first <= 'f') {
-                        accVal += *first - 'a' + 10;
+                    else if (*src >= 'a' && *src <= 'f') {
+                        accVal += *src - 'a' + 10;
                     }
-                    else if (*first >= 'A' && *first <= 'F') {
-                        accVal += *first - 'A' + 10;
+                    else if (*src >= 'A' && *src <= 'F') {
+                        accVal += *src - 'A' + 10;
                     }
                 }
                 break;
         }
     }
 
-    if (state == STATE_ESCAPE) {
-        *result++ = '&';
+    if (state == STATE_ESCAPE && dst < last) {
+        *dst++ = '&';
     }
-    else if (state == STATE_NAMED_CHARACTER_REFERENCE && potentialMatchIndices.size() > 0) {
+    else if (state == STATE_NAMED_CHARACTER_REFERENCE && potentialMatchIndices.size() > 0 && dst < last) {
         // Send consumed ampersand to the output
-        *result++ = '&';
+        *dst++ = '&';
 
         // Send those matched characters (these are the same that we consumed) - to the output
-        for (size_t i = 0; i < matchLength; i++) {
+        for (size_t i = 0; i < matchLength && dst < last; i++) {
             // Even if there are multiple potential matches, all of them start with the same
             // matchLength characters that we consumed!
-            *result++ = g_htmlEntities[lastKnownMatchIndex].name[i];
+            *dst++ = g_htmlEntities[lastKnownMatchIndex].name[i];
         }
     }
     if (state == STATE_HEX && !digitsSeen) { // Special case of "&#x"
         // Copy from back-track, not including current character (which is absent), and continue
-        while (mark < first) {
-            *result++ = *mark++;
+        while (dst <= mark && mark < src) {
+            *dst++ = *mark++;
         }
         state = STATE_COPY;
     }
     else if (state == STATE_HEX || state == STATE_NUMERIC || state == STATE_NUMERIC_START) {
-        if (digitsSeen) {
+        if (digitsSeen && dst < last) {
             // Encode UTF code point as UTF-8 bytes
             if (accVal < 0x80) {
-                *result++ = accVal;
+                *dst++ = accVal;
             }
-            else if (accVal < 0x800 ) {
-                *result++ = (accVal >> 6)    | 0xC0;
-                *result++ = (accVal & 0x3F) | 0x80;
+            else if (accVal < 0x800 && std::distance(dst, last) >= 2) {
+                *dst++ = (accVal >> 6) | 0xC0;
+                *dst++ = (accVal & 0x3F) | 0x80;
             }
-            else { // (accVal <= 0xFFFF : always true because accVal type is unsigned short which is 16-bit
-                *result++ = (accVal >> 12) | 0xE0;
-                *result++ = ((accVal >> 6) & 0x3F) | 0x80;
-                *result++ = (accVal & 0x3F) | 0x80;
+            // (accVal <= 0xFFFF : always true because accVal type is unsigned short which is 16-bit
+            else if (std::distance(dst, last) >= 3) {
+                *dst++ = (accVal >> 12) | 0xE0;
+                *dst++ = ((accVal >> 6) & 0x3F) | 0x80;
+                *dst++ = (accVal & 0x3F) | 0x80;
             }
         }
         else {
             // Copy from back-track, not including current character (which is absent), and continue
-            while (mark < first) {
-                *result++ = *mark++;
+            while (dst <= mark && mark < src) {
+                *dst++ = *mark++;
             }
             state = STATE_COPY;
         }
     }
 
-    return result;
+    return dst;
 }
 
 // Compare two buffers, case insensitive. Return true if they are equal (case-insensitive)
