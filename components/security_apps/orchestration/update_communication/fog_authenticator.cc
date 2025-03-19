@@ -168,10 +168,12 @@ FogAuthenticator::registerAgent(
     auto nginx_data = details_resolver->parseNginxMetadata();
 
     if (nginx_data.ok()) {
+        string nginx_signature;
         string nginx_version;
         string config_opt;
         string cc_opt;
-        tie(config_opt, cc_opt, nginx_version) = nginx_data.unpack();
+        tie(config_opt, cc_opt, nginx_version, nginx_signature) = nginx_data.unpack();
+        request << make_pair("nginxSignature",   nginx_signature);
         request << make_pair("nginxVersion",     nginx_version);
         request << make_pair("configureOpt",     config_opt);
         request << make_pair("extraCompilerOpt", cc_opt);

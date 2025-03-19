@@ -32,6 +32,30 @@ TEST(StringAttributesBasic, SettersAndGetters)
     EXPECT_FALSE(string_attributes.isEmpty());
     EXPECT_EQ(string_attributes.getStringAttr("attr1").unpack(), "1");
     EXPECT_EQ(string_attributes.getStringSetAttr("attr2").unpack(), vals);
+
+    IpAttributes attributes;
+
+    EXPECT_TRUE(attributes.isEmpty());
+    EXPECT_FALSE(attributes.getIpv4Addresses().ok());
+    EXPECT_FALSE(attributes.getIpv6Addresses().ok());
+    EXPECT_FALSE(attributes.getIpv4AddressRanges().ok());
+    EXPECT_FALSE(attributes.getIpv6AddressRanges().ok());
+
+    IpAddressRange range("1.1.1.1", "1.1.1.5");
+    attributes
+        .addIpv4Addresses("1.1.1.2")
+        .addIpv4AddressRanges(range)
+        .addIpv6Addresses("1.1.1.2")
+        .addIpv6AddressRanges(range);
+
+
+    EXPECT_FALSE(attributes.isEmpty());
+    vector<string> ip_vector = {"1.1.1.2"};
+    vector<IpAddressRange> ip_range_vector = {range};
+    EXPECT_EQ(attributes.getIpv4Addresses().unpack(), ip_vector);
+    EXPECT_EQ(attributes.getIpv4AddressRanges().unpack(), ip_range_vector);
+    EXPECT_EQ(attributes.getIpv6Addresses().unpack(), ip_vector);
+    EXPECT_EQ(attributes.getIpv6AddressRanges().unpack(), ip_range_vector);
 }
 
 TEST(StringAttributesBasic, attr_schema)
@@ -51,6 +75,39 @@ TEST(StringAttributesBasic, attr_schema)
         "    ]\n"
         "}";
     EXPECT_EQ(ss.str(), expected_schema);
+
+    IpAddressRange range("1.1.1.1", "1.1.1.5");
+    IpAttributes attributes = IpAttributes()
+        .addIpv4Addresses("1.1.1.2")
+        .addIpv4Addresses("1.1.1.3")
+        .addIpv4AddressRanges(range)
+        .addIpv6Addresses("1.1.1.4")
+        .addIpv6AddressRanges(range);
+    stringstream attr_ss;
+    attributes.performOutputingSchema(attr_ss, 0);
+    expected_schema =
+        "{\n"
+        "    \"ipv4Addresses\": [\n"
+        "        \"1.1.1.2\",\n"
+        "        \"1.1.1.3\"\n"
+        "    ],\n"
+        "    \"ipv6Addresses\": [\n"
+        "        \"1.1.1.4\"\n"
+        "    ],\n"
+        "    \"ipv4AddressesRange\": [\n"
+        "        {\n"
+        "            \"max\": \"1.1.1.5\",\n"
+        "            \"min\": \"1.1.1.1\"\n"
+        "        }\n"
+        "    ],\n"
+        "    \"ipv6AddressesRange\": [\n"
+        "        {\n"
+        "            \"max\": \"1.1.1.5\",\n"
+        "            \"min\": \"1.1.1.1\"\n"
+        "        }\n"
+        "    ]\n"
+        "}";
+    EXPECT_EQ(attr_ss.str(), expected_schema);
 }
 
 TEST(StringAttributesBasic, Matching)
@@ -105,6 +162,20 @@ TEST(StringAttributesBasic, genObject)
 
     string expected_json = "{ \"attr1\": \"1\", \"attr2\": [ \"2\", \"3\" ] }";
     EXPECT_EQ(string_attributes.genObject().unpack(), expected_json);
+
+    IpAddressRange range("1.1.1.1", "1.1.1.5");
+    IpAttributes attributes = IpAttributes()
+        .addIpv4Addresses("1.1.1.2")
+        .addIpv4Addresses("1.1.1.3")
+        .addIpv4AddressRanges(range)
+        .addIpv6Addresses("1.1.1.4")
+        .addIpv6AddressRanges(range);
+
+    expected_json =
+        "{ \"ipv4Addresses\": [ \"1.1.1.2\", \"1.1.1.3\" ], \"ipv6Addresses\": [ \"1.1.1.4\" ], "
+        "\"ipv4AddressesRange\": [ { \"max\": \"1.1.1.5\", \"min\": \"1.1.1.1\" } ], "
+        "\"ipv6AddressesRange\": [ { \"max\": \"1.1.1.5\", \"min\": \"1.1.1.1\" } ] }";
+    EXPECT_EQ(attributes.genObject().unpack(), expected_json);
 }
 
 TEST(InvalidationBasic, SettersAndGetters)
@@ -125,15 +196,15 @@ TEST(InvalidationBasic, SettersAndGetters)
     EXPECT_FALSE(invalidation.getInvalidationType().ok());
 
     set<string> main_vals = { "2", "3" };
-    set<string> vals = { "5", "6" };
+    vector<string> vals = {"1.1.1.1", "2.2.2.2"};
 
     auto main_attr = StrAttributes()
         .addStringAttr("main_attr1", "1")
         .addStringSetAttr("main_attr2", main_vals);
 
-    auto attr = StrAttributes()
-        .addStringAttr("attr1", "4")
-        .addStringSetAttr("attr2", vals);
+    auto attr = IpAttributes()
+        .addIpv4Addresses("1.1.1.1")
+        .addIpv4Addresses("2.2.2.2");
 
     invalidation
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -148,8 +219,7 @@ TEST(InvalidationBasic, SettersAndGetters)
     EXPECT_EQ(invalidation.getClassifier(ClassifierType::FAMILY), "ccc");
     EXPECT_EQ(invalidation.getMainAttributes().begin()->getStringAttr("main_attr1").unpack(), "1");
     EXPECT_EQ(invalidation.getMainAttributes().begin()->getStringSetAttr("main_attr2").unpack(), main_vals);
-    EXPECT_EQ(invalidation.getAttributes().begin()->getStringAttr("attr1").unpack(), "4");
-    EXPECT_EQ(invalidation.getAttributes().begin()->getStringSetAttr("attr2").unpack(), vals);
+    EXPECT_EQ(invalidation.getAttributes().begin()->getIpv4Addresses().unpack(), vals);
     EXPECT_EQ(invalidation.getSourceId().unpack(), "id");
     EXPECT_EQ(invalidation.getObjectType().unpack(), Intelligence::ObjectType::ASSET);
     EXPECT_EQ(invalidation.getInvalidationType().unpack(), InvalidationType::DELETE);
@@ -164,9 +234,9 @@ TEST(InvalidationBasic, Matching)
         .addStringAttr("main_attr1", "1")
         .addStringSetAttr("main_attr2", main_vals);
 
-    auto attr = StrAttributes()
-        .addStringAttr("attr1", "4")
-        .addStringSetAttr("attr2", vals);
+    auto attr = IpAttributes()
+        .addIpv4Addresses("1.1.1.1")
+        .addIpv4Addresses("2.2.2.2");
 
     auto base_invalidation = Invalidation("aaa")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -179,10 +249,9 @@ TEST(InvalidationBasic, Matching)
         .addStringSetAttr("main_attr2", main_vals)
         .addStringAttr("main_attr3", "6");
 
-    auto matching_attr = StrAttributes()
-        .addStringAttr("attr1", "4")
-        .addStringSetAttr("attr2", vals)
-        .addStringAttr("attr3", "7");
+    auto matching_attr = IpAttributes()
+        .addIpv4Addresses("1.1.1.1")
+        .addIpv4Addresses("2.2.2.2");
 
     auto matching_invalidation = Invalidation("aaa")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -212,10 +281,9 @@ TEST(InvalidationBasic, Matching)
 
     EXPECT_FALSE(base_invalidation.matches(missing_attr_invalidation_main));
 
-    auto missing_attr = StrAttributes()
-        .addStringAttr("attr1", "4")
-        .addStringAttr("attr2", "2")
-        .addStringAttr("attr3", "7");
+    auto missing_attr = IpAttributes()
+        .addIpv4Addresses("2.2.2.2")
+        .addIpv4Addresses("3.3.3.3");
 
     auto missing_attr_invalidation = Invalidation("aaa")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -280,7 +348,7 @@ public:
         intelligence.preload();
         intelligence.init();
         main_attr.addStringAttr("attr2", "2");
-        attr.addStringAttr("attr3", "3");
+        attr.addIpv4Addresses("1.1.1.1");
     }
 
     bool
@@ -291,7 +359,7 @@ public:
     }
 
     StrAttributes main_attr;
-    StrAttributes attr;
+    IpAttributes attr;
     StrictMock<MockMessaging> messaging_mock;
     StrictMock<MockMainLoop> mock_ml;
     NiceMock<MockTimeGet> mock_time;
@@ -350,7 +418,7 @@ TEST_F(IntelligenceInvalidation, sending_public_invalidation)
         "\"objectType\": \"asset\", "
         "\"sourceId\": \"id\", "
         "\"mainAttributes\": [ { \"attr2\": \"2\" } ], "
-        "\"attributes\": [ { \"attr3\": \"3\" } ]"
+        "\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.1\" ] } ]"
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
     EXPECT_FALSE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
@@ -390,7 +458,7 @@ TEST_F(IntelligenceInvalidation, multiple_assets_invalidation)
         "\"objectType\": \"asset\", "
         "\"sourceId\": \"id\", "
         "\"mainAttributes\": [ { \"attr2\": \"2\" }, { \"attr2\": \"22\", \"attr3\": [ \"33\", \"44\" ] } ], "
-        "\"attributes\": [ { \"attr3\": \"3\" } ]"
+        "\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.1\" ] } ]"
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
 }
@@ -439,7 +507,7 @@ TEST_F(IntelligenceInvalidation, sending_private_invalidation)
         "\"objectType\": \"asset\", "
         "\"sourceId\": \"id\", "
         "\"mainAttributes\": [ { \"attr2\": \"2\" } ], "
-        "\"attributes\": [ { \"attr3\": \"3\" } ]"
+        "\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.1\" ] } ]"
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
     EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
@@ -484,7 +552,7 @@ TEST_F(IntelligenceInvalidation, register_for_invalidation)
     EXPECT_THAT(body, HasSubstr("\"url\": \"http://127.0.0.1:7000/set-new-invalidation\""));
     EXPECT_THAT(body, HasSubstr("\"apiVersion\": \"v2\", \"communicationType\": \"sync\""));
     EXPECT_THAT(body, HasSubstr("\"mainAttributes\": [ { \"attr2\": \"2\" } ]"));
-    EXPECT_THAT(body, HasSubstr("\"attributes\": [ { \"attr3\": \"3\" } ]"));
+    EXPECT_THAT(body, HasSubstr("\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.1\" ] } ]"));
     EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
     EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true }"));
 
@@ -888,11 +956,19 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_by_registration_id)
     configuration << "}";
     Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
 
+    IpAddressRange range("1.1.1.1", "1.1.1.5");
+    IpAttributes attributes = IpAttributes()
+        .addIpv4Addresses("1.1.1.2")
+        .addIpv4AddressRanges(range)
+        .addIpv6Addresses("1.1.1.2")
+        .addIpv6AddressRanges(range);
+
     auto base_main_attr2 = StrAttributes()
         .addStringAttr("attr3", "3");
     auto invalidation_to_register = Invalidation("aaa")
         .addMainAttr(main_attr)
         .addMainAttr(base_main_attr2)
+        .addAttr(attributes)
         .setSourceId("id")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -911,6 +987,7 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_by_registration_id)
 
     auto matching_invalidation = Invalidation("aaa")
         .addMainAttr(matching_second_main_attribute)
+        .addAttr(attributes)
         .setSourceId("id")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::CATEGORY, "bbb")
@@ -919,6 +996,7 @@ TEST_F(IntelligenceInvalidation, invalidation_cb_match_by_registration_id)
 
     auto invalidation_2_to_register = Invalidation("aaa")
         .addMainAttr(base_main_attr2)
+        .addAttr(attributes)
         .setSourceId("id")
         .setClassifier(ClassifierType::FAMILY, "ccc")
         .setClassifier(ClassifierType::CATEGORY, "bbb")

@@ -276,6 +276,7 @@ void
 AgentDetails::preload()
 {
     registerExpectedConfiguration<string>("orchestration", "Agent details path");
+    registerExpectedConfiguration<string>("Agent details", "File path");
     registerConfigLoadCb([this] () { readAgentDetails(); });
 }
 

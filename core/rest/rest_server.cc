@@ -163,10 +163,14 @@ RestServer::Impl::init()
             }
         }
 
+        bool is_ipv6 = false;
         if (accept_get_from_external_ip) {
+            is_ipv6 = true;
             fd = socket(AF_INET6, SOCK_STREAM, 0);
-        } else {
+        }
+        if (fd == -1) {
             fd = socket(AF_INET, SOCK_STREAM, 0);
+            is_ipv6 = false;
         }
         dbgAssert(fd >= 0) << alert << "Failed to open a socket";
 
@@ -175,7 +179,8 @@ RestServer::Impl::init()
             dbgWarning(D_API) << "Could not set the socket options";
         }
 
-        if (accept_get_from_external_ip) {
+        if (is_ipv6) {
+            dbgDebug(D_API) << "IPv6 socket opened successfully";
             int option = 0;
             if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &option, sizeof(option)) < 0) {
                 dbgWarning(D_API) << "Could not set the IPV6_V6ONLY option";
@@ -185,16 +190,24 @@ RestServer::Impl::init()
             bzero(&addr6, sizeof(addr6));
             addr6.sin6_family = AF_INET6;
             addr6.sin6_addr = in6addr_any;
+            dbgDebug(D_API) << "Socket listening on any address";
 
             while (!bindRestServerSocket(addr6, port_range)) {
                 mainloop->yield(bind_retry_interval_msec);
             }
             listening_port = ntohs(addr6.sin6_port);
         } else {
+            dbgDebug(D_API) << "IPv4 socket opened successfully";
             struct sockaddr_in addr;
             bzero(&addr, sizeof(addr));
             addr.sin_family = AF_INET;
-            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (accept_get_from_external_ip) {
+                addr.sin_addr.s_addr = htonl(INADDR_ANY);
+                dbgDebug(D_API) << "Socket listening on any address";
+            } else {
+                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                dbgDebug(D_API) << "Socket listening on local address";
+            }
 
             while (!bindRestServerSocket(addr, port_range)) {
                 mainloop->yield(bind_retry_interval_msec);

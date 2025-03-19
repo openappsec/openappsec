@@ -68,6 +68,7 @@ public:
         const Maybe<string> &agent_version
     ) override;
 
+    pair<string, string> generateTimeStamp();
     bool addAttr(const string &key, const string &val, bool allow_override = false) override;
     bool addAttr(const map<string, string> &attr, bool allow_override = false) override;
     void deleteAttr(const string &key) override;
@@ -218,6 +219,13 @@ AgentDetailsReporter::Impl::isPersistantAttr(const std::string &key)
     return persistant_attributes.count(key) > 0;
 }
 
+pair<string, string>
+AgentDetailsReporter::Impl::generateTimeStamp()
+{
+    auto time_stamp =  Singleton::Consume<I_TimeGet>::by<AgentDetailsReporter>()->getWalltimeStr();
+    return make_pair("timestamp", time_stamp);
+}
+
 bool
 AgentDetailsReporter::Impl::sendAttributes()
 {
@@ -232,11 +240,10 @@ AgentDetailsReporter::Impl::sendAttributes()
         attributes[new_attr.first] = new_attr.second;
     }
 
-
     AttributesSender attr_to_send(attributes);
     if (is_server) {
         AttrSerializer<ofstream, cereal::JSONOutputArchive>(attributes, "save");
-
+        attr_to_send.attributes.get().insert(generateTimeStamp());
         messaging->sendAsyncMessage(HTTPMethod::PATCH, "/agents", attr_to_send);
         dbgDebug(D_AGENT_DETAILS) << "Triggered persistent message request with attributes to the Fog";
         new_attributes.clear();
@@ -322,6 +329,36 @@ public:
         attributes = attr;
     }
 
+    void
+    addAttr(const string &key, const string &val, bool allow_override = false)
+    {
+        dbgDebug(D_AGENT_DETAILS)
+            << "Trying to add new attribute. Key: "
+            << key
+            << ", Value: "
+            << val
+            << " Should allow override: "
+            << (allow_override ? "true" : "false");
+        auto &attr = attributes.get();
+        if (!allow_override) {
+            if (attr.count(key) > 0) {
+                dbgWarning(D_AGENT_DETAILS)
+                    << "Cannot override an existing value with a new one. Existing Value: "
+                    << (attr.count(key) > 0 ? attr[key] : "");
+                return;
+            }
+        }
+
+        attr[key] = val;
+        if (!attributes.isActive()) attributes.setActive(true);
+    }
+
+    void
+    addAttr(const pair<string, string> &attr, bool allow_override = false)
+    {
+        addAttr(attr.first, attr.second, allow_override);
+    }
+
 private:
     C2S_PARAM(metaDataReport, additionalMetaData);
     C2S_OPTIONAL_PARAM(string, agentVersion);
@@ -402,6 +439,7 @@ AgentDetailsReporter::Impl::sendReport(
         additional_metadata.setAdditionalAttributes(attributes);
     }
 
+    additional_metadata.addAttr(generateTimeStamp());
     messaging->sendAsyncMessage(HTTPMethod::PATCH, "/agents", additional_metadata);
 }
 

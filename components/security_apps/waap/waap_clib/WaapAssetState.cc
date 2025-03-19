@@ -424,6 +424,8 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
 
     std::string unescape(const std::string & s) {
         std::string text = s;
+        size_t orig_size = text.size();
+        size_t orig_capacity = text.capacity();
         dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (0) '" << text << "'";
 
         fixBreakingSpace(text);
@@ -433,7 +435,17 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
         filterUnicode(text);
         dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (1) '" << text << "'";
 
+        // inplace unescaping must result in a string of the same size or smaller
+        dbgAssertOpt(text.size() <= orig_size && text.size() <= text.capacity() && text.capacity() <= orig_capacity)
+            << AlertInfo(AlertTeam::CORE, "WAAP sample processing")
+            << "unescape: original size=" << orig_size << " capacity=" << orig_capacity
+            << " new size=" << text.size() << " capacity=" << text.capacity()
+            << " text='" << text << "'";
+
         text = filterUTF7(text);
+        // update orig_size and orig_capacity after string copy
+        orig_size = text.size();
+        orig_capacity = text.capacity();
         dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (1) (after filterUTF7) '" << text << "'";
 
         // 2. Replace %xx sequences by their single-character equivalents.
@@ -512,6 +524,14 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
         }
 
         dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (12) '" << text << "'";
+
+        // inplace unescaping must result in a string of the same size or smaller
+        dbgAssertOpt(text.size() <= orig_size && text.size() <= text.capacity() && text.capacity() <= orig_capacity)
+            << AlertInfo(AlertTeam::CORE, "WAAP sample processing")
+            << "unescape: original size=" << orig_size << " capacity=" << orig_capacity
+            << " new size=" << text.size() << " capacity=" << text.capacity()
+            << " text='" << text << "'";
+
         return text;
     }
 

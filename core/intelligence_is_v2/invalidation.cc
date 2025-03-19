@@ -20,6 +20,8 @@
 
 #include "i_intelligence_is_v2.h"
 
+USE_DEBUG_FLAG(D_INTELLIGENCE);
+
 using namespace Intelligence;
 using namespace std;
 
@@ -204,6 +206,18 @@ Invalidation::attr_matches(const vector<StrAttributes> &current, const vector<St
 }
 
 bool
+Invalidation::attr_matches(const vector<IpAttributes> &current, const vector<IpAttributes> &other) const
+{
+    if (current.empty()) return true;
+    for (const auto &attr : current) {
+        for(const auto &other_attr : other) {
+            if (attr.matches(other_attr)) return true;
+        }
+    }
+    return false;
+}
+
+bool
 Invalidation::matches(const Invalidation &other) const
 {
     for (auto key : NGEN::Range<ClassifierType>()) {
@@ -230,7 +244,7 @@ Invalidation::matches(const Invalidation &other) const
 }
 
 Invalidation &
-Invalidation::addAttr(const StrAttributes &attr)
+Invalidation::addAttr(const IpAttributes &attr)
 {
     attributes.emplace_back(attr);
     return *this;
@@ -377,4 +391,225 @@ StrAttributes::performOutputingSchema(ostream &out, int level) {
         first = false;
     }
     RestHelper::printIndent(out, level) << "}";
+}
+
+IpAttributes &
+IpAttributes::addIpv4Addresses(const string &val)
+{
+    ipv4_addresses.push_back(val);
+    return *this;
+}
+
+IpAttributes &
+IpAttributes::addIpv6Addresses(const string &val)
+{
+    ipv6_addresses.push_back(val);
+    return *this;
+}
+
+IpAttributes &
+IpAttributes::addIpv4AddressRanges(const IpAddressRange &val)
+{
+    ipv4_address_ranges.push_back(val);
+    return *this;
+}
+
+IpAttributes &
+IpAttributes::addIpv6AddressRanges(const IpAddressRange &val)
+{
+    ipv6_address_ranges.push_back(val);
+    return *this;
+}
+
+Maybe<vector<string>, void>
+IpAttributes::getIpv4Addresses() const
+{
+    if (ipv4_addresses.empty()) return genError<void>();
+    return ipv4_addresses;
+}
+
+Maybe<vector<string>, void>
+IpAttributes::getIpv6Addresses() const
+{
+    if (ipv6_addresses.empty()) return genError<void>();
+    return ipv6_addresses;
+}
+
+Maybe<vector<IpAddressRange>, void>
+IpAttributes::getIpv4AddressRanges() const
+{
+    if (ipv4_address_ranges.empty()) return genError<void>();
+    return ipv4_address_ranges;
+}
+
+Maybe<vector<IpAddressRange>, void>
+IpAttributes::getIpv6AddressRanges() const
+{
+    if (ipv6_address_ranges.empty()) return genError<void>();
+    return ipv6_address_ranges;
+}
+
+Maybe<string, void>
+IpAttributes::genObject() const
+{
+    stringstream attributes_ss;
+    if (this->isEmpty()) return genError<void>();
+    bool internal_first = true;
+    bool first = true;
+    attributes_ss << "{ ";
+    if (!ipv4_addresses.empty()) {
+        attributes_ss << "\"ipv4Addresses\": [ ";
+        for (auto &attr : ipv4_addresses) {
+            if (!internal_first) attributes_ss << ", ";
+            attributes_ss << "\"" << attr << "\"";
+            internal_first = false;
+        }
+        attributes_ss << " ]";
+        first = false;
+    }
+
+    if (!ipv6_addresses.empty()) {
+        if (!first) attributes_ss << ", ";
+        attributes_ss << "\"ipv6Addresses\": [ ";
+        internal_first = true;
+        for (auto &attr : ipv6_addresses) {
+            if (!internal_first) attributes_ss << ", ";
+            attributes_ss << "\"" << attr << "\"";
+            internal_first = false;
+        }
+        attributes_ss << " ]";
+        first = false;
+    }
+
+    if (!ipv4_address_ranges.empty()) {
+        if (!first) attributes_ss << ", ";
+        attributes_ss << "\"ipv4AddressesRange\": [ ";
+        internal_first = true;
+        for (auto &attr : ipv4_address_ranges) {
+            if (!internal_first) attributes_ss << ", ";
+            attributes_ss << "{ \"max\": \"" << attr.getMax() << "\", \"min\": \"" << attr.getMin() << "\" }";
+            internal_first = false;
+        }
+        attributes_ss << " ]";
+        first = false;
+    }
+
+    if (!ipv6_address_ranges.empty()) {
+        if (!first) attributes_ss << ", ";
+        attributes_ss << "\"ipv6AddressesRange\": [ ";
+        internal_first = true;
+        for (auto &attr : ipv6_address_ranges) {
+            if (!internal_first) attributes_ss << ", ";
+            attributes_ss << "{ \"max\": \"" << attr.getMax() << "\", \"min\": \"" << attr.getMin() << "\" }";
+            internal_first = false;
+        }
+        attributes_ss << " ]";
+        first = false;
+    }
+
+    attributes_ss << " }";
+    return attributes_ss.str();
+}
+
+bool
+IpAttributes::isEmpty() const
+{
+    return
+        ipv4_addresses.empty() &&
+        ipv6_addresses.empty() &&
+        ipv4_address_ranges.empty() &&
+        ipv6_address_ranges.empty();
+}
+
+bool
+IpAttributes::matches(const IpAttributes &other) const
+{
+    return
+        ipv4_addresses == other.ipv4_addresses &&
+        ipv6_addresses == other.ipv6_addresses &&
+        ipv4_address_ranges == other.ipv4_address_ranges &&
+        ipv6_address_ranges == other.ipv6_address_ranges;
+}
+
+void
+IpAttributes::serialize(cereal::JSONInputArchive &ar)
+{
+    try {
+        ar(cereal::make_nvp("ipv4Addresses", ipv4_addresses));
+        ar(cereal::make_nvp("ipv4AddressesRange", ipv4_address_ranges));
+        ar(cereal::make_nvp("ipv6Addresses", ipv6_addresses));
+        ar(cereal::make_nvp("ipv6AddressesRange", ipv6_address_ranges));
+    } catch (cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+}
+
+void
+IpAttributes::performOutputingSchema(ostream &out, int level)
+{
+    bool first = true;
+    bool internal_first = true;
+    RestHelper::printIndent(out, level) << "{\n";
+
+    if (!ipv4_addresses.empty()) {
+        RestHelper::printIndent(out, level + 1) << "\"ipv4Addresses\": [\n";
+        for (auto &attr : ipv4_addresses) {
+            if (!internal_first) out << ",\n";
+            RestHelper::printIndent(out, level + 2) << "\"" << attr << "\"";
+            internal_first = false;
+        }
+        out << "\n";
+        RestHelper::printIndent(out, level + 1) << "]";
+        first = false;
+    }
+
+    if (!ipv6_addresses.empty()) {
+        if (!first) out << ",\n";
+        RestHelper::printIndent(out, level + 1) << "\"ipv6Addresses\": [\n";
+        internal_first = true;
+        for (auto &attr : ipv6_addresses) {
+            if (!internal_first) out << ",\n";
+            RestHelper::printIndent(out, level + 2) << "\"" << attr << "\"";
+            internal_first = false;
+        }
+        out << "\n";
+        RestHelper::printIndent(out, level + 1) << "]";
+        first = false;
+    }
+
+    if (!ipv4_address_ranges.empty()) {
+        if (!first) out << ",\n";
+        RestHelper::printIndent(out, level + 1) << "\"ipv4AddressesRange\": [\n";
+        internal_first = true;
+        for (auto &attr : ipv4_address_ranges) {
+            if (!internal_first) out << ",\n";
+            RestHelper::printIndent(out, level + 2) << "{\n";
+            RestHelper::printIndent(out, level + 3) << "\"max\": \"" << attr.getMax() << "\",\n";
+            RestHelper::printIndent(out, level + 3) << "\"min\": \"" << attr.getMin() << "\"\n";
+            RestHelper::printIndent(out, level + 2) << "}";
+            internal_first = false;
+        }
+        out << "\n";
+        RestHelper::printIndent(out, level + 1) << "]";
+        first = false;
+    }
+
+    if (!ipv6_address_ranges.empty()) {
+        if (!first) out << ",\n";
+        RestHelper::printIndent(out, level + 1) << "\"ipv6AddressesRange\": [\n";
+        internal_first = true;
+        for (auto &attr : ipv6_address_ranges) {
+            if (!internal_first) out << ",\n";
+            RestHelper::printIndent(out, level + 2) << "{\n";
+            RestHelper::printIndent(out, level + 3) << "\"max\": \"" << attr.getMax() << "\",\n";
+            RestHelper::printIndent(out, level + 3) << "\"min\": \"" << attr.getMin() << "\"\n";
+            RestHelper::printIndent(out, level + 2) << "}";
+            internal_first = false;
+        }
+        out << "\n";
+        RestHelper::printIndent(out, level + 1) << "]";
+        first = false;
+    }
+
+    RestHelper::printIndent(out, level) << "\n}";
 }

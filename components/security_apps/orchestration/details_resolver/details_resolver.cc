@@ -46,7 +46,7 @@ public:
     bool isReverseProxy() override;
     bool isCloudStorageEnabled() override;
     Maybe<tuple<string, string, string, string, string>> readCloudMetadata() override;
-    Maybe<tuple<string, string, string>> parseNginxMetadata() override;
+    Maybe<tuple<string, string, string, string>> parseNginxMetadata() override;
 #if defined(gaia) || defined(smb)
     bool compareCheckpointVersion(int cp_version, std::function<bool(int, int)> compare_operator) const override;
 #endif // gaia || smb
@@ -230,7 +230,7 @@ isNoResponse(const string &cmd)
     return !res.ok() || res.unpack().empty();
 }
 
-Maybe<tuple<string, string, string>>
+Maybe<tuple<string, string, string, string>>
 DetailsResolver::Impl::parseNginxMetadata()
 {
     auto output_path = getConfigurationWithDefault<string>(
@@ -241,6 +241,11 @@ DetailsResolver::Impl::parseNginxMetadata()
     const string srcipt_exe_cmd =
         getFilesystemPathConfig() +
         "/scripts/cp-nano-makefile-generator.sh -f -o " +
+        output_path;
+
+    const string script_fresh_exe_cmd =
+        getFilesystemPathConfig() +
+        "/scripts/cp-nano-makefile-generator-fresh.sh save --save-location " +
         output_path;
 
     dbgTrace(D_ORCHESTRATOR) << "Details resolver, srcipt exe cmd: " << srcipt_exe_cmd;
@@ -265,7 +270,7 @@ DetailsResolver::Impl::parseNginxMetadata()
             return genError("Cannot open the file with nginx metadata, File: " + output_path);
         }
 
-    string line;
+        string line;
         while (getline(input_stream, line)) {
             lines.push_back(line);
         }
@@ -279,7 +284,37 @@ DetailsResolver::Impl::parseNginxMetadata()
             << " Error: " << exception.what();
     }
 
+    if (!isNoResponse("which nginx")) {
+        auto script_output = DetailsResolvingHanlder::getCommandOutput(script_fresh_exe_cmd);
+        if (!script_output.ok()) {
+            return genError("Failed to generate nginx fresh metadata, Error: " + script_output.getErr());
+        }
+
+        try {
+            ifstream input_stream(output_path);
+            if (!input_stream) {
+                return genError("Cannot open the file with nginx fresh metadata, File: " + output_path);
+            }
+
+            string line;
+            while (getline(input_stream, line)) {
+                if (line.find("NGX_MODULE_SIGNATURE") == 0) {
+                    lines.push_back(line);
+                }
+            }
+            input_stream.close();
+
+            orchestration_tools->removeFile(output_path);
+        } catch (const ifstream::failure &exception) {
+            dbgWarning(D_ORCHESTRATOR)
+                << "Cannot read the file with required nginx fresh metadata."
+                << " File: " << output_path
+                << " Error: " << exception.what();
+        }
+    }
+
     if (lines.size() == 0) return genError("Failed to read nginx metadata file");
+    string nginx_signature;
     string nginx_version;
     string config_opt;
     string cc_opt;
@@ -294,6 +329,11 @@ DetailsResolver::Impl::parseNginxMetadata()
             nginx_version = "nginx-" + line.substr(eq_index + 1);
             continue;
         }
+        if (line.find("NGX_MODULE_SIGNATURE") != string::npos) {
+            auto eq_index = line.find("=");
+            nginx_signature = line.substr(eq_index + 1);
+            continue;
+        }
         if (line.find("EXTRA_CC_OPT") != string::npos) {
             auto eq_index = line.find("=");
             cc_opt = line.substr(eq_index + 1);
@@ -303,7 +343,7 @@ DetailsResolver::Impl::parseNginxMetadata()
         if (line.back() == '\\') line.pop_back();
         config_opt += line;
     }
-    return make_tuple(config_opt, cc_opt, nginx_version);
+    return make_tuple(config_opt, cc_opt, nginx_version, nginx_signature);
 }
 
 Maybe<tuple<string, string, string, string, string>>

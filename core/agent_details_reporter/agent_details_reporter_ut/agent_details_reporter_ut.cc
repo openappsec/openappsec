@@ -8,6 +8,7 @@
 #include "mock/mock_messaging.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_rest_api.h"
+#include "mock/mock_time_get.h"
 #include "environment.h"
 #include "agent_details_report.h"
 
@@ -73,6 +74,7 @@ public:
     StrictMock<MockMainLoop> mock_mainloop;
     StrictMock<MockMessaging> mock_messaging;
     StrictMock<MockRestApi> mock_rest;
+    StrictMock<MockTimeGet> mock_time_get;
     I_MainLoop::Routine periodic_report;
     I_AgentDetailsReporter *report;
     CPTestTempfile persistence_attr_file;
@@ -85,6 +87,7 @@ public:
 
 TEST_F(AgentReporterTest, dataReport)
 {
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     string custom_data = "Linux version 24.00.15F";
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
@@ -92,26 +95,33 @@ TEST_F(AgentReporterTest, dataReport)
         "{\n"
         "    \"additionalMetaData\": {\n"
         "        \"custom_data\": \"Linux version 24.00.15F\"\n"
-        "    }"
-        "\n}",
+        "    },\n"
+        "    \"attributes\": {\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
+        "}",
         MessageCategory::GENERIC,
         _,
         _
     )).Times(1);
-    AgentDataReport() << AgentReportField(custom_data);;
+    AgentDataReport() << AgentReportField(custom_data);
 }
 
 TEST_F(AgentReporterTest, labeledDataReport)
 {
     string data = "Linux version 24.00.15F";
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
         "{\n"
         "    \"additionalMetaData\": {\n"
         "        \"this_is_custom_label\": \"Linux version 24.00.15F\"\n"
-        "    }"
-        "\n}",
+        "    },\n"
+        "    \"attributes\": {\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
+        "}",
         MessageCategory::GENERIC,
         _,
         _
@@ -123,6 +133,7 @@ TEST_F(AgentReporterTest, multiDataReport)
 {
     string custom_data = "Linux version 24.00.15F";
     string data_to_report = "Agent Version 95.95.95.00A";
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
@@ -130,8 +141,11 @@ TEST_F(AgentReporterTest, multiDataReport)
         "    \"additionalMetaData\": {\n"
         "        \"custom_data\": \"Linux version 24.00.15F\",\n"
         "        \"this_is_custom_label\": \"Agent Version 95.95.95.00A\"\n"
-        "    }"
-        "\n}",
+        "    },\n"
+        "    \"attributes\": {\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
+        "}",
         MessageCategory::GENERIC,
         _,
         _
@@ -146,7 +160,7 @@ TEST_F(AgentReporterTest, multiDataReportWithRegistrationData)
 {
     string custom_data = "Linux version 24.00.15F";
     string data_to_report = "Agent Version 95.95.95.00A";
-
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
@@ -158,7 +172,10 @@ TEST_F(AgentReporterTest, multiDataReportWithRegistrationData)
         "    \"agentVersion\": \"1.15.9\",\n"
         "    \"policyVersion\": \"ccc\",\n"
         "    \"platform\": \"bbb\",\n"
-        "    \"architecture\": \"aaa\"\n"
+        "    \"architecture\": \"aaa\",\n"
+        "    \"attributes\": {\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
         "}",
         MessageCategory::GENERIC,
         _,
@@ -178,11 +195,15 @@ TEST_F(AgentReporterTest, multiDataReportWithRegistrationData)
 
 TEST_F(AgentReporterTest, basicAttrTest)
 {
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
         "{\n"
-        "    \"additionalMetaData\": {}\n"
+        "    \"additionalMetaData\": {},\n"
+        "    \"attributes\": {\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
         "}",
         MessageCategory::GENERIC,
         _,
@@ -193,6 +214,7 @@ TEST_F(AgentReporterTest, basicAttrTest)
         AgentDataReport agent_data;
     }
 
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
@@ -201,7 +223,8 @@ TEST_F(AgentReporterTest, basicAttrTest)
         "    \"attributes\": {\n"
         "        \"1\": \"2\",\n"
         "        \"a\": \"1\",\n"
-        "        \"c\": \"d\"\n"
+        "        \"c\": \"d\",\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
         "    }\n"
         "}",
         MessageCategory::GENERIC,
@@ -219,11 +242,15 @@ TEST_F(AgentReporterTest, basicAttrTest)
         AgentDataReport agent_data;
     }
 
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
         "{\n"
-        "    \"additionalMetaData\": {}\n"
+        "    \"additionalMetaData\": {},\n"
+        "    \"attributes\": {\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
         "}",
         MessageCategory::GENERIC,
         _,
@@ -242,7 +269,7 @@ TEST_F(AgentReporterTest, advancedAttrTest)
 
     EXPECT_TRUE(report->addAttr({{"c", "d"}, {"1", "2"}, {"send", "me"}}));
     EXPECT_TRUE(report->addAttr("a", "b"));
-
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
@@ -251,7 +278,8 @@ TEST_F(AgentReporterTest, advancedAttrTest)
         "        \"1\": \"2\",\n"
         "        \"a\": \"b\",\n"
         "        \"c\": \"d\",\n"
-        "        \"send\": \"me\"\n"
+        "        \"send\": \"me\",\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
         "    }\n"
         "}",
         MessageCategory::GENERIC,
@@ -268,6 +296,7 @@ TEST_F(AgentReporterTest, advancedAttrTest)
     EXPECT_TRUE(report->addAttr("new", "key val"));
     EXPECT_TRUE(report->addAttr("a", "key val override", true));
 
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
@@ -277,7 +306,8 @@ TEST_F(AgentReporterTest, advancedAttrTest)
         "        \"a\": \"key val override\",\n"
         "        \"c\": \"d\",\n"
         "        \"new\": \"key val\",\n"
-        "        \"send\": \"me\"\n"
+        "        \"send\": \"me\",\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
         "    }\n"
         "}",
         MessageCategory::GENERIC,
@@ -291,6 +321,7 @@ TEST_F(AgentReporterTest, advancedAttrTest)
 TEST_F(AgentReporterTest, RestDetailsTest)
 {
     stringstream rest_call_parameters;
+    stringstream rest_call_parameters_with_timestamp;
     rest_call_parameters
         << "{\n"
         << "    \"attributes\": {\n"
@@ -300,17 +331,28 @@ TEST_F(AgentReporterTest, RestDetailsTest)
         << "        \"send\": \"me\"\n"
         << "    }\n"
         << "}";
+
+    rest_call_parameters_with_timestamp
+        << "{\n"
+        << "    \"attributes\": {\n"
+        << "        \"1\": \"2\",\n"
+        << "        \"a\": \"key val override\",\n"
+        << "        \"c\": \"d\",\n"
+        << "        \"send\": \"me\",\n"
+        << "        \"timestamp\": \"Best Time ever\"\n"
+        << "    }\n"
+        << "}";
     add_details_rest_cb->performRestCall(rest_call_parameters);
 
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
-        rest_call_parameters.str(),
+        rest_call_parameters_with_timestamp.str(),
         MessageCategory::GENERIC,
         _,
         _
     )).Times(1);
-
     EXPECT_TRUE(report->sendAttributes());
 
     is_server_mode = false;
@@ -365,6 +407,18 @@ TEST_F(AgentReporterTest, PersistenceAttrTest)
         "}"
     );
 
+    string expected_attributes_with_timestamp(
+        "{\n"
+        "    \"attributes\": {\n"
+        "        \"1\": \"2\",\n"
+        "        \"a\": \"key val override\",\n"
+        "        \"c\": \"d\",\n"
+        "        \"send\": \"me\",\n"
+        "        \"timestamp\": \"Best Time ever\"\n"
+        "    }\n"
+        "}"
+    );
+
     write_attributes << expected_attributes;
     write_attributes.close();
 
@@ -372,10 +426,11 @@ TEST_F(AgentReporterTest, PersistenceAttrTest)
     EXPECT_CALL(mock_rest, mockRestCall(RestAction::ADD, "agent-details-attr", _)).WillOnce(Return(true));
     agent_details_reporter_comp.init();
 
+    EXPECT_CALL(mock_time_get, getWalltimeStr()).WillOnce(Return("Best Time ever"));
     EXPECT_CALL(mock_messaging, sendAsyncMessage(
         HTTPMethod::PATCH,
         "/agents",
-        expected_attributes,
+        expected_attributes_with_timestamp,
         MessageCategory::GENERIC,
         _,
         _

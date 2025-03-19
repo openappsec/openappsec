@@ -29,8 +29,10 @@ is_wlp_orchestration="false"
 ORCHESTRATION_EXE_SOURCE_PATH="./bin/orchestration_comp"
 
 NGINX_METADAT_EXTRACTOR_PATH="./scripts/cp-nano-makefile-generator.sh"
+NGINX_FRESH_METADATA_EXTRACTOR_PATH="./scripts/cp-nano-makefile-generator-fresh.sh"
 ORCHESTRATION_FILE_NAME="cp-nano-orchestration"
 NGINX_METADDATA_EXTRACTOR_NAME="cp-nano-makefile-generator.sh"
+NGINX_FRESH_METADATA_EXTRACTOR_NAME="cp-nano-makefile-generator-fresh.sh"
 GET_CLOUD_METADATA_PATH="get-cloud-metadata.sh"
 AGENT_UNINSTALL="cp-agent-uninstall.sh"
 ORCHESTRATION_NAME="orchestration"
@@ -336,6 +338,10 @@ while true; do
     elif [ "$1" = "--cloud-storage" ]; then
         shift
         var_cloud_storage=$1
+    elif [ "$1" = "--only_unpack_lib64_path" ]; then
+        shift
+        USR_LIB_PATH=$1
+        var_only_unpack_lib64="set"
     elif echo "$1" | grep -q ${FORCE_CLEAN_FLAG}; then
         var_upgrade_mode=
     elif echo "$1" | grep -q ${DEBUG_FLAG}; then
@@ -849,6 +855,13 @@ copy_nginx_metadata_script()
     cp_exec "chmod +x ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${NGINX_METADDATA_EXTRACTOR_NAME}"
 }
 
+copy_nginx_fresh_metadata_script()
+{
+    cp_copy "$NGINX_FRESH_METADATA_EXTRACTOR_PATH" ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${NGINX_FRESH_METADATA_EXTRACTOR_NAME}
+    cp_exec "chmod 700 ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${NGINX_FRESH_METADATA_EXTRACTOR_NAME}"
+    cp_exec "chmod +x ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${NGINX_FRESH_METADATA_EXTRACTOR_NAME}"
+}
+
 copy_and_run_cloud_metadata_script()
 {
     cp_copy "${SCRIPTS_PATH}/$GET_CLOUD_METADATA_PATH" ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}
@@ -925,6 +938,19 @@ get_status_content()
 install_orchestration()
 {
     INSTALLATION_TIME=$(date)
+
+    if [ "$var_only_unpack_lib64" = "set" ]; then
+        cp_exec "mkdir ${USR_LIB_PATH}"
+        if [ ! -d "$USR_LIB_PATH" ]; then
+            cp_print "No valid path: ${USR_LIB_PATH}. please do --only_unpack_lib64_path <Path>" ${FORCE_STDOUT}
+            exit 1
+        fi
+        ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/
+        ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/
+        cp_print "Done successfully doing only unpacking lib64 to Path: ${USR_LIB_PATH}" ${FORCE_STDOUT}	
+        exit 0
+    fi
+
     if [ "$is_smb" != "1" ]; then
         cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}"
     else
@@ -1038,6 +1064,7 @@ install_orchestration()
         copy_orchestration_executable
         copy_k8s_executable
         copy_nginx_metadata_script
+        copy_nginx_fresh_metadata_script
         copy_and_run_cloud_metadata_script
 
         install_watchdog "--upgrade"
@@ -1133,6 +1160,7 @@ install_orchestration()
     copy_orchestration_executable
     copy_k8s_executable
     copy_nginx_metadata_script
+    copy_nginx_fresh_metadata_script
     copy_and_run_cloud_metadata_script
 
     install_cp_nano_ctl

@@ -30,7 +30,7 @@ public:
     virtual bool isVersionAboveR8110() = 0;
     virtual bool isReverseProxy() = 0;
     virtual bool isCloudStorageEnabled() = 0;
-    virtual Maybe<std::tuple<std::string, std::string, std::string>> parseNginxMetadata() = 0;
+    virtual Maybe<std::tuple<std::string, std::string, std::string, std::string>> parseNginxMetadata() = 0;
     virtual Maybe<std::tuple<std::string, std::string, std::string, std::string, std::string>> readCloudMetadata() = 0;
     virtual std::map<std::string, std::string> getResolvedDetails() = 0;
 #if defined(gaia) || defined(smb)

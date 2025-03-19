@@ -254,7 +254,7 @@ private:
     C2S_OPTIONAL_PARAM(string, sourceId);
     C2S_OPTIONAL_PARAM(string, invalidationRegistrationId);
     C2S_OPTIONAL_PARAM(vector<StrAttributes>, mainAttributes);
-    C2S_OPTIONAL_PARAM(vector<StrAttributes>, attributes);
+    C2S_OPTIONAL_PARAM(vector<IpAttributes>, attributes);
     C2S_OPTIONAL_PARAM(string, invalidationType);
 };
 
@@ -624,7 +624,7 @@ private:
                 query_request.isBulk() ? queries_uri : query_uri,
                 *json_body,
                 MessageCategory::INTELLIGENCE,
-                global_req_md
+                query_request.getReqMD().getHostName().empty() ? global_req_md : query_request.getReqMD()
         );
         if (!req_data.ok()) {
             auto response_error = req_data.getErr().toString();
