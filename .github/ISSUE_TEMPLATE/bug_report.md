@@ -7,7 +7,7 @@ labels: [bug]
 **Checklist**
 - Have you checked the open-appsec troubleshooting guides - https://docs.openappsec.io/troubleshooting/troubleshooting
   - Yes / No
-- Have you checked the existing issues and discossions in github for the same issue
+- Have you checked the existing issues and discussions in github for the same issue.
   - Yes / No
 
 **Describe the bug**
