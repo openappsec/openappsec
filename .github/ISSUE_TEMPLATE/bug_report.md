@@ -1,6 +1,6 @@
 ---
 name: "Bug Report"
-description: "Report a bug with open-appsec"
+about: "Report a bug with open-appsec"
 labels: [bug]
 ---
 
