@@ -4,5 +4,5 @@ contact_links:
     url: "https://docs.openappsec.io/"
     about: "Check the documentation before submitting an issue."
   - name: "Feature Requests & Discussions"
-    url: "https://github.com/openappsec/discussions"
+    url: "https://github.com/openappsec/openappsec/discussions"
     about: "Please open a discussion for feature requests, or create an issue if necessary."
