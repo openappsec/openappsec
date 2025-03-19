@@ -1,6 +1,6 @@
 ---
 name: "Nginx Version Support Request"
-about: "Check if a specific Nginx version is supported"
+about: "Request for a specific Nginx version to be supported"
 ---
 
 **Nginx & OS Version:**
