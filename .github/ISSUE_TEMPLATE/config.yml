@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: "Documentation & FAQ"
-    url: "https://docs.openappsec.io/"
-    about: "Check the documentation before submitting an issue."
-  - name: "Feature Requests & Discussions"
-    url: "https://github.com/open-appsec/discussions"
-    about: "Please open a discussion for feature requests instead of an issue."
