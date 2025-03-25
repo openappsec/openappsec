@@ -359,7 +359,7 @@ done
 # VS ID argument is available only on install, for other actions, extract it from the package location
 if [ -z "$VS_ID" ]; then
     parent_pid=$PPID
-    parent_cmdline=$(ps -o cmd= -p "$parent_pid")
+    parent_cmdline=$(cat /proc/"$parent_pid"/cmdline | tr '\0' ' ')
     parent_dir=$(dirname "$parent_cmdline")
     packages_folder=$(dirname "$parent_dir")
     vs_folder=$(dirname "$packages_folder")
@@ -500,26 +500,26 @@ cp_copy() # Initials - cc
     cp_print "Destination md5, after the copy:\n$DEST_AFTER_COPY"
 }
 
-update_cloudguard_appsec_manifest()
+update_openappsec_manifest()
 {
-    if [ -z ${INFINITY_NEXT_NANO_AGENT} ] && { [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; }; then
+    if [ -z ${OPENAPPSEC_NANO_AGENT} ] && { [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; }; then
         return
     fi
 
-    selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/cloudguard_appsec_manifest.json"
-    if [ "${DOCKER_RPM_ENABLED}" = "false" ] || [ "${INFINITY_NEXT_NANO_AGENT}" = "TRUE" ]; then
-        selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/self_managed_cloudguard_appsec_manifest.json"
+    selected_openappsec_manifest_path="${TMP_FOLDER}/openappsec_manifest.json"
+    if [ "${DOCKER_RPM_ENABLED}" = "false" ] || [ "${OPENAPPSEC_NANO_AGENT}" = "TRUE" ]; then
+        selected_openappsec_manifest_path="${TMP_FOLDER}/self_managed_openappsec_manifest.json"
     fi
 
-    if [ ! -f "$selected_cloudguard_appsec_manifest_path" ]; then
+    if [ ! -f "$selected_openappsec_manifest_path" ]; then
         return
     fi
 
-    cloudguard_appsec_manifest_path="${selected_cloudguard_appsec_manifest_path}.used"
-    mv "$selected_cloudguard_appsec_manifest_path" "$cloudguard_appsec_manifest_path"
+    openappsec_manifest_path="${selected_openappsec_manifest_path}.used"
+    mv "$selected_openappsec_manifest_path" "$openappsec_manifest_path"
     fog_host=$(echo "$var_fog_address" | sed 's/https\?:\/\///')
     fog_host=${fog_host%/}
-    sed "s/namespace/${fog_host}/g" ${cloudguard_appsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
+    sed "s/namespace/${fog_host}/g" ${openappsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
 }
 
 set_cloud_storage()
@@ -785,8 +785,9 @@ upgrade_conf_if_needed()
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
 
-        previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
- 		if ! [ -z "$previous_mode" ]; then
+        [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
+	previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
+	if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
         fi
 
@@ -1020,7 +1021,9 @@ install_orchestration()
         fi
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
-        previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
+
+	[ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
+	previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
 
         if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
@@ -1044,7 +1047,8 @@ install_orchestration()
             rm -f "${FILESYSTEM_PATH}/${CONF_PATH}/default_orchestration_flags"
         fi
 
-        upgrade_conf_if_needed
+        update_openappsec_manifest
+	upgrade_conf_if_needed
 
         cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
         if [ "$IS_K8S_ENV" = "true" ]; then
@@ -1100,7 +1104,7 @@ install_orchestration()
     cp_exec "mkdir -p ${LOG_FILE_PATH}/${LOG_PATH}"
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${DATA_PATH}"
 
-    update_cloudguard_appsec_manifest
+    update_openappsec_manifest
 
     if [ ! -f ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH} ]; then
         echo "{\"agentSettings\": []}" >  ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH}
