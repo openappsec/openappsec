@@ -36,6 +36,7 @@ services:
       - ${APPSEC_DATA}:/etc/cp/data
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
+      - shm-volume:/dev/shm/check-point
     command: /cp-nano-agent
     
   appsec-nginx:
@@ -45,7 +46,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${NGINX_CONFIG}:/etc/nginx/conf.d
-
+      - shm-volume:/dev/shm/check-point
 ## advanced configuration - volume mount for nginx.conf file:
 ## To change global instructions it's possible to also mount your own nginx.conf file by uncommenting the line below
 ## then specify a desired local folder for NGINX_CONF_FILE in the .env file.
@@ -122,6 +123,13 @@ services:
     container_name: juiceshop-backend
     profiles:
       - juiceshop
+
+volumes:
+  shm-volume:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
 
 ## advanced configuration: learning_nfs volume for nfs storage in shared_storage container
 ##
