@@ -169,7 +169,6 @@ RestServer::Impl::init()
         } else {
             fd = socket(AF_INET, SOCK_STREAM, 0);
         }
-
         dbgAssert(fd >= 0) << alert << "Failed to open a socket";
 
         int socket_enable = 1;
