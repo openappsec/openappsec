@@ -163,15 +163,13 @@ RestServer::Impl::init()
             }
         }
 
-        bool is_ipv6 = false;
-        if (accept_get_from_external_ip) {
-            is_ipv6 = true;
+        bool is_ipv6 = getProfileAgentSettingWithDefault(false, "enable_ipv6");
+        if (is_ipv6) {
             fd = socket(AF_INET6, SOCK_STREAM, 0);
-        }
-        if (fd == -1) {
+        } else {
             fd = socket(AF_INET, SOCK_STREAM, 0);
-            is_ipv6 = false;
         }
+
         dbgAssert(fd >= 0) << alert << "Failed to open a socket";
 
         int socket_enable = 1;
