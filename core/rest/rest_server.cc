@@ -163,7 +163,7 @@ RestServer::Impl::init()
             }
         }
 
-        bool is_ipv6 = getProfileAgentSettingWithDefault(false, "enable_ipv6");
+        bool is_ipv6 = getProfileAgentSettingWithDefault(false, "agent.rest.enableIpv6");
         if (is_ipv6) {
             fd = socket(AF_INET6, SOCK_STREAM, 0);
         } else {
