@@ -39,10 +39,10 @@ kind: Exception
 metadata:
   name: exception-example
 spec:
-  action: accept
+  action: drop
   condition:
-    - key: countryCode
-      value: US
+    - key: sourceIP
+      value: 127.0.0.1
 
 ---
 apiVersion: openappsec.io/v1beta2
