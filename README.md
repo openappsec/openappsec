@@ -177,7 +177,7 @@ open-appsec code was audited by an independent third party in September-October 
 See the [full report](https://github.com/openappsec/openappsec/blob/main/LEXFO-CHP20221014-Report-Code_audit-OPEN-APPSEC-v1.2.pdf).
 
 ### Reporting security vulnerabilities
-If you've found a vulnerability or a potential vulnerability in open-appsec please let us know at securityalert@openappsec.io. We'll send a confirmation email to acknowledge your report within 24 hours, and we'll send an additional email when we've identified the issue positively or negatively.
+If you've found a vulnerability or a potential vulnerability in open-appsec please let us know at security-alert@openappsec.io. We'll send a confirmation email to acknowledge your report within 24 hours, and we'll send an additional email when we've identified the issue positively or negatively.
 
 
 # License
