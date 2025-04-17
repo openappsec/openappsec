@@ -1093,12 +1093,9 @@ void Waf2Transaction::add_request_hdr(const char* name, int name_len, const char
 void Waf2Transaction::end_request_hdrs() {
     dbgFlow(D_WAAP) << "[transaction:" << this << "] end_request_hdrs";
     m_isScanningRequired = setCurrentAssetContext();
-    if (m_siteConfig != NULL)
-    {
-        // getOverrideState also extracts the source identifier and populates m_source_identifier
-        // but the State itself is not needed now
-        Waap::Override::State overrideState = getOverrideState(m_siteConfig);
-    }
+
+    extractEnvSourceIdentifier();
+
     m_pWaapAssetState->m_requestsMonitor->logSourceHit(m_source_identifier);
     IdentifiersEvent ids(m_source_identifier, m_pWaapAssetState->m_assetId);
     ids.notify();

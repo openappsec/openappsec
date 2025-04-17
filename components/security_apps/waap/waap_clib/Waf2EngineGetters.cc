@@ -594,8 +594,6 @@ Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
         overrideState.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, true);
     }
 
-    extractEnvSourceIdentifier();
-
     if (overridePolicy) { // later we will run response overrides
         m_overrideState.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, false);
     }
