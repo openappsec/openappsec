@@ -1,0 +1,434 @@
+ype: object
+properties:
+  policies:
+    type: object
+    properties:
+      default:
+        type: object
+        properties:
+          custom-response:
+            type: string
+          exceptions:
+            items:
+              type: string
+            type: array
+          mode:
+            enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+            type: string
+          practices:
+            items:
+              type: string
+            type: array
+          source-identifiers:
+            type: string
+          triggers:
+            items:
+              type: string
+            type: array
+          trusted-sources:
+            type: string
+        required:
+          - mode
+          - practices
+          - triggers
+      specific-rules:
+        type: array
+        items:
+          properties:
+            host:
+              type: string
+            custom-response:
+              type: string
+            exceptions:
+              items:
+                type: string
+              type: array
+            mode:
+              enum:
+                - prevent-learn
+                - detect-learn
+                - prevent
+                - detect
+                - inactive
+              type: string
+            practices:
+              items:
+                type: string
+              type: array
+            source-identifiers:
+              type: string
+            triggers:
+              items:
+                type: string
+              type: array
+            trusted-sources:
+              type: string
+          required:
+            - mode
+            - host
+            - practices
+            - triggers
+          type: object
+  practices:
+    type: array
+    items:
+      properties:
+        name:
+          type: string
+        anti-bot:
+          properties:
+            injected-URIs:
+              items:
+                properties:
+                  uri:
+                    type: string
+                type: object
+              type: array
+            override-mode:
+              enum:
+                - prevent-learn
+                - detect-learn
+                - prevent
+                - detect
+                - inactive
+                - as-top-level
+              type: string
+              default: "inactive"
+            validated-URIs:
+              items:
+                properties:
+                  uri:
+                    type: string
+                type: object
+              type: array
+          type: object
+        openapi-schema-validation:
+          properties:
+            files:
+              items:
+                type: string
+              type: array
+            override-mode:
+              enum:
+                - prevent-learn
+                - detect-learn
+                - prevent
+                - detect
+                - inactive
+                - as-top-level
+              type: string
+          type: object
+        snort-signatures:
+          properties:
+            files:
+              items:
+                type: string
+              type: array
+            override-mode:
+              enum:
+                - prevent-learn
+                - detect-learn
+                - prevent
+                - detect
+                - inactive
+                - as-top-level
+              type: string
+          type: object
+        web-attacks:
+          properties:
+            max-body-size-kb:
+              type: integer
+            max-header-size-bytes:
+              type: integer
+            max-object-depth:
+              type: integer
+            max-url-size-bytes:
+              type: integer
+            minimum-confidence:
+              enum:
+                - medium
+                - high
+                - critical
+              type: string
+            override-mode:
+              enum:
+                - prevent-learn
+                - detect-learn
+                - prevent
+                - detect
+                - inactive
+                - as-top-level
+              type: string
+            protections:
+              properties:
+                csrf-enabled:
+                  enum:
+                    - prevent-learn
+                    - detect-learn
+                    - prevent
+                    - detect
+                    - inactive
+                  type: string
+                error-disclosure-enabled:
+                  enum:
+                    - prevent-learn
+                    - detect-learn
+                    - prevent
+                    - detect
+                    - inactive
+                  type: string
+                non-valid-http-methods:
+                  type: boolean
+                open-redirect-enabled:
+                  enum:
+                    - prevent-learn
+                    - detect-learn
+                    - prevent
+                    - detect
+                    - inactive
+                  type: string
+              type: object
+          type: object
+      required:
+        - name
+  custom-responses:
+    type: array
+    minItems: 0
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        http-response-code:
+          maximum: 599
+          minimum: 100
+          default: 403
+          type: integer
+        message-body:
+          type: string
+          default: "Attack blocked by web application protection"
+        message-title:
+          type: string
+          default: "Openappsec's <b>Application Security</b> has detected an attack and blocked it."
+        mode:
+          enum:
+            - block-page
+            - response-code-only
+          type: string
+      required:
+        - name
+  log-triggers:
+    type: array
+    minItems: 0
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        access-control-logging:
+          properties:
+            allow-events:
+              type: boolean
+              default: false
+            drop-events:
+              type: boolean
+              default: false
+          type: object
+        additional-suspicious-events-logging:
+          properties:
+            enabled:
+              type: boolean
+              default true:
+            minimum-severity:
+              enum:
+                - high
+                - critical
+              type: string
+              default: "high"
+            response-body:
+              type: boolean
+              default: false
+            response-code:
+              type: boolean
+              default: true
+          type: object
+        appsec-logging:
+          properties:
+            all-web-requests:
+              type: boolean
+              default: false
+            detect-events:
+              type: boolean
+              default: false
+            prevent-events:
+              type: boolean
+              default: true
+          type: object
+        extended-logging:
+          properties:
+            http-headers:
+              type: boolean
+              default: false
+            request-body:
+              type: boolean
+              default: false
+            url-path:
+              type: boolean
+              default: false
+            url-query:
+              type: boolean
+              default: false
+          type: object
+        log-destination:
+          properties:
+            cef-service:
+              minItems: 0
+              items:
+                properties:
+                  address:
+                    type: string
+                  port:
+                    type: integer
+                  proto:
+                    enum:
+                      - tcp
+                      - udp
+                    type: string
+                type: object
+              type: array
+            cloud:
+              type: boolean
+              default: false
+            stdout:
+              properties:
+                format:
+                  enum:
+                    - json
+                    - json-formatted
+                  type: string
+                  default: json
+              type: object
+            syslog-service:
+              minItems: 0
+              items:
+                properties:
+                  address:
+                    type: string
+                  port:
+                    type: integer
+                type: object
+              type: array
+          type: object
+      required:
+        - name
+  exceptions:
+    type: array
+    minItems: 0
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        action:
+          enum:
+            - skip
+            - accept
+            - drop
+            - suppressLog
+          type: string
+        comment:
+          type: string
+        countryCode:
+          items:
+            type: string
+          type: array
+        countryName:
+          items:
+            type: string
+          type: array
+        hostName:
+          items:
+            type: string
+          type: array
+        paramName:
+          items:
+            type: string
+          type: array
+        paramValue:
+          items:
+            type: string
+          type: array
+        protectionName:
+          items:
+            type: string
+          type: array
+        sourceIdentifier:
+          items:
+            type: string
+          type: array
+        sourceIp:
+          items:
+            type: string
+          type: array
+        url:
+          items:
+            type: string
+          type: array
+      required:
+        - name
+        - action
+  trusted-sources:
+    type: array
+    minItems: 0
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        minNumOfSources:
+          type: integer
+          minimum: 1
+          default: 3
+        sources-identifiers:
+          items:
+            type: string
+          type: array
+      required:
+        - name
+        - sources-identifiers
+  source-identifiers:
+    type: array
+    minItems: 0
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        identifiers:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            source-identifier:
+              enum:
+                - headerkey
+                - JWTKey
+                - cookie
+                - sourceip
+                - x-forwarded-for
+              type: string
+            value:
+              items:
+                type: string
+              type: array
+          required:
+            - source-identifier
+      required:
+        - name
+        - identifiers
+additionalProperties: false
