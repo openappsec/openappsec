@@ -1,0 +1,752 @@
+type: object
+properties:
+  apiVersion:
+    type: string
+    enum:
+    - v1beta1
+    - v1beta2
+  policies:
+    type: object
+    properties:
+      appsecClassName:
+        type: string
+      default:
+        type: object
+        required:
+        - mode
+        - threatPreventionPractices
+        - accessControlPractices
+        properties:
+          mode:
+            type: string
+            enum:
+            - prevent-learn
+            - detect-learn
+            - prevent
+            - detect
+            - inactive
+            default: detect-learn
+          threatPreventionPractices:
+            type: array
+            items:
+              type: string
+          accessControlPractices:
+            type: array
+            items:
+              type: string
+          customResponse:
+            type: string
+            default: "403"
+          triggers:
+            type: array
+            items:
+              type: string
+          sourceIdentifiers:
+            type: string
+          trustedSources:
+            type: string
+          exceptions:
+            type: array
+            items:
+              type: string
+      specificRules:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+            host:
+              type: string
+            mode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              default: detect-learn
+            threatPreventionPractices:
+              type: array
+              items:
+                type: string
+            accessControlPractices:
+              type: array
+              items:
+                type: string
+            triggers:
+              type: array
+              items:
+                type: string
+            customResponse:
+              type: string
+            sourceIdentifiers:
+              type: string
+            trustedSources:
+              type: string
+            exceptions:
+              type: array
+              items:
+                type: string
+  logTriggers:
+    type: array
+    items:
+      type: object
+      required:
+      - accessControlLogging
+      - appsecLogging
+      - additionalSuspiciousEventsLogging
+      - extendedLogging
+      - logDestination
+      properties:
+        appsecClassName:
+          type: string
+        name:
+          type: string
+        accessControlLogging:
+          type: object
+          properties:
+            allowEvents:
+              type: boolean
+              default: false
+            dropEvents:
+              type: boolean
+              default: true
+        appsecLogging:
+          type: object
+          properties:
+            detectEvents:
+              type: boolean
+              default: true
+            preventEvents:
+              type: boolean
+              default: true
+            allWebRequests:
+              type: boolean
+              default: false
+        additionalSuspiciousEventsLogging:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            minSeverity:
+              type: string
+              enum:
+              - high
+              - critical
+              default: high
+            responseBody:
+              type: boolean
+              default: false
+            responseCode:
+              type: boolean
+              default: true
+        extendedLogging:
+          type: object
+          properties:
+            urlPath:
+              type: boolean
+              default: false
+            urlQuery:
+              type: boolean
+              default: false
+            httpHeaders:
+              type: boolean
+              default: false
+            requestBody:
+              type: boolean
+              default: false
+        logDestination:
+          type: object
+          properties:
+            cloud:
+              type: boolean
+              default: false
+            local-tuning:
+              type: boolean
+              default: false
+            syslogService:
+              type: array
+              items:
+                type: object
+                properties:
+                  address:
+                    type: string
+                  port:
+                    type: integer
+            logToAgent:
+              type: boolean
+              default: true
+            stdout:
+              type: object
+              properties:
+                format:
+                  type: string
+                  enum:
+                  - json
+                  - json-formatted
+                  default: json
+            cefService:
+              type: array
+              items:
+                type: object
+                properties:
+                  address:
+                    type: string
+                  port:
+                    type: integer
+                  proto:
+                    type: string
+                    enum:
+                    - tcp
+                    - udp
+  threatPreventionPractices:
+    type: array
+    items:
+      type: object
+      required:
+      - webAttacks
+      - intrusionPrevention
+      - fileSecurity
+      - snortSignatures
+      properties:
+        appsecClassName:
+          type: string
+        name:
+          type: string
+        practiceMode:
+          type: string
+          enum:
+          - inherited
+          - prevent-learn
+          - detect-learn
+          - prevent
+          - detect
+          - inactive
+          default: inherited
+        webAttacks:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            minimumConfidence:
+              type: string
+              enum:
+              - medium
+              - high
+              - critical
+              default: high
+            maxUrlSizeBytes:
+              type: integer
+              default: 32768
+            maxObjectDepth:
+              type: integer
+              default: 40
+            maxBodySizeKb:
+              type: integer
+              default: 1000000
+            maxHeaderSizeBytes:
+              type: integer
+              default: 102400
+            protections:
+              type: object
+              properties:
+                csrfProtection:
+                  type: string
+                  enum:
+                  - prevent-learn
+                  - detect-learn
+                  - prevent
+                  - detect
+                  - inactive
+                  - inherited
+                  default: inactive
+                errorDisclosure:
+                  type: string
+                  enum:
+                  - prevent-learn
+                  - detect-learn
+                  - prevent
+                  - detect
+                  - inactive
+                  - inherited
+                  default: inactive
+                openRedirect:
+                  type: string
+                  enum:
+                  - prevent-learn
+                  - detect-learn
+                  - prevent
+                  - detect
+                  - inactive
+                  - inherited
+                  default: inactive
+                nonValidHttpMethods:
+                  type: boolean
+                  default: false
+        antiBot:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            injectedUris:
+              type: array
+              items:
+                type: object
+                properties:
+                  uri:
+                    type: string
+            validatedUris:
+              type: array
+              items:
+                type: object
+                properties:
+                  uri:
+                    type: string
+        snortSignatures:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            configmap:
+              type: array
+              items:
+                type: string
+            files:
+              type: array
+              items:
+                type: string
+        schemaValidation:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            enforcementLevel:
+              type: string
+            configmap:
+              type: array
+              items:
+                type: string
+            files:
+              type: array
+              items:
+                type: string
+        intrusionPrevention:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            maxPerformanceImpact:
+              type: string
+              enum:
+              - low
+              - medium
+              - high
+              default: medium
+            minSeverityLevel:
+              type: string
+              enum:
+              - low
+              - medium
+              - high
+              - critical
+              default: medium
+            minCveYear:
+              type: integer
+              default: 2016
+            highConfidenceEventAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inherited
+            mediumConfidenceEventAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inherited
+            lowConfidenceEventAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: detect
+        fileSecurity:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent-learn
+              - detect-learn
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            minSeverityLevel:
+              type: string
+              enum:
+              - low
+              - medium
+              - high
+              - critical
+              default: medium
+            highConfidenceEventAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inherited
+            mediumConfidenceEventAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inherited
+            lowConfidenceEventAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: detect
+            archiveInspection:
+              type: object
+              properties:
+                extractArchiveFiles:
+                  type: boolean
+                  default: false
+                scanMaxFileSize:
+                  type: integer
+                  default: 10
+                scanMaxFileSizeUnit:
+                  type: string
+                  enum:
+                  - bytes
+                  - KB
+                  - MB
+                  - GB
+                  default: MB
+                archivedFilesWithinArchivedFiles:
+                  type: string
+                  enum:
+                  - prevent
+                  - detect
+                  - inactive
+                  - inherited #as set in overrideMode for fileSecurity
+                  default: inherited
+                archivedFilesWhereContentExtractionFailed:
+                  type: string
+                  enum:
+                  - prevent
+                  - detect
+                  - inactive
+                  - inherited #as set in overrideMode for fileSecurity
+                  default: inherited
+            largeFileInspection:
+              type: object
+              properties:
+                fileSizeLimit:
+                  type: integer
+                  default: 10
+                fileSizeLimitUnit:
+                  type: string
+                  enum:
+                  - bytes
+                  - KB
+                  - MB
+                  - GB
+                  default: MB
+                filesExceedingSizeLimitAction:
+                  type: string
+                  enum:
+                  - prevent
+                  - detect
+                  - inactive
+                  - inherited #as set in overrideMode for fileSecurity
+                  default: inherited
+            unnamedFilesAction:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited #as set in overrideMode for fileSecurity
+              default: inherited
+            threatEmulationEnabled:
+              type: boolean
+              default: false
+  accessControlPractices:
+    type: array
+    items:
+      type: object
+      required:
+      - rateLimit
+      properties:
+        appsecClassName:
+          type: string
+        name:
+          type: string
+        practiceMode:
+          type: string
+          enum:
+          - inherited #inherited from mode set in policy
+          - prevent
+          - detect
+          - inactive
+          default: inherited
+        rateLimit:
+          type: object
+          required:
+          - overrideMode
+          properties:
+            overrideMode:
+              type: string
+              enum:
+              - prevent
+              - detect
+              - inactive
+              - inherited
+              default: inactive
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  action: # currently not supported
+                    type: string
+                    enum:
+                    - inherited
+                    - prevent
+                    - detect
+                    default: inherited
+                  condition: # currently not supported
+                    type: array
+                    items:
+                      type: object
+                      required:
+                      - key
+                      - value
+                      properties:
+                        key:
+                          type: string
+                        value:
+                          type: string
+                  uri:
+                    type: string
+                  limit:
+                    type: integer
+                  unit:
+                    type: string
+                    enum:
+                    - minute
+                    - second
+                    default: minute
+                  triggers:
+                    type: array
+                    items:
+                      type: string
+                  comment:
+                    type: string
+  customResponses:
+    type: array
+    items:
+      type: object
+      required:
+      - mode
+      properties:
+        appsecClassName:
+          type: string
+        name:
+          type: string
+        mode:
+          type: string
+          enum:
+          - block-page
+          - redirect
+          - response-code-only
+          default: response-code-only
+        messageTitle:
+          type: string
+        messageBody:
+          type: string
+        httpResponseCode:
+          type: integer
+          minimum: 100
+          maximum: 599
+          default: 403
+        redirectUrl:
+          type: string
+        redirectAddXEventId:
+          type: boolean
+          default: false
+  sourcesIdentifiers:
+    type: array
+    items:
+      type: object
+      required:
+      - sourcesIdentifiers
+      properties:
+        name:
+          type: string
+        sourcesIdentifiers:
+          type: array
+          items:
+            type: object
+            required:
+            - identifier
+            properties:
+              identifier:
+                type: string
+                enum:
+                - headerkey
+                - JWTKey
+                - cookie
+                - sourceip
+                - x-forwarded-for
+                default: sourceip
+              value:
+                type: array
+                items:
+                  type: string
+  exceptions:
+    type: array
+    items:
+      type: object
+      required:
+      - action
+      - condition
+      properties:
+        appsecClassName:
+          type: string
+        name:
+          type: string
+        action:
+          type: string
+          enum:
+          - skip
+          - accept
+          - drop
+          - suppressLog
+          default: accept
+        condition:
+          type: array
+          items:
+            type: object
+            required:
+            - key
+            - value
+            properties:
+              key:
+                type: string
+              value:
+                type: string
+  trustedSources:
+    type: array
+    items:
+      type: object
+      required:
+      - minNumOfSources
+      - sourcesIdentifiers
+      properties:
+        appsecClassName:
+          type: string
+        name:
+          type: string
+        minNumOfSources:
+          type: integer
+          default: 3
+        sourcesIdentifiers:
+          type: array
+          items:
+            type: string
+  policyActivations:
+    type: array
+    items:
+      type: object
+      properties:
+        appsecClassName:
+          type: string
+        enabledPolicies:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              hosts:
+                type: array
+                items:
+                  type: string
+            required:
+            - hosts
+      required:
+      - enabledPolicies
+additionalProperties: false
