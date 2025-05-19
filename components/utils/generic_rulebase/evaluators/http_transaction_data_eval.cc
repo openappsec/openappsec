@@ -103,6 +103,35 @@ WildcardHost::evalVariable() const
     return lower_host_ctx == lower_host;
 }
 
+EqualWafTag::EqualWafTag(const vector<string> &params)
+{
+    if (params.size() != 1) reportWrongNumberOfParams("EqualWafTag", params.size(), 1, 1);
+    waf_tag = params[0];
+}
+
+Maybe<bool, Context::Error>
+EqualWafTag::evalVariable() const
+{
+    I_Environment *env = Singleton::Consume<I_Environment>::by<EqualWafTag>();
+    auto maybe_waf_tag_ctx = env->get<string>(HttpTransactionData::waf_tag_ctx);
+
+    if (!maybe_waf_tag_ctx.ok())
+    {
+        dbgTrace(D_RULEBASE_CONFIG) << "didnt find waf tag in current context";
+        return false;
+    }
+
+    auto waf_tag_ctx = maybe_waf_tag_ctx.unpack();
+
+    dbgTrace(D_RULEBASE_CONFIG)
+        << "trying to match waf tag context with its corresponding waf tag: "
+        << waf_tag_ctx
+        << ". Matcher waf tag: "
+        << waf_tag;
+
+    return waf_tag_ctx == waf_tag;
+}
+
 EqualListeningIP::EqualListeningIP(const vector<string> &params)
 {
     if (params.size() != 1) reportWrongNumberOfParams("EqualListeningIP", params.size(), 1, 1);

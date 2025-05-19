@@ -282,39 +282,21 @@ isIpTrusted(const string &value, const vector<CIDRSData> &cidr_values)
 }
 
 Maybe<string>
-UsersAllIdentifiersConfig::parseXForwardedFor(const string &str, ExtractType type) const
+UsersAllIdentifiersConfig::parseXForwardedFor(const string &str) const
 {
     vector<string> header_values = split(str);
+
     if (header_values.empty()) return genError("No IP found in the xff header list");
 
     vector<string> xff_values = getHeaderValuesFromConfig("x-forwarded-for");
     vector<CIDRSData> cidr_values(xff_values.begin(), xff_values.end());
-    string last_valid_ip;
 
-    for (auto it = header_values.rbegin(); it != header_values.rend() - 1; ++it) {
-        if (!IPAddr::createIPAddr(*it).ok()) {
-            dbgWarning(D_NGINX_ATTACHMENT_PARSER) << "Invalid IP address found in the xff header IPs list: " << *it;
-            if (last_valid_ip.empty()) {
-                return genError("Invalid IP address");
-            }
-            return last_valid_ip;
+    for (const string &value : header_values) {
+        if (!IPAddr::createIPAddr(value).ok()) {
+            dbgWarning(D_NGINX_ATTACHMENT_PARSER) << "Invalid IP address found in the xff header IPs list: " << value;
+            return genError("Invalid IP address");
         }
-        last_valid_ip = *it;
-        if (type == ExtractType::PROXYIP) continue;
-        if (!isIpTrusted(*it, cidr_values)) {
-            dbgDebug(D_NGINX_ATTACHMENT_PARSER) << "Found untrusted IP in the xff header IPs list: " << *it;
-            return *it;
-        }
-    }
-
-    if (!IPAddr::createIPAddr(header_values[0]).ok()) {
-        dbgWarning(D_NGINX_ATTACHMENT_PARSER)
-            << "Invalid IP address found in the xff header IPs list: "
-            << header_values[0];
-        if (last_valid_ip.empty()) {
-            return genError("No Valid Ip address was found");
-        }
-        return last_valid_ip;
+        if (!isIpTrusted(value, cidr_values)) return genError("Untrusted Ip found");
     }
 
     return header_values[0];
@@ -330,7 +312,9 @@ UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, Ext
         return;
     }
     NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
-    auto value = parseXForwardedFor(header.getValue(), type);
+    opaque.setSavedData(HttpTransactionData::xff_vals_ctx, header.getValue());
+    dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "xff found, value from header: " << static_cast<string>(header.getValue());
+    auto value = parseXForwardedFor(header.getValue());
     if (!value.ok()) {
         dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Could not extract source identifier from X-Forwarded-For header";
         return;
@@ -339,13 +323,8 @@ UsersAllIdentifiersConfig::setXFFValuesToOpaqueCtx(const HttpHeader &header, Ext
     if (type == ExtractType::SOURCEIDENTIFIER) {
         opaque.setSourceIdentifier(header.getKey(), value.unpack());
         dbgDebug(D_NGINX_ATTACHMENT_PARSER)
-            << "Added source identifier from XFF header"
+            << "Added source identifir to XFF "
             <<  value.unpack();
-        opaque.setSavedData(HttpTransactionData::xff_vals_ctx, header.getValue());
-        opaque.setSavedData(HttpTransactionData::source_identifier, value.unpack());
-        dbgTrace(D_NGINX_ATTACHMENT_PARSER)
-            << "XFF found, set ctx with value from header: "
-            << static_cast<string>(header.getValue());
     } else {
         opaque.setSavedData(HttpTransactionData::proxy_ip_ctx, value.unpack());
     }
@@ -362,6 +341,24 @@ UsersAllIdentifiersConfig::setCustomHeaderToOpaqueCtx(const HttpHeader &header) 
     i_transaction_table->getState<NginxAttachmentOpaque>().setSourceIdentifier(header.getKey(), header.getValue());
     dbgDebug(D_NGINX_ATTACHMENT_PARSER)
         << "Added source identifir to custom header: "
+        <<  static_cast<string>(header.getValue());
+    return;
+}
+
+void
+UsersAllIdentifiersConfig::setWafTagValuesToOpaqueCtx(const HttpHeader &header) const
+{
+    auto i_transaction_table = Singleton::Consume<I_TableSpecific<SessionID>>::by<NginxAttachment>();
+    if (!i_transaction_table || !i_transaction_table->hasState<NginxAttachmentOpaque>()) {
+        dbgDebug(D_NGINX_ATTACHMENT_PARSER) << "Can't get the transaction table";
+        return;
+    }
+
+    NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
+    opaque.setSavedData(HttpTransactionData::waf_tag_ctx, static_cast<string>(header.getValue()));
+
+    dbgDebug(D_NGINX_ATTACHMENT_PARSER)
+        << "Added waf tag to context: "
         <<  static_cast<string>(header.getValue());
     return;
 }

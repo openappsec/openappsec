@@ -30,6 +30,7 @@ public:
     void parseRequestHeaders(const HttpHeader &header) const;
     std::vector<std::string> getHeaderValuesFromConfig(const std::string &header_key) const;
     void setXFFValuesToOpaqueCtx(const HttpHeader &header, ExtractType type) const;
+    void setWafTagValuesToOpaqueCtx(const HttpHeader &header) const;
 
 private:
     class UsersIdentifiersConfig
@@ -58,7 +59,7 @@ private:
         const std::string::const_iterator &end,
         const std::string &key) const;
     Buffer extractKeyValueFromCookie(const std::string &cookie_value, const std::string &key) const;
-    Maybe<std::string> parseXForwardedFor(const std::string &str, ExtractType type) const;
+    Maybe<std::string> parseXForwardedFor(const std::string &str) const;
 
     std::vector<UsersIdentifiersConfig> user_identifiers;
 };

@@ -28,8 +28,8 @@ USE_DEBUG_FLAG(D_NGINX_ATTACHMENT_PARSER);
 
 Buffer NginxParser::tenant_header_key = Buffer();
 static const Buffer proxy_ip_header_key("X-Forwarded-For", 15, Buffer::MemoryType::STATIC);
+static const Buffer waf_tag_key("x-waf-tag", 9, Buffer::MemoryType::STATIC);
 static const Buffer source_ip("sourceip", 8, Buffer::MemoryType::STATIC);
-bool is_keep_alive_ctx = getenv("SAAS_KEEP_ALIVE_HDR_NAME") != nullptr;
 
 map<Buffer, CompressionType> NginxParser::content_encodings = {
     {Buffer("identity"), CompressionType::NO_COMPRESSION},
@@ -178,70 +178,41 @@ getActivetenantAndProfile(const string &str, const string &deli = ",")
 }
 
 Maybe<vector<HttpHeader>>
-NginxParser::parseRequestHeaders(const Buffer &data, const unordered_set<string> &ignored_headers)
+NginxParser::parseRequestHeaders(const Buffer &data)
 {
-    auto maybe_parsed_headers = genHeaders(data);
-    if (!maybe_parsed_headers.ok()) return maybe_parsed_headers.passErr();
+    auto parsed_headers = genHeaders(data);
+    if (!parsed_headers.ok()) return parsed_headers.passErr();
 
     auto i_transaction_table = Singleton::Consume<I_TableSpecific<SessionID>>::by<NginxAttachment>();
-    auto parsed_headers = maybe_parsed_headers.unpack();
-    NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
 
-    if (is_keep_alive_ctx || !ignored_headers.empty()) {
-        bool is_last_header_removed = false;
-        parsed_headers.erase(
-            remove_if(
-                parsed_headers.begin(),
-                parsed_headers.end(),
-                [&opaque, &is_last_header_removed, &ignored_headers](const HttpHeader &header)
-                {
-                    string hdr_key = static_cast<string>(header.getKey());
-                    string hdr_val = static_cast<string>(header.getValue());
-                    if (
-                        opaque.setKeepAliveCtx(hdr_key, hdr_val)
-                        || ignored_headers.find(hdr_key) != ignored_headers.end()
-                    ) {
-                        dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Header was removed from headers list: " << hdr_key;
-                        if (header.isLastHeader()) {
-                            dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Last header was removed from headers list";
-                            is_last_header_removed = true;
-                        }
-                        return true;
-                    }
-                    return false;
-                }
-            ),
-            parsed_headers.end()
-        );
-        if (is_last_header_removed) {
-            dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Adjusting last header flag";
-            if (!parsed_headers.empty()) parsed_headers.back().setIsLastHeader();
-        }
-    }
-
-    for (const HttpHeader &header : parsed_headers) {
+    for (const HttpHeader &header : *parsed_headers) {
         auto source_identifiers = getConfigurationWithDefault<UsersAllIdentifiersConfig>(
             UsersAllIdentifiersConfig(),
             "rulebase",
             "usersIdentifiers"
         );
         source_identifiers.parseRequestHeaders(header);
+
+        NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
         opaque.addToSavedData(
             HttpTransactionData::req_headers,
             static_cast<string>(header.getKey()) + ": " + static_cast<string>(header.getValue()) + "\r\n"
         );
 
-        if (NginxParser::tenant_header_key == header.getKey()) {
+        const auto &header_key = header.getKey();
+        if (NginxParser::tenant_header_key == header_key) {
             dbgDebug(D_NGINX_ATTACHMENT_PARSER)
                 << "Identified active tenant header. Key: "
-                << dumpHex(header.getKey())
+                << dumpHex(header_key)
                 << ", Value: "
                 << dumpHex(header.getValue());
 
             auto active_tenant_and_profile = getActivetenantAndProfile(header.getValue());
             opaque.setSessionTenantAndProfile(active_tenant_and_profile[0], active_tenant_and_profile[1]);
-        } else if (proxy_ip_header_key == header.getKey()) {
+        } else if (proxy_ip_header_key == header_key) {
             source_identifiers.setXFFValuesToOpaqueCtx(header, UsersAllIdentifiersConfig::ExtractType::PROXYIP);
+        } else if (waf_tag_key == header_key) {
+            source_identifiers.setWafTagValuesToOpaqueCtx(header);
         }
     }
 
