@@ -59,7 +59,7 @@ private:
         const std::string::const_iterator &end,
         const std::string &key) const;
     Buffer extractKeyValueFromCookie(const std::string &cookie_value, const std::string &key) const;
-    Maybe<std::string> parseXForwardedFor(const std::string &str) const;
+    Maybe<std::string> parseXForwardedFor(const std::string &str, ExtractType type) const;
 
     std::vector<UsersIdentifiersConfig> user_identifiers;
 };
