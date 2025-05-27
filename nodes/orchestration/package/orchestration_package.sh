@@ -647,6 +647,9 @@ install_watchdog()
                 echo "ExecStart=ip netns exec CTX0000${VS_ID} ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             fi
             echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            if [ -n "${PROMETHEUS}" ] ; then
+                echo "Environment=\"PROMETHEUS=${PROMETHEUS}\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            fi
 
             cp_exec "systemctl daemon-reload"
             cp_exec "systemctl enable nano_agent"
