@@ -41,6 +41,7 @@ static in6_addr applyMaskV6(const in6_addr& addr, uint8_t prefixLength) {
     in6_addr maskedAddr = addr;
     int fullBytes = prefixLength / 8;
     int remainingBits = prefixLength % 8;
+    uint8_t partialByte = maskedAddr.s6_addr[fullBytes];
 
     // Mask full bytes
     for (int i = fullBytes; i < 16; ++i) {
@@ -50,7 +51,7 @@ static in6_addr applyMaskV6(const in6_addr& addr, uint8_t prefixLength) {
     // Mask remaining bits
     if (remainingBits > 0) {
         uint8_t mask = ~((1 << (8 - remainingBits)) - 1);
-        maskedAddr.s6_addr[fullBytes] &= mask;
+        maskedAddr.s6_addr[fullBytes] = partialByte & mask;
     }
 
     return maskedAddr;
