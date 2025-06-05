@@ -93,22 +93,10 @@ if [ -f "$FILE" ]; then
 fi
 
 touch /etc/cp/watchdog/wd.startup
+/etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
+active_watchdog_pid=$!
 while true; do
-    if [ -z "$init" ]; then
-        init=true
-        /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
-        sleep 5
-        active_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
-    fi
-
-    current_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
-    if [ ! -f /tmp/restart_watchdog ] && [ "$current_watchdog_pid" != "$active_watchdog_pid" ]; then
-        echo "Error: Watchdog exited abnormally"
-        echo "---------------------------------------------------------------------------------------------------" >> /etc/cp/conf/wiaam.txt
-        date >> /etc/cp/conf/wiaam.txt
-        echo "current pid = $current_watchdog_pid" >> /etc/cp/conf/wiaam.txt
-        echo "active pid = $active_watchdog_pid" >> /etc/cp/conf/wiaam.txt
-    elif [ -f /tmp/restart_watchdog ]; then
+    if [ -f /tmp/restart_watchdog ]; then
         echo "restarting the watch dog " >> /etc/cp/conf/wiaam.txt
         echo "current pid = $current_watchdog_pid" >> /etc/cp/conf/wiaam.txt
         echo "active pid = $active_watchdog_pid" >> /etc/cp/conf/wiaam.txt
@@ -116,11 +104,10 @@ while true; do
 
         rm -f /tmp/restart_watchdog
         kill -9 "$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")"
-        /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
-        sleep 5
-        active_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
-        echo "new active watchdog pid = $active_watchdog_pid"
     fi
-
+    if [ ! "$(ps -f | grep cp-nano-watchdog | grep ${active_watchdog_pid})" ]; then
+        /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
+        active_watchdog_pid=$!
+    fi
     sleep 5
 done
