@@ -1,0 +1,32 @@
+{
+    "Registered Services": {
+        "cp-nano-orchestration": {
+            "Service name": "cp-nano-orchestration",
+            "Service ID": "cp-nano-orchestration",
+            "Service port": 7777,
+            "Relevant configs": [
+                "zones",
+                "triggers",
+                "rules",
+                "registration-data",
+                "parameters",
+                "orchestration",
+                "exceptions",
+                "agent-intelligence"
+            ]
+        },
+        "cp-nano-prometheus": {
+            "Service name": "cp-nano-prometheus",
+            "Service ID": "cp-nano-prometheus",
+            "Service port": 7465,
+            "Relevant configs": [
+                "zones",
+                "triggers",
+                "rules",
+                "parameters",
+                "exceptions",
+                "agent-intelligence"
+            ]
+        }
+    }
+}

@@ -1,0 +1,2 @@
+add_library(prometheus_comp prometheus_comp.cc)
+add_subdirectory(prometheus_ut)

@@ -6,6 +6,7 @@ HTTP_TRANSACTION_HANDLER_SERVICE="install-cp-nano-service-http-transaction-handl
 ATTACHMENT_REGISTRATION_SERVICE="install-cp-nano-attachment-registration-manager.sh"
 ORCHESTRATION_INSTALLATION_SCRIPT="install-cp-nano-agent.sh"
 CACHE_INSTALLATION_SCRIPT="install-cp-nano-agent-cache.sh"
+PROMETHEUS_INSTALLATION_SCRIPT="install-cp-nano-service-prometheus.sh"
 
 var_fog_address=
 var_proxy=
@@ -80,6 +81,10 @@ fi
 /nano-service-installers/$ATTACHMENT_REGISTRATION_SERVICE --install
 /nano-service-installers/$CACHE_INSTALLATION_SCRIPT --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
+
+if [ "$PROMETHEUS" == "true" ]; then
+    /nano-service-installers/$PROMETHEUS_INSTALLATION_SCRIPT --install
+fi
 
 if [ "$CROWDSEC_ENABLED" == "true" ]; then
     /nano-service-installers/$INTELLIGENCE_INSTALLATION_SCRIPT --install
