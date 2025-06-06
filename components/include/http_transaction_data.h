@@ -137,6 +137,7 @@ public:
     static const std::string source_identifier;
     static const std::string proxy_ip_ctx;
     static const std::string xff_vals_ctx;
+    static const std::string waf_tag_ctx;
 
     static const CompressionType default_response_content_encoding;
 

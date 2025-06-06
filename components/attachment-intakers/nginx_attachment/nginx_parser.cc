@@ -28,6 +28,7 @@ USE_DEBUG_FLAG(D_NGINX_ATTACHMENT_PARSER);
 
 Buffer NginxParser::tenant_header_key = Buffer();
 static const Buffer proxy_ip_header_key("X-Forwarded-For", 15, Buffer::MemoryType::STATIC);
+static const Buffer waf_tag_key("x-waf-tag", 9, Buffer::MemoryType::STATIC);
 static const Buffer source_ip("sourceip", 8, Buffer::MemoryType::STATIC);
 bool is_keep_alive_ctx = getenv("SAAS_KEEP_ALIVE_HDR_NAME") != nullptr;
 
@@ -231,17 +232,20 @@ NginxParser::parseRequestHeaders(const Buffer &data, const unordered_set<string>
             static_cast<string>(header.getKey()) + ": " + static_cast<string>(header.getValue()) + "\r\n"
         );
 
-        if (NginxParser::tenant_header_key == header.getKey()) {
+        const auto &header_key = header.getKey();
+        if (NginxParser::tenant_header_key == header_key) {
             dbgDebug(D_NGINX_ATTACHMENT_PARSER)
                 << "Identified active tenant header. Key: "
-                << dumpHex(header.getKey())
+                << dumpHex(header_key)
                 << ", Value: "
                 << dumpHex(header.getValue());
 
             auto active_tenant_and_profile = getActivetenantAndProfile(header.getValue());
             opaque.setSessionTenantAndProfile(active_tenant_and_profile[0], active_tenant_and_profile[1]);
-        } else if (proxy_ip_header_key == header.getKey()) {
+        } else if (proxy_ip_header_key == header_key) {
             source_identifiers.setXFFValuesToOpaqueCtx(header, UsersAllIdentifiersConfig::ExtractType::PROXYIP);
+        } else if (waf_tag_key == header_key) {
+            source_identifiers.setWafTagValuesToOpaqueCtx(header);
         }
     }
 

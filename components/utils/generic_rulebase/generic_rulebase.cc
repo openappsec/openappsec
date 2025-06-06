@@ -80,6 +80,7 @@ GenericRulebase::Impl::preload()
     addMatcher<IpProtocolMatcher>();
     addMatcher<UrlMatcher>();
     addMatcher<EqualHost>();
+    addMatcher<EqualWafTag>();
     addMatcher<WildcardHost>();
     addMatcher<EqualListeningIP>();
     addMatcher<EqualListeningPort>();
