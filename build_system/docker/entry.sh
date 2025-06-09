@@ -97,13 +97,8 @@ touch /etc/cp/watchdog/wd.startup
 active_watchdog_pid=$!
 while true; do
     if [ -f /tmp/restart_watchdog ]; then
-        echo "restarting the watch dog " >> /etc/cp/conf/wiaam.txt
-        echo "current pid = $current_watchdog_pid" >> /etc/cp/conf/wiaam.txt
-        echo "active pid = $active_watchdog_pid" >> /etc/cp/conf/wiaam.txt
-        echo "killing pid = $(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")" >> /etc/cp/conf/wiaam.txt
-
         rm -f /tmp/restart_watchdog
-        kill -9 "$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")"
+        kill -9 ${active_watchdog_pid}
     fi
     if [ ! "$(ps -f | grep cp-nano-watchdog | grep ${active_watchdog_pid})" ]; then
         /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
