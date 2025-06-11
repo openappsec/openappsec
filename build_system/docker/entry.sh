@@ -7,6 +7,7 @@ ATTACHMENT_REGISTRATION_SERVICE="install-cp-nano-attachment-registration-manager
 ORCHESTRATION_INSTALLATION_SCRIPT="install-cp-nano-agent.sh"
 CACHE_INSTALLATION_SCRIPT="install-cp-nano-agent-cache.sh"
 PROMETHEUS_INSTALLATION_SCRIPT="install-cp-nano-service-prometheus.sh"
+NGINX_CENTRAL_MANAGER_INSTALLATION_SCRIPT="install-cp-nano-central-nginx-manager.sh"
 
 var_fog_address=
 var_proxy=
@@ -84,6 +85,10 @@ fi
 
 if [ "$PROMETHEUS" == "true" ]; then
     /nano-service-installers/$PROMETHEUS_INSTALLATION_SCRIPT --install
+fi
+
+if [ "$CENTRAL_NGINX_MANAGER" == "true" ]; then
+    /nano-service-installers/$NGINX_CENTRAL_MANAGER_INSTALLATION_SCRIPT --install
 fi
 
 if [ "$CROWDSEC_ENABLED" == "true" ]; then
