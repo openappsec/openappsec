@@ -332,7 +332,17 @@ vector<PrometheusData>
 GenericMetric::getPromMetricsData()
 {
     vector<PrometheusData> all_metrics;
-    if (!getProfileAgentSettingWithDefault(false, "prometheus")) return all_metrics;
+    bool enable_prometheus = false;
+    auto prometheus_settings = getProfileAgentSetting<bool>("prometheus");
+    if (prometheus_settings.ok()) {
+        enable_prometheus = prometheus_settings.unpack();
+    } else {
+        const char *prometheus_env = getenv("PROMETHEUS");
+        if (prometheus_env != nullptr) {
+            enable_prometheus = string(prometheus_env) == "true";
+        }
+    }
+    if (!enable_prometheus) return all_metrics;
     dbgTrace(D_METRICS) << "Get prometheus metrics";
 
     for (auto &calc : prometheus_calcs) {

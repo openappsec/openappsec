@@ -6,6 +6,7 @@ HTTP_TRANSACTION_HANDLER_SERVICE="install-cp-nano-service-http-transaction-handl
 ATTACHMENT_REGISTRATION_SERVICE="install-cp-nano-attachment-registration-manager.sh"
 ORCHESTRATION_INSTALLATION_SCRIPT="install-cp-nano-agent.sh"
 CACHE_INSTALLATION_SCRIPT="install-cp-nano-agent-cache.sh"
+PROMETHEUS_INSTALLATION_SCRIPT="install-cp-nano-service-prometheus.sh"
 
 var_fog_address=
 var_proxy=
@@ -81,6 +82,10 @@ fi
 /nano-service-installers/$CACHE_INSTALLATION_SCRIPT --install
 /nano-service-installers/$HTTP_TRANSACTION_HANDLER_SERVICE --install
 
+if [ "$PROMETHEUS" == "true" ]; then
+    /nano-service-installers/$PROMETHEUS_INSTALLATION_SCRIPT --install
+fi
+
 if [ "$CROWDSEC_ENABLED" == "true" ]; then
     /nano-service-installers/$INTELLIGENCE_INSTALLATION_SCRIPT --install
     /nano-service-installers/$CROWDSEC_INSTALLATION_SCRIPT --install
@@ -93,25 +98,16 @@ if [ -f "$FILE" ]; then
 fi
 
 touch /etc/cp/watchdog/wd.startup
+/etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
+active_watchdog_pid=$!
 while true; do
-    if [ -z "$init" ]; then
-        init=true
-        /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
-        sleep 5
-        active_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
-    fi
-
-    current_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
-    if [ ! -f /tmp/restart_watchdog ] && [ "$current_watchdog_pid" != "$active_watchdog_pid" ]; then
-        echo "Error: Watchdog exited abnormally"
-        exit 1
-    elif [ -f /tmp/restart_watchdog ]; then
+    if [ -f /tmp/restart_watchdog ]; then
         rm -f /tmp/restart_watchdog
-        kill -9 "$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")"
-        /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
-        sleep 5
-        active_watchdog_pid=$(pgrep -f -x -o "/bin/(bash|sh) /etc/cp/watchdog/cp-nano-watchdog")
+        kill -9 ${active_watchdog_pid}
     fi
-
+    if [ ! "$(ps -f | grep cp-nano-watchdog | grep ${active_watchdog_pid})" ]; then
+        /etc/cp/watchdog/cp-nano-watchdog >/dev/null 2>&1 &
+        active_watchdog_pid=$!
+    fi
     sleep 5
 done

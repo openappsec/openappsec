@@ -11,6 +11,7 @@ set(COMMON_LIBRARIES "-lngen_core;-lcompression_utils;-lssl;-lcrypto;-lz;-lboost
 include(packaging.cmake)
 
 add_subdirectory(orchestration)
+add_subdirectory(prometheus)
 add_subdirectory(agent_cache)
 add_subdirectory(http_transaction_handler)
 add_subdirectory(attachment_registration_manager)
