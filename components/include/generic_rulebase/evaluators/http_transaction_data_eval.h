@@ -45,6 +45,19 @@ private:
     std::string host;
 };
 
+class EqualWafTag : public EnvironmentEvaluator<bool>, Singleton::Consume<I_Environment>
+{
+public:
+EqualWafTag(const std::vector<std::string> &params);
+
+    static std::string getName() { return "EqualWafTag"; }
+
+    Maybe<bool, Context::Error> evalVariable() const override;
+
+private:
+    std::string waf_tag;
+};
+
 class EqualListeningIP : public EnvironmentEvaluator<bool>, Singleton::Consume<I_Environment>
 {
 public:

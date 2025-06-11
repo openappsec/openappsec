@@ -366,6 +366,24 @@ UsersAllIdentifiersConfig::setCustomHeaderToOpaqueCtx(const HttpHeader &header) 
     return;
 }
 
+void
+UsersAllIdentifiersConfig::setWafTagValuesToOpaqueCtx(const HttpHeader &header) const
+{
+    auto i_transaction_table = Singleton::Consume<I_TableSpecific<SessionID>>::by<NginxAttachment>();
+    if (!i_transaction_table || !i_transaction_table->hasState<NginxAttachmentOpaque>()) {
+        dbgDebug(D_NGINX_ATTACHMENT_PARSER) << "Can't get the transaction table";
+        return;
+    }
+
+    NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
+    opaque.setSavedData(HttpTransactionData::waf_tag_ctx, static_cast<string>(header.getValue()));
+
+    dbgDebug(D_NGINX_ATTACHMENT_PARSER)
+        << "Added waf tag to context: "
+        <<  static_cast<string>(header.getValue());
+    return;
+}
+
 Maybe<string>
 UsersAllIdentifiersConfig::parseCookieElement(
     const string::const_iterator &start,
