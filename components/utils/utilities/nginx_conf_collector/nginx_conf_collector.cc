@@ -1,5 +1,5 @@
 // Copyright (C) 2022 Check Point Software Technologies Ltd. All rights reserved.
-
+ 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // You may obtain a copy of the License at
 //
@@ -13,9 +13,11 @@
 
 #include <iostream>
 #include <unistd.h>
+#include <sstream>
 
 #include "agent_core_utilities.h"
 #include "debug.h"
+#include "getopt.h"
 #include "internal/shell_cmd.h"
 #include "mainloop.h"
 #include "nginx_utils.h"
@@ -43,11 +45,159 @@ public:
         environment.fini();
         time_proxy.fini();
     }
+
 private:
     ShellCmd shell_cmd;
     MainloopComponent mainloop;
     Environment environment;
     TimeProxyComponent time_proxy;
+};
+
+class FogConnection
+{
+public:
+    FogConnection(const std::string& token, const std::string& fog)
+        : var_token(token), var_fog(fog) {}
+
+    bool registerAgent() {
+        std::string curl_cmd = "curl -s --noproxy \"*\" "
+                            "--header \"User-Agent: Infinity Next (a7030abf93a4c13)\" "
+                            "--header \"Content-Type: application/json\" "
+                            "--request POST "
+                            "--data '{\"authenticationData\": [{\"authenticationMethod\": \"token\", \"data\": \""
+                            + var_token + "\"}], "
+                            "\"metaData\": {\"agentName\": \"ConfCollector\", \"agentType\":"
+                            "\"Embedded\", \"platform\": \"linux\", "
+                            "\"architecture\": \"x86\", \"additionalMetaData\": {\"agentVendor\": \"python\"}}}' "
+                            + var_fog + "/agents";
+
+        std::string response = executeCommand(curl_cmd);
+
+        std::string error_check = "echo '" + response + "' | grep referenceId";
+        std::string error_result = executeCommand(error_check);
+        if (!error_result.empty()) {
+            std::cerr << "Couldn't register to the FOG" << std::endl;
+            return false;
+        }
+
+        agent_id = extractJsonValue(response, "agentId");
+        clientId = extractJsonValue(response, "clientId");
+        clientSecret = extractJsonValue(response, "clientSecret");
+        tenant_id = extractJsonValue(response, "tenantId");
+        profile_id = extractJsonValue(response, "profileId");
+
+        removeNewlines(agent_id);
+        removeNewlines(clientId);
+        removeNewlines(clientSecret);
+        removeNewlines(tenant_id);
+        removeNewlines(profile_id);
+
+        return true;
+    }
+
+    bool getJWT() {
+        std::string curl_cmd = "curl -s --noproxy \"*\" "
+                            "--header \"User-Agent: Infinity Next (a7030abf93a4c13)\" "
+                            "--header \"Content-Type: application/json\" "
+                            "-d '{\"login\":\"" + clientId + "\", \"password\":\"" + clientSecret + "\"}' "
+                            "--user \"" + clientId + ":" + clientSecret + "\" "
+                            "--request POST "
+                            "--data '{}' "
+                            + var_fog + "/oauth/token?grant_type=client_credentials";
+
+        std::string response = executeCommand(curl_cmd);
+
+        std::string error_check = "echo '" + response + "' | grep referenceId";
+        std::string error_result = executeCommand(error_check);
+        if (!error_result.empty()) {
+            std::cerr << "Couldn't receive JWT" << std::endl;
+            return false;
+        }
+
+        ra_token = extractJsonValue(response, "access_token");
+        removeNewlines(ra_token);
+
+        return true;
+    }
+
+    bool uploadNginxConfig(const std::string& config_file_path)
+    {
+        if (tenant_id.empty() || profile_id.empty() || ra_token.empty()) {
+            std::cerr << "Missing required data for upload (tenant_id, profile_id, or JWT token)" << std::endl;
+            return false;
+        }
+
+        std::ifstream file_check(config_file_path);
+        if (!file_check.is_open()) {
+            std::cerr << "Cannot open config file for upload: " << config_file_path << std::endl;
+            return false;
+        }
+        file_check.close();
+
+        std::string upload_url = var_fog + "/agents-core/storage/" + tenant_id + "/" + "nginx/" + profile_id +
+            "/1/nginx.conf";
+
+        std::string curl_cmd = "curl -s --noproxy \"*\" "
+                            "--header \"User-Agent: Infinity Next (a7030abf93a4c13)\" "
+                            "--header \"Authorization: Bearer " + ra_token + "\" "
+                            "--header \"Content-Type: text/plain\" "
+                            "--request PUT "
+                            "--data-binary @" + config_file_path + " "
+                            "-w \"%{http_code}\" "
+                            + upload_url;
+
+        std::string response = executeCommand(curl_cmd);
+
+        std::string status_code = "";
+        if (response.length() >= 3) {
+            status_code = response.substr(response.length() - 3);
+            response = response.substr(0, response.length() - 3);
+        }
+
+        if (status_code.empty() || status_code[0] != '2') {
+            std::cerr << "Upload failed with HTTP status code: " << status_code << std::endl;
+            return false;
+        }
+
+        std::cout << "Successfully uploaded nginx config to: " << upload_url << " (HTTP " << status_code << ")"
+            << std::endl;
+        return true;
+    }
+
+private:
+    std::string var_token;
+    std::string var_fog;
+    std::string agent_id;
+    std::string tenant_id;
+    std::string profile_id;
+    std::string ra_token;
+    std::string clientId;
+    std::string clientSecret;
+
+    std::string executeCommand(const std::string& command) {
+        std::string result;
+        FILE* pipe = popen(command.c_str(), "r");
+        if (!pipe) {
+            throw std::runtime_error("popen() failed!");
+        }
+ 
+        char buffer[128];
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            result += buffer;
+        }
+        pclose(pipe);
+        return result;
+    }
+
+    std::string extractJsonValue(const std::string& response, const std::string& key) {
+        std::string command = "echo '" + response + "' | grep -o '\"" + key + "\":\"[^\"]*' | grep -o '[^\"]*$'";
+        return executeCommand(command);
+    }
+
+    void removeNewlines(std::string& str) {
+        str.erase(std::remove(str.begin(), str.end(), '\n'), str.end());
+        str.erase(std::remove(str.begin(), str.end(), '\r'), str.end());
+    }
 };
 
 void
@@ -63,12 +213,16 @@ printVersion()
 void
 printUsage(const char *prog_name)
 {
-    cout << "Usage: " << prog_name << " [-v] [-i /path/to/nginx.conf] [-o /path/to/output.conf]" << '\n';
+    cout << "Usage: " << prog_name << " [-v] [-i /path/to/nginx.conf] [-o /path/to/output.conf]" <<
+        "[--upload --token <token> [--fog <address>]]" << '\n';
     cout << "  -V              Print version" << '\n';
     cout << "  -v              Enable verbose output" << '\n';
     cout << "  -i input_file   Specify input file (default is /etc/nginx/nginx.conf)" << '\n';
     cout << "  -o output_file  Specify output file (default is ./full_nginx.conf)" << '\n';
     cout << "  -h              Print this help message" << '\n';
+    cout << "  --upload        Upload configuration to FOG (requires --token)" << '\n';
+    cout << "  --token <token> profile token for FOG upload" << '\n';
+    cout << "  --fog <address> FOG server address (default: inext-agents.cloud.ngen.checkpoint.com)" << '\n';
 }
 
 int
@@ -76,9 +230,19 @@ main(int argc, char *argv[])
 {
     string nginx_input_file = "/etc/nginx/nginx.conf";
     string nginx_output_file = "full_nginx.conf";
-
+    string fog_address = "inext-agents.cloud.ngen.checkpoint.com";
+    string token;
+    bool upload_flag = false;
     int opt;
-    while ((opt = getopt(argc, argv, "Vvhi:o:h")) != -1) {
+
+    static struct option long_options[] = {
+        {"upload", no_argument, 0, 'u'},
+        {"token", required_argument, 0, 1001},
+        {"fog", required_argument, 0, 1002},
+        {0, 0, 0, 0}
+    };
+
+    while ((opt = getopt_long(argc, argv, "Vvhi:o:", long_options, nullptr)) != -1) {
         switch (opt) {
             case 'V':
                 printVersion();
@@ -95,14 +259,29 @@ main(int argc, char *argv[])
             case 'h':
                 printUsage(argv[0]);
                 return 0;
+            case 'u':
+                upload_flag = true;
+                break;
+            case 1001: // --token
+                token = optarg;
+                break;
+            case 1002: // --fog
+                fog_address = optarg;
+                break;
             default:
                 printUsage(argv[0]);
                 return 1;
         }
     }
 
-    for (int i = optind; i < argc;) {
+    for (int i = optind; i < argc; i++) {
         cerr << "Unknown argument: " << argv[i] << '\n';
+        printUsage(argv[0]);
+        return 1;
+    }
+
+    if (upload_flag && token.empty()) {
+        cerr << "Error: --upload requires --token to be specified" << '\n';
         printUsage(argv[0]);
         return 1;
     }
@@ -143,6 +322,31 @@ main(int argc, char *argv[])
     }
 
     cout << "Full nginx configuration file was successfully generated: " << result.unpack() << '\n';
+
+    if (upload_flag) {
+        cout << "Uploading configuration to FOG server: " << fog_address << '\n';
+
+        string full_fog_url = fog_address;
+        if (fog_address.find("http://") != 0 && fog_address.find("https://") != 0) {
+            full_fog_url = "https://" + fog_address;
+        }
+
+        FogConnection fog_connection(token, full_fog_url);
+        if (!fog_connection.registerAgent()) {
+            cerr << "Failed to register agent with the FOG." << '\n';
+            return 1;
+        }
+
+        if (!fog_connection.getJWT()) {
+            cerr << "Failed to get JWT token." << '\n';
+            return 1;
+        }
+
+        if (!fog_connection.uploadNginxConfig(result.unpack())) {
+            cerr << "Failed to upload nginx config file to FOG." << '\n';
+            return 1;
+        }
+    }
 
     return 0;
 }
