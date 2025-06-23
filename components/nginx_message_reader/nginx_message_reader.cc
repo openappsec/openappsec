@@ -50,12 +50,37 @@ static const boost::regex error_log_regex(
     ", (upstream: \".+?\")"
     ", (host: \".+?\")$"
 );
+// Generic regexes for fallback parsing
+static const boost::regex generic_crit_log_regex(
+    "("
+    + syslog_regex_string + ") "
+    + "(?:\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} )?"  // Optional nginx timestamp
+    + "\\[crit\\] (.+)$"
+);
+
+static const boost::regex generic_emerg_log_regex(
+    "("
+    + syslog_regex_string + ") "
+    + "(?:\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} )?"  // Optional nginx timestamp
+    + "\\[emerg\\] (.+)$"
+);
+
+// Generic regex to extract time, log level and message for fallback parsing
+static const boost::regex generic_fallback_log_regex(
+    "("
+    + syslog_regex_string + ") "
+    + "(?:\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2} )?"  // Optional nginx timestamp
+    + "\\[(\\w+)\\] (.+)$"
+);
 
 static const boost::regex server_regex("(\\d+\\.\\d+\\.\\d+\\.\\d+)|(\\w+\\.\\w+)");
 static const boost::regex uri_regex("^/");
 static const boost::regex port_regex("\\d+");
 static const boost::regex response_code_regex("[0-9]{3}");
 static const boost::regex http_method_regex("[A-Za-z]+");
+
+static const string central_nginx_manager = "Central NGINX Manager";
+static const string reverse_proxe = "Reverse Proxy";
 
 class NginxMessageReader::Impl
 {
@@ -64,6 +89,16 @@ public:
     init()
     {
         dbgFlow(D_NGINX_MESSAGE_READER);
+
+        if (Singleton::exists<I_Environment>()) {
+            auto name = Singleton::Consume<I_Environment>::by<Report>()->get<string>("Service Name");
+            if (name.ok()) 
+            {
+                dbgInfo(D_NGINX_MESSAGE_READER) << "Service name: " << *name;
+                service_name = *name;
+            }
+        }
+
         I_MainLoop *mainloop = Singleton::Consume<I_MainLoop>::by<NginxMessageReader>();
         mainloop->addOneTimeRoutine(
             I_MainLoop::RoutineType::System,
@@ -115,6 +150,12 @@ private:
         RULE_NAME,
         RULE_ID,
         COUNT
+    };
+
+    struct GenericLogInfo {
+        string timestamp;
+        string severity;
+        string message;
     };
 
     void
@@ -175,10 +216,10 @@ private:
                 bool log_sent;
                 if (isAccessLog(log)) {
                     log_sent = sendAccessLog(log);
-                } else if (isAlertErrorLog(log) || isErrorLog(log)) {
+                } else if (isAlertErrorLog(log) || isErrorLog(log) || isCritErrorLog(log) || isEmergErrorLog(log)) {
                     log_sent = sendErrorLog(log);
                 } else {
-                    dbgWarning(D_NGINX_MESSAGE_READER) << "Unexpected nginx log format";
+                    dbgWarning(D_NGINX_MESSAGE_READER) << "Unexpected nginx log format for message: "<< log;
                     continue;
                 }
                 if (!log_sent) {
@@ -222,13 +263,22 @@ private:
     {
         dbgFlow(D_NGINX_MESSAGE_READER) << "Error log" << log;
         Maybe<EnumArray<LogInfo, string>> log_info = parseErrorLog(log);
-        if (!log_info.ok()) {
-            dbgWarning(D_NGINX_MESSAGE_READER)
-                << "Failed parsing the NGINX logs. Error: "
-                << log_info.getErr();
-            return false;
+        if (log_info.ok()) {
+            return sendLog(log_info.unpack());
         }
-        return sendLog(log_info.unpack());
+
+        if (service_name == central_nginx_manager) {
+            dbgDebug(D_NGINX_MESSAGE_READER) << "Detailed parsing failed, trying generic parsing";
+            Maybe<GenericLogInfo> generic_log = parseGenericErrorLog(log);
+            if (generic_log.ok()) {
+                return sendGenericLog(generic_log.unpack());
+            }
+        }
+
+        dbgWarning(D_NGINX_MESSAGE_READER)
+            << "Failed parsing the NGINX logs. Error: "
+            << log_info.getErr();
+        return false;
     }
 
     bool
@@ -253,7 +303,45 @@ private:
     }
 
     bool
-    sendLog(const EnumArray<LogInfo, string> &log_info)
+    isCritErrorLog(const string &log) const
+    {
+        dbgFlow(D_NGINX_MESSAGE_READER) << "Check if log is of type 'crit log'. Log: " << log;
+        return log.find("[crit]") != string::npos;
+    }
+
+    bool
+    isEmergErrorLog(const string &log) const
+    {
+        dbgFlow(D_NGINX_MESSAGE_READER) << "Check if log is of type 'emerg log'. Log: " << log;
+        return log.find("[emerg]") != string::npos;
+    }
+
+    string
+    getCNMEventName(const EnumArray<LogInfo, string> &log_info) const
+    {
+        dbgFlow(D_NGINX_MESSAGE_READER);
+        string event_name;
+        switch (log_info[LogInfo::RESPONSE_CODE][0]) {
+            case '4': {
+                event_name = "NGINX Proxy Error: Invalid request or incorrect NGINX configuration - Request dropped."
+                " Please check the reverse proxy configuration of your relevant assets";
+                break;
+            }
+            case '5': {
+                event_name = "NGINX Proxy Error: Request failed! Please verify your proxy configuration."
+                "If the issue persists please contact open-appsec support";
+                break;
+            }
+            default: {
+                dbgError(D_NGINX_MESSAGE_READER) << "Irrelevant status code";
+                return "";
+            }
+        }
+        return event_name;
+    }
+
+    string
+    getRPMEventName(const EnumArray<LogInfo, string> &log_info) const
     {
         dbgFlow(D_NGINX_MESSAGE_READER);
         string event_name;
@@ -271,9 +359,45 @@ private:
             }
             default: {
                 dbgError(D_NGINX_MESSAGE_READER) << "Irrelevant status code";
-                return false;
+                return "";
             }
         }
+        return event_name;
+    }
+
+    string 
+    getServiceName()
+    {
+        string service_name = "Unnamed Nano Service";
+        if (Singleton::exists<I_Environment>()) {
+            auto name = Singleton::Consume<I_Environment>::by<Report>()->get<string>("Service Name");
+            if (name.ok()) return *name;
+        }
+        return service_name;
+    }
+
+    string getEventName(const EnumArray<LogInfo, string> &log_info)
+    {
+        if (service_name == central_nginx_manager)
+        {
+            return getCNMEventName(log_info);
+        }
+
+        if (service_name != reverse_proxe)
+        {
+            dbgWarning(D_NGINX_MESSAGE_READER) 
+                << "Unknown service name: "
+                << service_name
+                << " Response will be sent as RPM";
+        }
+        return getRPMEventName(log_info);
+    }
+
+    bool
+    sendLog(const EnumArray<LogInfo, string> &log_info)
+    {
+        dbgFlow(D_NGINX_MESSAGE_READER);
+        string event_name = getEventName(log_info);
 
         dbgTrace(D_NGINX_MESSAGE_READER)
             << "Nginx log's event name and response code: "
@@ -283,9 +407,11 @@ private:
         LogGen log(
             event_name,
             ReportIS::Audience::SECURITY,
-            ReportIS::Severity::INFO,
+            ReportIS::Severity::HIGH,
             ReportIS::Priority::LOW,
-            ReportIS::Tags::REVERSE_PROXY
+            service_name == central_nginx_manager ?
+                ReportIS::Tags::CENTRAL_NGINX_MANAGER :
+                ReportIS::Tags::REVERSE_PROXY
         );
         log << LogField("eventConfidence", "High");
 
@@ -311,6 +437,47 @@ private:
             }
         }
         return true;
+    }
+
+    bool
+    sendGenericLog(const GenericLogInfo &log_info)
+    {
+        dbgFlow(D_NGINX_MESSAGE_READER) << "Sending generic log";
+        
+        // check with christoper
+        string event_name = "NGINX Proxy Error: Request failed! Please verify your proxy configuration."
+                "If the issue persists please contact open-appsec support";
+        
+        // Convert string severity to ReportIS::Severity
+        ReportIS::Severity severity = ReportIS::Severity::MEDIUM;
+        ReportIS::Priority priority = ReportIS::Priority::MEDIUM;
+        if (log_info.severity == "emerg" || log_info.severity == "crit") {
+            severity = ReportIS::Severity::CRITICAL;
+            priority = ReportIS::Priority::URGENT;
+        } else if (log_info.severity == "error" || log_info.severity == "alert") {
+            severity = ReportIS::Severity::HIGH;
+            priority = ReportIS::Priority::HIGH;
+        }
+        
+        LogGen log(
+            event_name,
+            ReportIS::Audience::SECURITY,
+            severity,
+            priority,
+            ReportIS::Tags::CENTRAL_NGINX_MANAGER
+        );
+        
+        log << LogField("eventConfidence", "High");
+        log << LogField("timestamp", log_info.timestamp);
+        log << LogField("httpResponseBody", formatGenericLogMessage(log_info));
+        
+        return true;
+    }
+
+    string
+    formatGenericLogMessage(const GenericLogInfo &log_info)
+    {
+        return "[" + log_info.severity + "] " + log_info.message;
     }
 
     bool
@@ -531,6 +698,48 @@ private:
         log_info[LogInfo::RULE_NAME] = context.getRuleName();
     }
 
+    Maybe<GenericLogInfo>
+    parseGenericErrorLog(const string &log_line)
+    {
+        dbgFlow(D_NGINX_MESSAGE_READER) << "Parsing generic error log: " << log_line;
+        
+        boost::smatch matcher;
+        GenericLogInfo generic_log;
+        
+        if (isCritErrorLog(log_line)) {
+            if (NGEN::Regex::regexSearch(__FILE__, __LINE__, log_line, matcher, generic_crit_log_regex)) {
+                const int timestamp_index = 2;  // Timestamp from within syslog_regex_string
+                const int message_index = 5;    // The captured message after [crit]
+                generic_log.timestamp = string(matcher[timestamp_index].first, matcher[timestamp_index].second);
+                generic_log.severity = "crit";
+                generic_log.message = string(matcher[message_index].first, matcher[message_index].second);
+                return generic_log;
+            }
+        } else if (isEmergErrorLog(log_line)) {
+            if (NGEN::Regex::regexSearch(__FILE__, __LINE__, log_line, matcher, generic_emerg_log_regex)) {
+                const int timestamp_index = 2;  // Timestamp from within syslog_regex_string
+                const int message_index = 5;    // The captured message after [emerg]
+                generic_log.timestamp = string(matcher[timestamp_index].first, matcher[timestamp_index].second);
+                generic_log.severity = "emerg";
+                generic_log.message = string(matcher[message_index].first, matcher[message_index].second);
+                return generic_log;
+            }
+        }
+        
+        if (NGEN::Regex::regexSearch(__FILE__, __LINE__, log_line, matcher, generic_fallback_log_regex)) {
+            const int timestamp_index = 2;  // Timestamp from within syslog_regex_string
+            const int severity_index = 5;   // The captured severity level
+            const int message_index = 6;    // The captured message
+            generic_log.timestamp = string(matcher[timestamp_index].first, matcher[timestamp_index].second);
+            generic_log.severity = string(matcher[severity_index].first, matcher[severity_index].second);
+            generic_log.message = string(matcher[message_index].first, matcher[message_index].second);
+            return generic_log;
+        }
+        
+        dbgWarning(D_NGINX_MESSAGE_READER) << "Could not parse log with generic method: " << log_line;
+        return genError("Could not parse log with generic method");
+    }
+
     Maybe<EnumArray<LogInfo, string>>
     parseErrorLog(const string &log_line)
     {
@@ -540,17 +749,29 @@ private:
 
         boost::smatch matcher;
         vector<string> result;
+        boost::regex selected_regex;
+        
+        // Select appropriate regex based on log type
+        if (isAlertErrorLog(log_line)) {
+            selected_regex = alert_log_regex;
+        } else if (isErrorLog(log_line)) {
+            selected_regex = error_log_regex;
+        } else {
+            dbgWarning(D_NGINX_MESSAGE_READER) << "No matching log type found for log: " << log_line;
+            return genError("No matching log type found");
+        }
+
         if (
             !NGEN::Regex::regexSearch(
                 __FILE__,
                 __LINE__,
                 log_line,
                 matcher,
-                isAlertErrorLog(log_line) ? alert_log_regex : error_log_regex
+                selected_regex
             )
         ) {
-            dbgWarning(D_NGINX_MESSAGE_READER) << "Unexpected nginx log format";
-            return genError("Unexpected nginx log format");
+            dbgWarning(D_NGINX_MESSAGE_READER) << "Detailed regex parsing failed for log: " << log_line;
+            return genError("Detailed regex parsing failed");
         }
 
         const int event_message_index = 6;
@@ -591,8 +812,8 @@ private:
         addContextFieldsToLogInfo(log_info);
 
         if (!validateLog(log_info)) {
-            dbgWarning(D_NGINX_MESSAGE_READER) << "Unexpected nginx log format";
-            return genError("Unexpected nginx log format");
+            dbgWarning(D_NGINX_MESSAGE_READER) << "Log validation failed for detailed parsing";
+            return genError("Log validation failed for detailed parsing");
         }
 
         return log_info;
@@ -710,6 +931,7 @@ private:
 
     I_Socket::socketFd syslog_server_socket = -1;
     string rate_limit_status_code = "429";
+    string service_name = "Unnamed Nano Service";
 };
 
 NginxMessageReader::NginxMessageReader() : Component("NginxMessageReader"), pimpl(make_unique<Impl>()) {}

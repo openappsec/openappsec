@@ -179,10 +179,10 @@ private:
     Maybe<void>
     configureSyslog()
     {
-        if (!getProfileAgentSettingWithDefault<bool>(false, "centralNginxManagement.syslogEnabled")) {
-            dbgTrace(D_NGINX_MANAGER) << "Syslog is disabled via settings";
-            return {};
-        }
+        // if (!getProfileAgentSettingWithDefault<bool>(false, "centralNginxManagement.syslogEnabled")) {
+        //     dbgTrace(D_NGINX_MANAGER) << "Syslog is disabled via settings";
+        //     return {};
+        // }
 
         string syslog_directive = "error_log syslog:server=127.0.0.1:1514 warn;";
         auto load_shared_directive_result = loadSharedDirective(syslog_directive);
