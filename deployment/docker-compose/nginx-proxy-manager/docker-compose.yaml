@@ -22,7 +22,7 @@ services:
   appsec-agent:
     image: ghcr.io/openappsec/agent:${APPSEC_VERSION}
     container_name: appsec-agent
-    ipc: service:appsec-nginx-proxy-manager
+    ipc: host
     network_mode: service:appsec-nginx-proxy-manager
     restart: unless-stopped
     environment:
@@ -44,7 +44,7 @@ services:
   appsec-nginx-proxy-manager:
     container_name: appsec-nginx-proxy-manager
     image: ghcr.io/openappsec/nginx-proxy-manager-attachment:${APPSEC_VERSION}
-    ipc: shareable
+    ipc: host
     restart: unless-stopped
     ports:
       - 80:80 # Public HTTP Port
@@ -72,7 +72,7 @@ services:
       - standalone
     image: ghcr.io/openappsec/smartsync-shared-files:${APPSEC_VERSION}
     container_name: appsec-shared-storage
-    ipc: service:appsec-agent
+    ipc: host
     restart: unless-stopped
 ## if you do not want to run this container as "root" user you can comment it out and instead run the below command after the deployment
 ## docker exec -u root appsec-shared-storage chown -R appuser:appuser /db
