@@ -57,11 +57,11 @@ public:
         dbgTrace(D_GEO_FILTER) << "Check if country code: " << _country_code << " is allowed";
         for (const GeoFilterCountry &country : allowed_countries) {
             if (country.getCountryCode() == _country_code) {
-                dbgTrace(D_GEO_FILTER) << "County code: " << _country_code << " is allowed";
+                dbgTrace(D_GEO_FILTER) << "Country code: " << _country_code << " is allowed";
                 return true;
             }
         }
-        dbgTrace(D_GEO_FILTER) << "County code: " << _country_code << " not in allowed countries list";
+        dbgTrace(D_GEO_FILTER) << "Country code: " << _country_code << " not in allowed countries list";
         return false;
     }
 
@@ -71,11 +71,11 @@ public:
         dbgTrace(D_GEO_FILTER) << "Check if country code: " << _country_code << " is blocked";
         for (const GeoFilterCountry &country : blocked_countries) {
             if (country.getCountryCode() == _country_code) {
-                dbgTrace(D_GEO_FILTER) << "County code: " << _country_code << " is blocked";
+                dbgTrace(D_GEO_FILTER) << "Country code: " << _country_code << " is blocked";
                 return true;
             }
         }
-        dbgTrace(D_GEO_FILTER) << "County code: " << _country_code << " not in blocked countries list";
+        dbgTrace(D_GEO_FILTER) << "Country code: " << _country_code << " not in blocked countries list";
         return false;
     }
 
