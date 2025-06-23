@@ -29,7 +29,7 @@ services:
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
       - registered_server="Envoy"
-    ipc: shareable
+    ipc: host
     restart: unless-stopped
     volumes:
       - ${APPSEC_CONFIG}:/etc/cp/conf
@@ -41,7 +41,7 @@ services:
   appsec-envoy:
     image: ghcr.io/openappsec/envoy-attachment:${APPSEC_VERSION}
     container_name: appsec-envoy
-    ipc: service:appsec-agent
+    ipc: host
     restart: unless-stopped
     environment:
       - ENVOY_UID=0
@@ -75,7 +75,7 @@ services:
       - standalone
     image: ghcr.io/openappsec/smartsync-shared-files:${APPSEC_VERSION}
     container_name: appsec-shared-storage
-    ipc: service:appsec-agent
+    ipc: host
     restart: unless-stopped
 ## if you do not want to run this container as "root" user you can comment it out and instead run the below command after the deployment
 ## docker exec -u root appsec-shared-storage chown -R appuser:appuser /db
