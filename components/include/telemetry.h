@@ -76,6 +76,20 @@ private:
     std::unordered_set<std::string> sources_seen;
 };
 
+class WaapAdditionalTrafficTelemetrics : public WaapTelemetryBase
+{
+public:
+    void updateMetrics(const std::string &asset_id, const DecisionTelemetryData &data);
+    void initMetrics();
+
+private:
+    MetricCalculations::Counter requests{this, "reservedNgenA"};
+    MetricCalculations::Counter sources{this, "reservedNgenB"};
+    MetricCalculations::Counter blocked{this, "reservedNgenC"};
+    MetricCalculations::Counter temperature_count{this, "reservedNgenD"};
+    std::unordered_set<std::string> sources_seen;
+};
+
 class WaapTrafficTelemetrics : public WaapTelemetryBase
 {
 public:
@@ -124,6 +138,7 @@ private:
     std::map<std::string, std::shared_ptr<WaapTrafficTelemetrics>> traffic_telemetries;
     std::map<std::string, std::shared_ptr<WaapAttackTypesMetrics>> attack_types;
     std::map<std::string, std::shared_ptr<WaapAttackTypesMetrics>> attack_types_telemetries;
+    std::map<std::string, std::shared_ptr<WaapAdditionalTrafficTelemetrics>> additional_traffic_telemetries;
 
     template <typename T>
     void initializeTelemetryData(

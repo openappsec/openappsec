@@ -45,8 +45,6 @@
 #include <iostream>
 #include "ParserDelimiter.h"
 #include "OpenRedirectDecision.h"
-#include "DecisionType.h"
-#include "generic_rulebase/triggers_config.h"
 #include "config.h"
 #include "LogGenWrapper.h"
 #include "reputation_features_events.h"
@@ -58,6 +56,7 @@ USE_DEBUG_FLAG(D_WAAP_ULIMITS);
 USE_DEBUG_FLAG(D_WAAP_BOT_PROTECTION);
 USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 USE_DEBUG_FLAG(D_WAAP_HEADERS);
+
 
 using namespace ReportIS;
 using namespace std;
@@ -92,9 +91,6 @@ void Waf2Transaction::start_response(int response_status, int http_version)
     dbgTrace(D_WAAP) << "[transaction:" << this << "] start_response(response_status=" << response_status
         << "," << " http_version=" << http_version << ")";
     m_responseStatus = response_status;
-    if (m_triggerReport) {
-        m_responseInspectReasons.setTriggerReport(false);
-    }
 
     if(m_responseStatus == 404)
     {
@@ -324,11 +320,12 @@ Waf2Transaction::Waf2Transaction() :
     m_responseStatus(0),
     m_responseInspectReasons(),
     m_responseInjectReasons(),
+    m_practiceSubType("Web Application"),
     m_index(-1),
-    m_triggerLog(),
     m_triggerReport(false),
     is_schema_validation(false),
-    m_waf2TransactionFlags()
+    m_waf2TransactionFlags(),
+    m_temperature_detected(false)
 {
     m_overrideOriginalMaxScore[OVERRIDE_ACCEPT] = 0;
     I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
@@ -363,11 +360,12 @@ Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState
     m_responseStatus(0),
     m_responseInspectReasons(),
     m_responseInjectReasons(),
+    m_practiceSubType("Web Application"),
     m_index(-1),
-    m_triggerLog(),
     m_triggerReport(false),
     is_schema_validation(false),
-    m_waf2TransactionFlags()
+    m_waf2TransactionFlags(),
+    m_temperature_detected(false)
 {
     I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
     m_entry_time = chrono::duration_cast<chrono::milliseconds>(timeGet->getMonotonicTime());
@@ -574,6 +572,8 @@ void Waf2Transaction::start() {
     hdrs_map.clear();
     m_request_body.clear();
     m_response_body.clear();
+    m_overrideStateByPractice.clear();
+    m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = Waap::Override::State();
 }
 
 void Waf2Transaction::set_transaction_time(const char* log_time) {
@@ -639,6 +639,7 @@ bool Waf2Transaction::checkIsScanningRequired()
             result = true;
         }
     }
+
     return result;
 }
 
@@ -828,7 +829,7 @@ void Waf2Transaction::processUri(const std::string &uri, const std::string& scan
        }
         dbgTrace(D_WAAP) << "should_decode % = " << should_decode;
 
-        ParserUrlEncode up(m_deepParserReceiver, 0, paramSep, should_decode);
+        ParserUrlEncode up(m_deepParserReceiver, 0, paramSep, should_decode, false);
         up.push(p, buff_len);
         up.finish();
         m_deepParser.m_key.pop(tag.c_str());
@@ -875,7 +876,7 @@ void Waf2Transaction::parseCookie(const char* value, int value_len)
     if (value_len > 0) {
         dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] scanning the cookie value";
         m_deepParser.m_key.push("cookie", 6);
-        ParserUrlEncode cookieValueParser(m_deepParserReceiver, 0, ';', false);
+        ParserUrlEncode cookieValueParser(m_deepParserReceiver, 0, ';', false, false);
         cookieValueParser.push(value, value_len);
         cookieValueParser.finish();
         m_deepParser.m_key.pop("cookie");
@@ -969,10 +970,7 @@ void Waf2Transaction::scanSpecificHeader(const char* name, int name_len, const c
         parseUnknownHeaderName(name, name_len);
         // Scan unknown headers whose values do not match "clean generic header" pattern.
         // Note that we do want to process special header named x-chkp-csrf-token header - it is treated specially.
-        if (!m_pWaapAssetState->getSignatures()->good_header_value_re.hasMatch(std::string(value, value_len)) ||
-                headerName == "x-chkp-csrf-token" || headerType == HeaderType::OTHER_KNOWN_HEADERS) {
-            parseGenericHeaderValue(headerName, value, value_len);
-        }
+        parseGenericHeaderValue(headerName, value, value_len);
         break;
     }
     case HeaderType::USER_AGENT_HEADER: {
@@ -1104,9 +1102,6 @@ void Waf2Transaction::end_request_hdrs() {
     if (m_isScanningRequired) {
         createUserLimitsState();
         detectHeaders();
-        if (isUserLimitReached()) {
-            return;
-        }
     }
     // Scan URL and url query
     if (m_isScanningRequired && !m_processedUri) {
@@ -1115,6 +1110,16 @@ void Waf2Transaction::end_request_hdrs() {
     // Scan relevant headers for attacks
     if (m_isScanningRequired && !m_processedHeaders) {
         scanHeaders();
+    }
+
+    // Chack after scanning the URL and headers so we have the valuse for state.
+    if (m_siteConfig != NULL)
+    {
+        m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = getOverrideState(m_siteConfig);
+    }
+
+    if(m_isScanningRequired && isUserLimitReached()) {
+        return;
     }
 
 
@@ -1275,12 +1280,6 @@ void Waf2Transaction::end_request() {
     // Enable response headers processing if response scanning is enabled in policy
     auto errorDisclosurePolicy = m_siteConfig ? m_siteConfig->get_ErrorDisclosurePolicy() : NULL;
     m_responseInspectReasons.setErrorDisclosure(errorDisclosurePolicy && errorDisclosurePolicy->enable);
-
-    auto triggerPolicy = m_siteConfig ? m_siteConfig->get_TriggerPolicy() : NULL;
-    if (isTriggerReportExists(triggerPolicy)) {
-        m_responseInspectReasons.setTriggerReport(true);
-        dbgTrace(D_WAAP) << "setTriggerReport(true)";
-    }
 }
 
 void Waf2Transaction::extractEnvSourceIdentifier()
@@ -1360,7 +1359,7 @@ Waf2Transaction::isHtmlType(const char* data, int data_len){
     std::string body(data, data_len);
     if(!m_pWaapAssetState->getSignatures()->html_regex.hasMatch(body))
     {
-        dbgTrace(D_WAAP) << "Waf2Transaction::isHtmlType: false";
+        dbgTrace(D_WAAP) << "Waf2Transaction::isHtmlType: false. Html regex not matched.";
         return false;
     }
     dbgTrace(D_WAAP) << "Waf2Transaction::isHtmlType: true";
@@ -1532,7 +1531,7 @@ Waf2Transaction::decideAfterHeaders()
     }
 
     m_isHeaderOverrideScanRequired = true;
-    m_overrideState = getOverrideState(sitePolicy);
+    m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = getOverrideState(sitePolicy);
 
     // Select scores pool by location (but use forced pool when forced)
     std::string realPoolName =
@@ -1551,7 +1550,7 @@ Waf2Transaction::decideAfterHeaders()
         UNKNOWN_TYPE
     );
 
-    return finalizeDecision(sitePolicy, shouldBlock);
+    return shouldBlock;
 }
 
 
@@ -1584,7 +1583,7 @@ Waf2Transaction::decideFinal(
     if (WaapConfigAPI::getWaapAPIConfig(ngenAPIConfig)) {
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant API configuration from the I/S";
         sitePolicy = &ngenAPIConfig;
-        m_overrideState = getOverrideState(sitePolicy);
+        m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = getOverrideState(sitePolicy);
 
         // User limits
         shouldBlock = (getUserLimitVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
@@ -1592,7 +1591,7 @@ Waf2Transaction::decideFinal(
     else if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant Application configuration from the I/S";
         sitePolicy = &ngenSiteConfig;
-        m_overrideState = getOverrideState(sitePolicy);
+        m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = getOverrideState(sitePolicy);
 
         shouldBlock = decideAutonomousSecurity(
             *sitePolicy,
@@ -1600,7 +1599,8 @@ Waf2Transaction::decideFinal(
             false,
             transactionResult,
             realPoolName,
-            fpClassification);
+            fpClassification
+        );
 
         // CSRF Protection
         auto csrfPolicy = m_siteConfig ? m_siteConfig->get_CsrfPolicy() : nullptr;
@@ -1613,62 +1613,23 @@ Waf2Transaction::decideFinal(
 
     if (mode == 2) {
         decide(
-            m_overrideState.bForceBlock,
-            m_overrideState.bForceException,
+            m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceBlock,
+            m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException,
             mode
         );
         shouldBlock = isSuspicious();
     }
 
-    return finalizeDecision(sitePolicy, shouldBlock);
-}
-
-int
-Waf2Transaction::finalizeDecision(IWaapConfig *sitePolicy, bool shouldBlock)
-{
-    auto decision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
-        m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
-    // Send log
-    if (sitePolicy)
-    {
-        // auto reject should have default threat level info and above
-        if (m_overrideState.bForceBlock && decision->getThreatLevel() == ThreatLevel::NO_THREAT)
-        {
-            decision->setThreatLevel(ThreatLevel::THREAT_INFO);
-        }
-    }
-
-    if (m_overrideState.bForceBlock) {
-        dbgTrace(D_WAAP) << "Waf2Transaction::finalizeDecision(): setting shouldBlock to true due to override";
-        shouldBlock = true; // BLOCK
-    }
-    else if (m_overrideState.bForceException) {
-        dbgTrace(D_WAAP) << "Waf2Transaction::finalizeDecision(): setting shouldBlock to false due to override";
-        shouldBlock = false; // PASS
-    }
-
-    if (m_siteConfig) {
-        const std::shared_ptr<Waap::Trigger::Policy> triggerPolicy = m_siteConfig->get_TriggerPolicy();
-        if (triggerPolicy) {
-            const std::shared_ptr<Waap::Trigger::Log> triggerLog = getTriggerLog(triggerPolicy);
-            if (triggerLog && shouldSendExtendedLog(triggerLog))
-            {
-                m_responseInspectReasons.setCollectResponseForLog(true);
-            }
-        }
-    }
-
-    dbgTrace(D_WAAP) << "Waf2Transaction::finalizeDecision(): returning shouldBlock: " << shouldBlock;
+    dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): returning shouldBlock: " << shouldBlock;
     return shouldBlock;
 }
 
 void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
-    const std::shared_ptr<Waap::Trigger::Log> &triggerLog,
+    const LogTriggerConf &triggerLog,
     bool shouldBlock,
     const std::string& logOverride,
     const std::string& incidentType,
-    const std::string& practiceID,
-    const std::string& practiceName) const
+    DecisionType practiceType) const
 {
     auto env = Singleton::Consume<I_Environment>::by<WaapComponent>();
     auto active_id = env->get<std::string>("ActiveTenantId");
@@ -1686,10 +1647,9 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     if (!m_siteConfig->get_AssetId().empty()) waapLog << LogField("assetId", m_siteConfig->get_AssetId());
     if (!m_siteConfig->get_AssetName().empty()) waapLog << LogField("assetName", m_siteConfig->get_AssetName());
 
-    const auto& autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
-        m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
-    bool send_extended_log = shouldSendExtendedLog(triggerLog);
-    if (triggerLog->webUrlPath || autonomousSecurityDecision->getOverridesLog()) {
+    const auto& decision = m_waapDecision.getDecision(practiceType);
+    bool send_extended_log = shouldSendExtendedLog(triggerLog, practiceType);
+    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webUrlPath) || decision->shouldForceLog()) {
         std::string httpUriPath = m_uriPath;
 
         if (httpUriPath.length() > MAX_LOG_FIELD_SIZE)
@@ -1699,7 +1659,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
 
         waapLog << LogField("httpUriPath", httpUriPath, LogFieldOption::XORANDB64);
     }
-    if (triggerLog->webUrlQuery || autonomousSecurityDecision->getOverridesLog()) {
+    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webUrlQuery) || decision->shouldForceLog()) {
         std::string uriQuery = m_uriQuery;
         if (uriQuery.length() > MAX_LOG_FIELD_SIZE)
         {
@@ -1707,16 +1667,16 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
         }
         waapLog << LogField("httpUriQuery", uriQuery, LogFieldOption::XORANDB64);
     }
-    if (triggerLog->webHeaders || autonomousSecurityDecision->getOverridesLog()) {
+    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webHeaders) || decision->shouldForceLog()) {
         waapLog << LogField("httpRequestHeaders", logHeadersStr(), LogFieldOption::XORANDB64);
     }
     // Log http response code if it is known
-    if (m_responseStatus != 0 && send_extended_log && triggerLog->responseCode) {
+    if (m_responseStatus != 0 && send_extended_log && triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseCode)) {
         waapLog << LogField("httpResponseCode", std::to_string(m_responseStatus));
     }
 
     // Count of bytes available to send to the log
-    std::string requestBodyToLog = (triggerLog->webBody) ?
+    std::string requestBodyToLog = (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webBody)) ?
         m_request_body : std::string();
     std::string responseBodyToLog = m_response_body;
     if (!shouldBlock && responseBodyToLog.empty())
@@ -1748,7 +1708,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
         waapLog << LogField("httpRequestBody", requestBodyToLog, LogFieldOption::XORANDB64);
     }
 
-    if (!responseBodyToLog.empty() && send_extended_log && triggerLog->responseBody)
+    if (!responseBodyToLog.empty() && send_extended_log && triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseBody))
     {
         waapLog << LogField("httpResponseBody", responseBodyToLog, LogFieldOption::XORANDB64);
     }
@@ -1757,10 +1717,10 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     waapLog << LogField("securityAction", shouldBlock ? "Prevent" : "Detect");
     waapLog << LogField("waapOverride", logOverride);
     waapLog << LogField("practiceType", "Threat Prevention");
-    waapLog << LogField("practiceSubType", m_siteConfig->get_PracticeSubType());
+    waapLog << LogField("practiceSubType", m_practiceSubType);
     waapLog << LogField("ruleName", m_siteConfig->get_RuleName());
-    waapLog << LogField("practiceId", practiceID);
-    waapLog << LogField("practiceName", practiceName);
+    waapLog << LogField("practiceId", m_siteConfig->get_PracticeIdByPactice(practiceType));
+    waapLog << LogField("practiceName", m_siteConfig->get_PracticeNameByPactice(practiceType));
     waapLog << LogField("waapIncidentType", incidentType);
 
     // Registering this value would append the list of matched override IDs to the unified log
@@ -1786,19 +1746,24 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
 void
 Waf2Transaction::sendLog()
 {
-    dbgFlow(D_WAAP);
+    dbgFlow(D_WAAP) << "send log";
     m_waapDecision.orderDecisions();
     if (m_siteConfig == NULL) {
         dbgWarning(D_WAAP) <<
             "Waf2Transaction::sendLog: no site policy associated with transaction - not sending a log";
         return;
     }
+    DecisionType decision_type = m_waapDecision.getHighestPriorityDecisionToLog();
+    dbgTrace(D_WAAP) << "send log got decision type: " << decision_type;
+    auto final_decision = m_waapDecision.getDecision(decision_type);
+    if (!final_decision) {
+        final_decision = m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION);
+    }
+
     std::string attackTypes = buildAttackTypes();
     std::string logOverride = "None";
     DecisionTelemetryData telemetryData;
     std::string assetId = m_siteConfig->get_AssetId();
-    const auto& autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
-        m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
 
     I_TimeGet *timeGet = Singleton::Consume<I_TimeGet>::by<Waf2Transaction>();
     auto finish = timeGet->getMonotonicTime();
@@ -1824,51 +1789,53 @@ Waf2Transaction::sendLog()
         telemetryData.responseCode = m_responseStatus;
     }
 
-
     telemetryData.source = getSourceIdentifier();
     telemetryData.assetName = m_siteConfig->get_AssetName();
     telemetryData.practiceId = m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION);
     telemetryData.practiceName = m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION);
-    if (m_scanResult) {
-        telemetryData.attackTypes = m_scanResult->attack_types;
-    }
-    telemetryData.threat = autonomousSecurityDecision->getThreatLevel();
-    if (m_overrideState.bForceBlock) {
-        telemetryData.blockType = FORCE_BLOCK;
-    }
-    else if (m_overrideState.bForceException) {
-        telemetryData.blockType = FORCE_EXCEPTION;
-    }
-    else if (m_waapDecision.getDecision(USER_LIMITS_DECISION)->shouldBlock()) {
+    telemetryData.temperatureDetected = wasTemperatureDetected();
+    switch (decision_type)
+    {
+    case USER_LIMITS_DECISION: {
         telemetryData.blockType = LIMIT_BLOCK;
+        break;
     }
-    else if (autonomousSecurityDecision->shouldBlock()) {
-        telemetryData.blockType = WAF_BLOCK;
-    }
-    else if (m_waapDecision.getDecision(CSRF_DECISION)->shouldBlock()) {
+    case CSRF_DECISION: {
         telemetryData.blockType = CSRF_BLOCK;
+        break;
     }
-    else {
+    case AUTONOMOUS_SECURITY_DECISION: {
+        telemetryData.blockType = WAF_BLOCK;
+        break;
+    }
+    default:
         telemetryData.blockType = NOT_BLOCKING;
-    }
-
-    WaapTelemetryEvent(assetId, telemetryData).notify();
-
-    if (m_overrideState.bIgnoreLog) {
-        dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: override is to ignore log - not sending a log";
-        return;
+        break;
     }
 
     bool shouldBlock = false;
-    if (m_overrideState.bForceBlock) {
+    if (final_decision->shouldForceBlock()) {
+        telemetryData.blockType = FORCE_BLOCK;
         // If override forces "reject" decision, mention it in the "override" log field.
         logOverride = OVERRIDE_DROP;
         shouldBlock = true;
-    } else if (m_overrideState.bForceException) {
+    }
+    else if (final_decision->shouldForceAllow()) {
+        telemetryData.blockType = FORCE_EXCEPTION;
         // If override forces "allow" decision, mention it in the "override" log field.
         logOverride = OVERRIDE_ACCEPT;
-    } else if (m_scanner.getIgnoreOverride()) {
+    } else if (decision_type == AUTONOMOUS_SECURITY_DECISION && m_scanner.getIgnoreOverride()) {
+        // skip exception detected by scanner
+        dbgTrace(D_WAAP) << "should ignore override";
         logOverride = OVERRIDE_IGNORE;
+    }
+
+    WaapTelemetryEvent(assetId, telemetryData).notify();
+    auto it = m_overrideStateByPractice.find(decision_type);
+    if ((it != m_overrideStateByPractice.end() && it->second.bSupressLog) ||
+        (it == m_overrideStateByPractice.end() && m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bSupressLog)) {
+        dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: override is to ignore log - not sending a log";
+        return;
     }
 
     // Get triggers
@@ -1879,27 +1846,29 @@ Waf2Transaction::sendLog()
         return;
     }
 
-    const std::shared_ptr<Waap::Trigger::Log> triggerLog = getTriggerLog(triggerPolicy);
-
+    auto maybeTriggerLog = getTriggerLog(triggerPolicy, decision_type);
     // If there were no triggers of type Log - do not send log
-    if (!triggerLog) {
+    if (!maybeTriggerLog.ok()) {
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: found no triggers of type 'Log' - not sending a log";
         return;
     }
-
-    bool send_extended_log = shouldSendExtendedLog(triggerLog);
+    auto triggerLog = maybeTriggerLog.unpack();
+    bool send_extended_log = shouldSendExtendedLog(triggerLog, decision_type);
     shouldBlock |= m_waapDecision.getShouldBlockFromHighestPriorityDecision();
     // Do not send Detect log if trigger disallows it
-    if (!send_extended_log && shouldBlock == false && !triggerLog->tpDetect &&
-        !autonomousSecurityDecision->getOverridesLog())
+    // and we do not override log(for ignore exception)
+    if (!send_extended_log && shouldBlock == false &&
+        !triggerLog.isDetectLogActive(LogTriggerConf::SecurityType::ThreatPrevention) &&
+        !final_decision->shouldForceLog())
     {
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: not sending Detect log (triggers)";
         return;
     }
 
     // Do not send Prevent log if trigger disallows it
-    if (!send_extended_log && shouldBlock == true && !triggerLog->tpPrevent &&
-        !autonomousSecurityDecision->getOverridesLog())
+    if (!send_extended_log && shouldBlock == true &&
+        !triggerLog.isPreventLogActive(LogTriggerConf::SecurityType::ThreatPrevention) &&
+        !final_decision->shouldForceLog())
     {
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: not sending Prevent log (triggers)";
         return;
@@ -1908,7 +1877,7 @@ Waf2Transaction::sendLog()
     // In case no decision to block or log - send log if extend log or override
     if (!m_waapDecision.anyDecisionsToLogOrBlock())
     {
-        if (send_extended_log || autonomousSecurityDecision->getOverridesLog())
+        if (send_extended_log || final_decision->shouldForceLog())
         {
             sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes);
             dbgTrace(D_WAAP) << "Waf2Transaction::sendLog()::" <<
@@ -1921,24 +1890,14 @@ Waf2Transaction::sendLog()
         return;
     }
 
-    DecisionType decision_type = m_waapDecision.getHighestPriorityDecisionToLog();
     if (decision_type == DecisionType::NO_WAAP_DECISION) {
-        if (send_extended_log || autonomousSecurityDecision->getOverridesLog()) {
+        if (send_extended_log || final_decision->shouldForceLog()) {
             sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes);
         }
         dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: decisions marked for block only";
         return;
     }
 
-    std::set<std::string> triggers_set;
-    for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
-        triggers_set.insert(trigger.triggerId);
-        dbgTrace(D_WAAP) << "Add waap log trigger id to triggers set:" << trigger.triggerId;
-    }
-    ScopedContext ctx;
-    ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
-
-    auto maybeLogTriggerConf = getConfiguration<LogTriggerConf>("rulebase", "log");
     switch (decision_type)
     {
     case USER_LIMITS_DECISION: {
@@ -1960,7 +1919,7 @@ Waf2Transaction::sendLog()
         }
 
         LogGenWrapper logGenWrapper(
-                                maybeLogTriggerConf,
+                                maybeTriggerLog,
                                 "Web Request",
                                 ReportIS::Audience::SECURITY,
                                 LogTriggerConf::SecurityType::ThreatPrevention,
@@ -1969,11 +1928,7 @@ Waf2Transaction::sendLog()
                                 shouldBlock);
 
         LogGen& waap_log = logGenWrapper.getLogGen();
-        appendCommonLogFields(
-            waap_log, triggerLog, shouldBlock, logOverride, incidentType,
-            m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
-            m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
-        );
+        appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType, decision_type);
         waap_log << LogField("waapIncidentDetails", incidentDetails);
         waap_log << LogField("eventConfidence", "High");
         break;
@@ -1983,7 +1938,7 @@ Waf2Transaction::sendLog()
     case RATE_LIMITING_DECISION:
     case ERROR_DISCLOSURE_DECISION: {
         LogGenWrapper logGenWrapper(
-                                maybeLogTriggerConf,
+                                maybeTriggerLog,
                                 "API Request",
                                 ReportIS::Audience::SECURITY,
                                 LogTriggerConf::SecurityType::ThreatPrevention,
@@ -2006,18 +1961,14 @@ Waf2Transaction::sendLog()
             waap_log << LogField("waapFoundIndicators", getKeywordMatchesStr(), LogFieldOption::XORANDB64);
         }
 
-        appendCommonLogFields(
-            waap_log, triggerLog, shouldBlock, logOverride, incidentType,
-            m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
-            m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
-        );
+        appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, incidentType, decision_type);
 
         waap_log << LogField("waapIncidentDetails", incidentDetails);
         break;
     }
     case CSRF_DECISION: {
         LogGenWrapper logGenWrapper(
-                                maybeLogTriggerConf,
+                                maybeTriggerLog,
                                 "CSRF Protection",
                                 ReportIS::Audience::SECURITY,
                                 LogTriggerConf::SecurityType::ThreatPrevention,
@@ -2027,18 +1978,17 @@ Waf2Transaction::sendLog()
 
         LogGen& waap_log = logGenWrapper.getLogGen();
         appendCommonLogFields(
-            waap_log, triggerLog, shouldBlock, logOverride, "Cross Site Request Forgery",
-            m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
-            m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
+            waap_log, triggerLog, shouldBlock, logOverride, "Cross Site Request Forgery", decision_type
         );
         waap_log << LogField("waapIncidentDetails", "CSRF Attack discovered.");
         break;
     }
     case AUTONOMOUS_SECURITY_DECISION: {
-        if (triggerLog->webRequests ||
+        if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webRequests) ||
             send_extended_log ||
-            autonomousSecurityDecision->getThreatLevel() != ThreatLevel::NO_THREAT ||
-            autonomousSecurityDecision->getOverridesLog()) {
+            std::dynamic_pointer_cast<AutonomousSecurityDecision>(final_decision)
+                ->getThreatLevel() != ThreatLevel::NO_THREAT ||
+            final_decision->shouldForceLog()) {
             sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes);
         }
         break;
@@ -2080,7 +2030,8 @@ Waf2Transaction::decideAutonomousSecurity(
 
     // Do not call stage2 so it doesn't learn from exceptions.
     // Also do not call stage2 for attacks found in parameter name
-    if (!m_overrideState.bForceException && !(m_scanResult && m_scanResult->m_isAttackInParam)) {
+    if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException &&
+         !(m_scanResult && m_scanResult->m_isAttackInParam)) {
         if (!m_processedUri) {
             dbgWarning(D_WAAP) << "decideAutonomousSecurity(): processing URI although is was supposed "
                 "to be processed earlier ...";
@@ -2135,7 +2086,8 @@ Waf2Transaction::decideAutonomousSecurity(
     }
 
     // Fill attack details for attacks found in parameter names
-    if (!m_overrideState.bForceException && m_scanResult && m_scanResult->m_isAttackInParam) {
+    if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException &&
+         m_scanResult && m_scanResult->m_isAttackInParam) {
         // Since stage2 learning doesn't run in this case, assume stage1 score is the final score
         float finalScore = m_scanResult->score;
         ThreatLevel threat = Waap::Conversions::convertFinalScoreToThreatLevel(finalScore);
@@ -2153,13 +2105,18 @@ Waf2Transaction::decideAutonomousSecurity(
         transactionResult.d2Analysis.finalScore = finalScore;
         transactionResult.shouldBlock = shouldBlock;
         transactionResult.threatLevel = threat;
+    } else if (m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceBlock &&
+                decision->getThreatLevel() == ThreatLevel::NO_THREAT) {
+        // If override forces block, set threat level to INFO
+        decision->setThreatLevel(ThreatLevel::THREAT_INFO);
     }
 
     dbgTrace(D_WAAP_OVERRIDE) << "override ids count: " << m_matchedOverrideIds.size();
     // Apply overrides
     for (auto it = m_overridePostFilterMaxScore.begin(); it != m_overridePostFilterMaxScore.end(); it++) {
         const string id = it->first;
-        if (m_overrideState.forceBlockIds.find(id) != m_overrideState.forceBlockIds.end()) {
+        if (m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].forceBlockIds.find(id) !=
+            m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].forceBlockIds.end()) {
             // blocked effectivness is calculates later from the force block exception ids list
             continue;
         }
@@ -2179,34 +2136,41 @@ Waf2Transaction::decideAutonomousSecurity(
         }
     }
 
-    if (m_overrideState.bForceBlock) {
+    if (m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceBlock) {
         dbgTrace(D_WAAP) << "decideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
             " and override forces REJECT ...";
         if (!decision->shouldBlock()) {
-            m_effectiveOverrideIds.insert(m_overrideState.forceBlockIds.begin(), m_overrideState.forceBlockIds.end());
+            m_effectiveOverrideIds.insert(
+                m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].forceBlockIds.begin(),
+                m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].forceBlockIds.end()
+            );
         }
         decision->setBlock(true);
-        if (!m_overrideState.bIgnoreLog)
+        decision->setForceBlock(true);
+        if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bSupressLog)
         {
-            decision->setOverridesLog(true);
+            decision->setForceLog(true);
         }
     }
-    else if (m_overrideState.bForceException) {
-        dbgTrace(D_WAAP) << "de cideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
+    else if (m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException) {
+        dbgTrace(D_WAAP) << "decideAutonomousSecurity(): decision was " << decision->shouldBlock() <<
             " and override forces ALLOW ...";
         decision->setBlock(false);
-        if (!m_overrideState.bIgnoreLog)
+        decision->setForceAllow(true);
+        if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bSupressLog)
         {
-            decision->setOverridesLog(true);
+            decision->setForceLog(true);
         }
     } else if (!m_matchedOverrideIds.empty()) {
-        if (!m_overrideState.bIgnoreLog)
+        if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bSupressLog)
         {
-            decision->setOverridesLog(true);
+            decision->setForceLog(true);
         }
     }
-    dbgTrace(D_WAAP_OVERRIDE) << "force exception: " << m_overrideState.bForceException <<
-    " force block: " << m_overrideState.bForceBlock <<
+    dbgTrace(D_WAAP_OVERRIDE) <<
+    "force exception: " <<
+    m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException <<
+    " force block: " << m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceBlock <<
     " matched overrides count: " << m_matchedOverrideIds.size() <<
     " effective overrides count: " << m_effectiveOverrideIds.size() <<
     " learned overrides count: " << m_exceptionLearned.size();
@@ -2214,8 +2178,9 @@ Waf2Transaction::decideAutonomousSecurity(
     bool log_all = false;
     const std::shared_ptr<Waap::Trigger::Policy> triggerPolicy = sitePolicy.get_TriggerPolicy();
     if (triggerPolicy) {
-        const std::shared_ptr<Waap::Trigger::Log> triggerLog = getTriggerLog(triggerPolicy);
-        if (triggerLog && triggerLog->webRequests) log_all = true;
+        auto triggerLog = getTriggerLog(triggerPolicy, AUTONOMOUS_SECURITY_DECISION);
+        if (triggerLog.ok() && triggerLog.unpack().isWebLogFieldActive(LogTriggerConf::WebLogFields::webRequests)) log_all = true;
+        if (triggerLog.ok() && shouldSendExtendedLog(triggerLog.unpack())) m_responseInspectReasons.setCollectResponseForLog(true);
     }
 
     if(decision->getThreatLevel() <= ThreatLevel::THREAT_INFO && !log_all) {
@@ -2223,7 +2188,6 @@ Waf2Transaction::decideAutonomousSecurity(
     } else {
         decision->setLog(true);
     }
-
     return decision->shouldBlock();
 }
 
@@ -2242,6 +2206,14 @@ Waf2Transaction::clearAllInjectionReasons() {
 bool Waf2Transaction::shouldInspectResponse()
 {
     return m_responseInspectReasons.shouldInspect() || m_responseInjectReasons.shouldInject();
+}
+bool
+Waf2Transaction::shouldLimitResponseHeadersInspection() {
+    auto triggerPolicy = m_siteConfig ? m_siteConfig->get_TriggerPolicy() : NULL;
+    if (!shouldInspectResponse() && isTriggerReportExists(triggerPolicy)) {
+        return true;
+    }
+    return false;
 }
 bool Waf2Transaction::shouldInjectResponse()
 {
@@ -2276,14 +2248,14 @@ bool Waf2Transaction::decideResponse()
         if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
             dbgTrace(D_WAAP)
                     << "Waf2Transaction::decideResponse(): got relevant Application configuration from the I/S";
-            m_overrideState = getOverrideState(&ngenSiteConfig);
+            m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = getOverrideState(&ngenSiteConfig);
             // Apply overrides
-            if (m_overrideState.bForceBlock) {
+            if (m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceBlock) {
                 dbgTrace(D_WAAP)
                         << "Waf2Transaction::decideResponse(): setting shouldBlock to true due to override";
                 return false; // BLOCK
             }
-            else if (m_overrideState.bForceException) {
+            else if (m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException) {
                 dbgTrace(D_WAAP)
                         << "Waf2Transaction::decideResponse(): setting shouldBlock to false due to override";
                 return true; // PASS
@@ -2297,25 +2269,25 @@ bool Waf2Transaction::decideResponse()
             dbgTrace(D_WAAP) << "Trigger policy was not found. Returning true (accept)";
             return true; // accept
         }
-
-        const std::shared_ptr<Waap::Trigger::Log> triggerLog = getTriggerLog(triggerPolicy);
-        if (!triggerLog) {
+        // response is only for WAF
+        auto maybeTriggerLog = getTriggerLog(triggerPolicy, AUTONOMOUS_SECURITY_DECISION);
+        if (!maybeTriggerLog.ok()) {
             dbgTrace(D_WAAP) << "Log trigger configuration was not found. Returning true (accept)";
             return true; // accept
         }
-
+        auto triggerLog = maybeTriggerLog.unpack();
         auto env = Singleton::Consume<I_Environment>::by<Waf2Transaction>();
         auto http_chunk_type = env->get<ngx_http_chunk_type_e>("HTTP Chunk type");
         bool should_send_extended_log = shouldSendExtendedLog(triggerLog) && http_chunk_type.ok();
         if (should_send_extended_log &&
             *http_chunk_type == ngx_http_chunk_type_e::RESPONSE_CODE &&
-            !triggerLog->responseBody
+            !triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseBody)
         ) {
             should_send_extended_log = false;
         } else if (should_send_extended_log &&
             *http_chunk_type == ngx_http_chunk_type_e::REQUEST_END &&
-            !triggerLog->responseCode &&
-            !triggerLog->responseBody
+            !triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseCode) &&
+            !triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseBody)
         ) {
             should_send_extended_log = false;
         }
@@ -2347,83 +2319,116 @@ Waf2Transaction::reportScanResult(const Waf2ScanResult &res) {
 
 bool
 Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
-    auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
-    if (!exceptions.ok()) {
-        dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions error: " << exceptions.getErr();
-        return false;
-    }
-    dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions";
+
+    dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions for should ignore";
 
     std::unordered_map<std::string, std::set<std::string>> exceptions_dict;
+    std::set<ParameterBehavior> behaviors;
+    std::set<std::string> &ignored_keywords = getAssetState()->m_filtersMngr->getMatchedOverrideKeywords();
 
-    if (res.location != "referer") {
-        // collect param name
-        exceptions_dict["paramName"].insert(res.param_name);
-        exceptions_dict["paramName"].insert(IndicatorsFiltersManager::generateKey(res.location, res.param_name, this));
+    // collect param name
+    exceptions_dict["paramName"].insert(res.param_name);
+    exceptions_dict["paramName"].insert(IndicatorsFiltersManager::generateKey(res.location, res.param_name, this));
 
-        std::set<std::string> param_name_set;
-        param_name_set.insert(res.param_name);
-        param_name_set.insert(IndicatorsFiltersManager::generateKey(res.location, res.param_name, this));
+    std::set<std::string> param_name_set;
+    param_name_set.insert(res.param_name);
+    param_name_set.insert(IndicatorsFiltersManager::generateKey(res.location, res.param_name, this));
 
-        // collect param value
-        exceptions_dict["paramValue"].insert(res.unescaped_line);
+    // collect param value
+    exceptions_dict["paramValue"].insert(res.unescaped_line);
 
-        // collect param location
-        exceptions_dict["paramLocation"].insert(res.location);
+    // collect param location
+    exceptions_dict["paramLocation"].insert(res.location);
 
-        ScopedContext ctx;
-        ctx.registerValue<std::string>("paramValue", res.unescaped_line);
-        ctx.registerValue<std::set<std::string>>("paramName", param_name_set);
+    ScopedContext ctx;
+    ctx.registerValue<std::string>("paramValue", res.unescaped_line);
+    ctx.registerValue<std::set<std::string>>("paramName", param_name_set);
 
-        // collect sourceip, sourceIdentifier, url
-        exceptions_dict["sourceIP"].insert(m_remote_addr);
-        exceptions_dict["sourceIdentifier"].insert(m_source_identifier);
-        exceptions_dict["url"].insert(getUriStr());
-        exceptions_dict["hostName"].insert(m_hostStr);
-        exceptions_dict["method"].insert(m_methodStr);
+    // collect sourceip, sourceIdentifier, url
+    exceptions_dict["sourceIP"].insert(m_remote_addr);
+    exceptions_dict["sourceIdentifier"].insert(m_source_identifier);
+    exceptions_dict["url"].insert(getUriStr());
+    exceptions_dict["hostName"].insert(m_hostStr);
+    exceptions_dict["method"].insert(m_methodStr);
 
-        for (auto &keyword : res.keyword_matches) {
-            exceptions_dict["indicator"].insert(keyword);
-        }
-        for (auto &it : res.found_patterns) {
-            exceptions_dict["indicator"].insert(it.first);
-        }
+    for (auto &keyword : res.keyword_matches) {
+        exceptions_dict["indicator"].insert(keyword);
+    }
+    for (auto &it : res.found_patterns) {
+        exceptions_dict["indicator"].insert(it.first);
+    }
 
-        // calling behavior and check if there is a behavior that match to this specific param name.
-        auto behaviors = exceptions.unpack().getBehavior(exceptions_dict,
-                getAssetState()->m_filtersMngr->getMatchedOverrideKeywords());
-        for (const auto &behavior : behaviors) {
-            dbgTrace(D_WAAP_OVERRIDE) << "got behavior: " << behavior.getId();
-            if (!res.filtered_keywords.empty() || res.score > 0) {
-                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for param '" << res.param_name << "' with filtered indicators";
-                std::string overrideId = behavior.getId();
-                if (m_overrideOriginalMaxScore.find(overrideId) == m_overrideOriginalMaxScore.end()){
-                    m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
-                    m_overridePostFilterMaxScore[overrideId] = res.score;
-                } else {
-                    if (res.scoreNoFilter > m_overrideOriginalMaxScore[overrideId]) {
-                        m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
-                    }
-                    if (res.score > m_overridePostFilterMaxScore[overrideId]) {
-                        m_overridePostFilterMaxScore[overrideId] = res.score;
-                    }
-                }
-                if (res.scoreNoFilter > m_overrideOriginalMaxScore[OVERRIDE_ACCEPT]) {
-                    m_overrideOriginalMaxScore[OVERRIDE_ACCEPT] = res.scoreNoFilter;
-                }
-            }
-            if (behavior == action_ignore)
-            {
-                dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for param '" << res.param_name << "': should ignore.";
-                std::string overrideId = behavior.getId();
-                if (!overrideId.empty()) {
-                    m_matchedOverrideIds.insert(overrideId);
-                }
-                return true;
-            }
+    bool isConfigExist = false;
+    if (WaapConfigAPI::getWaapAPIConfig(m_ngenAPIConfig)) {
+        dbgTrace(D_WAAP_OVERRIDE) << "waap api config found";
+        m_siteConfig = &m_ngenAPIConfig;
+        isConfigExist = true;
+    } else if (WaapConfigApplication::getWaapSiteConfig(m_ngenSiteConfig)) {
+        dbgTrace(D_WAAP_OVERRIDE) << "waap web application config found";
+        m_siteConfig = &m_ngenSiteConfig;
+        isConfigExist = true;
+    }
+    std::vector<std::string> site_exceptions;
+    if (isConfigExist) {
+        dbgTrace(D_WAAP_OVERRIDE) << "config exists, get override policy";
+        std::shared_ptr<Waap::Override::Policy> overridePolicy = m_siteConfig->get_OverridePolicy();
+        if (overridePolicy) {
+            site_exceptions = overridePolicy->getExceptionsByPractice()
+                    .getExceptionsOfPractice(AUTONOMOUS_SECURITY_DECISION);
         }
     }
 
+    if (!site_exceptions.empty()) {
+        dbgTrace(D_WAAP_OVERRIDE) << "get behaviors by web app practice";
+        I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<Waf2Transaction>();
+        for (const auto &id : site_exceptions) {
+            dbgTrace(D_WAAP_OVERRIDE) << "get parameter exception: " << id;
+            auto params = i_rulebase->getParameterException(id).getBehavior(exceptions_dict, ignored_keywords);
+            behaviors.insert(params.begin(), params.end());
+        }
+    } else {
+        auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
+        if (!exceptions.ok()) {
+            dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions error: " << exceptions.getErr();
+            return false;
+        }
+        // calling behavior and check if there is a behavior that match to this specific param name.
+        behaviors = exceptions.unpack().getBehavior(exceptions_dict, ignored_keywords);
+    }
+    dbgTrace(D_WAAP_OVERRIDE) << "got "<< behaviors.size() << " behaviors and " <<
+        ignored_keywords.size() << " ignored keywords";
+
+    for (const auto &behavior : behaviors) {
+        dbgTrace(D_WAAP_OVERRIDE) << "got behavior: " << behavior.getId();
+        if (!res.filtered_keywords.empty() || res.score > 0) {
+            dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for param '" << res.param_name << "' with filtered indicators";
+            std::string overrideId = behavior.getId();
+            if (m_overrideOriginalMaxScore.find(overrideId) == m_overrideOriginalMaxScore.end()){
+                m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
+                m_overridePostFilterMaxScore[overrideId] = res.score;
+            } else {
+                if (res.scoreNoFilter > m_overrideOriginalMaxScore[overrideId]) {
+                    m_overrideOriginalMaxScore[overrideId] = res.scoreNoFilter;
+                }
+                if (res.score > m_overridePostFilterMaxScore[overrideId]) {
+                    m_overridePostFilterMaxScore[overrideId] = res.score;
+                }
+            }
+            if (res.scoreNoFilter > m_overrideOriginalMaxScore[OVERRIDE_ACCEPT]) {
+                m_overrideOriginalMaxScore[OVERRIDE_ACCEPT] = res.scoreNoFilter;
+            }
+        }
+        if (behavior == action_ignore)
+        {
+            dbgTrace(D_WAAP_OVERRIDE) << "matched exceptions for param '" << res.param_name << "': should ignore.";
+            std::string overrideId = behavior.getId();
+            if (!overrideId.empty()) {
+                m_matchedOverrideIds.insert(overrideId);
+            }
+            return true;
+        }
+    }
+    dbgTrace(D_WAAP_OVERRIDE) << "should not ignore";
     return false;
 }
 
@@ -2485,9 +2490,15 @@ void Waf2Transaction::collectFoundPatterns()
     }
 }
 
-bool Waf2Transaction::shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger::Log> &trigger_log) const
+bool Waf2Transaction::shouldSendExtendedLog(const LogTriggerConf &trigger_log, DecisionType practiceType) const
 {
-    if (!trigger_log->extendLogging)
+    if (practiceType != AUTONOMOUS_SECURITY_DECISION)
+    {
+        dbgTrace(D_WAAP) << "Should not send extended logging. Practice type is: " << practiceType;
+        return false;
+    }
+    auto extend_logging_severity = trigger_log.getExtendLoggingSeverity();
+    if(extend_logging_severity == LogTriggerConf::extendLoggingSeverity::None)
     {
         dbgTrace(D_WAAP) << "Should not send extended log. Extended log is disabled.";
         return false;
@@ -2498,7 +2509,7 @@ bool Waf2Transaction::shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger:
     ReportIS::Severity severity = Waap::Util::computeSeverityFromThreatLevel(
         autonomousSecurityDecision->getThreatLevel());
 
-    if (trigger_log->extendLoggingMinSeverity == "Critical" || trigger_log->extendLoggingMinSeverity == "critical")
+    if (extend_logging_severity == LogTriggerConf::extendLoggingSeverity::Critical)
     {
         if (severity == ReportIS::Severity::CRITICAL)
         {
@@ -2508,7 +2519,7 @@ bool Waf2Transaction::shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger:
         dbgTrace(D_WAAP) << "Should not send extended logging. Min Severity Critical. Severity: " << (int) severity;
         return false;
     }
-    else if (trigger_log->extendLoggingMinSeverity == "High" || trigger_log->extendLoggingMinSeverity == "high")
+    else if (extend_logging_severity == LogTriggerConf::extendLoggingSeverity::High)
     {
         if (severity == ReportIS::Severity::CRITICAL || severity == ReportIS::Severity::HIGH)
         {
@@ -2519,6 +2530,19 @@ bool Waf2Transaction::shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger:
         return false;
     }
 
-    dbgTrace(D_WAAP) << "Should not send extended logging. Min Severity: " << trigger_log->extendLoggingMinSeverity;
+    dbgTrace(D_WAAP) << "Should not send extended logging. Min Severity: " << (int) extend_logging_severity;
     return false;
+}
+
+
+void
+Waf2Transaction::setTemperatureDetected(bool detected)
+{
+    m_temperature_detected = detected;
+}
+
+bool
+Waf2Transaction::wasTemperatureDetected() const
+{
+    return m_temperature_detected;
 }

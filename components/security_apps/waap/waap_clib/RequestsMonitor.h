@@ -28,6 +28,7 @@ protected:
 private:
     // map of sources and their requests per minute (UNIX)
     MonitorData m_sourcesRequests;
+    bool m_enabled;
 };
 
 #endif // __REQUESTS_MONITOR_H__

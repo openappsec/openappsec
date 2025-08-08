@@ -170,19 +170,22 @@ ParserXML::onEntityDeclaration(
 {
     dbgTrace(D_WAAP_PARSER_XML) << "ENTITY FOUND WITH VALUE: '" << (content ? (const char*)content : "null") << "'";
 
-    ParserXML* p = (ParserXML*)ctx;
-    std::string kw = "08a80340-06d3-11ea-9f87-0242ac11000f";
+    if (systmeid != nullptr) {
+        dbgTrace(D_WAAP_PARSER_XML) << "ENTITY FOUND WITH SYSTEM ID: '" << (const char*)systmeid << "'";
+        ParserXML* p = (ParserXML*)ctx;
+        std::string kw = "08a80340-06d3-11ea-9f87-0242ac11000f";
 
-    if (p->m_receiver.onKey(p->m_key.c_str(), p->m_key.size()) != 0) {
-        p->m_state = s_error;
-    }
+        if (p->m_receiver.onKey(p->m_key.c_str(), p->m_key.size()) != 0) {
+            p->m_state = s_error;
+        }
 
-    if (p->m_receiver.onValue(kw.data(), kw.size()) != 0) {
-        p->m_state = s_error;
-    }
+        if (p->m_receiver.onValue(kw.data(), kw.size()) != 0) {
+            p->m_state = s_error;
+        }
 
-    if (p->m_receiver.onKvDone() != 0) {
-        p->m_state = s_error; // error
+        if (p->m_receiver.onKvDone() != 0) {
+            p->m_state = s_error; // error
+        }
     }
 }
 

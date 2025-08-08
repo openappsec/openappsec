@@ -19,6 +19,7 @@
 #include <string>
 #include <memory>
 #include "debug.h"
+#include "DecisionType.h"
 
 USE_DEBUG_FLAG(D_WAAP);
 
@@ -143,15 +144,86 @@ struct Trigger {
     std::shared_ptr<Log> log;
 };
 
+class TriggersByPractice
+{
+public:
+    template <typename _A>
+    void serialize(_A& ar)
+    {
+        ar(
+            cereal::make_nvp("WebApplicationTriggers", m_web_app_ids),
+            cereal::make_nvp("APIProtectionTriggers", m_api_protect_ids),
+            cereal::make_nvp("AntiBotTriggers", m_anti_bot_ids)
+        );
+        m_all_ids.insert(m_all_ids.end(), m_web_app_ids.begin(), m_web_app_ids.end());
+        m_all_ids.insert(m_all_ids.end(), m_api_protect_ids.begin(), m_api_protect_ids.end());
+        m_all_ids.insert(m_all_ids.end(), m_anti_bot_ids.begin(), m_anti_bot_ids.end());
+    }
+
+    bool operator==(const TriggersByPractice &other) const;
+    const std::vector<std::string>& getTriggersByPractice(DecisionType practiceType) const;
+    const std::vector<std::string>& getAllTriggers() const;
+private:
+    std::vector<std::string> m_web_app_ids;
+    std::vector<std::string> m_api_protect_ids;
+    std::vector<std::string> m_anti_bot_ids;
+    std::vector<std::string> m_all_ids;
+};
+
+class WebUserResponseByPractice
+{
+public:
+    template <typename _A>
+    void serialize(_A& ar)
+    {
+        ar(
+            cereal::make_nvp("WebApplicationResponse", m_web_app_ids),
+            cereal::make_nvp("APIProtectionResponse", m_api_protect_ids),
+            cereal::make_nvp("AntiBotResponse", m_anti_bot_ids)
+        );
+    }
+
+    bool operator==(const WebUserResponseByPractice &other) const;
+    const std::vector<std::string>& getResponseByPractice(DecisionType practiceType) const;
+private:
+    std::vector<std::string> m_web_app_ids;
+    std::vector<std::string> m_api_protect_ids;
+    std::vector<std::string> m_anti_bot_ids;
+};
+
 struct Policy {
     template <typename _A>
     Policy(_A &ar) {
-        ar(cereal::make_nvp("triggers", triggers));
+        try {
+            ar(
+                cereal::make_nvp("triggersPerPractice", triggersByPractice)
+            );
+        }
+        catch (std::runtime_error &e) {
+            ar.setNextName(nullptr);
+            dbgInfo(D_WAAP) << "Failed to load triggers per practice, error: " << e.what();
+            triggersByPractice = TriggersByPractice();
+        }
+        try {
+            ar(
+                cereal::make_nvp("webUserResponsePerPractice", responseByPractice)
+            );
+        }
+        catch (std::runtime_error &e) {
+            ar.setNextName(nullptr);
+            dbgInfo(D_WAAP) << "Failed to load web user response per practice, error: " << e.what();
+            responseByPractice = WebUserResponseByPractice();
+        }
+        ar(
+            cereal::make_nvp("triggers", triggers)
+        );
     }
 
     bool operator==(const Policy &other) const;
 
     std::vector<Waap::Trigger::Trigger> triggers;
+    TriggersByPractice triggersByPractice;
+    WebUserResponseByPractice responseByPractice;
 };
 
 }

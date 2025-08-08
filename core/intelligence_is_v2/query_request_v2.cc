@@ -30,11 +30,13 @@ QueryRequest::QueryRequest(
     const string &key,
     const string &value,
     bool full_reponse,
-    AttributeKeyType attribute_type
+    AttributeKeyType attribute_type,
+    bool _external_sources_error_status
 ) {
     query = SerializableQueryFilter(condition_type, createAttributeString(key, attribute_type), value);
     assets_limit = default_assets_limit;
     full_response = full_reponse;
+    external_sources_error_status = _external_sources_error_status;
 }
 
 QueryRequest::QueryRequest(
@@ -42,11 +44,13 @@ QueryRequest::QueryRequest(
     const string &key,
     const int64_t &value,
     bool full_reponse,
-    AttributeKeyType attribute_type
+    AttributeKeyType attribute_type,
+    bool _external_sources_error_status
 ) {
     query = SerializableQueryFilter(condition_type, createAttributeString(key, attribute_type), value);
     assets_limit = default_assets_limit;
     full_response = full_reponse;
+    external_sources_error_status = _external_sources_error_status;
 }
 
 QueryRequest::QueryRequest(
@@ -54,11 +58,13 @@ QueryRequest::QueryRequest(
     const string &key,
     const vector<string> &value,
     bool full_reponse,
-    AttributeKeyType attribute_type
+    AttributeKeyType attribute_type,
+    bool _external_sources_error_status
 ) {
     query = SerializableQueryFilter(condition_type, createAttributeString(key, attribute_type), value);
     assets_limit = default_assets_limit;
     full_response = full_reponse;
+    external_sources_error_status = _external_sources_error_status;
 }
 
 Maybe<string>
@@ -83,9 +89,14 @@ QueryRequest::save(cereal::JSONOutputArchive &ar) const
 {
     ar(
         cereal::make_nvp("limit", assets_limit),
-        cereal::make_nvp("fullResponse", full_response),
-        cereal::make_nvp("query", query)
+        cereal::make_nvp("fullResponse", full_response)
     );
+
+    if (external_sources_error_status) {
+        ar(cereal::make_nvp("externalSourcesErrorStatus", external_sources_error_status));
+    }
+
+    ar(cereal::make_nvp("query", query));
 
     auto objTypeString = convertObjectTypeToString();
     if (objTypeString.ok()) {
@@ -236,6 +247,7 @@ QueryRequest::calcQueryRequestOperator(const QueryRequest &other_query, const Op
     res_req_query.query = res_query_filter;
     res_req_query.assets_limit = this->assets_limit;
     res_req_query.full_response = this->full_response;
+    res_req_query.external_sources_error_status = this->external_sources_error_status;
     res_req_query.cursor = this->cursor;
     res_req_query.requested_attributes = this->requested_attributes;
     res_req_query.query_types = this->query_types;

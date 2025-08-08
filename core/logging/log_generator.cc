@@ -14,15 +14,23 @@
 #include "log_generator.h"
 
 using namespace std;
+USE_DEBUG_FLAG(D_LOGGING);
 
 extern const string unnamed_service;
 
 LogGen::~LogGen()
 {
     try {
-        if (send_log) Singleton::Consume<I_Logging>::by<LogGen>()->sendLog(log);
+        if (send_log) {
+            dbgTrace(D_LOGGING) << "sending log";
+            Singleton::Consume<I_Logging>::by<LogGen>()->sendLog(log);
+        } else {
+            dbgTrace(D_LOGGING) << "not sending log";
+        }
     } catch (...) {
+        dbgWarning(D_LOGGING) << "Failed to send log";
     }
+
 }
 
 LogGen &

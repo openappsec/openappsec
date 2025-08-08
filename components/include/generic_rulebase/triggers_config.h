@@ -317,12 +317,12 @@ public:
     {
         return url_for_cef;
     }
+    Flags<ReportIS::StreamType> getStreams(SecurityType security_type, bool is_action_drop_or_prevent) const;
+    Flags<ReportIS::Enreachments> getEnrechments(SecurityType security_type) const;
 
 private:
     ReportIS::Severity getSeverity(bool is_action_drop_or_prevent) const;
     ReportIS::Priority getPriority(bool is_action_drop_or_prevent) const;
-    Flags<ReportIS::StreamType> getStreams(SecurityType security_type, bool is_action_drop_or_prevent) const;
-    Flags<ReportIS::Enreachments> getEnrechments(SecurityType security_type) const;
 
     std::string name;
     std::string verbosity;
@@ -337,6 +337,34 @@ private:
     Flags<WebLogFields> log_web_fields;
     extendLoggingSeverity extend_logging_severity = extendLoggingSeverity::None;
     bool should_format_output = false;
+};
+
+class ReportTriggerConf
+{
+public:
+    /// \brief Default constructor for ReportTriggerConf.
+    ReportTriggerConf() {}
+
+    /// \brief Preload function to register expected configuration.
+    static void
+    preload()
+    {
+        registerExpectedConfiguration<ReportTriggerConf>("rulebase", "report");
+    }
+
+    /// \brief Load function to deserialize configuration from JSONInputArchive.
+    /// \param archive_in The JSON input archive.
+    void load(cereal::JSONInputArchive &archive_in);
+
+    /// \brief Get the name.
+    /// \return The name.
+    const std::string &
+    getName() const
+    {
+        return name;
+    }
+private:
+    std::string name;
 };
 
 #endif //__TRIGGERS_CONFIG_H__

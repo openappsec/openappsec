@@ -394,7 +394,7 @@ Buffer::isEqualLowerCase(const Buffer &buf) const
 {
     if (len != buf.size()) return false;
     for (uint i = 0; i < len; i++) {
-        if (tolower((*this)[i]) != buf[i]) return false;
+        if (tolower((*this)[i]) != tolower(buf[i])) return false;
     }
     return true;
 }

@@ -26,7 +26,6 @@
 #include "../waap_clib/SecurityHeadersPolicy.h"
 #include <memory>
 
-
 enum class BlockingLevel {
     NO_BLOCKING = 0,
     LOW_BLOCKING_LEVEL,

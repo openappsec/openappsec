@@ -36,6 +36,7 @@ static const string query_uri = "/api/v2/intelligence/assets/query";
 static const string queries_uri = "/api/v2/intelligence/assets/queries";
 static const string fog_health_uri = "/access-manager/health/live";
 static const string intelligence_health_uri = "/show-health";
+static const string time_range_invalidation_uri = "/api/v2/intelligence/invalidation/get";
 
 class I_InvalidationCallBack
 {
@@ -83,6 +84,12 @@ public:
         first = false;
     }
 
+    void
+    setAgentId(const string &_agent_id)
+    {
+        agent_id = _agent_id;
+    }
+
     RestCall
     genJson() const
     {
@@ -90,7 +97,7 @@ public:
 
         res << "{ \"apiVersion\": \"v2\", \"communicationType\": \"sync\", \"callbackType\": \"invalidation\", ";
         auto details = Singleton::Consume<I_AgentDetails>::by<IntelligenceComponentV2>();
-        res << "\"name\": \"" << details->getAgentId() << "\", ";
+        res << "\"name\": \"" << (agent_id.empty() ? details->getAgentId() : agent_id) << "\", ";
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
         res << "\"url\": \"http://127.0.0.1:" << rest->getListeningPort() <<"/set-new-invalidation\", ";
         res << "\"capabilities\": { \"getBulkCallback\": " << "true" << " }, ";
@@ -106,6 +113,7 @@ public:
 private:
     bool first = true;
     stringstream stream;
+    string agent_id = "";
 };
 
 class InvalidationCallBack : Singleton::Provide<I_InvalidationCallBack>::SelfInterface
@@ -137,9 +145,11 @@ public:
     bool empty() const { return callbacks.empty(); }
 
     InvalidationRegistration::RestCall
-    getRegistration() const
+    getRegistration(const string& agent_id) const
     {
         InvalidationRegistration registration;
+
+        registration.setAgentId(agent_id);
 
         for (auto &registed_invalidation : callbacks) {
             registration.addInvalidation(registed_invalidation.second.first);
@@ -394,11 +404,24 @@ public:
         return sendIntelligence(invalidation).ok();
     }
 
+    Maybe<vector<Invalidation>>
+    getInvalidations(TimeRangeInvalidations request) const override
+    {
+        auto res = sendIntelligence(request);
+        if (res.ok()) return res.unpack().getInvalidations();
+        return res.passErr();
+    }
+
     Maybe<uint>
-    registerInvalidation(const Invalidation &invalidation, const function<void(const Invalidation &)> &cb) override
+    registerInvalidation(
+        const Invalidation &invalidation,
+        const function<void(const Invalidation &)> &cb,
+        const string &AgentId
+    ) override
     {
         if (!invalidation.isLegalInvalidation()) return genError("Attempting to register invalid invalidation");
         auto res = invalidations.emplace(invalidation, cb);
+        agent_id = AgentId;
         sendRecurringInvalidationRegistration();
         return res;
     }
@@ -504,7 +527,7 @@ private:
         const string &server,
         const string &port_setting,
         const bool should_send_access_token = false
-) const
+    ) const
     {
         auto port = getSetting<uint>("intelligence", port_setting);
         if (!port.ok()) {
@@ -543,6 +566,16 @@ private:
     {
         Response response(response_body, query_request.getSize(), query_request.isBulk());
         auto load_status = response.load();
+        if (load_status.ok()) return response;
+        dbgWarning(D_INTELLIGENCE) << "Could not create intelligence response.";
+        return load_status.passErr();
+    }
+
+    Maybe<Response>
+    createResponse(const string &response_body) const
+    {
+        Response response(response_body, 0, false);
+        auto load_status = response.loadInvalidations();
         if (load_status.ok()) return response;
         dbgWarning(D_INTELLIGENCE) << "Could not create intelligence response.";
         return load_status.passErr();
@@ -642,6 +675,39 @@ private:
         return createResponse(req_data->getBody(), query_request);
     }
 
+    Maybe<Response>
+    sendIntelligenceRequestImpl(
+        const TimeRangeInvalidations &request,
+        const MessageMetadata &global_req_md) const
+    {
+        dbgFlow(D_INTELLIGENCE) << "Sending time range invalidations request";
+
+        auto json_body = request.genJson();
+        if (!json_body.ok()) return json_body.passErr();
+
+        auto req_data = message->sendSyncMessage(
+                HTTPMethod::POST,
+                time_range_invalidation_uri,
+                *json_body,
+                MessageCategory::INTELLIGENCE,
+                global_req_md
+        );
+        if (!req_data.ok()) {
+            dbgWarning(D_INTELLIGENCE)
+                << "Could not send time range invalidations request. "
+                << req_data.getErr().getBody()
+                << " "
+                << req_data.getErr().toString();
+            return genError("Could not send time range invalidations request.");
+        }
+        if (req_data->getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+            dbgWarning(D_INTELLIGENCE) << "Invalid intelligence response: " << req_data->toString();
+            return genError(req_data->toString());
+        }
+
+        return createResponse(req_data->getBody());
+    }
+
     map<string, string>
     getHTTPHeaders() const
     {
@@ -651,7 +717,7 @@ private:
         if (tenant == "") tenant = "Global";
         headers["X-Tenant-Id"] = tenant;
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
-        auto agent = details->getAgentId() + ":" + to_string(rest->getListeningPort());
+        auto agent = (agent_id.empty() ? details->getAgentId() : agent_id) + ":" + to_string(rest->getListeningPort());
         headers["X-Source-Id"] = agent;
 
         return headers;
@@ -662,7 +728,7 @@ private:
     {
         if (invalidations.empty()) return;
 
-        sendLocalIntelligenceToLocalServer(invalidations.getRegistration());
+        sendLocalIntelligenceToLocalServer(invalidations.getRegistration(agent_id));
     }
 
     Maybe<Response>
@@ -678,6 +744,7 @@ private:
     InvalidationCallBack         invalidations;
     I_Messaging               *message = nullptr;
     I_MainLoop                   *mainloop = nullptr;
+    string agent_id = "";
 };
 
 IntelligenceComponentV2::IntelligenceComponentV2()

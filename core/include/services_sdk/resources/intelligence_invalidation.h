@@ -19,6 +19,9 @@
 #include <string>
 #include <set>
 #include <cereal/archives/json.hpp>
+#include "rest.h"
+#include "messaging/messaging_enums.h"
+#include "messaging/messaging_metadata.h"
 
 #include "maybe_res.h"
 #include "enum_array.h"
@@ -31,6 +34,56 @@ namespace Intelligence
 enum class ClassifierType { CLASS, CATEGORY, FAMILY, GROUP, ORDER, KIND };
 enum class ObjectType { ASSET, ZONE, POLICY_PACKAGE, CONFIGURATION, SESSION, SHORTLIVED };
 enum class InvalidationType { ADD, DELETE, UPDATE };
+
+static const std::map<std::string, ObjectType> stringToObjectTypeMap = {
+    {"asset", ObjectType::ASSET},
+    {"zone", ObjectType::ZONE},
+    {"policyPackage", ObjectType::POLICY_PACKAGE},
+    {"configuration", ObjectType::CONFIGURATION},
+    {"session", ObjectType::SESSION},
+    {"shortLived", ObjectType::SHORTLIVED}
+};
+
+static const std::map<std::string, InvalidationType> stringToInvalidationTypeMap = {
+    {"add", InvalidationType::ADD},
+    {"delete", InvalidationType::DELETE},
+    {"update", InvalidationType::UPDATE}
+};
+
+class TimeRangeInvalidations
+{
+public:
+    TimeRangeInvalidations(uint64_t start_time, uint64_t end_time) : time_range{start_time, end_time} {}
+
+    Maybe<std::string> genJson() const
+    {
+        try {
+            std::stringstream out;
+            {
+                cereal::JSONOutputArchive out_ar(out);
+                out_ar(cereal::make_nvp("timeRange", time_range));
+            }
+            return out.str();
+        } catch (const std::exception &e) {
+            return genError("Failed to generate JSON for TimeRangeInvalidations. Error: " + std::string(e.what()));
+        }
+    }
+
+private:
+    struct TimeRange
+    {
+        uint64_t start;
+        uint64_t end;
+
+        template <class Archive>
+        void serialize(Archive &ar)
+        {
+            ar(cereal::make_nvp("start", start), cereal::make_nvp("end", end));
+        }
+    };
+
+    TimeRange time_range;
+};
 
 class StrAttributes
 {
@@ -101,6 +154,7 @@ private:
 class Invalidation
 {
 public:
+    Invalidation();
     Invalidation(const std::string &class_value);
 
     Invalidation & setClassifier(ClassifierType type, const std::string &val);
@@ -113,14 +167,18 @@ public:
     std::string getClassifier(ClassifierType type) const { return classifiers[type]; }
     std::vector<StrAttributes> getMainAttributes() const { return main_attributes; }
     std::vector<IpAttributes> getAttributes() const { return attributes; }
-    const Maybe<std::string, void> & getSourceId() const { return source_id; }
-    const Maybe<ObjectType, void> & getObjectType() const { return object_type; }
-    const Maybe<InvalidationType, void> & getInvalidationType() const { return invalidation_type; }
-    Maybe<std::string, void> getRegistrationID() const;
+    const Maybe<std::string> & getSourceId() const { return source_id; }
+    const Maybe<ObjectType> & getObjectType() const { return object_type; }
+    const Maybe<InvalidationType> & getInvalidationType() const { return invalidation_type; }
+    Maybe<std::string> getRegistrationID() const;
 
     bool report(I_Intelligence_IS_V2 *interface) const;
 
-    Maybe<uint> startListening(I_Intelligence_IS_V2 *interface, const std::function<void(const Invalidation &)> &cb);
+    Maybe<uint> startListening(
+        I_Intelligence_IS_V2 *interface,
+        const std::function<void(const Invalidation &)> &cb,
+        const std::string &AgentId = ""
+    );
     void stopListening(I_Intelligence_IS_V2 *interface);
 
     Maybe<std::string> genJson() const;
@@ -128,6 +186,7 @@ public:
     bool isLegalInvalidation() const;
 
     bool matches(const Invalidation &other) const;
+    void serialize(cereal::JSONInputArchive &ar);
 
 private:
     bool attr_matches(const std::vector<StrAttributes> &current, const std::vector<StrAttributes> &other) const;
@@ -136,11 +195,11 @@ private:
     EnumArray<ClassifierType, std::string, 6> classifiers;
     std::vector<StrAttributes> main_attributes;
     std::vector<IpAttributes> attributes;
-    Maybe<std::string, void> source_id;
-    Maybe<ObjectType, void> object_type;
-    Maybe<InvalidationType, void> invalidation_type;
-    Maybe<uint, void> listening_id;
-    Maybe<std::string, void> registration_id;
+    Maybe<std::string> source_id;
+    Maybe<ObjectType> object_type;
+    Maybe<InvalidationType> invalidation_type;
+    Maybe<uint> listening_id;
+    Maybe<std::string> registration_id;
 };
 
 } // namespace Intelligence

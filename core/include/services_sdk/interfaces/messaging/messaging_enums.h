@@ -30,6 +30,7 @@ enum class MessageConnectionConfig
     UNSECURE_CONN,
     ONE_TIME_CONN,
     IGNORE_SSL_VALIDATION,
+    ONE_TIME_FOG_CONN, // used for learning mechanism - one time connection sent by dedicated thread
 
     COUNT
 };

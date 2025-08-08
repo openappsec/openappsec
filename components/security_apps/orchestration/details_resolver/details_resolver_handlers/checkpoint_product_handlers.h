@@ -26,9 +26,7 @@
 Maybe<string>
 checkSAMLSupportedBlade(const string &command_output)
 {
-    // uncomment when vpn will support SAML authentication
-    // string supportedBlades[3] = {"identityServer", "vpn", "cvpn"};
-    string supportedBlades[1] = {"identityServer"};
+    string supportedBlades[3] = {"identityServer", "vpn", "cvpn"};
     for(const string &blade : supportedBlades) {
         if (command_output.find(blade) != string::npos) {
             return string("true");
@@ -50,6 +48,17 @@ checkIDABlade(const string &command_output)
 }
 
 Maybe<string>
+checkVPNBlade(const string &command_output)
+{
+    string vpnBlade = "vpn";
+    if (command_output.find(vpnBlade) != string::npos) {
+        return string("true");
+    }
+
+    return string("false");
+}
+
+Maybe<string>
 checkSAMLPortal(const string &command_output)
 {
     if (command_output.find("Portal is running") != string::npos) {
@@ -60,9 +69,9 @@ checkSAMLPortal(const string &command_output)
 }
 
 Maybe<string>
-checkPepIdaIdnStatus(const string &command_output)
+checkInfinityIdentityEnabled(const string &command_output)
 {
-    if (command_output.find("nac_pep_identity_next_enabled = 1") != string::npos) {
+    if (command_output.find("get_identities_from_infinity_identity (true)") != string::npos) {
         return string("true");
     }
     return string("false");
@@ -90,11 +99,28 @@ checkIDP(shared_ptr<istream> file_stream)
 {
     string line;
     while (getline(*file_stream, line)) {
-        if (line.find("<identity_portal/>") != string::npos) {
-            return string("false");
-        }
         if (line.find("<central_idp ") != string::npos) {
             return string("true");
+        }
+    }
+
+    return string("false");
+}
+
+Maybe<string>
+checkVPNCIDP(shared_ptr<istream> file_stream)
+{
+    string line;
+    while (getline(*file_stream, line)) {
+        if (line.find("<vpn") != string::npos) {
+            while (getline(*file_stream, line)) {
+                if (line.find("<central_idp ") != string::npos) {
+                    return string("true");
+                }
+                if (line.find("</vpn>") != string::npos) {
+                    break;
+                }
+            }
         }
     }
 
@@ -139,6 +165,17 @@ getIsAiopsRunning(const string &command_output)
     
     return command_output;
 }
+
+Maybe<string>
+getInterfaceMgmtIp(const string &command_output)
+{
+    if (!command_output.empty()) {
+        return command_output;
+    }
+
+    return genError("Eth Management IP was not found");
+}
+
 
 Maybe<string>
 checkHasSDWan(const string &command_output)
@@ -450,6 +487,14 @@ extractManagements(const string &command_output)
     }
     json_output += "]";
     return json_output;
+}
+
+Maybe<string>
+checkQosLegacyBlade(const string &command_output)
+{
+    if (command_output == "true" || command_output == "false") return command_output;
+
+    return string("false");
 }
 #endif // gaia || smb
 

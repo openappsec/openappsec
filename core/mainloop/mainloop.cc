@@ -98,12 +98,17 @@ public:
     init()
     {
         fini_signal_flag = false;
-        addOneTimeRoutine(
-            RoutineType::Offline,
-            [this](){ reportStartupEvent(); },
-            "Nano service startup report",
-            false
-        );
+        bool report_startup_event =
+            getConfigurationWithDefault<bool>(true, "Mainloop", "Report Startup Event");
+
+        if (report_startup_event) {
+            addOneTimeRoutine(
+                RoutineType::Offline,
+                [this](){ reportStartupEvent(); },
+                "Nano service startup report",
+                false
+            );
+        }
 
         metric_report_interval = chrono::seconds(
             getConfigurationWithDefault<uint>(600, "Mainloop", "metric reporting interval")
@@ -319,7 +324,12 @@ MainloopComponent::Impl::run()
                 ) {
                     dbgWarning(D_MAINLOOP)
                         << "Routine execution exceeded run time. Routine name: "
-                        << curr_iter->second.getRoutineName();
+                        << curr_iter->second.getRoutineName()
+                        << ", time slice: "
+                        << time_slice_to_use
+                        << ", exceeded time: "
+                        << (getTimer()->getMonotonicTime() - stop_time).count()
+                        << " microseconds";
                 }
             }
 
@@ -642,5 +652,6 @@ MainloopComponent::preload()
     registerExpectedConfiguration<int>("Mainloop", "Busy routine time slice");
     registerExpectedConfiguration<uint>("Mainloop", "metric reporting interval");
     registerExpectedConfiguration<uint>("Mainloop", "Exceed Warning");
+    registerExpectedConfiguration<bool>("Mainloop", "Report Startup Event");
     registerConfigLoadCb([&] () { pimpl->reloadConfigurationCb(); });
 }

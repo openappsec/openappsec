@@ -29,6 +29,8 @@ public:
     {
         comp.preload();
         comp.init();
+        auto err = genError("not coroutine");
+        EXPECT_CALL(mainloop, getCurrentRoutineId()).WillRepeatedly(Return(Maybe<I_MainLoop::RoutineID>(err)));
     }
 
     ~ComponentTest()

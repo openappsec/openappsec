@@ -86,10 +86,11 @@ bool KeywordIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapPa
         std::to_string(CONFIDENCE_THRESHOLD)));
     std::string learnPermanentlyStr = pParams->getParamVal("learnIndicators.learnPermanently", "true");
     params.learnPermanently = !boost::iequals(learnPermanentlyStr.c_str(), "false");
+    params.maxMemoryUsage = std::stoul(pParams->getParamVal("learnIndicators.maxMemoryUsage",
+        std::to_string(CONFIDENCE_MAX_MEMORY_USAGE)));
 
     std::string remoteSyncStr = pParams->getParamVal("remoteSync", "true");
     bool syncEnabled = !boost::iequals(remoteSyncStr, "false");
-
     dbgTrace(D_WAAP) << params << " remote sync: " << remoteSyncStr;
 
     m_confidence_calc.setRemoteSyncEnabled(syncEnabled);

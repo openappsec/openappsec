@@ -48,6 +48,7 @@ WaapComponent::Impl::Impl() :
     pending_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT),
     accept_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT),
     drop_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP),
+    limit_response_headers(ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS),
     waapStateTable(NULL),
     transactionsCount(0),
     deepAnalyzer()
@@ -246,7 +247,7 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
 
     // Delete state before returning any verdict which is not pending
     if ((verdict.getVerdict() != pending_response.getVerdict()) && waapStateTable->hasState<Waf2Transaction>()) {
-        finishTransaction(waf2Transaction);
+        finishTransaction(waf2Transaction, verdict);
     } else {
     }
 
@@ -283,8 +284,9 @@ WaapComponent::Impl::respond(const HttpRequestBodyEvent &event)
     waf2Transaction.add_request_body_chunk(dataBuf, dataBufLen);
 
     ngx_http_cp_verdict_e verdict = waf2Transaction.getUserLimitVerdict();
+    EventVerdict eventVedict(verdict);
     if (verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT) {
-        finishTransaction(waf2Transaction);
+        finishTransaction(waf2Transaction, eventVedict);
     }
 
     return EventVerdict(verdict);
@@ -323,9 +325,10 @@ WaapComponent::Impl::respond(const EndRequestEvent &)
 
     // Delete state before returning any verdict which is not pending
     if (verdict.getVerdict() != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
+        verdict.getVerdict() != ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
-        finishTransaction(waf2Transaction);
+        finishTransaction(waf2Transaction, verdict);
     }
 
     return verdict;
@@ -374,7 +377,7 @@ WaapComponent::Impl::respond(const ResponseCodeEvent &event)
         verdict.getVerdict() != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
-        finishTransaction(waf2Transaction);
+        finishTransaction(waf2Transaction, verdict);
     }
 
     return verdict;
@@ -412,6 +415,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
 
     ngx_http_cp_verdict_e verdict = pending_response.getVerdict();
     HttpHeaderModification modifications;
+    std::string webUserResponseByPractice;
     bool isSecurityHeadersInjected = false;
 
     if (waf2Transaction.shouldInjectSecurityHeaders()) {
@@ -477,16 +481,16 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
         // disable should inject security headers after injection to avoid response body scanning when it's unnecessary
         waf2Transaction.disableShouldInjectSecurityHeaders();
     }
-
+    EventVerdict eventVedict(move(modifications.getModificationList()), verdict);
     // Delete state before returning any verdict which is not pending
     if (verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
         verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
-        finishTransaction(waf2Transaction);
+        finishTransaction(waf2Transaction, eventVedict);
     }
 
-    return EventVerdict(move(modifications.getModificationList()), verdict);
+    return eventVedict;
 }
 
 EventVerdict
@@ -528,6 +532,7 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
 
     ngx_http_cp_verdict_e verdict = pending_response.getVerdict();
     HttpBodyModification modifications;
+    std::string webUserResponseByPractice;
 
     // Set drop verdict if waap engine decides to drop response.
     if (!waf2Transaction.decideResponse()) {
@@ -582,16 +587,16 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
         dbgTrace(D_WAAP) << " * \e[32m HttpBodyResponse: shouldInspectResponse==false: ACCEPT\e[0m";
         verdict = accept_response.getVerdict();
     }
-
+    EventVerdict eventVedict(modifications.getModificationList(), verdict);
     // Delete state before returning any verdict which is not pending or inject
     if (verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
         verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
-        finishTransaction(waf2Transaction);
+        finishTransaction(waf2Transaction, eventVedict);
     }
 
-    return EventVerdict(modifications.getModificationList(), verdict);
+    return eventVedict;
 }
 
 EventVerdict
@@ -630,7 +635,7 @@ WaapComponent::Impl::respond(const EndTransactionEvent &)
     }
 
     // This is our last chance to delete the state. The verdict must not be "PENDING" at this point.
-    finishTransaction(waf2Transaction);
+    finishTransaction(waf2Transaction, verdict);
     return verdict;
 }
 
@@ -638,11 +643,13 @@ EventVerdict
 WaapComponent::Impl::waapDecisionAfterHeaders(IWaf2Transaction& waf2Transaction)
 {
     dbgTrace(D_WAAP) << "waapDecisionAfterHeaders() started";
+    EventVerdict verdict = pending_response;
     if (waf2Transaction.decideAfterHeaders()) {
         dbgTrace(D_WAAP) << "WaapComponent::Impl::waapDecisionAfterHeaders(): returning DROP response.";
-        return drop_response;
+        verdict = drop_response;
+        return verdict;
     }
-    return pending_response;
+    return verdict;
 }
 
 EventVerdict
@@ -660,8 +667,11 @@ WaapComponent::Impl::waapDecision(IWaf2Transaction& waf2Transaction)
     // (in the latter case - decision to drop/pass should be governed by failopen setting)
     if (verdictCode == 0) {
         waf2Transaction.checkShouldInject();
-
-        if (waf2Transaction.shouldInspectResponse()) {
+        if (waf2Transaction.shouldLimitResponseHeadersInspection()) {
+            dbgTrace(D_WAAP) << "WAF VERDICT: " << verdictCode << " (\e[32mLIMIT RESPONSE HEADERS\e[0m)";
+            verdict = limit_response_headers;
+        } else if (waf2Transaction.shouldInspectResponse()) {
+            dbgTrace(D_WAAP) << "WAF VERDICT: " << verdictCode << " (\e[32mPENDING RESPONSE\e[0m)";
             verdict = pending_response;
         } else {
             dbgTrace(D_WAAP) << "WAF VERDICT: " << verdictCode << " (\e[32mPASS\e[0m)";
@@ -678,10 +688,12 @@ WaapComponent::Impl::waapDecision(IWaf2Transaction& waf2Transaction)
 }
 
 void
-WaapComponent::Impl::finishTransaction(IWaf2Transaction& waf2Transaction)
+WaapComponent::Impl::finishTransaction(IWaf2Transaction& waf2Transaction, EventVerdict& verdict)
 {
+    dbgTrace(D_WAAP) << "finishTransaction() started";
     waf2Transaction.collectFoundPatterns();
     waf2Transaction.sendLog();
+    verdict.setWebUserResponseByPractice(waf2Transaction.getCurrentWebUserResponse());
     ReportIS::Severity severity = waf2Transaction.computeEventSeverityFromDecision();
     validateFirstRequestForAsset(severity);
     waapStateTable->deleteState<Waf2Transaction>();

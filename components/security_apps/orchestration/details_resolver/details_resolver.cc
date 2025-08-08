@@ -41,6 +41,7 @@ public:
 
     string getAgentVersion() override;
     bool isKernelVersion3OrHigher() override;
+    bool isGw() override;
     bool isGwNotVsx() override;
     bool isVersionAboveR8110() override;
     bool isReverseProxy() override;
@@ -168,6 +169,19 @@ DetailsResolver::Impl::isKernelVersion3OrHigher()
 }
 
 bool
+DetailsResolver::Impl::isGw()
+{
+#if defined(gaia) || defined(smb)
+    static const string is_gw_cmd = "cpprod_util FwIsFirewallModule";
+    auto is_gw = DetailsResolvingHanlder::getCommandOutput(is_gw_cmd);
+    if (is_gw.ok() && !is_gw.unpack().empty()) {
+        return is_gw.unpack().front() == '1';
+    }
+#endif
+    return false;
+}
+
+bool
 DetailsResolver::Impl::isGwNotVsx()
 {
 #if defined(gaia) || defined(smb)
@@ -238,15 +252,21 @@ DetailsResolver::Impl::parseNginxMetadata()
         "orchestration",
         "Nginx metadata temp file"
     );
+
+    const string &filesystem_path_config = getFilesystemPathConfig();
+
     const string srcipt_exe_cmd =
-        getFilesystemPathConfig() +
+        filesystem_path_config +
         "/scripts/cp-nano-makefile-generator.sh -f -o " +
         output_path;
 
     const string script_fresh_exe_cmd =
-        getFilesystemPathConfig() +
+        filesystem_path_config +
         "/scripts/cp-nano-makefile-generator-fresh.sh save --save-location " +
-        output_path;
+        output_path +
+        " --strings_bin_path " +
+        filesystem_path_config +
+        "/bin/strings";
 
     dbgTrace(D_ORCHESTRATOR) << "Details resolver, srcipt exe cmd: " << srcipt_exe_cmd;
     if (isNoResponse("which nginx") && isNoResponse("which kong")) {

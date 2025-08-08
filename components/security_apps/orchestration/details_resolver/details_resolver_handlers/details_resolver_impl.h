@@ -79,6 +79,14 @@ SHELL_CMD_HANDLER("MGMT_QUID", "[ -d /opt/CPquid ] "
 SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "[ -d /opt/CPOtlpAgent/custom_scripts ] "
     "&& ENV_NO_FORMAT=1 /opt/CPOtlpAgent/custom_scripts/agent_role.sh",
     getOtlpAgentGaiaOsRole)
+SHELL_CMD_HANDLER("ETH_MGMT_IP",
+    "FS_PATH=<FILESYSTEM-PREFIX>;"
+    "VS_ID=$(echo \"${FS_PATH}\" | grep -o -E \"vs[0-9]+\" | grep -o -E \"[0-9]+\");"
+    "[ -z \"${VS_ID}\" ] && "
+    "(eth=\"$(grep 'management:interface' /config/active | awk '{print $2}')\" &&"
+    " ip addr show \"${eth}\" | grep inet | awk '{print $2}' | cut -d '/' -f1) || "
+    "(ip a | grep UP | grep -v lo | head -n 1 | cut -d ':' -f2 | tr -d ' ')",
+    getInterfaceMgmtIp)
 #endif
 #if defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
 SHELL_CMD_HANDLER("GLOBAL_QUID",
@@ -89,6 +97,8 @@ SHELL_CMD_HANDLER("QUID",
     "cat $FWDIR/database/myown.C "
     "| awk -F'[()]' '/:name/ { found=1; next } found && /:uuid/ { uid=tolower($2); print uid; exit }'",
     getQUID)
+
+
 SHELL_CMD_HANDLER("SMO_QUID", "echo ''", getQUID)
 SHELL_CMD_HANDLER("MGMT_QUID", "echo ''", getQUID)
 SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "echo 'SMB'", getOtlpAgentGaiaOsRole)
@@ -115,12 +125,6 @@ SHELL_CMD_HANDLER(
     checkLsmProfileUuid
 )
 SHELL_CMD_HANDLER(
-    "IP Address",
-    "[ $(cpprod_util FWisDAG) -eq 1 ] && echo \"Dynamic Address\" "
-    "|| (jq -r .main_ip /tmp/cpsdwan_getdata_orch.json)",
-    getGWIPAddress
-)
-SHELL_CMD_HANDLER(
     "Version",
     "cat /etc/cp-release | grep -oE 'R[0-9]+(\\.[0-9]+)?'",
     getGWVersion
@@ -138,13 +142,22 @@ SHELL_CMD_HANDLER(
     "fw ctl get int support_fec |& grep -sq \"support_fec =\";echo $?",
     getFecApplicable
 )
+SHELL_CMD_HANDLER("is_legacy_qos_blade_enabled",
+    "cpprod_util CPPROD_GetValue FG1 ProdActive 1 | grep -q '^1$' "
+    "&& (cpprod_util CPPROD_GetValue FG1 FgSDWAN 1 | grep -q '^1$' && echo false || echo true) || "
+    "echo false",
+    checkQosLegacyBlade)
 #endif //gaia || smb
 
 #if defined(gaia)
 SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
+SHELL_CMD_HANDLER("hasVPNBlade", "enabled_blades", checkVPNBlade)
 SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
-SHELL_CMD_HANDLER("hasIdaIdnEnabled", "fw ctl get int nac_pep_identity_next_enabled", checkPepIdaIdnStatus)
+SHELL_CMD_HANDLER("hasInfinityIdentityEnabled",
+    "cat $FWDIR/database/myself_objects.C | grep get_identities_from_infinity_identity",
+    checkInfinityIdentityEnabled
+)
 SHELL_CMD_HANDLER("requiredNanoServices", "echo ida", getRequiredNanoServices)
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtObjectName",
@@ -209,6 +222,14 @@ SHELL_CMD_HANDLER(
     "echo 1",
     extractManagements
 )
+SHELL_CMD_HANDLER(
+    "IP Address",
+    "( [ $(cpprod_util FwIsHighAvail) -eq 1 ] && [ $(cpprod_util FwIsVSX) -eq 1 ]"
+    "&& (jq -r .cluster_main_ip /tmp/cpsdwan_getdata_orch.json) )"
+    "|| ( [ $(cpprod_util FWisDAG) -eq 1 ] && echo \"Dynamic Address\" )"
+    "|| (jq -r .main_ip /tmp/cpsdwan_getdata_orch.json)",
+    getGWIPAddress
+)
 #endif //gaia
 
 #if defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
@@ -270,6 +291,17 @@ SHELL_CMD_HANDLER(
     "echo 1",
     extractManagements
 )
+SHELL_CMD_HANDLER(
+    "IP Address",
+    "[ $(cpprod_util FWisDAG) -eq 1 ] && echo \"Dynamic Address\" "
+    "|| (jq -r .main_ip /tmp/cpsdwan_getdata_orch.json)",
+    getGWIPAddress
+)
+SHELL_CMD_HANDLER(
+    "Hardware",
+    R"(ver | sed -E 's/^This is Check Point'\''s +([^ ]+).*$/\1/')",
+    getHardware
+)
 #endif//smb
 
 SHELL_CMD_OUTPUT("kernel_version", "uname -r")
@@ -286,6 +318,11 @@ FILE_CONTENT_HANDLER(
     "hasIdpConfigured",
     (getenv("SAMLPORTAL_HOME") ? string(getenv("SAMLPORTAL_HOME")) : "") + "/phpincs/spPortal/idpPolicy.xml",
     checkIDP
+)
+FILE_CONTENT_HANDLER(
+    "hasVPNCidpConfigured",
+    (getenv("SAMLPORTAL_HOME") ? string(getenv("SAMLPORTAL_HOME")) : "") + "/phpincs/spPortal/idpPolicy.xml",
+    checkVPNCIDP
 )
 #endif //gaia
 

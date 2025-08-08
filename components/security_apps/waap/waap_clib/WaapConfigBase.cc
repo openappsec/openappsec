@@ -132,7 +132,7 @@ void WaapConfigBase::loadOverridePolicy(cereal::JSONInputArchive& ar)
     try {
         m_overridePolicy = std::make_shared<Waap::Override::Policy>(ar);
     }
-    catch (std::runtime_error& e) {
+    catch (const cereal::Exception &e) {
         ar.setNextName(nullptr);
         dbgWarning(D_WAAP) << failMessage << e.what();
         m_overridePolicy = nullptr;
@@ -329,37 +329,38 @@ const std::string& WaapConfigBase::get_AssetName() const
     return m_assetName;
 }
 
-const std::string& WaapConfigBase::get_PracticeIdByPactice(DecisionType practiceType) const
+const string &
+WaapConfigBase::get_PracticeIdByPactice(DecisionType practiceType) const
 {
-
+    dbgTrace(D_WAAP) << "get practice ID of decision type: " << practiceType;
     switch (practiceType)
     {
-    case DecisionType::AUTONOMOUS_SECURITY_DECISION:
-        return m_practiceId;
+    case DecisionType::AUTONOMOUS_SECURITY_DECISION: break;
     default:
-        dbgError(D_WAAP)
-        << "Can't find practice type for practice ID by practice: "
-        << practiceType
-        << ", return web app practice ID";
-        return m_practiceId;
+        dbgDebug(D_WAAP)
+            << "Can't find practice type for practice ID by practice: "
+            << practiceType
+            << ", return web app practice ID";
     }
 
+    return m_practiceId;
 }
 
-const std::string& WaapConfigBase::get_PracticeNameByPactice(DecisionType practiceType) const
+const string &
+WaapConfigBase::get_PracticeNameByPactice(DecisionType practiceType) const
 {
+    dbgTrace(D_WAAP) << "get practice name of decision type: " << practiceType;
     switch (practiceType)
     {
-    case DecisionType::AUTONOMOUS_SECURITY_DECISION:
-        return m_practiceName;
+    case DecisionType::AUTONOMOUS_SECURITY_DECISION: break;
     default:
-        dbgError(D_WAAP)
-        << "Can't find practice type for practice name by practice: "
-        << practiceType
-        << ", return web app practice name";
-        return m_practiceName;
+        dbgDebug(D_WAAP)
+            << "Can't find practice type for practice name by practice: "
+            << practiceType
+            << ", return web app practice name";
     }
 
+    return m_practiceName;
 }
 
 const std::string& WaapConfigBase::get_RuleId() const

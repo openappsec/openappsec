@@ -78,7 +78,6 @@ ParserBinaryFile::detectBinaryFileHeader(const string &buf)
     return BinaryFileType::FILE_TYPE_NONE;
 }
 
-
 size_t
 ParserBinaryFile::push(const char *buf, size_t len)
 {
@@ -151,7 +150,10 @@ ParserBinaryFile::push(const char *buf, size_t len)
                 } else {
                     dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "parsing binary. Searching for tail: " << tail;
                     size_t tail_lookup_offset = (len > MAX_TAIL_LOOKUP) ? len - MAX_TAIL_LOOKUP : 0;
-                    c = strstr(buf + tail_lookup_offset, tail.c_str());
+                    c = static_cast<const char *>(memmem(buf + tail_lookup_offset,
+                        len - tail_lookup_offset,
+                        tail.c_str(),
+                        tail.size()));
                     dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "search result: c=" << c;
                     if (c) {
                         m_state = s_end;

@@ -98,6 +98,7 @@ public:
         registerListener();
         table = Singleton::Consume<I_Table>::by<IPSComp>();
         env = Singleton::Consume<I_Environment>::by<IPSComp>();
+        updateSigsYieldCount();
     }
 
     void
@@ -307,6 +308,20 @@ public:
 
     EventVerdict respond (const EndTransactionEvent &) override { return ACCEPT; }
 
+    void
+    updateSigsYieldCount()
+    {
+        const char *ips_yield_env_str = getenv("CPNANO_IPS_LOAD_YIELD_CNT");
+        int ips_yield_default = DEFAULT_IPS_YIELD_COUNT;
+        if (ips_yield_env_str != nullptr) {
+            dbgDebug(D_IPS) << "CPNANO_IPS_LOAD_YIELD_CNT env variable is set to " << ips_yield_env_str;
+            ips_yield_default = atoi(ips_yield_env_str);
+        }
+        int yield_limit = getProfileAgentSettingWithDefault<int>(ips_yield_default, "ips.sigsYieldCnt");
+        dbgDebug(D_IPS) << "Setting IPS yield count to  " << yield_limit;
+        IPSSignatureSubTypes::CompleteSignature::setYieldCounter(yield_limit);
+    }
+
 private:
     static void setDrop(IPSEntry &state) { state.setDrop(); }
     static bool isDrop(const IPSEntry &state) { return state.isDrop(); }
@@ -373,6 +388,7 @@ IPSComp::preload()
     registerExpectedConfigFile("ips", Config::ConfigFileType::Policy);
     registerExpectedConfigFile("ips", Config::ConfigFileType::Data);
     registerExpectedConfigFile("snort", Config::ConfigFileType::Policy);
+    registerConfigLoadCb([this]() { pimpl->updateSigsYieldCount(); });
 
     ParameterException::preload();
 

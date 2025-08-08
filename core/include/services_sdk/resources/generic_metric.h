@@ -116,7 +116,7 @@ private:
     friend class MetricCalc;
     void addCalc(MetricCalc *calc);
 
-    std::vector<PrometheusData> getPromMetricsData();
+    std::vector<PrometheusData> getPromMetricsData(const std::vector<MetricCalc*> *allowed_calcs = nullptr);
 
     void handleMetricStreamSending();
     void generateLog();

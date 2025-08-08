@@ -139,6 +139,25 @@ FogAuthenticator::RegistrationData::serialize(JSONOutputArchive &out_ar) const
     );
 }
 
+static string
+getDeplymentType()
+{
+    auto deplyment_type = Singleton::Consume<I_EnvDetails>::by<FogAuthenticator>()->getEnvType();
+    switch (deplyment_type) {
+        case EnvType::LINUX: return "Embedded";
+        case EnvType::DOCKER: return "Docker";
+        case EnvType::NON_CRD_K8S:
+        case EnvType::K8S: return "K8S";
+        case EnvType::COUNT: break;
+    }
+
+    dbgAssertOpt(false)
+        << AlertInfo(AlertTeam::CORE, "fog communication")
+        << "Failed to get a legitimate deployment type: "
+        << static_cast<uint>(deplyment_type);
+    return "Embedded";
+}
+
 Maybe<FogAuthenticator::UserCredentials>
 FogAuthenticator::registerAgent(
     const FogAuthenticator::RegistrationData &reg_data,
@@ -208,6 +227,13 @@ FogAuthenticator::registerAgent(
 
     request << make_pair("userEdition", getUserEdition());
 
+    if (getDeplymentType() == "Docker" || getDeplymentType() == "K8S") {
+        const char *image_version_otp = getenv("IMAGE_VERSION");
+        if (image_version_otp) {
+            request << make_pair("imageVersion", image_version_otp);
+        }
+    }
+
     if (details_resolver->isReverseProxy()) {
         request << make_pair("reverse_proxy", "true");
     }
@@ -218,6 +244,10 @@ FogAuthenticator::registerAgent(
 
     if (details_resolver->isKernelVersion3OrHigher()) {
         request << make_pair("isKernelVersion3OrHigher", "true");
+    }
+
+    if (details_resolver->isGw()) {
+        request << make_pair("isGw", "true");
     }
 
     if (details_resolver->isGwNotVsx()) {
@@ -283,11 +313,14 @@ FogAuthenticator::getAccessToken(const UserCredentials &user_credentials) const
     static const string grant_type_string = "/oauth/token?grant_type=client_credentials";
     TokenRequest request = TokenRequest();
 
-    MessageMetadata request_token_md;
+    MessageMetadata request_token_md(true);
     request_token_md.insertHeader(
         "Authorization",
         buildBasicAuthHeader(user_credentials.getClientId(), user_credentials.getSharedSecret())
     );
+    dbgInfo(D_ORCHESTRATOR)
+        << "Sending request for access token. Trace: "
+        << (request_token_md.getTraceId().ok() ? request_token_md.getTraceId().unpack() : "No trace id");
     auto request_token_status = Singleton::Consume<I_Messaging>::by<FogAuthenticator>()->sendSyncMessage(
         HTTPMethod::POST,
         grant_type_string,
@@ -459,25 +492,6 @@ FogAuthenticator::getCredentialsFromFile() const
     dbgTrace(D_ORCHESTRATOR) << "Read the user credentials from the file";
 
     return orchestration_tools->jsonStringToObject<UserCredentials>(encrypted_cred.unpack());
-}
-
-static string
-getDeplymentType()
-{
-    auto deplyment_type = Singleton::Consume<I_EnvDetails>::by<FogAuthenticator>()->getEnvType();
-    switch (deplyment_type) {
-        case EnvType::LINUX: return "Embedded";
-        case EnvType::DOCKER: return "Docker";
-        case EnvType::NON_CRD_K8S:
-        case EnvType::K8S: return "K8S";
-        case EnvType::COUNT: break;
-    }
-
-    dbgAssertOpt(false)
-        << AlertInfo(AlertTeam::CORE, "fog communication")
-        << "Failed to get a legitimate deployment type: "
-        << static_cast<uint>(deplyment_type);
-    return "Embedded";
 }
 
 Maybe<FogAuthenticator::UserCredentials>

@@ -19,8 +19,12 @@
 
 USE_DEBUG_FLAG(D_MESSAGING);
 
-MessageMetadata::MessageMetadata()
+MessageMetadata::MessageMetadata(bool immediate_tracing)
 {
+    if (immediate_tracing && Singleton::exists<I_Environment>()) {
+        insertHeaders(Singleton::Consume<I_Environment>::by<MessageMetadata>()->getCurrentHeadersMap());
+    }
+
     if (!Singleton::exists<I_AgentDetails>() || !Singleton::exists<I_ProxyConfiguration>()) return;
     auto i_agent_details = Singleton::Consume<I_AgentDetails>::by<I_Messaging>();
     auto i_proxy_configuration = Singleton::Consume<I_ProxyConfiguration>::by<I_Messaging>();
@@ -136,6 +140,8 @@ I_Messaging::sendAsyncMessage(
         dbgWarning(D_MESSAGING) << "Failed to create a request. Error: " << req_body.getErr();
         return;
     }
+
+    dbgTrace(D_MESSAGING) << "Sending async message. URI: " << uri << ", Body: " << req_body.unpack();
 
     sendAsyncMessage(
         method,

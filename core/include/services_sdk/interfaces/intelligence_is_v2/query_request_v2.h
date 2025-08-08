@@ -34,7 +34,8 @@ public:
         const std::string &key,
         const std::string &value,
         bool full_response,
-        AttributeKeyType type = AttributeKeyType::MAIN
+        AttributeKeyType type = AttributeKeyType::MAIN,
+        bool _external_sources_error_status = false
     );
 
     QueryRequest(
@@ -42,7 +43,8 @@ public:
         const std::string &key,
         const int64_t &value,
         bool full_response,
-        AttributeKeyType type = AttributeKeyType::MAIN
+        AttributeKeyType type = AttributeKeyType::MAIN,
+        bool _external_sources_error_status = false
     );
 
     QueryRequest(
@@ -50,7 +52,8 @@ public:
         const std::string &key,
         const std::vector<std::string> &value,
         bool full_response,
-        AttributeKeyType type = AttributeKeyType::MAIN
+        AttributeKeyType type = AttributeKeyType::MAIN,
+        bool _external_sources_error_status = false
     );
 
     void saveToJson(cereal::JSONOutputArchive &ar) const;
@@ -115,6 +118,7 @@ public:
 private:
     uint assets_limit = default_assets_limit;
     bool full_response = false;
+    bool external_sources_error_status = false;
     Maybe<ObjectType> object_type = genError("uninitialized");
     Maybe<RequestCursor> cursor = genError("Cursor not initialized");
     SerializableQueryFilter query;

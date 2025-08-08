@@ -116,7 +116,7 @@ Signatures::Signatures(const std::string& filepath) :
     ),
     allowed_text_re(sigsSource["allowed_text_re"].get<std::string>(), error, "allowed_text_re"),
     pipe_split_re(
-        "([\\w\\=\\-\\_\\.\\,\\(\\)\\[\\]\\/\\%\\s]+?)\\||([\\w\\=\\-\\_\\.\\,\\(\\)\\[\\]\\/\\%\\s]+)|\\|()",
+        "([^|]*)\\||([^|]+)|\\|()",
         error,
         "pipe_decode"),
     semicolon_split_re("([\\w\\=\\-\\_\\.\\,\\(\\)\\%]+?);|([\\w\\=\\-\\_\\.\\,\\(\\)\\%]+)|;()", error, "sem_decode"),

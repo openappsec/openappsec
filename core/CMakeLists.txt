@@ -32,6 +32,7 @@ add_subdirectory(compression)
 add_subdirectory(attachments)
 add_subdirectory(report_messaging)
 add_subdirectory(env_details)
+add_subdirectory(curl_http_client)
 
 add_library(ngen_core SHARED ".")
 target_link_libraries(

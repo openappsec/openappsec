@@ -1,8 +1,13 @@
 #include <sstream>
-namespace Intelligence { class Response; }
+#include <vector>
+namespace Intelligence
+{
+    class Response;
+    class Invalidation;
+}
 std::ostream & operator<<(std::ostream &os, const Intelligence::Response &);
-
-#include "intelligence_comp_v2.h"
+std::ostream & operator<<(std::ostream &os, const Intelligence::Invalidation &);
+std::ostream & operator<<(std::ostream &os, const std::vector<Intelligence::Invalidation> &);
 
 #include "config.h"
 #include "config_component.h"
@@ -15,6 +20,8 @@ std::ostream & operator<<(std::ostream &os, const Intelligence::Response &);
 #include "mock/mock_agent_details.h"
 #include "read_attribute_v2.h"
 #include "singleton.h"
+#include "intelligence_comp_v2.h"
+#include "intelligence_invalidation.h"
 
 using namespace std;
 using namespace testing;
@@ -1396,4 +1403,69 @@ TEST_F(IntelligenceComponentTestV2, localIntelligenceHealthy)
     EXPECT_CALL(mock_rest, getListeningPort()).Times(1).WillRepeatedly(Return(8888));
 
     EXPECT_TRUE(intell->isIntelligenceHealthy());
+}
+
+TEST_F(IntelligenceComponentTestV2, getInvalidations)
+{
+    Debug::setUnitTestFlag(D_INTELLIGENCE, Debug::DebugLevel::TRACE);
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    Debug::setNewDefaultStdout(&cout);
+
+    HTTPResponse response_str(
+        HTTPStatusCode::HTTP_OK,
+        string(
+            "{ \"invalidations\": [ { "
+            "\"class\": \"aaa\", "
+            "\"category\": \"bbb\", "
+            "\"family\": \"ccc\", "
+            "\"group\": \"ddd\", "
+            "\"order\": \"eee\", "
+            "\"kind\": \"fff\", "
+            "\"objectType\": \"asset\", "
+            "\"sourceId\": \"id\", "
+            "\"mainAttributes\": [ { \"attr\": \"2\" } ], "
+            "\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.2\" ], "
+            "\"ipv4AddressesRange\": [ { \"max\": \"1.1.1.5\", \"min\": \"1.1.1.1\" } ] } ]"
+            " } ] }"
+        )
+    );
+
+    Intelligence::TimeRangeInvalidations time_range_invalidations(1622505600, 1622592000);
+    auto json_body = time_range_invalidations.genJson();
+
+    EXPECT_TRUE(json_body.ok());
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
+    EXPECT_CALL(
+        messaging_mock,
+        sendSyncMessage(
+            HTTPMethod::POST,
+            "/api/v2/intelligence/invalidation/get",
+            json_body.unpack(),
+            MessageCategory::INTELLIGENCE,
+            _
+        )
+    ).WillOnce(Return(response_str));
+
+    auto main_attr = Intelligence::StrAttributes()
+        .addStringAttr("attr", "2");
+    Intelligence::IpAddressRange range("1.1.1.1", "1.1.1.5");
+    Intelligence::IpAttributes attributes = Intelligence::IpAttributes()
+        .addIpv4Addresses("1.1.1.2")
+        .addIpv4AddressRanges(range);
+
+    auto invalidation = Intelligence::Invalidation("aaa")
+        .addMainAttr(main_attr)
+        .addAttr(attributes)
+        .setSourceId("id")
+        .setClassifier(Intelligence::ClassifierType::FAMILY, "ccc")
+        .setClassifier(Intelligence::ClassifierType::CATEGORY, "bbb")
+        .setClassifier(Intelligence::ClassifierType::GROUP, "ddd")
+        .setClassifier(Intelligence::ClassifierType::ORDER, "eee")
+        .setClassifier(Intelligence::ClassifierType::KIND, "fff")
+        .setObjectType(Intelligence::ObjectType::ASSET);
+
+    auto res = intell->getInvalidations(time_range_invalidations);
+
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(res.unpack().front().matches(invalidation));
 }

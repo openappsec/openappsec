@@ -87,6 +87,7 @@ GenericRulebase::Impl::preload()
     addMatcher<BeginWithUri>();
     BasicRuleConfig::preload();
     LogTriggerConf::preload();
+    ReportTriggerConf::preload();
     ParameterException::preload();
     registerExpectedConfiguration<Zone>("rulebase", "zones");
     registerExpectedConfigFile("zones", Config::ConfigFileType::Policy);

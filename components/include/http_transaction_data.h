@@ -72,7 +72,8 @@ public:
             parsed_uri,
             client_ip,
             client_port,
-            response_content_encoding
+            response_content_encoding,
+            waf_tag
         );
     }
 
@@ -91,7 +92,8 @@ public:
             parsed_uri,
             client_ip,
             client_port,
-            response_content_encoding
+            response_content_encoding,
+            waf_tag
         );
     }
 // LCOV_EXCL_STOP
@@ -121,6 +123,9 @@ public:
     {
         response_content_encoding = _response_content_encoding;
     }
+
+    const std::string & getWafTag() const { return waf_tag; }
+    void setWafTag(const std::string &_waf_tag) { waf_tag = _waf_tag; }
 
     static const std::string http_proto_ctx;
     static const std::string method_ctx;
@@ -154,6 +159,7 @@ private:
     uint16_t client_port;
     bool is_request;
     CompressionType response_content_encoding;
+    std::string waf_tag;
 };
 
 #endif // __HTTP_TRANSACTION_DATA_H__

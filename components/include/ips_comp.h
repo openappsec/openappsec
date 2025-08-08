@@ -4,6 +4,7 @@
 #include "singleton.h"
 #include "i_keywords_rule.h"
 #include "i_table.h"
+#include "i_mainloop.h"
 #include "i_http_manager.h"
 #include "i_environment.h"
 #include "http_inspection_events.h"
@@ -16,7 +17,8 @@ class IPSComp
     Singleton::Consume<I_KeywordsRule>,
     Singleton::Consume<I_Table>,
     Singleton::Consume<I_Environment>,
-    Singleton::Consume<I_GenericRulebase>
+    Singleton::Consume<I_GenericRulebase>,
+    Singleton::Consume<I_MainLoop>
 {
 public:
     IPSComp();

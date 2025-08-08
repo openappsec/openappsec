@@ -27,6 +27,7 @@ struct DecisionTelemetryData
     int responseCode;
     uint64_t elapsedTime;
     std::set<std::string> attackTypes;
+    bool temperatureDetected;
 
     DecisionTelemetryData() :
         blockType(NOT_BLOCKING),
@@ -38,7 +39,8 @@ struct DecisionTelemetryData
         method(POST),
         responseCode(0),
         elapsedTime(0),
-        attackTypes()
+        attackTypes(),
+        temperatureDetected(false)
     {
     }
 };

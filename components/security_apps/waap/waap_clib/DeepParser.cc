@@ -36,6 +36,7 @@
 #include "debug.h"
 #include "i_transaction.h"
 #include "agent_core_utilities.h"
+#include <boost/algorithm/string.hpp>
 
 USE_DEBUG_FLAG(D_WAAP_DEEP_PARSER);
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
@@ -92,6 +93,12 @@ DeepParser::depth() const
 {
     return m_depth;
 }
+
+static bool err = false;
+static const SingleRegex temperature_value_re(
+    "^\\s*([0-9](?:\\.\\d+)?)\\s*$",
+    err,
+    "temperature_value");
 
 // Called when another key/value pair is ready
 int
@@ -195,6 +202,14 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     bool isBodyPayload = (m_key.first().size() == 4 && m_key.first() == "body");
 
 
+    if (isBodyPayload && v_len < 32 && k_len == 11 &&
+        boost::to_lower_copy(std::string(k, k_len)) == "temperature" &&
+        temperature_value_re.hasMatch(std::string(v, v_len))) {
+        m_pTransaction->setTemperatureDetected(true);
+        dbgTrace(D_WAAP_DEEP_PARSER) << "temperature detected, value: " << std::string(v, v_len);
+    }
+
+
     // If csrf/antibot cookie - send to Waf2Transaction for collection of cookie value.
     if (m_depth == 1 && isCookiePayload && (m_key.str() == "x-chkp-csrf-token" || m_key.str() == "__fn1522082288")) {
         std::string cur_val = std::string(v, v_len);
@@ -287,6 +302,11 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
         if (isUrlPayload && m_depth == 1 && cur_val[0] == '/') {
             dbgTrace(D_WAAP_DEEP_PARSER) << "removing leading '/' from URL param value";
             base64_offset = 1;
+        }
+        if (m_depth == 1 && (isUrlParamPayload || isRefererParamPayload) &&
+            k_len != 0  && (v_len == 0 || (v[0] == '=' && v_len == 1))) {
+            // if the value is empty or starts with '=' - replace it with key
+            cur_val = std::string(k, k_len);
         }
         std::string decoded_val, decoded_key;
         base64_variants base64_status = Waap::Util::b64Test(
@@ -474,6 +494,19 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             ValueStatsAnalyzer valueStatsUpdated(cur_val_html_escaped);
             cur_val.erase(unquote_plus(cur_val.begin(), cur_val.end()), cur_val.end());
             Waap::Util::decodeUtf16Value(valueStatsUpdated, cur_val);
+        }
+    }
+
+    // If this is url_paran and key is match to nosql_key_evasion_detector_re and this is 1st and last buffer
+    // than add to beginning of cur_val "<key>=" where key is the key
+    if (flags == BUFFERED_RECEIVER_F_BOTH) {
+        std::string key = std::string(k, k_len);
+        if (Waap::Util::testNoSQLKeySuspect(key)) {
+            cur_val = key + "=" + cur_val;
+            dbgTrace(D_WAAP_DEEP_PARSER)
+                << "DeepParser::onKv(): found: key = "
+                << key
+                << " is a candidate for NoSQL key evasion - sending to updated string for scanning.";
         }
     }
 
@@ -1326,7 +1359,7 @@ DeepParser::createInternalParser(
         } else if (b64FileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE) {
             dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a known binary file, base64 encoded";
             m_parsersDeque.push_back(
-                std::make_shared<BufferedParser<ParserBinaryFile>>(*this, parser_depth + 1, true, b64FileType)
+                std::make_shared<BufferedParser<ParserBinaryFile>>(*this, parser_depth + 1, false, b64FileType)
             );
             offset = 0;
         }

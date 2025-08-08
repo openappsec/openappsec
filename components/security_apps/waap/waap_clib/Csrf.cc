@@ -45,6 +45,21 @@ State::decide
     }
 
     auto csrfDecision = decision.getDecision(CSRF_DECISION);
+    auto autonomousDecision = decision.getDecision(AUTONOMOUS_SECURITY_DECISION);
+    if (autonomousDecision->shouldForceBlock())
+    {
+        dbgTrace(D_WAAP) << "Waap::CSRF::State::decide(): Autonomous decision force should block.";
+        csrfDecision->setBlock(true);
+        csrfDecision->setForceBlock(true);
+        return true;
+    }
+    if (autonomousDecision->shouldForceAllow())
+    {
+        dbgTrace(D_WAAP) << "Waap::CSRF::State::decide(): Autonomous decision force should allow.";
+        csrfDecision->setBlock(false);
+        csrfDecision->setForceAllow(true);
+        return false;
+    }
     if (csrf_token.empty())
     {
         dbgTrace(D_WAAP) << "Waap::CSRF::State::decide(): missing token.";

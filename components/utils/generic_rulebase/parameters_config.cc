@@ -125,9 +125,10 @@ ParameterException::getBehavior(
             // When matching indicators with action=ignore, we expect no behavior override.
             // Instead, a matched keywords list should be returned which will be later removed from score calculation
             if (match_res.matched_keywords->size() > 0 && match_behavior_pair.behavior == action_ignore) {
-                dbgTrace(D_RULEBASE_CONFIG) << "Got action ignore";
                 matched_override_keywords.insert(match_res.matched_keywords->begin(),
                         match_res.matched_keywords->end());
+                dbgTrace(D_RULEBASE_CONFIG) << "Got action ignore, found " <<
+                    matched_override_keywords.size() << "keywords";
             } else {
                 matched_behaviors.insert(match_behavior_pair.behavior);
             }
@@ -143,6 +144,8 @@ ParameterException::getBehavior(
             if (match_res.matched_keywords->size() > 0 && behavior == action_ignore) {
                 matched_override_keywords.insert(match_res.matched_keywords->begin(),
                         match_res.matched_keywords->end());
+                dbgTrace(D_RULEBASE_CONFIG) << "Got action ignore, found " <<
+                    matched_override_keywords.size() << "keywords";
             } else {
                 matched_behaviors.insert(behavior);
             }
@@ -155,6 +158,6 @@ ParameterException::getBehavior(
 set<ParameterBehavior>
 ParameterException::getBehavior(const unordered_map<string, set<string>> &key_value_pairs) const
 {
-    set<string> keywords;
+    set<string> keywords; // placeholder only, this function will be used where there's no need for ignored keywords
     return getBehavior(key_value_pairs, keywords);
 }

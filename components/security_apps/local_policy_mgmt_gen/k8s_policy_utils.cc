@@ -515,17 +515,6 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
 }
 // LCOV_EXCL_STOP
 
-bool
-doesVersionExist(const map<string, string> &annotations, const string &version)
-{
-    for (auto annotation : annotations) {
-        if(annotation.second.find(version) != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>>
 K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &ingress_mode) const
 {
@@ -534,7 +523,7 @@ K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &i
     );
 
     if (!maybe_appsec_policy_spec.ok() ||
-        !doesVersionExist(maybe_appsec_policy_spec.unpack().getMetaData().getAnnotations(), "v1beta1")
+        maybe_appsec_policy_spec.unpack().getApiVersion().find("v1beta1") == std::string::npos
     ) {
         try {
             std::string v1beta1_error =

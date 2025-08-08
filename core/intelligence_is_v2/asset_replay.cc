@@ -15,6 +15,18 @@
 
 using namespace std;
 
+template<class Archive>
+void
+ExternalSourceError::serialize(Archive &ar)
+{
+    ar(
+        cereal::make_nvp("sourceID", source_id),
+        cereal::make_nvp("sourceName", source_name),
+        cereal::make_nvp("statusCode", status_code),
+        cereal::make_nvp("errorMessage", error_message)
+    );
+}
+
 void
 IntelligenceQueryResponse::loadFromJson(const std::string &json_response)
 {
@@ -35,4 +47,14 @@ IntelligenceQueryResponse::serialize(Archive &ar)
     try {
         ar(cereal::make_nvp("cursor", cursor));
     } catch (...) {}
+
+    try {
+        ar(cereal::make_nvp("externalSourcesErrorStatus", external_sources_errors));
+    } catch (...) {}
+}
+
+const std::vector<ExternalSourceError> &
+IntelligenceQueryResponse::getExternalSourcesErrorStatus() const
+{
+    return external_sources_errors;
 }

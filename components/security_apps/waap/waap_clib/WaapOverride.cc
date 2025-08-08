@@ -82,11 +82,48 @@ State::State() :
     forceBlockIds(),
     bForceException(false),
     forceExceptionIds(),
-    bIgnoreLog(false),
+    bSupressLog(false),
     bSourceIdentifierOverride(false),
     sSourceIdentifierMatch("")
 {
 }
 
+bool ExceptionsByPractice::operator==(const ExceptionsByPractice &other) const
+{
+    return m_web_app_ids == other.m_web_app_ids &&
+        m_api_protect_ids == other.m_api_protect_ids &&
+        m_anti_bot_ids == other.m_anti_bot_ids;
+}
+
+const std::vector<std::string>& ExceptionsByPractice::getExceptionsOfPractice(DecisionType practiceType) const
+{
+    switch (practiceType)
+    {
+
+    case DecisionType::AUTONOMOUS_SECURITY_DECISION:
+        return m_web_app_ids;
+    default:
+        dbgError(D_WAAP) <<
+        "Can't find practice type for exceptions by practice: " <<
+        practiceType <<
+        ", return web app exceptions";
+        return m_web_app_ids;
+    }
+}
+
+const std::set<std::string>& ExceptionsByPractice::getAllExceptions() const
+{
+    return m_all_ids;
+}
+
+bool ExceptionsByPractice::isIDInWebApp(const std::string &id) const
+{
+    auto it = std::find(m_web_app_ids.begin(), m_web_app_ids.end(), id);
+    if (it != m_web_app_ids.end()) {
+        dbgTrace(D_WAAP) << "rule id is in web application exceptions by practice: " << id;
+        return true;
+    }
+    return false;
+}
 }
 }

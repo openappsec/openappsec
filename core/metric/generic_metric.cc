@@ -31,6 +31,36 @@ MetricMetadata::DotName operator"" _dot(const char *str, size_t) { return Metric
 MetricMetadata::Units operator"" _unit(const char *str, size_t) { return MetricMetadata::Units{str}; }
 MetricMetadata::Description operator"" _desc(const char *str, size_t) { return MetricMetadata::Description{str}; }
 
+static const set<string> default_metrics = {
+    "watchdogProcessStartupEventsSum",
+    "reservedNgenA",
+    "reservedNgenB",
+    "reservedNgenC"
+    "reservedNgenD"
+    "reservedNgenE",
+    "reservedNgenF",
+    "reservedNgenG"
+    "reservedNgenH",
+    "reservedNgenI",
+    "reservedNgenJ",
+    "numberOfProtectedAssetsSample",
+    "preventEngineMatchesSample",
+    "detectEngineMatchesSample",
+    "ignoreEngineMatchesSample",
+    "cpuMaxSample",
+    "cpuAvgSample",
+    "cpuSample",
+    "serviceVirtualMemorySizeMaxSample",
+    "serviceVirtualMemorySizeMinSample",
+    "serviceVirtualMemorySizeAvgSample",
+    "serviceRssMemorySizeMaxSample",
+    "serviceRssMemorySizeMinSample",
+    "serviceRssMemorySizeAvgSample",
+    "generalTotalMemorySizeMaxSample",
+    "generalTotalMemorySizeMinSample",
+    "generalTotalMemorySizeAvgSample"
+};
+
 // LCOV_EXCL_START Reason: Tested in unit test (testAIOPSMapMetric), but not detected by coverage
 static ostream & operator<<(ostream &os, const CompressAndEncodeAIOPSMetrics &metrics)
 {
@@ -165,6 +195,9 @@ GenericMetric::init(
     const string &_asset_id
 )
 {
+
+    if (!getConfigurationWithDefault<bool>(true, "metric", "genericMetricInitEnable")) return;
+
     turnOnStream(Stream::FOG);
     turnOnStream(Stream::DEBUG);
 
@@ -263,7 +296,22 @@ GenericMetric::respond(const AllMetricEvent &event)
 vector<PrometheusData>
 GenericMetric::respond(const MetricScrapeEvent &)
 {
-    return getPromMetricsData();
+    bool enable_all_metrics = getProfileAgentSettingWithDefault<bool>(false, "enable_all_metrics");
+    if (enable_all_metrics) {
+        dbgTrace(D_METRICS) << "Sensitive metrics enabled, returning all metrics";
+        return getPromMetricsData();
+    }
+
+    vector<MetricCalc *> allowed_calcs;
+    for (auto &calc : prometheus_calcs) {
+        auto metric_calc_name = calc->getMetricDotName() != "" ? calc->getMetricDotName() : calc->getMetricName();
+        if (default_metrics.find(metric_calc_name) != default_metrics.end()) {
+            allowed_calcs.push_back(calc);
+        }
+    }
+    if (allowed_calcs.empty()) return {};
+
+    return getPromMetricsData(&allowed_calcs);
 }
 
 string GenericMetric::getListenerName() const { return metric_name; }
@@ -329,7 +377,7 @@ GenericMetric::generateLog()
 }
 
 vector<PrometheusData>
-GenericMetric::getPromMetricsData()
+GenericMetric::getPromMetricsData(const vector<MetricCalc*> *allowed_calcs)
 {
     vector<PrometheusData> all_metrics;
     bool enable_prometheus = false;
@@ -345,7 +393,8 @@ GenericMetric::getPromMetricsData()
     if (!enable_prometheus) return all_metrics;
     dbgTrace(D_METRICS) << "Get prometheus metrics";
 
-    for (auto &calc : prometheus_calcs) {
+    const vector<MetricCalc*> &calcs_to_use = allowed_calcs ? *allowed_calcs : prometheus_calcs;
+    for (auto &calc : calcs_to_use) {
         const auto &calc_prom_metrics = calc->getPrometheusMetrics(metric_name, asset_id);
         all_metrics.insert(all_metrics.end(), calc_prom_metrics.begin(), calc_prom_metrics.end());
         calc->reset();
@@ -416,5 +465,6 @@ GenericMetric::preload()
     registerExpectedConfiguration<bool>("metric", "debugMetricSendEnable");
     registerExpectedConfiguration<bool>("metric", "aiopsMetricSendEnable");
     registerExpectedConfiguration<bool>("metric", "fogMetricUri");
+    registerExpectedConfiguration<bool>("metric", "genericMetricInitEnable");
     registerExpectedConfiguration<string>("metric", "metricsOutputTmpFile");
 }

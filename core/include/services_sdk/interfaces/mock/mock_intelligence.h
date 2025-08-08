@@ -16,16 +16,31 @@ operator<<(std::ostream &os, const Intelligence::Invalidation &)
     return os;
 }
 
+std::ostream &
+operator<<(std::ostream &os, const std::vector<Intelligence::Invalidation> &)
+{
+    return os;
+}
+
 class MockIntelligence : public Singleton::Provide<I_Intelligence_IS_V2>::From<MockProvider<I_Intelligence_IS_V2>>
 {
 public:
     using InvalidationCb = std::function<void(const Intelligence::Invalidation &)>;
     using Invalidation = Intelligence::Invalidation;
     using Response = Intelligence::Response;
+    using TimeRangeInvalidations = Intelligence::TimeRangeInvalidations;
 
     MOCK_CONST_METHOD1(sendInvalidation, bool(const Invalidation &invalidation));
+    MOCK_CONST_METHOD1(getInvalidations, Maybe<std::vector<Invalidation>>(TimeRangeInvalidations));
     MOCK_CONST_METHOD0(isIntelligenceHealthy, bool(void));
-    MOCK_METHOD2(registerInvalidation, Maybe<uint>(const Invalidation &invalidation, const InvalidationCb &callback));
+    MOCK_METHOD3(
+        registerInvalidation,
+        Maybe<uint>(
+            const Invalidation &invalidation,
+            const InvalidationCb &callback,
+            const std::string &AgentId
+        )
+    );
     MOCK_METHOD1(unregisterInvalidation, void(uint id));
     MOCK_CONST_METHOD5(
         getResponse,

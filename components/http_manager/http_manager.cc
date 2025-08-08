@@ -37,6 +37,7 @@ operator<<(ostream &os, const EventVerdict &event)
 {
     switch (event.getVerdict()) {
         case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT: return os << "Inspect";
+        case ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS: return os << "Limit Response Headers";
         case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT: return os << "Accept";
         case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP: return os << "Drop";
         case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT: return os << "Inject";
@@ -93,13 +94,14 @@ public:
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
 
         HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
-        string event_key = static_cast<string>(event.getKey());
-
-        if (event_key == getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging")) {
+        
+        const auto &custom_header = getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging");
+        
+        if (event.getKey().isEqualLowerCase(custom_header)) {
             string event_value = static_cast<string>(event.getValue());
             dbgTrace(D_HTTP_MANAGER)
                 << "Found header key and value - ("
-                << event_key
+                << custom_header
                 << ": "
                 << event_value
                 << ") that matched agent settings";
@@ -195,7 +197,6 @@ public:
         if (state.getUserDefinedValue().ok()) {
             ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
         }
-
         return handleEvent(EndRequestEvent().performNamedQuery());
     }
 
@@ -323,8 +324,9 @@ private:
                 << respond.second.getVerdict();
 
             state.setApplicationVerdict(respond.first, respond.second.getVerdict());
+            state.setApplicationWebResponse(respond.first, respond.second.getWebUserResponseByPractice());
         }
-        FilterVerdict aggregated_verdict = state.getCurrVerdict();
+        FilterVerdict aggregated_verdict(state.getCurrVerdict(), state.getCurrWebUserResponse());
         if (aggregated_verdict.getVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
             SecurityAppsDropEvent(state.getCurrentDropVerdictCausers()).notify();
         }

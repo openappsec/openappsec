@@ -55,13 +55,13 @@ SyslogStream::sendLog(const Report &log)
     vector<char> data(syslog_report.begin(), syslog_report.end());
     log_send_routine = mainloop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Offline,
-        [this, data] () { sendLog(data); },
+        [this, data] () { sendLogData(data); },
         "Logging Syslog stream messaging"
     );
 }
 
 void
-SyslogStream::sendLog(const vector<char> &data)
+SyslogStream::sendLogData(const vector<char> &data)
 {
     dbgTrace(D_REPORT) << "Sending Syslog log." << " Max logs per send: " << max_logs_per_send;
     sendLogWithQueue(data);

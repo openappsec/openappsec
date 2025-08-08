@@ -26,8 +26,7 @@ namespace Waap {
     errorLimiter(false),
     rateLimiting(false),
     collectResponseForLog(false),
-    applyOverride(false),
-    triggerReport(false)
+    applyOverride(false)
     {
     }
 
@@ -40,12 +39,11 @@ namespace Waap {
             " RateLimiting=" << rateLimiting <<
             " ErrorLimiter=" << errorLimiter <<
             " collectResponseForLog=" << collectResponseForLog <<
-            " applyOverride=" << applyOverride <<
-            " triggerReport=" << triggerReport;
+            " applyOverride=" << applyOverride;
 
         return
             openRedirect || errorDisclosure || rateLimiting || errorLimiter ||
-            collectResponseForLog || applyOverride || triggerReport;
+            collectResponseForLog || applyOverride;
     }
 
     void
@@ -91,14 +89,6 @@ namespace Waap {
         dbgTrace(D_WAAP) << "Change ResponseInspectReasons(setApplyOverride) " << applyOverride << " to " <<
             flag;
         applyOverride = flag;
-    }
-
-    void
-    ResponseInspectReasons::setTriggerReport(bool flag)
-    {
-        dbgTrace(D_WAAP) << "Change ResponseInspectReasons(setTriggerReport) " << triggerReport << " to " <<
-            flag;
-        triggerReport = flag;
     }
 
     bool

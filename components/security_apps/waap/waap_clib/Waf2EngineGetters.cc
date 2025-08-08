@@ -17,7 +17,6 @@
 #include <boost/uuid/uuid_generators.hpp> // uuid generators
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/algorithm/string.hpp>
-#include "generic_rulebase/triggers_config.h"
 #include "config.h"
 #include "LogGenWrapper.h"
 #include <memory>
@@ -343,7 +342,7 @@ Waap::CSRF::State& Waf2Transaction::getCsrfState()
 }
 
 void Waf2Transaction::sendAutonomousSecurityLog(
-    const std::shared_ptr<Waap::Trigger::Log>& triggerLog,
+    const LogTriggerConf& triggerLog,
     bool shouldBlock,
     const std::string& logOverride,
     const std::string& attackTypes) const
@@ -352,11 +351,11 @@ void Waf2Transaction::sendAutonomousSecurityLog(
         m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
     ReportIS::Severity severity = Waap::Util::computeSeverityFromThreatLevel(
         autonomousSecurityDecision->getThreatLevel());
-    if (autonomousSecurityDecision->getOverridesLog() && logOverride == OVERRIDE_DROP)
+    if (autonomousSecurityDecision->shouldForceLog() && logOverride == OVERRIDE_DROP)
     {
         severity = ReportIS::Severity::MEDIUM;
     }
-    else if (autonomousSecurityDecision->getOverridesLog() && logOverride == OVERRIDE_ACCEPT)
+    else if (autonomousSecurityDecision->shouldForceLog() && logOverride == OVERRIDE_ACCEPT)
     {
         severity = ReportIS::Severity::INFO;
     }
@@ -381,11 +380,7 @@ void Waf2Transaction::sendAutonomousSecurityLog(
         waap_log << LogField("eventConfidence", confidence);
     }
 
-    appendCommonLogFields(
-        waap_log, triggerLog, shouldBlock, logOverride, attackTypes,
-        m_siteConfig->get_PracticeIdByPactice(AUTONOMOUS_SECURITY_DECISION),
-        m_siteConfig->get_PracticeNameByPactice(AUTONOMOUS_SECURITY_DECISION)
-    );
+    appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, attackTypes, AUTONOMOUS_SECURITY_DECISION);
 
     std::string sampleString = getSample();
     if (sampleString.length() > MAX_LOG_FIELD_SIZE) {
@@ -470,24 +465,36 @@ Waf2Transaction::getUserLimitVerdict()
     auto decision = m_waapDecision.getDecision(USER_LIMITS_DECISION);
     if (mode == AttackMitigationMode::LEARNING) {
         decision->setLog(true);
-        decision->setBlock(false);
-        if (isIllegalMethodViolation()) {
-            dbgInfo(D_WAAP_ULIMITS) << msg << "INSPECT" << reason << " in detect mode";
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
-        }
-        else {
-            dbgInfo(D_WAAP_ULIMITS) << msg << "PASS" << reason;
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+        if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceBlock) {
+            // detect mode and no active drop exception
+            decision->setBlock(false);
+            if (isIllegalMethodViolation()) {
+                dbgInfo(D_WAAP_ULIMITS) << msg << "INSPECT" << reason << " in detect mode";
+                verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+            }
+            else {
+                dbgInfo(D_WAAP_ULIMITS) << msg << "PASS" << reason;
+                verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+            }
+        } else {
+            // detect mode and active drop exception
+            decision->setBlock(true);
+            decision->setForceBlock(true);
+            dbgInfo(D_WAAP_ULIMITS) << msg << "Override Block" << reason;
+            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
         }
     }
     else if (mode == AttackMitigationMode::PREVENT) {
         decision->setLog(true);
-        if (!m_overrideState.bForceException) {
+        if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException) {
+            // prevent mode and no active accept exception
             decision->setBlock(true);
             dbgInfo(D_WAAP_ULIMITS) << msg << "BLOCK" << reason;
             verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
         } else {
-            decision->setBlock(true);
+            // prevent mode and active accept exception
+            decision->setBlock(false);
+            decision->setForceAllow(true);
             dbgInfo(D_WAAP_ULIMITS) << msg << "Override Accept" << reason;
             verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
         }
@@ -585,20 +592,206 @@ bool Waf2Transaction::checkIsHeaderOverrideScanRequired()
     return m_isHeaderOverrideScanRequired;
 }
 
+const std::string Waf2Transaction::getCurrentWebUserResponse() {
+    dbgFlow(D_WAAP);
+    m_waapDecision.orderDecisions();
+    DecisionType practiceType = m_waapDecision.getHighestPriorityDecisionToLog();
+
+    dbgTrace(D_WAAP) << "set current web user response for practice: " << practiceType;
+
+    const std::shared_ptr<Waap::Trigger::Policy> triggerPolicy = m_siteConfig->get_TriggerPolicy();
+    if (!triggerPolicy) {
+        dbgTrace(D_WAAP) << "No trigger policy, can't set web user response for practice: " << practiceType;
+        return "";
+    }
+    auto responses = triggerPolicy->responseByPractice.getResponseByPractice(practiceType);
+    if (responses.empty()) {
+        dbgTrace(D_WAAP) << "No web user response for practice: " << practiceType;
+        return "";
+    }
+    dbgTrace(D_WAAP) << "Found web user response trigger by practice, ID: " << responses[0];
+    return responses[0];
+}
+
+std::unordered_map<std::string, std::set<std::string>>
+Waf2Transaction::getExceptionsDict(DecisionType practiceType) {
+    std::unordered_map<std::string, std::set<std::string>> exceptions_dict;
+    exceptions_dict["url"].insert(m_uriPath);
+    exceptions_dict["sourceIP"].insert(m_remote_addr);
+    exceptions_dict["method"].insert(m_methodStr);
+
+    extractEnvSourceIdentifier();
+    exceptions_dict["sourceIdentifier"].insert(m_source_identifier);
+    if (
+        practiceType == DecisionType::AUTONOMOUS_SECURITY_DECISION
+    ) {
+        for (const DeepParser::KeywordInfo& keywordInfo : getKeywordInfo()) {
+            exceptions_dict["paramName"].insert(keywordInfo.getName());
+        }
+    }
+    if (practiceType == DecisionType::AUTONOMOUS_SECURITY_DECISION) {
+        exceptions_dict["hostName"].insert(m_hostStr);
+        for (const std::string& keywordStr : getKeywordMatches()) {
+            exceptions_dict["indicator"].insert(keywordStr);
+        }
+        for (const DeepParser::KeywordInfo& keywordInfo : getKeywordInfo()) {
+            exceptions_dict["paramValue"].insert(keywordInfo.getValue());
+        }
+        exceptions_dict["paramLocation"].insert(getLocation());
+        if (!checkIsHeaderOverrideScanRequired()) {
+            dbgDebug(D_WAAP) << "Header name override scan is not required";
+        } else {
+            for (auto& hdr_pair : getHdrPairs()) {
+                std::string name = hdr_pair.first;
+                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+                exceptions_dict["headerName"].insert(name);
+                std::string value = hdr_pair.second;
+                std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+                exceptions_dict["headerValue"].insert(value);
+            }
+        }
+    }
+    return exceptions_dict;
+}
+
+std::set<ParameterBehavior>
+Waf2Transaction::getBehaviors(
+    const std::unordered_map<std::string, std::set<std::string>> &exceptions_dict,
+    const std::vector<std::string>& exceptions, bool checkResponse = false)
+{
+    std::set<ParameterBehavior> all_params;
+    I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<Waf2Transaction>();
+    for (const auto &id : exceptions) {
+        dbgTrace(D_WAAP) << "get parameter exception for: " << id;
+        auto params = i_rulebase->getParameterException(id).getBehavior(exceptions_dict);
+
+        if (checkResponse && !getResponseBody().empty()) {
+            std::unordered_map<std::string, std::set<std::string>> response_dict = {
+                {"responseBody", {getResponseBody()}}
+            };
+            auto params = i_rulebase->getParameterException(id).getBehavior(response_dict);
+            if (params.size() > 0) {
+                dbgTrace(D_WAAP) << "got responseBody behavior, setApplyOverride(true)";
+                m_responseInspectReasons.setApplyOverride(true);
+                all_params.insert(params.begin(), params.end());
+                // once found, no need to check again
+                checkResponse = false;
+            }
+        }
+
+        dbgTrace(D_WAAP) << "got "<< params.size() << " behaviors";
+        all_params.insert(params.begin(), params.end());
+    }
+    return all_params;
+}
+
+
+bool Waf2Transaction::shouldEnforceByPracticeExceptions(DecisionType practiceType)
+{
+    dbgFlow(D_WAAP);
+    auto decision = m_waapDecision.getDecision(practiceType);
+    bool shouldEnforce = false;
+    std::shared_ptr<Waap::Override::Policy> overridePolicy = m_siteConfig->get_OverridePolicy();
+    if (overridePolicy) {
+        auto exceptions = overridePolicy->getExceptionsByPractice().getExceptionsOfPractice(practiceType);
+
+        if (!exceptions.empty()) {
+            dbgTrace(D_WAAP) << "get behaviors for practice: " << practiceType;
+
+            auto behaviors = getBehaviors(getExceptionsDict(practiceType), exceptions);
+            if (behaviors.size() > 0)
+            {
+                auto it = m_overrideStateByPractice.find(practiceType);
+                if (it == m_overrideStateByPractice.end()) {
+                    dbgWarning(D_WAAP) << "no override state for practice: " << practiceType;
+                    return false;
+                }
+                setOverrideState(behaviors, it->second);
+                if (it->second.bForceBlock) {
+                    dbgTrace(D_WAAP)
+                    << "should block by exceptions for practice: " << practiceType;
+                    decision->setBlock(true);
+                    decision->setForceBlock(true);
+                    shouldEnforce = true;
+                }
+                if (it->second.bForceException) {
+                    dbgTrace(D_WAAP)
+                    << "should not block by exceptions for practice: " << practiceType;
+                    decision->setBlock(false);
+                    decision->setForceAllow(true);
+                    shouldEnforce = true;
+                }
+            }
+        }
+    }
+    if (shouldEnforce) {
+        decision->setLog(true);
+        if(!m_overrideStateByPractice[practiceType].bSupressLog) {
+            decision->setForceLog(true);
+        }
+        std::shared_ptr<AutonomousSecurityDecision> autonomousDecision =
+            std::dynamic_pointer_cast<AutonomousSecurityDecision>(
+                m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION)
+            );
+        if (autonomousDecision->getThreatLevel() <= ThreatLevel::THREAT_INFO) {
+            autonomousDecision->setLog(false);
+        }
+    } else if(!m_matchedOverrideIds.empty() && !m_overrideStateByPractice[practiceType].bSupressLog) {
+        decision->setForceLog(true);
+    }
+    return shouldEnforce;
+}
+
+void Waf2Transaction::setOverrideState(const std::set<ParameterBehavior>& behaviors, Waap::Override::State& state) {
+    dbgFlow(D_WAAP) << "setOverrideState(): from exceptions per practice";
+    for (auto const &behavior : behaviors) {
+        m_matchedOverrideIds.insert(behavior.getId());
+        if (behavior.getKey() == BehaviorKey::ACTION) {
+            if (behavior.getValue() == BehaviorValue::ACCEPT) {
+                dbgTrace(D_WAAP) << "setting bForceException due to override behavior: " << behavior.getId();
+                state.bForceException = true;
+                state.forceExceptionIds.insert(behavior.getId());
+            } else if (behavior.getValue() == BehaviorValue::REJECT) {
+                dbgTrace(D_WAAP) << "setting bForceBlock due to override behavior: " << behavior.getId();
+                state.bForceBlock = true;
+                state.forceBlockIds.insert(behavior.getId());
+            }
+        } else if(behavior.getKey() == BehaviorKey::LOG && behavior.getValue() == BehaviorValue::IGNORE) {
+            dbgTrace(D_WAAP) << "setting bSupressLog due to override behavior: " << behavior.getId();
+            state.bSupressLog = true;
+        }
+    }
+}
+
 Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
 {
     Waap::Override::State overrideState;
     std::shared_ptr<Waap::Override::Policy> overridePolicy = sitePolicy->get_OverridePolicy();
     if (overridePolicy) { // at first we will run request overrides (in order to set the source)
+        auto exceptions = overridePolicy->getExceptionsByPractice().
+            getExceptionsOfPractice(AUTONOMOUS_SECURITY_DECISION);
+        if (!exceptions.empty()) {
+            dbgTrace(D_WAAP) << "get behaviors for override state";
+            m_responseInspectReasons.setApplyOverride(false);
+            auto behaviors = getBehaviors(getExceptionsDict(AUTONOMOUS_SECURITY_DECISION), exceptions, true);
+            if (behaviors.size() > 0) {
+                dbgTrace(D_WAAP) << "set override state by practice found behaviors";
+                setOverrideState(behaviors, m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION]);
+            }
+            m_isHeaderOverrideScanRequired = false;
+            return m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION];
+        }
         m_responseInspectReasons.setApplyOverride(overridePolicy->isOverrideResponse());
         overrideState.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, true);
     }
 
     if (overridePolicy) { // later we will run response overrides
-        m_overrideState.applyOverride(*overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, false);
+        m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].applyOverride(
+            *overridePolicy, WaapOverrideFunctor(*this), m_matchedOverrideIds, false
+        );
     }
     m_isHeaderOverrideScanRequired = false;
-    return m_overrideState;
+    return m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION];
 }
 
 Waf2TransactionFlags &Waf2Transaction::getTransactionFlags()
@@ -606,22 +799,32 @@ Waf2TransactionFlags &Waf2Transaction::getTransactionFlags()
     return m_waf2TransactionFlags;
 }
 
-const std::shared_ptr<Waap::Trigger::Log> Waf2Transaction::getTriggerLog(const std::shared_ptr<
-    Waap::Trigger::Policy> &triggerPolicy) const
+const Maybe<LogTriggerConf, Config::Errors> Waf2Transaction::getTriggerLog(const std::shared_ptr<
+    Waap::Trigger::Policy> &triggerPolicy, DecisionType practiceType) const
 {
-    // Trigger log already known (no need to extract it second time)
-    if (m_triggerLog) {
-        return m_triggerLog;
-    }
-
-    // Walk over trigger logs and choose the last one of type Log
-    for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
-        if (trigger.triggerType == "log") {
-            m_triggerLog = trigger.log;
+    dbgTrace(D_WAAP) << "Getting log trigger for practice type:" << practiceType;
+    std::set<std::string> triggers_set;
+    auto triggers = triggerPolicy->triggersByPractice.getTriggersByPractice(practiceType);
+    if (!triggers.empty()) {
+        for (const auto &id : triggers) {
+            triggers_set.insert(id);
+            dbgTrace(D_WAAP) << "Add log trigger by practice to triggers set:" << id;
+        }
+    } else {
+        for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
+            triggers_set.insert(trigger.triggerId);
+            dbgTrace(D_WAAP) << "Add log trigger waap to triggers set:" << trigger.triggerId;
         }
     }
 
-    return m_triggerLog;
+    ScopedContext ctx;
+    ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
+    auto trigger_config = getConfiguration<LogTriggerConf>("rulebase", "log");
+
+    if (!trigger_config.ok()) {
+        dbgError(D_WAAP) << "Failed to get log trigger configuration, err: " << trigger_config.getErr();
+    }
+    return trigger_config;
 }
 
 bool Waf2Transaction::isTriggerReportExists(const std::shared_ptr<
@@ -633,12 +836,31 @@ bool Waf2Transaction::isTriggerReportExists(const std::shared_ptr<
     if (m_triggerReport) {
         return m_triggerReport;
     }
-    for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
-        if (trigger.triggerType == "report") {
-            return m_triggerReport = true;
+    std::set<std::string> triggers_set;
+    auto triggers = triggerPolicy->triggersByPractice.getAllTriggers();
+    if (!triggers.empty()) {
+        for (const auto &id : triggers) {
+            triggers_set.insert(id);
         }
     }
-    return m_triggerReport;
+    else {
+        for (const Waap::Trigger::Trigger &trigger : triggerPolicy->triggers) {
+            triggers_set.insert(trigger.triggerId);
+        }
+    }
+
+    ScopedContext ctx;
+    ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
+    auto trigger_config = getConfiguration<ReportTriggerConf>("rulebase", "report");
+    if (!trigger_config.ok()) {
+        dbgWarning(D_WAAP) << "Failed to get report trigger configuration, err: " << trigger_config.getErr();
+        m_triggerReport = false;
+        return false;
+    }
+    auto triggerName = trigger_config.unpack().getName();
+    dbgTrace(D_WAAP) << "Got report trigger from rulbase: " << triggerName << ", m_triggerReport = true";
+    m_triggerReport = true;
+    return true;
 }
 
 ReportIS::Severity Waf2Transaction::computeEventSeverityFromDecision() const

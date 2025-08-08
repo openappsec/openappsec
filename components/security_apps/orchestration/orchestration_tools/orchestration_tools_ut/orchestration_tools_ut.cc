@@ -86,7 +86,7 @@ TEST_F(OrchestrationToolsTest, setClusterId)
     EXPECT_CALL(
         mock_shell_cmd,
         getExecOutput(
-            "curl -s -k -H \"Authorization: Bearer 123\" -H \"Connection: close\" "
+            "LD_LIBRARY_PATH=\"\" curl -s -k -H \"Authorization: Bearer 123\" -H \"Connection: close\" "
             "https://kubernetes.default.svc:443/api/v1/namespaces/ | /etc/cp/bin/cpnano_json",
             200,
             false

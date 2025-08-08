@@ -1471,7 +1471,8 @@ private:
             string cc_opt;
             tie(config_opt, cc_opt, nginx_version, nginx_signature) = nginx_data.unpack();
             agent_data_report
-                << make_pair("attachmentVersion", "Legacy")
+                << make_pair("configureOptStatus", "Enabled")
+                << make_pair("moduleSignatureStatus", "Enabled")
                 << make_pair("nginxSignature",    nginx_signature)
                 << make_pair("nginxVersion",      nginx_version)
                 << make_pair("configureOpt",      config_opt)
@@ -1494,6 +1495,10 @@ private:
 
         if (i_details_resolver->isKernelVersion3OrHigher()) {
             agent_data_report << AgentReportFieldWithLabel("isKernelVersion3OrHigher", "true");
+        }
+
+        if (i_details_resolver->isGw()) {
+            agent_data_report << AgentReportFieldWithLabel("isGw", "true");
         }
 
         if (i_details_resolver->isGwNotVsx()) {

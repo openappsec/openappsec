@@ -53,6 +53,7 @@ var_default_gem_fog_address="https://inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="https://inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="https://inext-agents-aus1.cloud.ngen.checkpoint.com"
 var_default_in_fog_address="https://inext-agents-ind1.cloud.ngen.checkpoint.com"
+var_default_ae_fog_address="https://inext-agents-ae.cloud.ngen.checkpoint.com"
 var_fog_address=
 var_certs_dir=
 var_public_key=
@@ -396,9 +397,13 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             au_prefix_uppercase="CP-AU-"
             in_prefix="cp-in-"
             in_prefix_uppercase="CP-IN-"
+            ae_prefix="cp-ae-"
+            ae_prefix_uppercase="CP-AE-"
 
             if [ "${var_token#"$us_prefix"}" != "${var_token}" ] || [ "${var_token#"$us_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_us_fog_address"
+            elif [ "${var_token#"$ae_prefix"}" != "${var_token}" ] || [ "${var_token#"$ae_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_ae_fog_address"
             elif [ "${var_token#$au_prefix}" != "${var_token}" ] || [ "${var_token#"$au_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_au_fog_address"
             elif [ "${var_token#$in_prefix}" != "${var_token}" ] || [ "${var_token#"$in_prefix_uppercase"}" != "${var_token}" ]; then
@@ -500,26 +505,26 @@ cp_copy() # Initials - cc
     cp_print "Destination md5, after the copy:\n$DEST_AFTER_COPY"
 }
 
-update_openappsec_manifest()
+update_cloudguard_appsec_manifest()
 {
-    if [ -z ${OPENAPPSEC_NANO_AGENT} ] && { [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; }; then
+    if [ -z ${INFINITY_NEXT_NANO_AGENT} ] && { [ -z ${CLOUDGUARD_APPSEC_STANDALONE} ] || [ -z ${DOCKER_RPM_ENABLED} ]; }; then
         return
     fi
 
-    selected_openappsec_manifest_path="${TMP_FOLDER}/openappsec_manifest.json"
-    if [ "${DOCKER_RPM_ENABLED}" = "false" ] || [ "${OPENAPPSEC_NANO_AGENT}" = "TRUE" ]; then
-        selected_openappsec_manifest_path="${TMP_FOLDER}/self_managed_openappsec_manifest.json"
+    selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/cloudguard_appsec_manifest.json"
+    if [ "${DOCKER_RPM_ENABLED}" = "false" ] || [ "${INFINITY_NEXT_NANO_AGENT}" = "TRUE" ]; then
+        selected_cloudguard_appsec_manifest_path="${TMP_FOLDER}/self_managed_cloudguard_appsec_manifest.json"
     fi
 
-    if [ ! -f "$selected_openappsec_manifest_path" ]; then
+    if [ ! -f "$selected_cloudguard_appsec_manifest_path" ]; then
         return
     fi
 
-    openappsec_manifest_path="${selected_openappsec_manifest_path}.used"
-    mv "$selected_openappsec_manifest_path" "$openappsec_manifest_path"
+    cloudguard_appsec_manifest_path="${selected_cloudguard_appsec_manifest_path}.used"
+    mv "$selected_cloudguard_appsec_manifest_path" "$cloudguard_appsec_manifest_path"
     fog_host=$(echo "$var_fog_address" | sed 's/https\?:\/\///')
     fog_host=${fog_host%/}
-    sed "s/namespace/${fog_host}/g" ${openappsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
+    sed "s/namespace/${fog_host}/g" ${cloudguard_appsec_manifest_path} > "${FILESYSTEM_PATH}/${CONF_PATH}/manifest.json"
 }
 
 set_cloud_storage()
@@ -644,13 +649,14 @@ install_watchdog()
                 echo "ExecStart=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
                 echo "ExecStartPost=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             else
-                echo "ExecStart=ip netns exec CTX0000${VS_ID} ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+                CTX_VAL=$(printf "CTX%05d" "$VS_ID")
+                echo "ExecStart=ip netns exec ${CTX_VAL} ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             fi
             echo "Environment=\"FILESYSTEM_PATH=${FILESYSTEM_PATH}\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             if [ -n "${PROMETHEUS}" ] ; then
                 echo "Environment=\"PROMETHEUS=${PROMETHEUS}\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             fi
-
+            check_and_run_restorecon /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             cp_exec "systemctl daemon-reload"
             cp_exec "systemctl enable nano_agent"
         else
@@ -709,6 +715,8 @@ install_cp_nano_ctl()
     OPEN_APPSEC_CTL="open-appsec-ctl"
     CP_NANO_YQ_LOCATION="./scripts/yq"
     CP_NANO_YQ="yq"
+    CP_NANO_STRINGS_LOCATION="./scripts/strings"
+    CP_NANO_STRINGS="strings"
 
     if [ -f $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED} ]; then
         cp_exec "rm -rf $USR_SBIN_PATH/${CP_NANO_CTL_DEPRECATED}"
@@ -742,6 +750,9 @@ install_cp_nano_ctl()
 
     cp_exec "cp -f ${CP_NANO_YQ_LOCATION} ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_YQ}" ${FORCE_STDOUT}
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_YQ}"
+
+    cp_exec "cp -f ${CP_NANO_STRINGS_LOCATION} ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_STRINGS}" ${FORCE_STDOUT}
+    cp_exec "chmod 700 ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_STRINGS}"
 }
 
 set_conf_temp_location()
@@ -789,8 +800,8 @@ upgrade_conf_if_needed()
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
-	previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
-	if ! [ -z "$previous_mode" ]; then
+        previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
+ 		if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
         fi
 
@@ -815,6 +826,7 @@ upgrade_conf_if_needed()
         cp_print "Creating env details file" ${FORCE_STDOUT}
         if [ $var_container_mode = true ]; then
             echo 'IS_CONTAINER_ENV=true' >> "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
+            echo "IMAGE_VERSION=$IMAGE_VERSION" >> "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
         fi
     fi
     if cat ${FILESYSTEM_PATH}/${ORCHESTRATION_CONF_FILE} | grep -q '"/agents/log'; then
@@ -871,6 +883,17 @@ copy_and_run_cloud_metadata_script()
     cp_copy "${SCRIPTS_PATH}/$GET_CLOUD_METADATA_PATH" ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}
     cp_exec "chmod +x ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}"
     cp_exec "${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${GET_CLOUD_METADATA_PATH}"
+}
+
+check_and_run_restorecon() {
+    if ! command -v restorecon >/dev/null 2>&1; then
+        return
+    fi
+
+    if [ -f /sys/fs/selinux/enforce ]; then
+        cp_print "SELinux is enabled. Running restorecon on: $1"
+        restorecon "$1"
+    fi
 }
 
 install_public_key()
@@ -1025,8 +1048,8 @@ install_orchestration()
 
         [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && . "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
 
-	[ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
-	previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
+        [ -f "${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg" ] && \
+        previous_mode=$(cat ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg | grep "orchestration-mode" | cut -d = -f 3 | sed 's/"//')
 
         if ! [ -z "$previous_mode" ]; then
             var_orchestration_mode=${previous_mode}
@@ -1050,8 +1073,8 @@ install_orchestration()
             rm -f "${FILESYSTEM_PATH}/${CONF_PATH}/default_orchestration_flags"
         fi
 
-        update_openappsec_manifest
-	upgrade_conf_if_needed
+        update_cloudguard_appsec_manifest
+        upgrade_conf_if_needed
 
         cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
         if [ "$IS_K8S_ENV" = "true" ]; then
@@ -1086,6 +1109,7 @@ install_orchestration()
                 sed -i "$ d" /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
                 echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
                 echo >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+                check_and_run_restorecon "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
                 cp_exec "systemctl daemon-reload"
                 cp_exec "systemctl restart nano_agent"
             fi
@@ -1107,7 +1131,7 @@ install_orchestration()
     cp_exec "mkdir -p ${LOG_FILE_PATH}/${LOG_PATH}"
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${DATA_PATH}"
 
-    update_openappsec_manifest
+    update_cloudguard_appsec_manifest
 
     if [ ! -f ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH} ]; then
         echo "{\"agentSettings\": []}" >  ${FILESYSTEM_PATH}/${DEFAULT_SETTINGS_PATH}
@@ -1117,6 +1141,7 @@ install_orchestration()
         cp_print "Creating env details file" ${FORCE_STDOUT}
         if [ $var_container_mode = true ]; then
             echo 'IS_CONTAINER_ENV=true' >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+            echo "IMAGE_VERSION=$IMAGE_VERSION" >> "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
         fi
         echo "MAX_FILE_SIZE=${WATCHDOG_MAX_FILE_SIZE}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
         echo "MAX_ROTATION=${WATCHDOG_MAX_ROTATIONS}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}

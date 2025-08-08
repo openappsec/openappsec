@@ -76,6 +76,7 @@ WaapTelemetrics::initMetrics()
     waf_blocked.report(0);
     force_and_block_exceptions.report(0);
 }
+
 void
 WaapTelemetrics::updateMetrics(const string &asset_id, const DecisionTelemetryData &data)
 {
@@ -244,6 +245,46 @@ WaapAttackTypesMetrics::updateMetrics(const string &asset_id, const DecisionTele
 }
 
 void
+WaapAdditionalTrafficTelemetrics::initMetrics()
+{
+    requests.report(0);
+    sources.report(0);
+    blocked.report(0);
+    temperature_count.report(0);
+    sources_seen.clear();
+}
+
+void
+WaapAdditionalTrafficTelemetrics::updateMetrics(const string &asset_id, const DecisionTelemetryData &data)
+{
+    initMetrics();
+
+    auto is_keep_alive_ctx = Singleton::Consume<I_Environment>::by<GenericMetric>()->get<bool>(
+        "keep_alive_request_ctx"
+    );
+    if (!is_keep_alive_ctx.ok() || !*is_keep_alive_ctx) {
+        requests.report(1);
+    } else {
+        dbgTrace(D_WAAP) << "Not increasing the number of requests due to keep alive";
+    }
+
+    if (!data.source.empty()) {
+        if (sources_seen.find(data.source) == sources_seen.end()) {
+            sources_seen.insert(data.source);
+            sources.report(1);
+        }
+    }
+
+    if (data.blockType == WAF_BLOCK) {
+        blocked.report(1);
+    }
+
+    if (data.temperatureDetected) {
+        temperature_count.report(1);
+    }
+}
+
+void
 WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
 {
     const string &asset_id = event.getAssetId();
@@ -268,10 +309,17 @@ WaapMetricWrapper::upon(const WaapTelemetryEvent &event)
         attack_types_telemetries
     );
     initializeTelemetryData<WaapTrafficTelemetrics>(asset_id, data, "WAAP traffic telemetry", traffic_telemetries);
+    initializeTelemetryData<WaapAdditionalTrafficTelemetrics>(
+        asset_id,
+        data,
+        "WAAP Additional Traffic Telemetry",
+        additional_traffic_telemetries
+    );
 
     telemetries[asset_id]->updateMetrics(asset_id, data);
     attack_types_telemetries[asset_id]->updateMetrics(asset_id, data);
     traffic_telemetries[asset_id]->updateMetrics(asset_id, data);
+    additional_traffic_telemetries[asset_id]->updateMetrics(asset_id, data);
 
     auto agent_mode = Singleton::Consume<I_AgentDetails>::by<WaapMetricWrapper>()->getOrchestrationMode();
     string tenant_id = Singleton::Consume<I_AgentDetails>::by<WaapMetricWrapper>()->getTenantId();

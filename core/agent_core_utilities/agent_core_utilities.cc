@@ -539,6 +539,14 @@ trim(string str)
     return removeLeadingWhitespaces(removeTrailingWhitespaces(str));
 }
 
+string
+toLower(string str)
+{
+    transform(str.begin(), str.end(), str.begin(), ::tolower);
+    return str;
+}
+
+
 } // namespace Strings
 
 } // namespace NGEN

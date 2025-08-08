@@ -179,6 +179,8 @@ private:
     bool
     sendOrchestatorConfMsg(int env_listening_port)
     {
+        dbgTrace(D_CONFIG) << "Sending configuration to orchestrator, listening port: " << env_listening_port;
+
         registerExpectedConfigUpdates config_updates;
 
         config_updates.service_name = executable_name;
@@ -204,6 +206,7 @@ private:
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         service_config_req_md.setSuspension(false);
+        service_config_req_md.setShouldSendAccessToken(false);
         auto service_config_status = messaging->sendSyncMessage(
             HTTPMethod::POST,
             "/set-nano-service-config",
@@ -212,10 +215,17 @@ private:
             service_config_req_md
         );
         if (!service_config_status.ok()) {
+            dbgWarning(D_CONFIG)
+                << "Could not send configuration to orchestrator 7777, error: "
+                << service_config_status.getErr().getBody()
+                << ", error-code: "
+                << static_cast<int>(service_config_status.getErr().getHTTPStatusCode());
+
             MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             secondary_port_req_md.setSuspension(false);
+            secondary_port_req_md.setShouldSendAccessToken(false);
             service_config_status = messaging->sendSyncMessage(
                 HTTPMethod::POST,
                 "/set-nano-service-config",
@@ -224,8 +234,25 @@ private:
                 secondary_port_req_md
             );
         }
+        
+        if (!service_config_status.ok()) {
+            dbgWarning(D_CONFIG)
+                << "Could not send configuration to orchestrator 7778, error: "
+                << service_config_status.getErr().getBody()
+                << ", error-code: "
+                << static_cast<int>(service_config_status.getErr().getHTTPStatusCode());
 
-        return service_config_status.ok() && config_updates.status.get();
+            return false;
+        }
+
+        if (is_force_reload && config_updates.status.get()) {
+            dbgWarning(D_CONFIG) << "Reloading configuration due to force-reload config";
+            if (reloadConfiguration("", false, 0) == I_Config::AsyncLoadConfigStatus::Success) is_force_reload = false;
+        }
+
+        dbgTrace(D_CONFIG) << "Configuration successfully sent to orchestrator";
+
+        return config_updates.status.get() && !is_force_reload;
     }
 
     void
@@ -254,6 +281,7 @@ private:
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         service_config_req_md.setSuspension(false);
+        service_config_req_md.setShouldSendAccessToken(false);
         bool service_config_status = messaging->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             "/set-reconf-status",
@@ -262,10 +290,12 @@ private:
             service_config_req_md
         );
         if (!service_config_status) {
+            dbgWarning(D_CONFIG) << "Could not send reconf-status to orchestrator 7777, retrying on 7778";
             MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             secondary_port_req_md.setSuspension(false);
+            secondary_port_req_md.setShouldSendAccessToken(false);
             service_config_status = messaging->sendSyncMessageWithoutResponse(
                 HTTPMethod::POST,
                 "/set-reconf-status",
@@ -275,9 +305,10 @@ private:
             );
         }
         if (!service_config_status) {
-            dbgWarning(D_CONFIG) << "Unsuccessful attempt to send configuration reload status";
+            dbgWarning(D_CONFIG) << "Could not send reconf-status to orchestrator 7778";
             return false;
         }
+
         return true;
     }
 
@@ -303,6 +334,7 @@ private:
     vector<ConfigCb> configuration_abort_cbs;
 
     bool is_continuous_report = false;
+    bool is_force_reload = getenv("FORCE_CONFIG_RELOAD") && string(getenv("FORCE_CONFIG_RELOAD")) == "TRUE";
     const string default_tenant_id = "";
     const string default_profile_id = "";
     string executable_name = "";
@@ -342,14 +374,19 @@ ConfigComponent::Impl::init()
     tenant_manager = Singleton::Consume<I_TenantManager>::by<ConfigComponent>();
 
     if (!Singleton::exists<I_MainLoop>()) return;
-    auto mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
 
-    mainloop->addOneTimeRoutine(
-        I_MainLoop::RoutineType::System,
-        [this] () { periodicRegistrationRefresh(); },
-        "Configuration update registration",
-        false
-    );
+    bool periodic_registration_refresh =
+        getConfigurationWithDefault<bool>(true, "Config Component", "Periodic Registration Refresh");
+
+    if (periodic_registration_refresh) {
+        auto mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
+        mainloop->addOneTimeRoutine(
+            I_MainLoop::RoutineType::System,
+            [this] () { periodicRegistrationRefresh(); },
+            "Configuration update registration",
+            false
+        );
+    }
 }
 
 static bool
@@ -893,8 +930,9 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
             dbgTrace(D_CONFIG) << "Could not open configuration file. Path: " << file.first;
         }
     }
-
+    env->registerValue<bool>("Is Async Config Load", is_async);
     bool res = loadConfiguration(archives, is_async);
+    env->unregisterKey<bool>("Is Async Config Load");
     if (res) env->registerValue<string>("Current Policy Version", version);
     return res;
 }
@@ -976,6 +1014,7 @@ ConfigComponent::preload()
 {
     registerExpectedConfiguration<string>("Config Component", "configuration path");
     registerExpectedConfiguration<uint>("Config Component", "Refresh config update registration time interval");
+    registerExpectedConfiguration<bool>("Config Component", "Periodic Registration Refresh");
     registerExpectedResource<bool>("Config Component", "Config Load Test");
     registerExpectedSetting<AgentProfileSettings>("agentSettings");
     pimpl->preload();

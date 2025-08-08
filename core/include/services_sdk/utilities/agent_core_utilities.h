@@ -85,6 +85,7 @@ namespace Strings
 std::string removeTrailingWhitespaces(std::string str);
 std::string removeLeadingWhitespaces(std::string str);
 std::string trim(std::string str);
+std::string toLower(std::string str);
 
 } // namespace Strings
 

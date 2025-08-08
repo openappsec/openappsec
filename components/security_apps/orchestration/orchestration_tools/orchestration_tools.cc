@@ -150,7 +150,8 @@ getNamespaceDataFromCluster()
     string auth_header = "Authorization: Bearer " + token;
     string connection_header = "Connection: close";
     string host = "https://kubernetes.default.svc:443/api/v1/namespaces/";
-    string culr_cmd = "curl -s -k -H \"" + auth_header + "\" -H \"" + connection_header + "\" " + host +
+    string culr_cmd =
+        "LD_LIBRARY_PATH=\"\" curl -s -k -H \"" + auth_header + "\" -H \"" + connection_header + "\" " + host +
         " | /etc/cp/bin/cpnano_json";
 
     auto output_res = Singleton::Consume<I_ShellCmd>::by<OrchestrationTools>()->getExecOutput(culr_cmd);

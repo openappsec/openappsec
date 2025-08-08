@@ -542,7 +542,8 @@ TEST_F(MetricTest, getPromeathusMetric)
     metric_scraper.init();
 
     stringstream configuration;
-    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
+    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"},";
+    configuration << "{\"key\":\"enable_all_metrics\",\"id\":\"id2\",\"value\":\"true\"}]}\n";
 
     EXPECT_TRUE(Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration));
 
@@ -634,7 +635,8 @@ TEST_F(MetricTest, getPromeathusMultiMap)
     metric_scraper.init();
 
     stringstream configuration;
-    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
+    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"},";
+    configuration << "{\"key\":\"enable_all_metrics\",\"id\":\"id2\",\"value\":\"true\"}]}\n";
 
     EXPECT_TRUE(Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration));
 
@@ -699,7 +701,8 @@ TEST_F(MetricTest, getPromeathusTwoMetrics)
     metric_scraper.init();
 
     stringstream configuration;
-    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"}]}\n";
+    configuration << "{\"agentSettings\":[{\"key\":\"prometheus\",\"id\":\"id1\",\"value\":\"true\"},";
+    configuration << "{\"key\":\"enable_all_metrics\",\"id\":\"id2\",\"value\":\"true\"}]}\n";
 
     EXPECT_TRUE(Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration));
 

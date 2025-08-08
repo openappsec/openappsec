@@ -55,7 +55,7 @@ public:
     std::pair<std::unique_ptr<EnvironmentEvaluator<bool>>, TypeWrapper>
     getLoaderConfig()
     {
-        return std::move(std::make_pair(std::move(context), TypeWrapper(value)));
+        return std::make_pair(std::move(context), TypeWrapper(value));
     }
 
 private:

@@ -19,7 +19,6 @@ AutonomousSecurityDecision::AutonomousSecurityDecision(DecisionType type) :
     m_fpMitigationScore(0.0f),
     m_finalScore(0.0f),
     m_threatLevel(NO_THREAT),
-    m_overridesLog(false),
     m_relativeReputationMean(0.0),
     m_variance(0.0)
 {}
@@ -52,10 +51,6 @@ void AutonomousSecurityDecision::setThreatLevel(ThreatLevel threatLevel)
     m_threatLevel = threatLevel;
 }
 
-void AutonomousSecurityDecision::setOverridesLog(bool overridesLog)
-{
-    m_overridesLog = overridesLog;
-}
 void AutonomousSecurityDecision::setRelativeReputationMean(double relativeReputationMean)
 {
     m_relativeReputationMean = relativeReputationMean;
@@ -79,10 +74,6 @@ double AutonomousSecurityDecision::getFinalScore() const
 ThreatLevel AutonomousSecurityDecision::getThreatLevel() const
 {
     return m_threatLevel;
-}
-bool AutonomousSecurityDecision::getOverridesLog() const
-{
-    return m_overridesLog;
 }
 double AutonomousSecurityDecision::getRelativeReputationMean() const
 {

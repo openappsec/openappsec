@@ -24,6 +24,7 @@
 #define TYPE_FILTER_CONFIDENCE_MIN_INTERVALS 5
 #define TYPE_FILTER_CONFIDENCE_THRESHOLD 0.8
 #define TYPE_FILTER_INTERVAL_DURATION std::chrono::minutes(60)
+#define TYPE_FILTER_CONFIDENCE_MAX_MEMORY_USAGE (40 * 1024 * 1024) // 40MB
 
 class TypeIndicatorFilter : public IndicatorFilterBase
 {

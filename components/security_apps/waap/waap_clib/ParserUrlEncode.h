@@ -25,7 +25,8 @@ public:
         IParserStreamReceiver &receiver,
         size_t parser_depth,
         char separatorChar = '&',
-        bool should_decode_per = true);
+        bool should_decode_per = true,
+        bool should_decode_plus = true);
     virtual ~ParserUrlEncode();
     size_t push(const char *data, size_t data_len);
     void finish();
@@ -55,6 +56,7 @@ private:
     char m_separatorChar;
     char m_escapedCharCandidate;
     bool should_decode_percent;
+    bool m_should_decode_plus;
     static const std::string m_parserName;
     size_t m_parser_depth;
 };

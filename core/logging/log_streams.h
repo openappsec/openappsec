@@ -157,7 +157,7 @@ protected:
 
 private:
     void init();
-    void sendLog(const std::vector<char> &data);
+    void sendLogData(const std::vector<char> &data);
     I_MainLoop::RoutineID log_send_routine = -1;
 };
 

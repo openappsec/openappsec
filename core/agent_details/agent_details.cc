@@ -40,13 +40,19 @@ void
 AgentDetails::init()
 {
     registerMachineType();
-    loadAccessToken();
-    Singleton::Consume<I_MainLoop>::by<AgentDetails>()->addRecurringRoutine(
-        I_MainLoop::RoutineType::System,
-        chrono::seconds(60),
-        [this] () { loadAccessToken(); },
-        "Load access token"
-    );
+    bool load_access_token =
+        getConfigurationWithDefault<bool>(true, "Agent details", "Load Access Token");
+
+    if (load_access_token) {
+        loadAccessToken();
+        Singleton::Consume<I_MainLoop>::by<AgentDetails>()->addRecurringRoutine(
+            I_MainLoop::RoutineType::System,
+            chrono::seconds(60),
+            [this] () { loadAccessToken(); },
+            "Load access token"
+        );
+    }
+
     proxies = {
         {ProxyProtocol::HTTP, ProxyData()},
         {ProxyProtocol::HTTPS, ProxyData()}
@@ -277,6 +283,7 @@ AgentDetails::preload()
 {
     registerExpectedConfiguration<string>("orchestration", "Agent details path");
     registerExpectedConfiguration<string>("Agent details", "File path");
+    registerExpectedConfiguration<bool>("Agent details", "Load Access Token");
     registerConfigLoadCb([this] () { readAgentDetails(); });
 }
 

@@ -162,11 +162,17 @@ public:
     sendLog(const Report &log) override
     {
         if (getConf("agent.config.log.useBulkMode", "Enable bulk of logs", true)) {
+            dbgTrace(D_REPORT) << "Adding log to bulk";
             reports.setBulkSize(getConfigurationWithDefault<uint>(100, "Logging", "Sent log bulk size"));
             reports.push(log);
             if (reports.sizeQueue() >= 4) {
                 auto persistence_only = getConf("agent.config.log.skip.enable", "Enable Log skipping", true);
-                sendBufferedLogsImpl(false, persistence_only);
+                dbgTrace(D_REPORT)
+                << "Sending buffered logs from queue size: "
+                << reports.sizeQueue()
+                << ", persistence_only: "
+                << persistence_only;
+            sendBufferedLogsImpl(false, persistence_only);
             }
         } else {
             LogEventLogsSent(true).notify();
@@ -230,10 +236,22 @@ private:
         for (auto &iter : local_streams) {
             LogBulkRest sub_batch;
             for (const auto &log : batch) {
-                if (log.isStreamActive(iter.first)) sub_batch.push(log);
+                if (log.isStreamActive(iter.first)) {
+                    dbgTrace(D_REPORT)
+                    << "stream: "
+                    << (int) iter.first
+                    << " is active. adding log to sub-batch";
+                    sub_batch.push(log);
+                }
             }
 
             if (sub_batch.size()) {
+                dbgTrace(D_REPORT)
+                << "Sending log to stream: "
+                << (int) iter.first
+                << ", batch size: "
+                << sub_batch.size();
+
                 iter.second->sendLog(sub_batch, persistence_only);
                 if (is_async) i_mainloop->yield();
             }

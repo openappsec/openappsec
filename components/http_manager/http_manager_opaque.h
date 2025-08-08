@@ -28,10 +28,12 @@ public:
     HttpManagerOpaque();
 
     void setApplicationVerdict(const std::string &app_name, ngx_http_cp_verdict_e verdict);
+    void setApplicationWebResponse(const std::string &app_name, std::string web_user_response_id);
     ngx_http_cp_verdict_e getApplicationsVerdict(const std::string &app_name) const;
     void setManagerVerdict(ngx_http_cp_verdict_e verdict) { manager_verdict = verdict; }
     ngx_http_cp_verdict_e getManagerVerdict() const { return manager_verdict; }
     ngx_http_cp_verdict_e getCurrVerdict() const;
+    const std::string & getCurrWebUserResponse() const { return current_web_user_response; };
     std::set<std::string> getCurrentDropVerdictCausers() const;
     void saveCurrentDataToCache(const Buffer &full_data);
     void setUserDefinedValue(const std::string &value) { user_defined_value = value; }
@@ -52,6 +54,8 @@ public:
 
 private:
     std::unordered_map<std::string, ngx_http_cp_verdict_e> applications_verdicts;
+    std::unordered_map<std::string, std::string> applications_web_user_response;
+    mutable std::string current_web_user_response;
     ngx_http_cp_verdict_e manager_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
     Buffer prev_data_cache;
     uint aggregated_payload_size = 0;

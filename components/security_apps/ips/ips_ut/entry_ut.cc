@@ -41,6 +41,8 @@ public:
     EntryTest()
     {
         ON_CALL(table, getState(_)).WillByDefault(Return(ptr));
+        auto err = genError("not coroutine");
+        EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(Maybe<I_MainLoop::RoutineID>(err)));
     }
 
     void

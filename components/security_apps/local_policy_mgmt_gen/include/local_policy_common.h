@@ -170,6 +170,7 @@ public:
         ss.str(modified_json);
         try {
             cereal::JSONInputArchive in_ar(ss);
+            in_ar(cereal::make_nvp("apiVersion", api_version));
             in_ar(cereal::make_nvp("spec", spec));
             in_ar(cereal::make_nvp("metadata", meta_data));
         } catch (cereal::Exception &e) {
@@ -191,11 +192,18 @@ public:
         return meta_data;
     }
 
+    const std::string &
+    getApiVersion() const
+    {
+        return api_version;
+    }
+
     const T & getSpec() const { return spec; }
 
 private:
     T spec;
     AppsecSpecParserMetaData meta_data;
+    std::string api_version;
 };
 
 #endif // __LOCAL_POLICY_COMMON_H__

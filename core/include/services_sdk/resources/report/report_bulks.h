@@ -51,6 +51,9 @@ public:
             dbgDebug(D_REPORT_BULK) << "Adding a new bulk to queue";
             bulks.push(LogBulkRest(bulk_size));;
         }
+        dbgTrace(D_REPORT_BULK)
+        << "Adding report to bulk, for asset: "
+        << (report.getStringData("assetName").ok() ? *report.getStringData("assetName") : "unknown");
         bulks.back().push(report);
         ++elem_in_quque;
     }

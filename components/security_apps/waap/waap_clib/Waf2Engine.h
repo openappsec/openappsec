@@ -22,17 +22,22 @@
 #include "PatternMatcher.h"
 #include "generic_rulebase/rulebase_config.h"
 #include "generic_rulebase/evaluators/trigger_eval.h"
+#include "i_generic_rulebase.h"
+#include "generic_rulebase/parameters_config.h"
 #include "Waf2Util.h"
 #include "WaapConfigApplication.h"
 #include "WaapConfigApi.h"
 #include "WaapDecision.h"
+#include "DecisionType.h"
 #include "DeepAnalyzer.h"
 #include <vector>
+#include <set>
 #include <map>
 #include <string>
 #include <set>
 #include <utility>
 #include <memory>
+#include <unordered_map>
 #include <boost/uuid/uuid.hpp>            // uuid class
 #include <boost/uuid/uuid_generators.hpp> // uuid generators
 #include <boost/tokenizer.hpp>
@@ -65,7 +70,8 @@ class Waf2Transaction :
     private boost::noncopyable,
     Singleton::Consume<I_AgentDetails>,
     Singleton::Consume<I_TimeGet>,
-    Singleton::Consume<I_Environment>
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<I_GenericRulebase>
 {
 public:
     Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState);
@@ -131,6 +137,7 @@ public:
     ngx_http_cp_verdict_e getUserLimitVerdict();
     const std::string getUserLimitVerdictStr() const;
     const std::string getViolatedUserLimitTypeStr() const;
+    const std::string getCurrentWebUserResponse();
 
     virtual HeaderType detectHeaderType(const char* name, int name_len);
     HeaderType checkCleanHeader(const char* name, int name_len, const char* value, int value_len) const;
@@ -195,7 +202,9 @@ public:
     void handleSecurityHeadersInjection(std::vector<std::pair<std::string, std::string>>& injectHeaderStrs);
     void disableShouldInjectSecurityHeaders();
 
-    bool shouldSendExtendedLog(const std::shared_ptr<Waap::Trigger::Log> &trigger_log) const;
+    bool shouldSendExtendedLog(
+        const LogTriggerConf &trigger_log, DecisionType practiceType = AUTONOMOUS_SECURITY_DECISION
+    ) const;
 
     // query
     virtual bool isSuspicious() const;
@@ -232,24 +241,26 @@ public:
     // LCOV_EXCL_START Reason: This function is tested in system tests
     bool checkIsHeaderOverrideScanRequired();
     // LCOV_EXCL_STOP
+    bool shouldLimitResponseHeadersInspection();
+
+    void setTemperatureDetected(bool detected);
+    bool wasTemperatureDetected() const;
 
 private:
-    int finalizeDecision(IWaapConfig *sitePolicy, bool shouldBlock);
-    const std::shared_ptr<Waap::Trigger::Log> getTriggerLog(const std::shared_ptr<Waap::Trigger::Policy>&
-        triggerPolicy) const;
+    const Maybe<LogTriggerConf, Config::Errors> getTriggerLog(const std::shared_ptr<Waap::Trigger::Policy>&
+        triggerPolicy, DecisionType practiceType) const;
     bool isTriggerReportExists(const std::shared_ptr<Waap::Trigger::Policy> &triggerPolicy);
     void sendAutonomousSecurityLog(
-        const std::shared_ptr<Waap::Trigger::Log>& triggerLog,
+        const LogTriggerConf& triggerLog,
         bool shouldBlock,
         const std::string& logOverride,
         const std::string& attackTypes) const;
     void appendCommonLogFields(LogGen& waapLog,
-        const std::shared_ptr<Waap::Trigger::Log> &triggerLog,
+        const LogTriggerConf &triggerLog,
         bool shouldBlock,
         const std::string& logOverride,
         const std::string& incidentType,
-        const std::string& practiceID,
-        const std::string& practiceName) const;
+        DecisionType practiceType) const;
     std::string getUserReputationStr(double relativeReputation) const;
     bool isTrustedSource() const;
 
@@ -258,6 +269,12 @@ private:
     bool setCurrentAssetContext();
     bool checkIsScanningRequired();
     Waap::Override::State getOverrideState(IWaapConfig* sitePolicy);
+    std::set<ParameterBehavior> getBehaviors(
+        const std::unordered_map<std::string, std::set<std::string>> &exceptions_dict,
+        const std::vector<std::string>& exceptions, bool checkResponse);
+    std::unordered_map<std::string, std::set<std::string>> getExceptionsDict(DecisionType practiceType);
+    bool shouldEnforceByPracticeExceptions(DecisionType practiceType);
+    void setOverrideState(const std::set<ParameterBehavior>& behaviors, Waap::Override::State& state);
 
     // User limits functions
     void createUserLimitsState();
@@ -360,15 +377,16 @@ private:
     Waap::ResponseInspectReasons m_responseInspectReasons;
     Waap::ResponseInjectReasons m_responseInjectReasons;
     WaapDecision m_waapDecision;
-    Waap::Override::State m_overrideState;
+    std::unordered_map<int, Waap::Override::State> m_overrideStateByPractice;
+    std::string m_practiceSubType;
 
     uint64_t m_index;
 
-    // Cached pointer to const triggerLog (hence mutable)
-    mutable std::shared_ptr<Waap::Trigger::Log> m_triggerLog;
     bool m_triggerReport;
     bool is_schema_validation = false;
     Waf2TransactionFlags m_waf2TransactionFlags;
+
+    bool m_temperature_detected = false; // Tracks if temperature was detected
 };
 
 #endif // __WAF2_TRANSACTION_H__99e4201a

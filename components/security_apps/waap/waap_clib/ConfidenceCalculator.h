@@ -28,6 +28,8 @@
 #include "i_ignoreSources.h"
 #include "TuningDecisions.h"
 
+static constexpr size_t defaultConfidenceMemUsage = 40 * 1024 * 1024; // 40MB
+
 USE_DEBUG_FLAG(D_WAAP_CONFIDENCE_CALCULATOR);
 
 class WaapComponent;
@@ -39,9 +41,10 @@ struct ConfidenceCalculatorParams
     std::chrono::minutes intervalDuration;
     double ratioThreshold;
     bool learnPermanently;
+    size_t maxMemoryUsage;
 
     template <class Archive>
-    void serialize(Archive& ar)
+    void serialize(Archive &ar)
     {
         size_t duration = intervalDuration.count();
         ar(cereal::make_nvp("minSources", minSources),
@@ -50,10 +53,17 @@ struct ConfidenceCalculatorParams
             cereal::make_nvp("ratioThreshold", ratioThreshold),
             cereal::make_nvp("learnPermanently", learnPermanently));
         intervalDuration = std::chrono::minutes(duration);
+        try {
+            ar(cereal::make_nvp("maxMemoryUsage", maxMemoryUsage));
+        } catch (cereal::Exception &e) {
+            maxMemoryUsage = defaultConfidenceMemUsage;
+            dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "maxMemoryUsage not found in serialized data";
+            ar.setNextName(nullptr);
+        }
     }
 
-    bool operator==(const ConfidenceCalculatorParams& other);
-    friend std::ostream& operator<<(std::ostream& os, const ConfidenceCalculatorParams& ccp);
+    bool operator==(const ConfidenceCalculatorParams &other);
+    friend std::ostream & operator<<(std::ostream &os, const ConfidenceCalculatorParams &ccp);
 };
 
 class ConfidenceCalculator : public SerializeToLocalAndRemoteSyncBase
@@ -74,7 +84,6 @@ public:
     typedef std::list<ValuesSet> ValuesList;
     typedef UMap<Key, ValuesList> WindowsConfidentValuesList;
     typedef UMap<Key, UMap<Val, double>> ConfidenceLevels;
-    typedef UMap<Key, int> WindowsCounter;
     typedef UMap<Key, ValueSetWithTime> ConfidenceSet;
 
     ConfidenceCalculator(size_t minSources,
@@ -82,19 +91,19 @@ public:
         std::chrono::minutes intervalDuration,
         double ratioThreshold,
         const Val &nullObj,
-        const std::string& backupPath,
-        const std::string& remotePath,
-        const std::string& assetId,
+        const std::string &backupPath,
+        const std::string &remotePath,
+        const std::string &assetId,
         TuningDecision* tuning = nullptr,
         I_IgnoreSources* ignoreSrc = nullptr);
 
     ~ConfidenceCalculator();
 
-    void setOwner(const std::string& owner);
+    void setOwner(const std::string &owner);
 
     void hardReset();
     void reset();
-    bool reset(ConfidenceCalculatorParams& params);
+    bool reset(ConfidenceCalculatorParams &params);
 
     virtual bool postData();
     virtual void pullData(const std::vector<std::string>& files);
@@ -103,10 +112,12 @@ public:
     virtual void pullProcessedData(const std::vector<std::string>& files);
     virtual void updateState(const std::vector<std::string>& files);
 
-    virtual void serialize(std::ostream& stream);
-    virtual void deserialize(std::istream& stream);
+    virtual void serialize(std::ostream &stream);
+    virtual void deserialize(std::istream &stream);
 
-    void mergeFromRemote(const ConfidenceSet& remote_confidence_set, bool is_first_pull);
+    Maybe<void> writeToFile(const std::string& path, const std::vector<unsigned char>& data);
+
+    void mergeFromRemote(const ConfidenceSet &remote_confidence_set, bool is_first_pull);
 
     bool is_confident(const Key &key, const Val &value) const;
 
@@ -121,35 +132,50 @@ public:
 
     void calculateInterval();
 
-    static void mergeConfidenceSets(ConfidenceSet& confidence_set,
-                                    const ConfidenceSet& confidence_set_to_merge,
-                                    size_t& last_indicators_update);
+    static void mergeConfidenceSets(ConfidenceSet &confidence_set,
+                                    const ConfidenceSet &confidence_set_to_merge,
+                                    size_t &last_indicators_update);
 private:
-    void loadVer0(cereal::JSONInputArchive& archive);
-    void loadVer1(cereal::JSONInputArchive& archive);
-    void loadVer2(cereal::JSONInputArchive& archive);
-    void loadVer3(cereal::JSONInputArchive& archive);
+    void loadVer0(cereal::JSONInputArchive &archive);
+    void loadVer1(cereal::JSONInputArchive &archive);
+    void loadVer2(cereal::JSONInputArchive &archive);
+    void loadVer3(cereal::JSONInputArchive &archive);
     bool tryParseVersionBasedOnNames(
-        cereal::JSONInputArchive& archive,
+        cereal::JSONInputArchive &archive,
         const std::string &params_field_name,
         const std::string &indicators_update_field_name,
         const std::string &windows_summary_field_name,
         const std::string &confident_sets_field_name);
-    void convertWindowSummaryToConfidenceLevel(const WindowsConfidentValuesList& windows);
+    void convertWindowSummaryToConfidenceLevel(const WindowsConfidentValuesList &windows);
 
-    std::string getParamName(const Key& key);
-    size_t sumSourcesWeight(const SourcesSet& sources);
-    void mergeSourcesCounter(const Key& key, const SourcesCounters& counters);
-    void removeBadSources(SourcesSet& sources, const std::vector<std::string>* badSources);
+    void loadConfidenceLevels();
+    void saveConfidenceLevels(Maybe<ConfidenceCalculator::ConfidenceLevels> confidenceLevels);
+    void saveConfidenceLevels();
+
+    void saveTimeWindowLogger();
+    std::shared_ptr<KeyValSourcesLogger> loadTimeWindowLogger();
+
+    std::string getParamName(const Key &key);
+    size_t sumSourcesWeight(const SourcesSet &sources);
+    void removeBadSources(SourcesSet &sources, const std::vector<std::string>* badSources);
+
+    // Delete existing carry-on data files asynchronously with yields
+    void garbageCollector();
 
     ConfidenceCalculatorParams m_params;
     Val m_null_obj;
-    KeyValSourcesLogger m_time_window_logger;
-    KeyValSourcesLogger m_time_window_logger_backup;
+    std::shared_ptr<KeyValSourcesLogger> m_time_window_logger;
+    std::shared_ptr<KeyValSourcesLogger> m_time_window_logger_backup;
+    std::string m_path_to_backup;
     ConfidenceSet m_confident_sets;
     ConfidenceLevels m_confidence_level;
-    WindowsCounter m_windows_counter;
     size_t m_last_indicators_update;
+    size_t m_latest_index;
     I_IgnoreSources* m_ignoreSources;
     TuningDecision* m_tuning;
+    size_t m_estimated_memory_usage; // Variable to track estimated memory usage
+    size_t m_post_index;
+    I_MainLoop *m_mainLoop;
+    I_MainLoop::RoutineID m_routineId;
+    std::vector<std::string> m_filesToRemove;
 };

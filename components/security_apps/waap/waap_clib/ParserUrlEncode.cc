@@ -21,7 +21,11 @@ USE_DEBUG_FLAG(D_WAAP);
 const std::string ParserUrlEncode::m_parserName = "ParserUrlEncode";
 
 ParserUrlEncode::ParserUrlEncode(
-    IParserStreamReceiver &receiver, size_t parser_depth, char separatorChar, bool should_decode_per
+    IParserStreamReceiver &receiver,
+    size_t parser_depth,
+    char separatorChar,
+    bool should_decode_per,
+    bool should_decode_plus
 ) :
     m_receiver(receiver),
     m_state(s_start),
@@ -29,13 +33,16 @@ ParserUrlEncode::ParserUrlEncode(
     m_separatorChar(separatorChar),
     m_escapedCharCandidate(0),
     should_decode_percent(should_decode_per),
+    m_should_decode_plus(should_decode_plus),
     m_parser_depth(parser_depth)
 {
     dbgTrace(D_WAAP)
         << "should_decode_percent="
         << should_decode_per
         << "parser_depth="
-        << parser_depth;
+        << parser_depth
+        << "m_should_decode_plus="
+        << m_should_decode_plus;
 
     // TODO:: is there a need for this?
     memset(m_escaped, 0, sizeof(m_escaped));
@@ -124,7 +131,7 @@ ParserUrlEncode::push(const char *buf, size_t len)
                 }
                 m_state = s_key_escaped1;
                 break;
-                } else if (c == '+') {
+                } else if (c == '+' && m_should_decode_plus) {
                 // convert plus character to space
                 if (i - mark > 0) {
                     if (m_receiver.onKey(buf + mark, i - mark) != 0) {
@@ -281,7 +288,7 @@ ParserUrlEncode::push(const char *buf, size_t len)
                 }
                 m_state = s_value_escaped1;
                 break;
-                } else if (c == '+') {
+                } else if (c == '+' && m_should_decode_plus) {
                 // convert plus character to space
                 if (i - mark > 0) {
                     if (m_receiver.onValue(buf + mark, i - mark) != 0) {

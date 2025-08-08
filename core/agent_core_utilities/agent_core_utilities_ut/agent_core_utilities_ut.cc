@@ -197,6 +197,12 @@ TEST_F(AgentCoreUtilUT, trimTest)
     EXPECT_EQ(NGEN::Strings::trim(str_with_leading_and_trailing_whitespace), "str_with_whitespace");
 }
 
+TEST_F(AgentCoreUtilUT, toLowerTest)
+{
+    string str = "ThIS Is A 123 TEsT StRiNG";
+    EXPECT_EQ(NGEN::Strings::toLower(str), "this is a 123 test string");
+}
+
 TEST_F(AgentCoreUtilUT, resolveFullPathTest)
 {
     string working_dir = cptestFnameInExeDir("");
@@ -207,4 +213,44 @@ TEST_F(AgentCoreUtilUT, resolveFullPathTest)
     string full_path = NGEN::Filesystem::resolveFullPath(relative_path);
     EXPECT_EQ(full_path, working_dir + "test.txt");
     ASSERT_TRUE(NGEN::Filesystem::deleteFile(working_dir + "test.txt"));
+}
+
+TEST_F(AgentCoreUtilUT, regexReplaceTest)
+{
+    struct TestCase {
+        std::string input;
+        std::string expected;
+    };
+
+    std::vector<TestCase> test_cases = {
+        {"my?invalid//:filename*test.txt", "my_invalid_filename_test.txt"},
+        {"hello///world", "hello_world"},
+        {"file@@name..txt", "file_name..txt"},
+        {"file--name", "file--name"},
+        {"some@@@file!!name.txt", "some_file_name.txt"},
+        {"https://some_file_name.txt", "https_some_file_name.txt"},
+        {"spaces in filename.txt", "spaces_in_filename.txt"},
+        {"trailing-dash-", "trailing-dash-"},
+        {"trailing.dot.", "trailing.dot."},
+        {"file name with (parens).txt", "file_name_with_parens_.txt"},
+        {"$pecial#Chars&here.txt", "_pecial_Chars_here.txt"},
+        {"___leading_underscores", "___leading_underscores"},
+        {"<<<<weird>>>filename", "_weird_filename"},
+        {"double..dots...txt", "double..dots...txt"},
+        {"a:b|c*d?e<f>g/h.txt", "a_b_c_d_e_f_g_h.txt"},
+        {"/leading/slash", "_leading_slash"},
+        {"back\\slash\\file", "back_slash_file"},
+        {"file.with..multiple.dots.txt", "file.with..multiple.dots.txt"},
+        {"CAPITAL&LETTERS^HERE", "CAPITAL_LETTERS_HERE"},
+        {"123_456-789.ok", "123_456-789.ok"},
+        {"__", "__"},
+        {"*.*", "_._"}
+    };
+
+    boost::regex regex("[^\\w.-]+"); // Matches one or more non-word, non-dot, non-hyphen characters
+
+    for (const auto& testCase : test_cases) {
+        std::string replaced = NGEN::Regex::regexReplace(__FILE__, __LINE__, testCase.input, regex, "_");
+        EXPECT_EQ(replaced, testCase.expected);
+    }
 }

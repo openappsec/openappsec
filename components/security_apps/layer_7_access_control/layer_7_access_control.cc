@@ -131,8 +131,12 @@ public:
     EventVerdict
     respond(const WaitTransactionEvent &) override
     {
-        dbgFlow(D_L7_ACCESS_CONTROL) << "Handling wait verdict";
+        if (!isAppEnabled()) {
+            dbgTrace(D_L7_ACCESS_CONTROL) << "Returning Accept verdict as the Layer-7 Access Control app is disabled";
+            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+        }
 
+        dbgTrace(D_L7_ACCESS_CONTROL) << "Handling wait verdict";
         return handleEvent();
     }
 

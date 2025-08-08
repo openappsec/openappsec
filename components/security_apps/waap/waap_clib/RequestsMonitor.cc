@@ -18,9 +18,11 @@ SourcesRequestMonitor::SourcesRequestMonitor(
         filePath,
         remotePath != "" ? remotePath + "/Monitor" : remotePath,
         assetId,
-        owner
-    ), m_sourcesRequests()
+        owner),
+    m_sourcesRequests(),
+    m_enabled(false)
 {
+    m_enabled = getProfileAgentSettingWithDefault<bool>(false, "appsec.sourceRequestsMonitor.enabled");
 }
 
 SourcesRequestMonitor::~SourcesRequestMonitor()
@@ -35,17 +37,18 @@ void SourcesRequestMonitor::syncWorker()
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
-    bool enabled = getProfileAgentSettingWithDefault<bool>(false, "appsec.sourceRequestsMonitor.enabled");
+    m_enabled = getProfileAgentSettingWithDefault<bool>(false, "appsec.sourceRequestsMonitor.enabled");
 
-    if (mode == OrchestrationMode::OFFLINE || !enabled || isBase() || !postData()) {
+    if (mode == OrchestrationMode::OFFLINE || !m_enabled || isBase() || !postData()) {
         dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR)
             << "Did not report data. for asset: "
             << m_assetId
             << " Remote URL: "
             << m_remotePath
             << " is enabled: "
-            << to_string(enabled)
+            << to_string(m_enabled)
             << ", mode: " << int(mode);
+        m_sourcesRequests.clear();
         return;
     }
 
@@ -72,6 +75,9 @@ void SourcesRequestMonitor::syncWorker()
 
 void SourcesRequestMonitor::logSourceHit(const string& source)
 {
+    if (!m_enabled) {
+        return;
+    }
     m_sourcesRequests[chrono::duration_cast<chrono::minutes>(
         Singleton::Consume<I_TimeGet>::by<WaapComponent>()->getWalltime()
     ).count()][source]++;
