@@ -110,6 +110,7 @@ load_paths()
 
     if [ -n "${CP_ENV_FILESYSTEM}" ]; then
         FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
+        export CP_ENV_FILESYSTEM=$CP_ENV_FILESYSTEM
     fi
     if [ -n "${CP_ENV_LOG_FILE}" ]; then
         LOG_FILE_PATH=$CP_ENV_LOG_FILE
@@ -172,14 +173,34 @@ fi
 
 alpine_pid()
 {
-   ps -ef | grep $1 | grep -v grep | awk '{printf $1 " "}'
+   ps -ef | awk -v pattern=$1 '$4 ~ pattern{printf $1 " "}'
+}
+
+# busybox pidof only supports executable names, not full paths.
+pidof_with_basename()
+{
+    service_path=$1
+
+    result=$(pidof "$service_path" 2>/dev/null)
+
+    if [ -z "$result" ]; then
+        base_name=$(get_basename "$service_path")
+        result=$(pidof "$base_name" 2>/dev/null)
+    fi
+
+    if [ -z "$result" ]; then
+        result=$(alpine_pid "$service_path")
+    fi
+
+    echo "$result"
 }
 
 ls -l /etc/ | grep release > /dev/null 2>&1
 retval=$?
 if [ $retval -eq 0 ]; then
     if [ ! -z "$(cat /etc/*release | grep alpine)" ]; then
-        pidof_cmd="alpine_pid"
+        command -V pidof > /dev/null
+        if [ $? -eq 0 ]; then pidof_cmd="pidof_with_basename"; else pidof_cmd="alpine_pid"; fi
         ARCH="alpine"
         echo "alpine" >${FILESYSTEM_PATH}/watchdog/platform
     fi
