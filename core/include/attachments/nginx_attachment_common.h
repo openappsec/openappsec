@@ -146,7 +146,8 @@ typedef enum ngx_http_cp_verdict
     TRAFFIC_VERDICT_INJECT,
     TRAFFIC_VERDICT_IRRELEVANT,
     TRAFFIC_VERDICT_RECONF,
-    TRAFFIC_VERDICT_WAIT
+    TRAFFIC_VERDICT_WAIT,
+    LIMIT_RESPONSE_HEADERS
 } ngx_http_cp_verdict_e;
 
 #ifdef __cplusplus
@@ -190,6 +191,8 @@ typedef enum ngx_http_meta_data
     PARSED_HOST_DATA,
     PARSED_URI_SIZE,
     PARSED_URI_DATA,
+    WAF_TAG_SIZE,
+    WAF_TAG_DATA,
 
     META_DATA_COUNT
 } ngx_http_meta_data_e;

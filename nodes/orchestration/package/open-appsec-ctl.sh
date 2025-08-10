@@ -26,6 +26,7 @@ var_default_gem_fog_address="inext-agents.cloud.ngen.checkpoint.com"
 var_default_us_fog_address="inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="inext-agents-aus1.cloud.ngen.checkpoint.com"
 var_default_in_fog_address="inext-agents-ind1.cloud.ngen.checkpoint.com"
+var_default_ae_fog_address="inext-agents-ae.cloud.ngen.checkpoint.com"
 
 #NOTE: open-appsec-ctl only supports nano services with name of the format cp-nano-<service>
 cp_nano_service_name_prefix="cp-nano"
@@ -1560,9 +1561,13 @@ set_mode()
             au_prefix_uppercase="CP-AU-"
             in_prefix="cp-in-"
             in_prefix_uppercase="CP-IN-"
+            ae_prefix="cp-ae-"
+            ae_prefix_uppercase="CP-AE-"
 
             if [ "${var_token#"$us_prefix"}" != "${var_token}" ] || [ "${var_token#"$us_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_us_fog_address"
+            elif [ "${var_token#"$ae_prefix"}" != "${var_token}" ] || [ "${var_token#"$ae_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_ae_fog_address"
             elif [ "${var_token#$au_prefix}" != "${var_token}" ] || [ "${var_token#"$au_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_au_fog_address"
             elif [ "${var_token#$in_prefix}" != "${var_token}" ] || [ "${var_token#"$in_prefix_uppercase"}" != "${var_token}" ]; then

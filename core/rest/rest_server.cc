@@ -46,8 +46,10 @@ public:
 
     void startNewConnection() const;
 
-    bool bindRestServerSocket(struct sockaddr_in &addr, vector<uint16_t> port_range);
-    bool bindRestServerSocket(struct sockaddr_in6 &addr, vector<uint16_t> port_range);
+    bool setupIpv4ServerSocket(bool accept_get_from_external_ip);
+    bool setupIpv6ServerSocket(bool &finish_port_range);
+    bool createIpv4Socket();
+    bool createIpv6Socket();
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
     bool addGetCall(const string &uri, const function<string()> &cb) override;
     bool addWildcardGetCall(const string &uri, const function<string(const string &)> &callback);
@@ -74,40 +76,141 @@ private:
 };
 
 bool
-RestServer::Impl::bindRestServerSocket(struct sockaddr_in &addr, vector<uint16_t> port_range)
+RestServer::Impl::createIpv4Socket()
+{
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == -1) {
+        dbgAssert(fd >= 0) << alert << "Failed to open a socket";
+    }
+    int socket_enable = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)) < 0) {
+        dbgWarning(D_API) << "Could not set the socket options";
+    }
+    dbgDebug(D_API) << "IPv4 socket opened successfully";
+    return true;
+}
+
+bool
+RestServer::Impl::createIpv6Socket()
+{
+    fd = socket(AF_INET6, SOCK_STREAM, 0);
+    if (fd == -1) {
+        return false;
+    }
+    int socket_enable = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)) < 0) {
+        dbgWarning(D_API) << "Could not set the socket options";
+    }
+    dbgDebug(D_API) << "IPv6 socket opened successfully";
+    int option = 0;
+
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &option, sizeof(option)) < 0) {
+        dbgWarning(D_API) << "Could not set the IPV6_V6ONLY option";
+    }
+    return true;
+}
+
+bool
+RestServer::Impl::setupIpv4ServerSocket(bool accept_get_from_external_ip)
 {
     dbgFlow(D_API) << "Binding IPv4 socket";
+    struct sockaddr_in addr;
+    bzero(&addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    if (accept_get_from_external_ip) {
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        dbgDebug(D_API) << "Socket listening on any address";
+    } else {
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        dbgDebug(D_API) << "Socket listening on local address";
+    }
+
+    bool create_socket = true;
     for (uint16_t port : port_range) {
+        if(create_socket) {
+            if (!createIpv4Socket()) {
+                dbgDebug(D_API) << "Failed creating Ipv4 socket!";
+                return false;
+            }
+            create_socket = false;
+        }
+
         addr.sin_port = htons(port);
 
-        if (bind(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) == 0) return true;
+        if (bind(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) != 0) {
+            if (errno == EADDRINUSE) {
+                dbgDebug(D_API) << "Port " << port << " is already in use";
+            } else {
+                dbgDebug(D_API) << "Failed to bind to port " << port << " with error: " << strerror(errno);
+            }
+            continue;
+        }
+
+        if (listen(fd, listen_limit) == 0) {
+            listening_port = ntohs(addr.sin_port);
+            return true;
+        }
 
         if (errno == EADDRINUSE) {
-            dbgDebug(D_API) << "Port " << port << " is already in use";
+            dbgDebug(D_API) << "Another socket is already listening on the port: " << port;
         } else {
-            dbgDebug(D_API) << "Failed to bind to port " << port << " with error: " << strerror(errno);
+            dbgDebug(D_API) << "Failed to listen to socket with error: " << strerror(errno);
         }
+
+        create_socket = true;
+        close(fd);
+        fd = -1;
     }
 
     return false;
 }
 
 bool
-RestServer::Impl::bindRestServerSocket(struct sockaddr_in6 &addr, vector<uint16_t> port_range)
+RestServer::Impl::setupIpv6ServerSocket(bool &finish_port_range)
 {
     dbgFlow(D_API) << "Binding IPv6 socket";
+    struct sockaddr_in6 addr6;
+    bzero(&addr6, sizeof(addr6));
+    addr6.sin6_family = AF_INET6;
+    addr6.sin6_addr = in6addr_any;
+    dbgDebug(D_API) << "Socket listening on any address";
+    bool create_socket = true;
     for (uint16_t port : port_range) {
-        addr.sin6_port = htons(port);
+        if(create_socket) {
+            if (!createIpv6Socket()) {
+                dbgDebug(D_API) << "Failed creating Ipv6 socket!";
+                return false;
+            }
+            create_socket = false;
+        }
 
-        if (bind(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in6)) == 0) return true;
+        addr6.sin6_port = htons(port);
+
+        if (bind(fd, (struct sockaddr *)&addr6, sizeof(struct sockaddr_in6)) != 0) {
+            if (errno == EADDRINUSE) {
+                dbgDebug(D_API) << "Port " << port << " is already in use";
+            } else {
+                dbgDebug(D_API) << "Failed to bind to port " << port << " with error: " << strerror(errno);
+            }
+            continue;
+        }
+
+        if (listen(fd, listen_limit) == 0) {
+            listening_port = ntohs(addr6.sin6_port);
+            return true;
+        }
 
         if (errno == EADDRINUSE) {
-            dbgDebug(D_API) << "Port " << port << " is already in use";
+            dbgDebug(D_API) << "Another socket is already listening on the port: " << port;
         } else {
-            dbgDebug(D_API) << "Failed to bind to port " << port << " with error: " << strerror(errno);
+            dbgDebug(D_API) << "Failed to listen to socket with error: " << strerror(errno);
         }
+        create_socket = true;
+        close(fd);
+        fd = -1;
     }
 
+    finish_port_range = true;
     return false;
 }
 
@@ -163,59 +266,27 @@ RestServer::Impl::init()
             }
         }
 
-        bool is_ipv6 = false;
+        bool finish_port_range = false;
+        bool failed_to_listen = false;
         if (accept_get_from_external_ip) {
-            is_ipv6 = true;
-            fd = socket(AF_INET6, SOCK_STREAM, 0);
+            while (!setupIpv6ServerSocket(finish_port_range) && finish_port_range) {
+                dbgWarning(D_API) << "Failed to bind to any of the (IPv6) ports in the port range";
+                failed_to_listen = true;
+                finish_port_range = false;
+                mainloop->yield(bind_retry_interval_msec);
+            }
         }
         if (fd == -1) {
-            fd = socket(AF_INET, SOCK_STREAM, 0);
-            is_ipv6 = false;
+            while (!setupIpv4ServerSocket(accept_get_from_external_ip)) {
+                dbgWarning(D_API) << "Failed to bind to any of the (IPv4) ports in the port range";
+                failed_to_listen = true;
+                mainloop->yield(bind_retry_interval_msec);
+            }
+        }
+        if (failed_to_listen) {
+            dbgWarning(D_API) << "Manage to listen on port:" << listening_port << " after failure";
         }
         dbgAssert(fd >= 0) << alert << "Failed to open a socket";
-
-        int socket_enable = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)) < 0) {
-            dbgWarning(D_API) << "Could not set the socket options";
-        }
-
-        if (is_ipv6) {
-            dbgDebug(D_API) << "IPv6 socket opened successfully";
-            int option = 0;
-            if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &option, sizeof(option)) < 0) {
-                dbgWarning(D_API) << "Could not set the IPV6_V6ONLY option";
-            }
-
-            struct sockaddr_in6 addr6;
-            bzero(&addr6, sizeof(addr6));
-            addr6.sin6_family = AF_INET6;
-            addr6.sin6_addr = in6addr_any;
-            dbgDebug(D_API) << "Socket listening on any address";
-
-            while (!bindRestServerSocket(addr6, port_range)) {
-                mainloop->yield(bind_retry_interval_msec);
-            }
-            listening_port = ntohs(addr6.sin6_port);
-        } else {
-            dbgDebug(D_API) << "IPv4 socket opened successfully";
-            struct sockaddr_in addr;
-            bzero(&addr, sizeof(addr));
-            addr.sin_family = AF_INET;
-            if (accept_get_from_external_ip) {
-                addr.sin_addr.s_addr = htonl(INADDR_ANY);
-                dbgDebug(D_API) << "Socket listening on any address";
-            } else {
-                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-                dbgDebug(D_API) << "Socket listening on local address";
-            }
-
-            while (!bindRestServerSocket(addr, port_range)) {
-                mainloop->yield(bind_retry_interval_msec);
-            }
-            listening_port = ntohs(addr.sin_port);
-        }
-
-        listen(fd, listen_limit);
 
         auto is_primary = Singleton::Consume<I_Environment>::by<RestServer>()->get<bool>("Is Rest primary routine");
         id = mainloop->addFileRoutine(

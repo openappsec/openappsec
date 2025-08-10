@@ -25,6 +25,7 @@
 using namespace std;
 
 USE_DEBUG_FLAG(D_MESSAGING);
+USE_DEBUG_FLAG(D_TRACE_ID);
 
 class FogConnectionChecker : public ServerRest
 {
@@ -95,13 +96,14 @@ isMessageToFog(const MessageMetadata message_metadata)
 Maybe<Connection>
 MessagingComp::getConnection(MessageCategory category, const MessageMetadata &metadata)
 {
-    auto persistant_conn = getPersistentConnection(metadata, category);
-    if (persistant_conn.ok()) {
-        dbgTrace(D_MESSAGING) << "Found a persistant connection";
-        return persistant_conn;
+    if (!metadata.getConnectionFlags().isSet(MessageConnectionConfig::ONE_TIME_FOG_CONN)) {
+        auto persistant_conn = getPersistentConnection(metadata, category);
+        if (persistant_conn.ok()) {
+            dbgTrace(D_MESSAGING) << "Found a persistant connection";
+            return persistant_conn;
+        }
+        dbgDebug(D_MESSAGING) << persistant_conn.getErr();
     }
-    dbgDebug(D_MESSAGING) << persistant_conn.getErr();
-
     auto maybe_conn = i_conn->establishConnection(metadata, category);
     if (!maybe_conn.ok()) {
         dbgWarning(D_MESSAGING) << maybe_conn.getErr();
@@ -131,6 +133,7 @@ MessagingComp::sendMessage(
 
     bool is_to_fog = isMessageToFog(message_metadata);
     auto metadata = message_metadata;
+
     if (is_to_fog) {
         if (method == HTTPMethod::GET && fog_get_requests_cache.doesKeyExists(uri)) {
             HTTPResponse res = fog_get_requests_cache.getEntry(uri);
@@ -141,7 +144,16 @@ MessagingComp::sendMessage(
 
         auto i_env = Singleton::Consume<I_Environment>::by<Messaging>();
         metadata.insertHeader("User-Agent", "Infinity Next (a7030abf93a4c13)");
-        metadata.insertHeaders(i_env->getCurrentHeadersMap());
+        if (!metadata.getTraceId().ok()) {
+            metadata.insertHeaders(i_env->getCurrentHeadersMap());
+        }
+
+        Maybe<string> trace_id = metadata.getTraceId();
+        if (trace_id.ok()) {
+            dbgTrace(D_TRACE_ID) << "Sending message to fog (trace ID: " << trace_id.unpack() << ")";
+        } else {
+            dbgTrace(D_TRACE_ID) << "Could not retrieve trace ID for fog message. Error: " << trace_id.getErr();
+        }
     }
 
     auto req = HTTPRequest::prepareRequest(

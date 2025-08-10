@@ -83,7 +83,6 @@ void WaapConfigApplication::load(cereal::JSONInputArchive& ar)
     assets_ids_aggregation.insert(m_assetId);
 }
 
-
 bool WaapConfigApplication::operator==(const WaapConfigApplication& other) const
 {
     const WaapConfigBase* configBase = this;

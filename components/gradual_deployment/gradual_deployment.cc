@@ -142,7 +142,7 @@ private:
         if (temp_params_list.size() == 1) {
             Maybe<IPAddr> maybe_ip = IPAddr::createIPAddr(temp_params_list[0]);
             if (!maybe_ip.ok()) return genError("Could not create IP address, " + maybe_ip.getErr());
-            IpAddress addr = move(ConvertToIpAddress(maybe_ip.unpackMove()));
+            IpAddress addr = ConvertToIpAddress(maybe_ip.unpackMove());
 
             return move(IPRange{.start = addr, .end = addr});
         }
@@ -157,11 +157,11 @@ private:
             IPAddr max_addr = maybe_ip_max.unpackMove();
             if (min_addr > max_addr) return genError("Could not create ip range - start greater then end");
 
-            IpAddress addr_min = move(ConvertToIpAddress(move(min_addr)));
-            IpAddress addr_max = move(ConvertToIpAddress(move(max_addr)));
+            IpAddress addr_min = ConvertToIpAddress(move(min_addr));
+            IpAddress addr_max = ConvertToIpAddress(move(max_addr));
             if (addr_max.ip_type != addr_min.ip_type) return genError("Range IP's type does not match");
 
-            return move(IPRange{.start = move(addr_min), .end = move(addr_max)});
+            return IPRange{.start = move(addr_min), .end = move(addr_max)};
         }
 
         return genError("Illegal range received: " + range);

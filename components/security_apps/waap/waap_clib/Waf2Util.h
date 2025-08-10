@@ -230,7 +230,7 @@ _IT escape_backslashes(_IT first, _IT last) {
     _IT src = first;
     _IT dst = first;
     _IT mark = first;
-    
+
     enum { STATE_COPY, STATE_ESCAPE, STATE_OCTAL, STATE_HEX } state = STATE_COPY;
     unsigned char accVal = 0;
     unsigned char digitsCount = 0;
@@ -1137,6 +1137,8 @@ namespace Util {
 
     bool containsInvalidUtf8(const std::string &payload);
 
+    bool containsPercentEncoding(const std::string &payload);
+
     // based on invalid utf-8 evasion from here: https://www.cgisecurity.com/lib/URLEmbeddedAttacks.html
     std::string unescapeInvalidUtf8(const std::string &text);
 
@@ -1144,6 +1146,8 @@ namespace Util {
     std::string unescapeBrokenUtf8(const std::string &text);
 
     bool containsCspReportPolicy(const std::string &payload);
+
+    bool testNoSQLKeySuspect(const std::string &key);
 
     bool testUrlBareUtf8Evasion(const std::string &line);
     bool testUrlBadUtf8Evasion(const std::string &line);

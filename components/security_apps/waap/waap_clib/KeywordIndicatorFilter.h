@@ -21,6 +21,7 @@
 #define CONFIDENCE_MIN_INTERVALS 5
 #define CONFIDENCE_THRESHOLD 0.8
 #define CONFIDENCE_WINDOW_INTERVAL std::chrono::minutes(120)
+#define CONFIDENCE_MAX_MEMORY_USAGE (40 * 1024 * 1024) // 40MB
 
 
 class KeywordIndicatorFilter : public IndicatorFilterBase

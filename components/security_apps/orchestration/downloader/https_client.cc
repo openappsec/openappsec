@@ -41,8 +41,13 @@ HTTPSClient::getFile(const URLParser &url, const string &out_file, bool auth_req
 
     if (!url.isOverSSL()) return genError("URL is not over SSL.");
 
-    if (getFileSSLDirect(url, out_file, token).ok()) return Maybe<void>();
-    dbgWarning(D_ORCHESTRATOR) << "Failed to get file over SSL directly. Trying indirectly.";
+    bool skip_direct_download = (url.getQuery().find("/resources/") != string::npos);
+    if (skip_direct_download) {
+        dbgWarning(D_ORCHESTRATOR) << "Resources path: " << url.getQuery() << ". Skipping direct download.";
+    } else {
+        if (getFileSSLDirect(url, out_file, token).ok()) return Maybe<void>();
+        dbgWarning(D_ORCHESTRATOR) << "Failed to get file over SSL directly. Trying indirectly.";
+    }
 
     if (getFileSSL(url, out_file, token).ok()) return Maybe<void>();
     dbgWarning(D_ORCHESTRATOR) << "Failed to get file over SSL. Trying via CURL (SSL).";

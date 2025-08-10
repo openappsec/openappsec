@@ -25,13 +25,22 @@ USE_DEBUG_FLAG(D_INTELLIGENCE);
 using namespace Intelligence;
 using namespace std;
 
+Invalidation::Invalidation()
+        :
+    source_id(genError<string>("")),
+    object_type(genError<string>("")),
+    invalidation_type(genError<string>("")),
+    listening_id(genError<string>("")),
+    registration_id(genError<string>(""))
+{}
+
 Invalidation::Invalidation(const string &class_value)
         :
-    source_id(genError<void>()),
-    object_type(genError<void>()),
-    invalidation_type(genError<void>()),
-    listening_id(genError<void>()),
-    registration_id(genError<void>())
+    source_id(genError<string>("")),
+    object_type(genError<string>("")),
+    invalidation_type(genError<string>("")),
+    listening_id(genError<string>("")),
+    registration_id(genError<string>(""))
 {
     setClassifier(ClassifierType::CLASS, class_value);
 }
@@ -72,10 +81,14 @@ Invalidation::report(I_Intelligence_IS_V2 *interface) const
 }
 
 Maybe<uint>
-Invalidation::startListening(I_Intelligence_IS_V2 *interface, const function<void(const Invalidation &)> &cb)
+Invalidation::startListening(
+    I_Intelligence_IS_V2 *interface,
+    const function<void(const Invalidation &)> &cb,
+    const string &AgentId
+)
 {
     registration_id = to_string(boost::uuids::random_generator()());
-    auto res = interface->registerInvalidation(*this, cb);
+    auto res = interface->registerInvalidation(*this, cb, AgentId);
     if (res.ok()) listening_id = *res;
     return res;
 }
@@ -243,6 +256,117 @@ Invalidation::matches(const Invalidation &other) const
     return true;
 }
 
+void
+Invalidation::serialize(cereal::JSONInputArchive &ar)
+{
+    std::string class_ = "";
+    std::string category = "";
+    std::string family = "";
+    std::string group = "";
+    std::string order = "";
+    std::string kind = "";
+    std::string object_type_;
+    std::string invalidation_type_;
+    std::string source_id_;
+    uint listening_id_;
+    std::string registration_id_;
+    
+    try {
+        ar(cereal::make_nvp("class", class_));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("category", category));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("family", family));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("group", group));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("order", order));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("kind", kind));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("mainAttributes", main_attributes));
+        ar(cereal::make_nvp("attributes", attributes));
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("objectType", object_type_));
+        auto it = stringToObjectTypeMap.find(object_type_);
+        if (it != stringToObjectTypeMap.end()) {
+            object_type = it->second;
+        } else {
+            throw std::invalid_argument("Invalid string for ObjectType: " + object_type_);
+        }
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("sourceId", source_id_));
+        source_id = source_id_;
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("invalidationRegistrationId", registration_id_));
+        registration_id = registration_id_;
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("invalidationType", invalidation_type_));
+        auto it = stringToInvalidationTypeMap.find(invalidation_type_);
+        if (it != stringToInvalidationTypeMap.end()) {
+            invalidation_type = it->second;
+        } else {
+            throw std::invalid_argument("Invalid string for InvalidationType: " + invalidation_type_);
+        }
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
+        ar(cereal::make_nvp("listeningId", listening_id_));
+        listening_id = listening_id_;
+    } catch (const cereal::Exception &e) {
+        dbgError(D_INTELLIGENCE) << e.what();
+    }
+
+    classifiers[ClassifierType::CLASS] = class_;
+    classifiers[ClassifierType::CATEGORY] = category;
+    classifiers[ClassifierType::FAMILY] = family;
+    classifiers[ClassifierType::GROUP] = group;
+    classifiers[ClassifierType::ORDER] = order;
+    classifiers[ClassifierType::KIND] = kind;
+}
+
 Invalidation &
 Invalidation::addAttr(const IpAttributes &attr)
 {
@@ -257,7 +381,7 @@ Invalidation::addMainAttr(const StrAttributes &attr)
     return *this;
 }
 
-Maybe<string, void>
+Maybe<string>
 Invalidation::getRegistrationID() const{
     return registration_id;
 }

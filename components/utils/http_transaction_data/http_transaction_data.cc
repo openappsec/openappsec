@@ -220,6 +220,18 @@ HttpTransactionData::createTransactionData(const Buffer &transaction_raw_data)
         dbgTrace(D_NGINX_ATTACHMENT) << "Successfully deserialized parsed URI: " << ngx_parsed_uri.unpack();
     }
 
+    // Try to read waf_tag if available
+    string waf_tag;
+    if (cur_pos < transaction_raw_data.size()) {
+        Maybe<string> maybe_waf_tag = deserializeStrParam(transaction_raw_data, cur_pos);
+        if (maybe_waf_tag.ok()) {
+            waf_tag = maybe_waf_tag.unpackMove();
+            dbgTrace(D_NGINX_ATTACHMENT) << "Successfully deserialized waf_tag: " << waf_tag;
+        }
+    } else {
+        dbgTrace(D_NGINX_ATTACHMENT) << "No waf_tag to deserialize, using empty string";
+    }
+
     // Fail if after parsing exact number of items, we didn't exactly consume whole buffer
     if (cur_pos != transaction_raw_data.size()) {
         dbgWarning(D_NGINX_ATTACHMENT) << "Nothing to deserialize, but raw data still remain";
@@ -239,6 +251,7 @@ HttpTransactionData::createTransactionData(const Buffer &transaction_raw_data)
         client_port.unpackMove()
     );
 
+    transaction.setWafTag(waf_tag);
     return transaction;
 }
 

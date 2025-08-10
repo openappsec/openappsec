@@ -9,6 +9,7 @@
 #include "singleton.h"
 #include "i_agent_details.h"
 #include "i_time_get.h"
+#include "i_environment.h"
 
 class MessageProxySettings
 {
@@ -55,14 +56,27 @@ private:
     uint16_t proxy_port = 0;
 };
 
-class MessageMetadata : Singleton::Consume<I_TimeGet>
+class MessageMetadata : Singleton::Consume<I_TimeGet>, Singleton::Consume<I_Environment>
 {
 public:
-    inline MessageMetadata();
+    inline MessageMetadata(bool immediate_tracing = false);
 
-    MessageMetadata(const std::string &_host_name, uint16_t _port_num, bool _buffer = false, bool _fog = false) :
-        host_name(_host_name), port_num(_port_num), should_buffer(_buffer), is_to_fog(_fog)
-    {}
+    MessageMetadata(
+        const std::string &_host_name,
+        uint16_t _port_num,
+        bool _buffer = false,
+        bool _fog = false,
+        bool immediate_tracing = false
+    ) :
+        host_name(_host_name),
+        port_num(_port_num),
+        should_buffer(_buffer),
+        is_to_fog(_fog)
+    {
+        if (immediate_tracing && Singleton::exists<I_Environment>()) {
+            insertHeaders(Singleton::Consume<I_Environment>::by<MessageMetadata>()->getCurrentHeadersMap());
+        }
+    }
 
     MessageMetadata(
         std::string _host_name,
@@ -70,7 +84,8 @@ public:
         Flags<MessageConnectionConfig> _conn_flags,
         bool _should_buffer = false,
         bool _is_to_fog = false,
-        bool _should_suspend = true
+        bool _should_suspend = true,
+        bool immediate_tracing = false
     ) :
         host_name(_host_name),
         port_num(_port_num),
@@ -79,7 +94,11 @@ public:
         is_to_fog(_is_to_fog),
         should_send_access_token(true),
         should_suspend(_should_suspend)
-    {}
+    {
+        if (immediate_tracing && Singleton::exists<I_Environment>()) {
+            insertHeaders(Singleton::Consume<I_Environment>::by<MessageMetadata>()->getCurrentHeadersMap());
+        }
+    }
 
     const bool &
     shouldSendAccessToken() const
@@ -133,6 +152,14 @@ public:
     getHeaders() const
     {
         return headers;
+    }
+
+    Maybe<std::string>
+    getTraceId() const
+    {
+        auto trace_id = headers.find("X-Trace-Id");
+        if (trace_id != headers.end()) return trace_id->second;
+        return genError("Trace ID not found");
     }
 
     std::string

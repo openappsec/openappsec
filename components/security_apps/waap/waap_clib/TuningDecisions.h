@@ -60,6 +60,7 @@ private:
             MessageMetadata req_md(getSharedStorageHost(), 80);
             req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
             req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             auto req_status = messaging->sendSyncMessage(
                 method,
                 uri,
@@ -69,11 +70,14 @@ private:
             );
             return req_status.ok();
         }
+        MessageMetadata req_md;
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_FOG_CONN);
         auto req_status = messaging->sendSyncMessage(
             method,
             uri,
             obj,
-            MessageCategory::GENERIC
+            MessageCategory::GENERIC,
+            req_md
         );
         return req_status.ok();
     }

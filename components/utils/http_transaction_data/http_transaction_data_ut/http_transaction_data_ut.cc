@@ -12,7 +12,7 @@ Buffer
 encodeInt16(uint16_t val)
 {
     vector<u_char> raw_data(reinterpret_cast<u_char*>(&val), reinterpret_cast<u_char*>(&val) + sizeof(uint16_t));
-    return move(Buffer(raw_data));
+    return Buffer(raw_data);
 }
 
 class HttpTransactionTest : public Test

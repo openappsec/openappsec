@@ -209,6 +209,7 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
     new_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
     new_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     new_config_req_md.setSuspension(false);
+    new_config_req_md.setShouldSendAccessToken(false);
     auto res = messaging->sendSyncMessage(
         HTTPMethod::POST,
         "/set-new-configuration",

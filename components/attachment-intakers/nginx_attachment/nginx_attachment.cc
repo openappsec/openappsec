@@ -36,6 +36,7 @@
 
 #include "nginx_attachment_config.h"
 #include "nginx_attachment_opaque.h"
+#include "generic_rulebase/evaluators/trigger_eval.h"
 #include "nginx_parser.h"
 #include "i_instance_awareness.h"
 #include "common.h"
@@ -130,6 +131,7 @@ class NginxAttachment::Impl
     Singleton::Provide<I_StaticResourcesHandler>::From<NginxAttachment>
 {
     static constexpr auto INSPECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    static constexpr auto LIMIT_RESPONSE_HEADERS = ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS;
     static constexpr auto ACCEPT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
     static constexpr auto DROP = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
     static constexpr auto INJECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
@@ -1146,10 +1148,18 @@ private:
     handleCustomWebResponse(
         SharedMemoryIPC *ipc,
         vector<const char *> &verdict_data,
-        vector<uint16_t> &verdict_data_sizes)
+        vector<uint16_t> &verdict_data_sizes,
+        string web_user_response_id)
     {
         ngx_http_cp_web_response_data_t web_response_data;
-
+        ScopedContext ctx;
+        if (web_user_response_id != "") {
+            dbgTrace(D_NGINX_ATTACHMENT)
+            << "web user response ID registered in contex: "
+            << web_user_response_id;
+            set<string> triggers_set{web_user_response_id};
+            ctx.registerValue<set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
+        }
         WebTriggerConf web_trigger_conf = getConfigurationWithDefault<WebTriggerConf>(
             WebTriggerConf::default_trigger_conf,
             "rulebase",
@@ -1271,7 +1281,7 @@ private:
         if (verdict.getVerdict() == DROP) {
             nginx_attachment_event.addTrafficVerdictCounter(nginxAttachmentEvent::trafficVerdict::DROP);
             verdict_to_send.modification_count = 1;
-            return handleCustomWebResponse(ipc, verdict_fragments, fragments_sizes);
+            return handleCustomWebResponse(ipc, verdict_fragments, fragments_sizes, verdict.getWebUserResponseID());
         }
 
         if (verdict.getVerdict() == ACCEPT) {
@@ -1497,11 +1507,17 @@ private:
         opaque.activateContext();
 
         FilterVerdict verdict = handleChunkedData(*chunked_data_type, inspection_data, opaque);
-
         bool is_header =
             *chunked_data_type == ChunkType::REQUEST_HEADER  ||
             *chunked_data_type == ChunkType::RESPONSE_HEADER ||
             *chunked_data_type == ChunkType::CONTENT_LENGTH;
+
+        if (verdict.getVerdict() == LIMIT_RESPONSE_HEADERS) {
+            handleVerdictResponse(verdict, attachment_ipc, transaction_data->session_id, is_header);
+            popData(attachment_ipc);
+            verdict = FilterVerdict(INSPECT);
+        }
+
         handleVerdictResponse(verdict, attachment_ipc, transaction_data->session_id, is_header);
 
         bool is_final_verdict = verdict.getVerdict() == ACCEPT ||
@@ -1614,6 +1630,8 @@ private:
                 return "INJECT";
             case INSPECT:
                 return "INSPECT";
+            case LIMIT_RESPONSE_HEADERS:
+                return "LIMIT_RESPONSE_HEADERS";
             case IRRELEVANT:
                 return "IRRELEVANT";
             case RECONF:

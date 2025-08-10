@@ -29,6 +29,7 @@ namespace Intelligence {
 
 class Invalidation;
 class Response;
+class TimeRangeInvalidations;
 
 } // namespace Intelligence
 
@@ -39,7 +40,8 @@ public:
     virtual bool isIntelligenceHealthy() const = 0;
     virtual Maybe<uint> registerInvalidation(
         const Intelligence::Invalidation &invalidation,
-        const std::function<void(const Intelligence::Invalidation &)> &callback
+        const std::function<void(const Intelligence::Invalidation &)> &callback,
+        const std::string &AgentId = ""
     ) = 0;
     virtual void unregisterInvalidation(uint id) = 0;
     virtual Maybe<Intelligence::Response>
@@ -57,6 +59,10 @@ public:
         bool is_pretty,
         bool is_proxy,
         const MessageMetadata &req_md
+    ) const = 0;
+
+    virtual Maybe<std::vector<Intelligence::Invalidation>> getInvalidations(
+        Intelligence::TimeRangeInvalidations request
     ) const = 0;
 
     template<typename Data>

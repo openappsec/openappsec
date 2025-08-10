@@ -50,7 +50,7 @@ static const string ip_proto_type_name = "IP protocol";
 
 static const unordered_map<string, MatchQuery::StaticKeys> string_to_key = {
     { "sourceIP", MatchQuery::StaticKeys::SrcIpAddress },
-    { "sourceIpAddr", MatchQuery::StaticKeys::SrcIpAddress },
+    { "sourceIdentifier", MatchQuery::StaticKeys::SrcIpAddress },
     { "destinationIP", MatchQuery::StaticKeys::DstIpAddress },
     { "destinationIpAddr", MatchQuery::StaticKeys::DstIpAddress },
     { "ipAddress", MatchQuery::StaticKeys::IpAddress },
@@ -319,7 +319,7 @@ MatchQuery::matchAttributes(
         match = matchAttributesString(values);
         dbgTrace(D_RULEBASE_CONFIG) << "Match result for string: " << match;
     }
-
+    dbgTrace(D_RULEBASE_CONFIG) << "Should negate match? " << negate;
     return negate ? !match : match;
 }
 

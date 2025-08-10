@@ -63,6 +63,28 @@ TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequestProxied) {
     EXPECT_EQ(*query.genJson(), expected);
 }
 
+TEST(IntelligenceQueryTestV2, genJsonPrettySingleRequestExternalError) {
+    QueryRequest request(Condition::EQUALS, "phase", "testing", true, AttributeKeyType::MAIN, true);
+    vector<QueryRequest> requests = {request};
+    Intelligence::IntelligenceRequest query(requests, true, false, true, MessageMetadata("", 0));
+
+    std::string expected = "{\n"
+        "    \"queryTypes\": {\n"
+        "        \"proxyToCloud\": true\n"
+        "    },\n"
+        "    \"limit\": 20,\n"
+        "    \"fullResponse\": true,\n"
+        "    \"externalSourcesErrorStatus\": true,\n"
+        "    \"query\": {\n"
+        "        \"operator\": \"equals\",\n"
+        "        \"key\": \"mainAttributes.phase\",\n"
+        "        \"value\": \"testing\"\n"
+        "    }\n"
+        "}";
+
+    EXPECT_EQ(*query.genJson(), expected);
+}
+
 TEST(IntelligenceQueryTestV2, genJsonUnprettySingleRequest) {
     QueryRequest request(Condition::EQUALS, "phase", "testing", true);
     vector<QueryRequest> requests = {request};

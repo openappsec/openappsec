@@ -241,3 +241,9 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
         archive_in.setNextName(nullptr);
     }
 }
+
+void
+ReportTriggerConf::load(cereal::JSONInputArchive& archive_in)
+{
+    parseJSONKey<string>("triggerName", name, archive_in);
+}

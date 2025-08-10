@@ -29,6 +29,8 @@
 #include "pm_hook.h"
 #include "i_generic_rulebase.h"
 
+#define DEFAULT_IPS_YIELD_COUNT 500
+
 /// \namespace IPSSignatureSubTypes
 /// \brief Namespace containing subtypes for IPS signatures.
 namespace IPSSignatureSubTypes
@@ -342,10 +344,17 @@ public:
         return is_loaded;
     }
 
+    static void
+    setYieldCounter(int new_yield_cnt)
+    {
+        yield_on_load_cnt = new_yield_cnt;
+    }
+
 private:
     IPSSignatureMetaData metadata;
     std::shared_ptr<BaseSignature> rule;
     bool is_loaded;
+    static int yield_on_load_cnt;
 };
 
 /// \class SignatureAndAction

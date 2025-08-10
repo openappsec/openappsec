@@ -60,7 +60,12 @@ public:
     {
         IPSHelper::has_deobfuscation = true;
         generic_rulebase.preload();
+        env.preload();
+        env.init();
+
         EXPECT_CALL(logs, getCurrentLogId()).Times(AnyNumber());
+        auto err = genError("not coroutine");
+        EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(Maybe<I_MainLoop::RoutineID>(err)));
         ON_CALL(table, getState(_)).WillByDefault(Return(&ips_state));
         {
             stringstream ss;
@@ -123,9 +128,6 @@ public:
     void
     loadExceptions()
     {
-        env.preload();
-        env.init();
-
         BasicRuleConfig::preload();
         registerExpectedConfiguration<ParameterException>("rulebase", "exception");
 
@@ -195,6 +197,7 @@ public:
     void
     load(const IPSSignaturesResource &policy, const string &severity, const string &confidence)
     {
+        Singleton::Consume<I_Environment>::from(env)->registerValue<bool>("Is Async Config Load", false);
         setResource(policy, "IPS", "protections");
         stringstream ss;
         ss << "{";

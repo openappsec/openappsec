@@ -145,7 +145,8 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
         "  ],\n"
         "  \"status\": \"done\",\n"
         "  \"totalNumAssets\": 2,\n"
-        "  \"cursor\": \"start\"\n"
+        "  \"cursor\": \"start\",\n"
+        "  \"externalSourcesErrorStatus\": []\n"
         "}\n"
     );
 
@@ -159,6 +160,8 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
     EXPECT_EQ(obj2.getAmountOfAssets(), 2u);
     EXPECT_EQ(obj.getResponseStatus(), ResponseStatus::DONE);
     EXPECT_EQ(obj2.getResponseStatus(), ResponseStatus::DONE);
+    EXPECT_TRUE(obj.getExternalSourcesErrorStatus().empty());
+    EXPECT_TRUE(obj2.getExternalSourcesErrorStatus().empty());
     EXPECT_EQ(obj.getData().begin()->getAssetSchemaVersion(), 1u);
     EXPECT_EQ(obj.getData().begin()->getAssetType(), "workload-cloud-ip");
     EXPECT_EQ(obj.getData().begin()->getAssetTypeSchemaVersion(), 1u);
@@ -215,6 +218,86 @@ TEST(QueryResponseTestV2, QueryResponseTestV2)
     asset_sources_it++;
     EXPECT_EQ(asset_sources_it->getData().toString(), "white");
     EXPECT_EQ(asset_sources_it->getData1().toString(), "Max");
+}
+
+TEST(QueryResponseTestV2, ExternalSourcesErrorStatusTestV2)
+{
+    DataString data;
+    IntelligenceQueryResponseT<stringData1> obj;
+    string string_attribute(
+        "{\n"
+        "  \"assetCollections\": [\n"
+        "    {\n"
+        "      \"schemaVersion\": 1,\n"
+        "      \"assetType\": \"workload-cloud-ip\",\n"
+        "      \"assetTypeSchemaVersion\": 1,\n"
+        "      \"permissionType\": \"tenant\",\n"
+        "      \"permissionGroupId\": \"some-group-id\",\n"
+        "      \"name\": \"[1.1.1.1]\",\n"
+        "      \"class\": \"workload\",\n"
+        "      \"category\": \"cloud\",\n"
+        "      \"family\": \"ip\",\n"
+        "      \"group\": \"\",\n"
+        "      \"order\": \"\",\n"
+        "      \"kind\": \"\",\n"
+        "      \"mainAttributes\": {\n"
+        "        \"team\": \"hapoel\"\n"
+        "      },\n"
+        "      \"sources\": [\n"
+        "        {\n"
+        "          \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+        "          \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+        "          \"ttl\": 120,\n"
+        "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+        "          \"confidence\": 500,\n"
+        "          \"attributes\": {\n"
+        "            \"color\": \"red\",\n"
+        "            \"user\": \"Omry\",\n"
+        "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+        "          }\n"
+        "        }\n"
+        "      ]\n"
+        "    }\n"
+        "  ],\n"
+        "  \"status\": \"done\",\n"
+        "  \"totalNumAssets\": 1,\n"
+        "  \"cursor\": \"start\",\n"
+        "  \"externalSourcesErrorStatus\": [\n"
+        "    {\n"
+        "      \"sourceID\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+        "      \"sourceName\": \"test-source-1\",\n"
+        "      \"statusCode\": 500,\n"
+        "      \"errorMessage\": \"Internal server error\"\n"
+        "    },\n"
+        "    {\n"
+        "      \"sourceID\": \"a1b2c3d4-5678-9abc-def0-123456789abc\",\n"
+        "      \"sourceName\": \"test-source-2\",\n"
+        "      \"statusCode\": 404,\n"
+        "      \"errorMessage\": \"Not found\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"
+    );
+
+    stringstream ss(string_attribute);
+    {
+        cereal::JSONInputArchive ar(ss);
+        obj.serialize(ar);
+    }
+
+    const auto& errors = obj.getExternalSourcesErrorStatus();
+    EXPECT_EQ(errors.size(), 2u);
+
+    EXPECT_EQ(errors[0].getSourceID(), "54d7de10-7b2e-4505-955b-cc2c2c7aaa00");
+    EXPECT_EQ(errors[0].getSourceName(), "test-source-1");
+    EXPECT_EQ(errors[0].getStatusCode(), 500u);
+    EXPECT_EQ(errors[0].getErrorMessage(), "Internal server error");
+
+    EXPECT_EQ(errors[1].getSourceID(), "a1b2c3d4-5678-9abc-def0-123456789abc");
+    EXPECT_EQ(errors[1].getSourceName(), "test-source-2");
+    EXPECT_EQ(errors[1].getStatusCode(), 404u);
+    EXPECT_EQ(errors[1].getErrorMessage(), "Not found");
 }
 
 TEST(QueryResponseTestV2, MainAttributesTestV2)

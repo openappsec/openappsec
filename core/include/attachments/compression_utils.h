@@ -45,7 +45,8 @@ typedef enum CompressionType
 {
     NO_COMPRESSION,
     GZIP,
-    ZLIB
+    ZLIB,
+    BROTLI
 } CompressionType;
 
 typedef struct CompressionResult

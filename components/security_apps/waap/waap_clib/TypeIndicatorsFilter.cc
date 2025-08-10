@@ -128,6 +128,8 @@ void TypeIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapParam
         std::to_string(TYPE_FILTER_CONFIDENCE_THRESHOLD)));
     std::string learnPermanentlyStr = pParams->getParamVal("typeIndicators.learnPermanently", "true");
     params.learnPermanently = !boost::iequals(learnPermanentlyStr, "false");
+    params.maxMemoryUsage = std::stoul(pParams->getParamVal("typeIndicators.maxMemoryUsage",
+        std::to_string(TYPE_FILTER_CONFIDENCE_MAX_MEMORY_USAGE)));
 
     std::string remoteSyncStr = pParams->getParamVal("remoteSync", "true");
     bool syncEnabled = !boost::iequals(remoteSyncStr, "false");

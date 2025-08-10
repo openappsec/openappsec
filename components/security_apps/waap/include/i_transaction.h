@@ -84,6 +84,7 @@ public:
     virtual const std::string getUri() const = 0;
     virtual const std::string getUriStr() const = 0;
     virtual const std::string& getSourceIdentifier() const = 0;
+    virtual const std::string getCurrentWebUserResponse() = 0;
     virtual double getScore() const = 0;
     virtual double getOtherModelScore() const = 0;
     virtual const std::vector<double> getScoreArray() const = 0;
@@ -130,6 +131,7 @@ public:
     virtual void add_request_body_chunk(const char* data, int data_len) = 0;
     virtual void end_request_body() = 0;
     virtual void end_request() = 0;
+    virtual bool shouldLimitResponseHeadersInspection() = 0;
     // Response
     virtual void start_response(int response_status, int http_version) = 0;
     virtual void start_response_hdrs() = 0;
@@ -145,4 +147,7 @@ public:
     virtual ReportIS::Severity computeEventSeverityFromDecision() const = 0;
     virtual void finish() = 0;
     virtual Waf2TransactionFlags &getTransactionFlags() = 0;
+
+    virtual void setTemperatureDetected(bool detected) = 0;
+    virtual bool wasTemperatureDetected() const = 0;
 };

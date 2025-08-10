@@ -265,7 +265,7 @@ IpAddrToString(const IpAddress &address)
         sa6.sin6_addr = address.ip.ipv6;
 
         inet_ntop(AF_INET6, &(sa6.sin6_addr), ip_str, INET6_ADDRSTRLEN);
-        return move(string(ip_str));
+        return string(ip_str);
     }
 
     char ip_str[INET_ADDRSTRLEN];
@@ -275,7 +275,7 @@ IpAddrToString(const IpAddress &address)
     sa.sin_addr = address.ip.ipv4;
 
     inet_ntop(AF_INET, &(sa.sin_addr), ip_str, INET_ADDRSTRLEN);
-    return move(string(ip_str));
+    return string(ip_str);
 }
 
 IpAddress

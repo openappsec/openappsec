@@ -264,3 +264,51 @@ TEST_F(TestConnectionComp, testEstablishNewProxyConnection)
 
     auto maybe_connection = i_conn->establishConnection(conn_metadata, MessageCategory::LOG);
 }
+
+TEST_F(TestConnectionComp, testSendRequestWithOneTimeFogConnection)
+{
+    Flags<MessageConnectionConfig> conn_flags;
+    conn_flags.setFlag(MessageConnectionConfig::UNSECURE_CONN);
+    conn_flags.setFlag(MessageConnectionConfig::ONE_TIME_FOG_CONN);
+    MessageMetadata conn_metadata(fog_addr, fog_port, conn_flags);
+
+    auto maybe_connection = i_conn->establishConnection(conn_metadata, MessageCategory::LOG);
+    ASSERT_TRUE(maybe_connection.ok());
+    auto conn = maybe_connection.unpack();
+
+    auto req = HTTPRequest::prepareRequest(conn, HTTPMethod::POST, "/test", conn_metadata.getHeaders(), "test-body");
+    ASSERT_TRUE(req.ok());
+
+    EXPECT_CALL(mock_mainloop, yield(A<std::chrono::microseconds>()))
+        .WillOnce(
+            InvokeWithoutArgs(
+                [&]() {
+                    cerr << "accepting socket" << endl;
+                    dummy_socket.acceptSocket();
+                    dummy_socket.writeToSocket("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmy-test");
+                }
+            )
+        ).WillRepeatedly(Return());
+
+    EXPECT_CALL(mock_timer, getMonotonicTime())
+        .WillRepeatedly(Invoke([]() { static int j = 0; return chrono::microseconds(++j * 10); }));
+
+    auto maybe_response = i_conn->sendRequest(conn, *req);
+    if (!maybe_response.ok()) {
+        cout << "Error: " << maybe_response.getErr().toString() << endl;
+    }
+    ASSERT_TRUE(maybe_response.ok());
+    EXPECT_EQ((*maybe_response).getBody(), "my-test");
+
+    string expected_msg =
+        "POST /test HTTP/1.1\r\n"
+        "Accept-Encoding: identity\r\n"
+        "Authorization: Bearer accesstoken\r\n"
+        "Connection: keep-alive\r\n"
+        "Content-Length: 9\r\n"
+        "Content-type: application/json\r\n"
+        "Host: 127.0.0.1\r\n"
+        "\r\n"
+        "test-body";
+    EXPECT_EQ(dummy_socket.readFromSocket(), expected_msg);
+}

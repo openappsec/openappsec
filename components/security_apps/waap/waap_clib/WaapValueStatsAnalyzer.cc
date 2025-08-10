@@ -229,6 +229,7 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
                 case '(':
                 case ')':
                 case '|':
+                case '+':
                     break;
                 default:
                     // Only alphanumeric characters and characters listed above are allowed, anything else disables

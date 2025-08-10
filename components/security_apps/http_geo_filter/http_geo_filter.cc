@@ -96,6 +96,7 @@ public:
         if (ignore_source_ip){
             dbgDebug(D_GEO_FILTER) << "Geo protection ignoring source ip: " << source_ip;
         } else {
+            dbgTrace(D_GEO_FILTER) << "Geo protection source ip: " << source_ip;
             ip_set.insert(convertIpAddrToString(maybe_source_ip.unpack()));
         }
 
@@ -335,6 +336,14 @@ private:
         ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
         I_GeoLocation *i_geo_location = Singleton::Consume<I_GeoLocation>::by<HttpGeoFilter>();
         EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data;
+        auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
+        string source_id;
+        auto maybe_source_id = env->get<std::string>(HttpTransactionData::source_identifier);
+        if (!maybe_source_id.ok()) {
+            dbgTrace(D_GEO_FILTER) << "failed to get source identifier from env";
+        } else {
+            source_id = maybe_source_id.unpack();
+        }
 
         for (const std::string& source : sources) {
 
@@ -366,11 +375,15 @@ private:
             << country_code
             << ", country name: "
             << country_name
-            << ", source ip address: "
-            << source;
+            << ", ip address: "
+            << source
+            << ", source identifier: "
+            << source_id;
+
 
             unordered_map<string, set<string>> exception_value_country_code = {
-                {"countryCode", {country_code}}
+                {"countryCode", {country_code}},
+                {"sourceIdentifier", {source_id}}
             };
             auto matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_code, geo_location_data);
             if (matched_behavior_maybe.ok()) {
@@ -382,7 +395,8 @@ private:
             }
 
             unordered_map<string, set<string>> exception_value_country_name = {
-                {"countryName", {country_name}}
+                {"countryName", {country_name}},
+                {"sourceIdentifier", {source_id}}
             };
             matched_behavior_maybe = getBehaviorsVerdict(exception_value_country_name, geo_location_data);
             if (matched_behavior_maybe.ok()) {

@@ -31,16 +31,6 @@ class LogGen
     Singleton::Consume<I_Environment>
 {
 public:
-    template <typename Trigger, typename ...Args>
-    LogGen(
-        const Trigger &trigger,
-        const std::string &title,
-        Args ...args)
-            :
-        LogGen(trigger(title, std::forward<Args>(args)...))
-    {
-    }
-
     template <typename ...Args>
     LogGen(
         const std::string &title,

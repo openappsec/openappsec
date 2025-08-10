@@ -70,6 +70,12 @@ NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_da
         ctx.registerValue(HttpTransactionData::uri_query_decoded, decoded_url.substr(question_mark_location + 1));
     }
     ctx.registerValue(HttpTransactionData::uri_path_decoded, decoded_url);
+
+    // Register waf_tag from transaction data if available
+    const std::string& waf_tag = transaction_data.getWafTag();
+    if (!waf_tag.empty()) {
+        ctx.registerValue(HttpTransactionData::waf_tag_ctx, waf_tag);
+    }
 }
 
 NginxAttachmentOpaque::~NginxAttachmentOpaque()

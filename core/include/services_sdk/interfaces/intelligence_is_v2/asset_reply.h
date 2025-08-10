@@ -70,6 +70,31 @@ private:
     std::vector<SerializableAssetSource<UserSerializableReplyAttr>> sources;
 };
 
+class ExternalSourceError
+{
+public:
+    ExternalSourceError() {}
+
+    const std::string & getSourceID() const { return source_id; }
+    const std::string & getSourceName() const { return source_name; }
+    uint getStatusCode() const { return status_code; }
+    const std::string & getErrorMessage() const { return error_message; }
+
+    void setSourceID(const std::string &id) { source_id = id; }
+    void setSourceName(const std::string &name) { source_name = name; }
+    void setStatusCode(uint code) { status_code = code; }
+    void setErrorMessage(const std::string &message) { error_message = message; }
+
+    template<class Archive>
+    void serialize(Archive &ar);
+
+private:
+    std::string source_id = "";
+    std::string source_name = "";
+    uint status_code = 0;
+    std::string error_message = "";
+};
+
 class IntelligenceQueryResponse
 {
 public:
@@ -83,6 +108,7 @@ public:
     Intelligence_IS_V2::ResponseStatus getResponseStatus() const { return status; }
     const std::string & getCursor() const { return cursor; }
     uint getAmountOfAssets() const { return total_num_assets; }
+    const std::vector<ExternalSourceError> & getExternalSourcesErrorStatus() const;
     bool isValidInBulk() const { return !partial_fail_in_bulk; }
     void setFailInBulk() { partial_fail_in_bulk = true; }
 
@@ -91,6 +117,7 @@ private:
     uint total_num_assets = 0;
     std::string cursor = "";
     bool partial_fail_in_bulk = false;
+    std::vector<ExternalSourceError> external_sources_errors;
 };
 
 template <typename UserSerializableReplyAttr>

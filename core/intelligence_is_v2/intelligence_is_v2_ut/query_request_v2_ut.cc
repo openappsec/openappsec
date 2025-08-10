@@ -87,13 +87,14 @@ TEST(QueryRequestTestV2, QueryTest)
     range2.push_back("224.11.10.16");
     range2.push_back("224.11.10.31");
 
-    QueryRequest request3(Condition::RANGE, "ipv4AddressesRange", range1, true);
+    QueryRequest request3(Condition::RANGE, "ipv4AddressesRange", range1, true, AttributeKeyType::MAIN, true);
     request3.addCondition(Condition::RANGE, "ipv4AddressesRange", range2);
 
     string output_json3=
     "{\n"
     "    \"limit\": 20,\n"
     "    \"fullResponse\": true,\n"
+    "    \"externalSourcesErrorStatus\": true,\n"
     "    \"query\": {\n"
     "        \"operator\": \"and\",\n"
     "        \"operands\": [\n"

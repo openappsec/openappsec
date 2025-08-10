@@ -8,7 +8,7 @@ link_directories(${CMAKE_BINARY_DIR}/core)
 link_directories(${CMAKE_BINARY_DIR}/core/compression)
 
 SET(EXECUTABLE_NAME "nginx_conf_collector_bin")
-add_executable(${EXECUTABLE_NAME} nginx_conf_collector.cc)
+add_executable(${EXECUTABLE_NAME} nginx_conf_collector.cc fog_connection.cc)
 target_compile_definitions(${EXECUTABLE_NAME} PRIVATE "NGINX_CONF_COLLECTOR_VERSION=\"$ENV{CI_PIPELINE_ID}\"")
 
 target_link_libraries(${EXECUTABLE_NAME}
@@ -26,6 +26,7 @@ target_link_libraries(${EXECUTABLE_NAME}
         report
         config
         environment
+        curl_http_client
         singleton
         rest
         boost_context

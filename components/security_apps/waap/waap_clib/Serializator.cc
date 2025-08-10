@@ -29,7 +29,7 @@
 #include "compression_utils.h"
 #include "config.h"
 
-USE_DEBUG_FLAG(D_WAAP_CONFIDENCE_CALCULATOR);
+USE_DEBUG_FLAG(D_WAAP_SERIALIZE);
 
 namespace ch = std::chrono;
 using namespace std;
@@ -52,6 +52,22 @@ isGZipped(const string &stream)
     return unsinged_stream[0] == 0x1f && unsinged_stream[1] == 0x8b;
 }
 
+void yieldIfPossible(const string& func, int line)
+{
+    // Check if we are in the main loop
+    if (Singleton::exists<I_MainLoop>() &&
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->getCurrentRoutineId().ok())
+    {
+        // If we are not in the main loop, yield to allow other routines to run
+        // This is important for the main loop to be able to process other events
+        // and avoid blocking the entire system.
+        dbgTrace(D_WAAP_SERIALIZE) << "Yielding to main loop from: " << func << ":" << line;
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+    }
+}
+
+#define YIELD_IF_POSSIBLE() yieldIfPossible(__FUNCTION__, __LINE__)
+
 bool RestGetFile::loadJson(const string& json)
 {
     string json_str;
@@ -61,6 +77,9 @@ bool RestGetFile::loadJson(const string& json)
     {
         return ClientRest::loadJson(json_str);
     }
+    YIELD_IF_POSSIBLE();
+    dbgTrace(D_WAAP_SERIALIZE) << "before decompression in loadJson, data size: "
+        << json_str.size() << " bytes";
     auto compression_stream = initCompressionStream();
     DecompressionResult res = decompressData(
         compression_stream,
@@ -75,33 +94,81 @@ bool RestGetFile::loadJson(const string& json)
     }
 
     finiCompressionStream(compression_stream);
+    YIELD_IF_POSSIBLE();
+    dbgTrace(D_WAAP_SERIALIZE) << "Yielded after decompression in loadJson, decompressed size: "
+        << json_str.size() << " bytes";
+
     return ClientRest::loadJson(json_str);
 }
 
 Maybe<string> RestGetFile::genJson() const
 {
     Maybe<string> json = ClientRest::genJson();
+    YIELD_IF_POSSIBLE();
+
     if (json.ok())
     {
         string data = json.unpack();
+
+        // Get chunk size from profile settings for compression chunks
+        const size_t COMPRESSED_CHUNK_SIZE = static_cast<size_t>(
+            getProfileAgentSettingWithDefault<uint>(64 * 1024, "appsecLearningSettings.compressionChunkSize"));
+
         auto compression_stream = initCompressionStream();
-        CompressionResult res = compressData(
-            compression_stream,
-            CompressionType::GZIP,
-            data.size(),
-            reinterpret_cast<const unsigned char *>(data.c_str()),
-            true);
+        size_t offset = 0;
+        std::vector<unsigned char> compressed_data;
+        bool ok = true;
+        size_t chunk_count = 0;
+
+        // Process data in chunks for compression
+        while (offset < data.size()) {
+            size_t chunk_size = std::min(COMPRESSED_CHUNK_SIZE, data.size() - offset);
+            bool is_last = (offset + chunk_size >= data.size());
+            CompressionResult chunk_res = compressData(
+                compression_stream,
+                CompressionType::GZIP,
+                static_cast<uint32_t>(chunk_size),
+                reinterpret_cast<const unsigned char *>(data.c_str() + offset),
+                is_last ? 1 : 0
+            );
+
+            if (!chunk_res.ok) {
+                ok = false;
+                break;
+            }
+
+            if (chunk_res.output && chunk_res.num_output_bytes > 0) {
+                compressed_data.insert(
+                    compressed_data.end(),
+                    chunk_res.output,
+                    chunk_res.output + chunk_res.num_output_bytes
+                );
+                free(chunk_res.output);
+                chunk_res.output = nullptr;
+            }
+
+            offset += chunk_size;
+            chunk_count++;
+            YIELD_IF_POSSIBLE();
+            dbgTrace(D_WAAP_SERIALIZE) << "Processed compression chunk " << chunk_count
+                << ", progress: " << offset << "/" << data.size() << " bytes ("
+                << (offset * 100 / data.size()) << "%) - yielded";
+        }
+
         finiCompressionStream(compression_stream);
-        if (!res.ok) {
-            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to gzip data";
+        dbgDebug(D_WAAP_SERIALIZE) << "Yielded after finalizing compression stream. "
+            << "Total chunks: " << chunk_count << ", Compression ratio: "
+            << (data.size() > 0 ? (float)compressed_data.size() / data.size() : 0) << "x";
+
+        if (!ok) {
+            dbgWarning(D_WAAP_SERIALIZE) << "Failed to gzip data";
             return genError("Failed to compress data");
         }
-        data = string((const char *)res.output, res.num_output_bytes);
-        json = data;
 
-        if (res.output) free(res.output);
-        res.output = nullptr;
-        res.num_output_bytes = 0;
+        // Create string from compressed data
+        string compressed_str(reinterpret_cast<const char*>(compressed_data.data()), compressed_data.size());
+
+        json = compressed_str;
     }
     return json;
 }
@@ -128,16 +195,16 @@ void SerializeToFilePeriodically::backupWorker()
     I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<WaapComponent>();
     auto currentTime = timer->getMonotonicTime();
 
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "backup worker: current time: " << currentTime.count();
+    dbgTrace(D_WAAP_SERIALIZE) << "backup worker: current time: " << currentTime.count();
 
     if (currentTime - m_lastSerialization >= m_interval)
     {
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "backup worker: backing up data";
+        dbgTrace(D_WAAP_SERIALIZE) << "backup worker: backing up data";
         m_lastSerialization = currentTime;
         // save data
         saveData();
 
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "backup worker: data is backed up";
+        dbgTrace(D_WAAP_SERIALIZE) << "backup worker: data is backed up";
     }
 }
 
@@ -153,7 +220,7 @@ void SerializeToFilePeriodically::setInterval(ch::seconds newInterval)
 
 SerializeToFileBase::SerializeToFileBase(string fileName) : m_filePath(fileName)
 {
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "SerializeToFileBase::SerializeToFileBase() fname='" << m_filePath
+    dbgTrace(D_WAAP_SERIALIZE) << "SerializeToFileBase::SerializeToFileBase() fname='" << m_filePath
         << "'";
 }
 
@@ -165,52 +232,119 @@ SerializeToFileBase::~SerializeToFileBase()
 void SerializeToFileBase::saveData()
 {
     fstream filestream;
-
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "saving to file: " << m_filePath;
+    auto maybe_routine = Singleton::Consume<I_MainLoop>::by<WaapComponent>()->getCurrentRoutineId();
+    dbgTrace(D_WAAP_SERIALIZE) << "saving to file: " << m_filePath;
     filestream.open(m_filePath, fstream::out);
 
     stringstream ss;
 
     if (filestream.is_open() == false) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to open file: " << m_filePath << " Error: "
+        dbgWarning(D_WAAP_SERIALIZE) << "failed to open file: " << m_filePath << " Error: "
             << strerror(errno);
         return;
     }
-
+    if (maybe_routine.ok()) {
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+    }
     serialize(ss);
 
+    if (maybe_routine.ok()) {
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+    }
     string data = ss.str();
+    dbgDebug(D_WAAP_SERIALIZE) << "Serialized data size: " << data.size() << " bytes";
+
+    // Get chunk size from profile settings, with default of 16 MiB for compression chunks
+    const size_t CHUNK_SIZE = static_cast<size_t>(
+        getProfileAgentSettingWithDefault<uint>(16 * 1024 * 1024, "appsecLearningSettings.writeChunkSize"));
+    // Get chunk size for writing compressed data, with default of 16 MiB
+    const size_t COMPRESSED_CHUNK_SIZE = static_cast<size_t>(
+        getProfileAgentSettingWithDefault<uint>(16 * 1024 * 1024, "appsecLearningSettings.compressionChunkSize"));
 
     auto compression_stream = initCompressionStream();
-    CompressionResult res = compressData(
-        compression_stream,
-        CompressionType::GZIP,
-        data.size(),
-        reinterpret_cast<const unsigned char *>(data.c_str()),
-        true
-    );
-    finiCompressionStream(compression_stream);
-    if (!res.ok) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to gzip data";
-    } else {
-        ss.str(string((const char *)res.output, res.num_output_bytes));
-        // free the memory allocated by compressData
-        if (res.output) free(res.output);
-        res.output = nullptr;
-        res.num_output_bytes = 0;
+    size_t offset = 0;
+    std::vector<unsigned char> compressed_data;
+    bool ok = true;
+    size_t chunk_count = 0;
+
+    // Process data in chunks for compression
+    while (offset < data.size()) {
+        size_t chunk_size = std::min(COMPRESSED_CHUNK_SIZE, data.size() - offset);
+        bool is_last = (offset + chunk_size >= data.size());
+        CompressionResult chunk_res = compressData(
+            compression_stream,
+            CompressionType::GZIP,
+            static_cast<uint32_t>(chunk_size),
+            reinterpret_cast<const unsigned char *>(data.c_str() + offset),
+            is_last ? 1 : 0
+        );
+
+        if (!chunk_res.ok) {
+            ok = false;
+            break;
+        }
+
+        if (chunk_res.output && chunk_res.num_output_bytes > 0) {
+            compressed_data.insert(
+                compressed_data.end(),
+                chunk_res.output,
+                chunk_res.output + chunk_res.num_output_bytes
+            );
+            free(chunk_res.output);
+            chunk_res.output = nullptr;
+        }
+
+        offset += chunk_size;
+        chunk_count++;
+        if (maybe_routine.ok()) {
+            Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+            dbgTrace(D_WAAP_SERIALIZE) << "Compression chunk " << chunk_count
+                << " processed (" << offset << "/" << data.size() << " bytes, "
+                << (offset * 100 / data.size()) << "%) - yielded";
+        }
     }
-    if (res.output) free(res.output);
-    res.output = nullptr;
-    res.num_output_bytes = 0;
+    finiCompressionStream(compression_stream);
+    dbgDebug(D_WAAP_SERIALIZE) << "Finished compression stream. "
+        << "Total chunks: " << chunk_count << ", Compression ratio: "
+        << (data.size() > 0 ? (float)compressed_data.size() / data.size() : 0) << "x";
+
+    if (!ok) {
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to compress data";
+        filestream.close();
+        return;
+    }
+
+    dbgDebug(D_WAAP_SERIALIZE) << "Compression complete: " << data.size() << " bytes -> "
+        << compressed_data.size() << " bytes (ratio: "
+        << (data.size() > 0 ? (float)compressed_data.size() / data.size() : 0) << "x)";
 
 
-    filestream << ss.str();
+    // Use compressed data directly
+    string data_to_write(reinterpret_cast<const char*>(compressed_data.data()), compressed_data.size());
+
+    // Write data to file in chunks with yield points
+    offset = 0;
+    size_t write_chunks = 0;
+
+    while (offset < data_to_write.size()) {
+        size_t current_chunk_size = std::min(CHUNK_SIZE, data_to_write.size() - offset);
+        filestream.write(data_to_write.c_str() + offset, current_chunk_size);
+        offset += current_chunk_size;
+        write_chunks++;
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+        dbgTrace(D_WAAP_SERIALIZE) << "Write chunk " << write_chunks
+            << " complete: " << offset << "/" << data_to_write.size() << " bytes ("
+            << (offset * 100 / data_to_write.size()) << "%) - yielded";
+    }
+
     filestream.close();
+    dbgDebug(D_WAAP_SERIALIZE) << "Finished writing backup file: " << m_filePath
+        << " (" << data_to_write.size() << " bytes in " << write_chunks << " chunks)";
 }
 
 string decompress(string fileContent) {
     if (!isGZipped(fileContent)) {
-        dbgTrace(D_WAAP) << "file note zipped";
+        dbgTrace(D_WAAP_SERIALIZE) << "file note zipped";
         return fileContent;
     }
     auto compression_stream = initCompressionStream();
@@ -236,13 +370,13 @@ string decompress(string fileContent) {
 
 void SerializeToFileBase::loadFromFile(string filePath)
 {
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "loadFromFile() file: " << filePath;
+    dbgTrace(D_WAAP_SERIALIZE) << "loadFromFile() file: " << filePath;
     fstream filestream;
 
     filestream.open(filePath, fstream::in);
 
     if (filestream.is_open() == false) {
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to open file: " << filePath << " Error: " <<
+        dbgTrace(D_WAAP_SERIALIZE) << "failed to open file: " << filePath << " Error: " <<
             strerror(errno);
         if (!Singleton::exists<I_InstanceAwareness>() || errno != ENOENT)
         {
@@ -262,18 +396,18 @@ void SerializeToFileBase::loadFromFile(string filePath)
         if (idPosition != string::npos)
         {
             filePath.erase(idPosition, idStr.length() - 1);
-            dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "retry to load file from : " << filePath;
+            dbgDebug(D_WAAP_SERIALIZE) << "retry to load file from : " << filePath;
             loadFromFile(filePath);
         }
         return;
     }
 
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "loading from file: " << filePath;
+    dbgTrace(D_WAAP_SERIALIZE) << "loading from file: " << filePath;
 
     int length;
     filestream.seekg(0, ios::end);    // go to the end
     length = filestream.tellg();           // report location (this is the length)
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "file length: " << length;
+    dbgTrace(D_WAAP_SERIALIZE) << "file length: " << length;
     assert(length >= 0); // length -1 really happens if filePath is a directory (!)
     char* buffer = new char[length];       // allocate memory for a buffer of appropriate dimension
     filestream.seekg(0, ios::beg);    // go back to the beginning
@@ -281,7 +415,7 @@ void SerializeToFileBase::loadFromFile(string filePath)
     {
         filestream.close();
         delete[] buffer;
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to read file, file: " << filePath;
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to read file, file: " << filePath;
         return;
     }
     filestream.close();
@@ -298,7 +432,7 @@ void SerializeToFileBase::loadFromFile(string filePath)
         deserialize(ss);
     }
     catch (runtime_error & e) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to deserialize file: " << m_filePath << ", error: " <<
+        dbgWarning(D_WAAP_SERIALIZE) << "failed to deserialize file: " << m_filePath << ", error: " <<
             e.what();
     }
 }
@@ -318,11 +452,11 @@ RemoteFilesList::RemoteFilesList() : files(), filesPathsList()
 bool RemoteFilesList::loadJson(const string& xml)
 {
     xmlDocPtr doc; // the resulting document tree
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "XML input: " << xml;
+    dbgTrace(D_WAAP_SERIALIZE) << "XML input: " << xml;
     doc = xmlParseMemory(xml.c_str(), xml.length());
 
     if (doc == NULL) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to parse " << xml;
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to parse " << xml;
         return false;
     }
 
@@ -343,7 +477,7 @@ bool RemoteFilesList::loadJson(const string& xml)
     {
         if (xmlStrEqual(contents_name, node->name) == 1)
         {
-            dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Found the Contents element";
+            dbgTrace(D_WAAP_SERIALIZE) << "Found the Contents element";
             xmlNodePtr contents_node = node->children;
             string file;
             string lastModified;
@@ -351,21 +485,21 @@ bool RemoteFilesList::loadJson(const string& xml)
             {
                 if (xmlStrEqual(key_name, contents_node->name) == 1)
                 {
-                    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Found the Key element";
+                    dbgTrace(D_WAAP_SERIALIZE) << "Found the Key element";
                     xmlChar* xml_file = xmlNodeGetContent(contents_node);
                     file = string(reinterpret_cast<const char*>(xml_file));
                     xmlFree(xml_file);
                 }
                 if (xmlStrEqual(last_modified_name, contents_node->name) == 1)
                 {
-                    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Found the LastModified element";
+                    dbgTrace(D_WAAP_SERIALIZE) << "Found the LastModified element";
                     xmlChar* xml_file = xmlNodeGetContent(contents_node);
                     lastModified = string(reinterpret_cast<const char*>(xml_file));
                     xmlFree(xml_file);
                 }
                 if (!file.empty() && !lastModified.empty())
                 {
-                    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Adding the file: " << file <<
+                    dbgTrace(D_WAAP_SERIALIZE) << "Adding the file: " << file <<
                         " last modified: " << lastModified;
                     break;
                 }
@@ -408,18 +542,18 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     m_interval(0),
     m_owner(owner),
     m_assetId(replaceAllCopy(assetId, "/", "")),
+    m_remoteSyncEnabled(true),
     m_pMainLoop(nullptr),
     m_waitForSync(waitForSync),
     m_workerRoutineId(0),
     m_daysCount(0),
     m_windowsCount(0),
     m_intervalsCounter(0),
-    m_remoteSyncEnabled(true),
     m_isAssetIdUuid(Waap::Util::isUuid(assetId)),
     m_shared_storage_host(genError("not set")),
     m_learning_host(genError("not set"))
 {
-    dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Create SerializeToLocalAndRemoteSyncBase. assetId='" << assetId <<
+    dbgInfo(D_WAAP_SERIALIZE) << "Create SerializeToLocalAndRemoteSyncBase. assetId='" << assetId <<
         "', owner='" << m_owner << "'";
 
     if (Singleton::exists<I_AgentDetails>() &&
@@ -429,7 +563,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
         if (sharedStorageHost != NULL) {
             m_shared_storage_host = string(sharedStorageHost);
         } else {
-            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) <<
+            dbgWarning(D_WAAP_SERIALIZE) <<
                 "shared storage host name(" <<
                 SHARED_STORAGE_HOST_ENV_NAME <<
                 ") is not set";
@@ -438,7 +572,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
         if (learningHost != NULL) {
             m_learning_host = string(learningHost);
         } else {
-            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) <<
+            dbgWarning(D_WAAP_SERIALIZE) <<
                 "learning host name(" <<
                 SHARED_STORAGE_HOST_ENV_NAME <<
                 ") is not set";
@@ -515,7 +649,7 @@ string SerializeToLocalAndRemoteSyncBase::getPostDataUrl()
     {
         I_InstanceAwareness* instance = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
         Maybe<string> uniqueId = instance->getUniqueID();
-        if (uniqueId.ok())
+        if (uniqueId.ok() && !uniqueId.unpack().empty())
         {
             agentId += "/" + uniqueId.unpack();
         }
@@ -530,7 +664,7 @@ void SerializeToLocalAndRemoteSyncBase::setRemoteSyncEnabled(bool enabled)
 
 void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
 {
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "setInterval: from " << m_interval.count() << " to " <<
+    dbgDebug(D_WAAP_SERIALIZE) << "setInterval: from " << m_interval.count() << " to " <<
         newInterval.count() << " seconds. assetId='" << m_assetId << "', owner='" << m_owner << "'";
 
     if (newInterval == m_interval)
@@ -571,7 +705,7 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
             if (remainingTime > m_interval) {
                 // on load between trigger and offset remaining time is larger than the interval itself
                 remainingTime -= m_interval;
-                dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "adjusting remaining time: " << remainingTime.count();
+                dbgDebug(D_WAAP_SERIALIZE) << "adjusting remaining time: " << remainingTime.count();
                 if (timeBeforeSyncWorker.count() != 0)
                 {
                     auto updateTime = timeBeforeSyncWorker - m_interval;
@@ -585,13 +719,13 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
             if (remainingTime < ch::seconds(0)) {
                 // syncWorker execution time was so large the remaining time became negative
                 remainingTime = ch::seconds(0);
-                dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "syncWorker execution time (owner='" << m_owner <<
+                dbgError(D_WAAP_SERIALIZE) << "syncWorker execution time (owner='" << m_owner <<
                     "', assetId='" << m_assetId << "') is " <<
                     ch::duration_cast<ch::seconds>(timeAfterSyncWorker - timeBeforeSyncWorker).count() <<
                     " seconds, too long to cause negative remainingTime. Waiting 0 seconds...";
             }
 
-            dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "current time: " << timeBeforeSyncWorker.count() << " \u00b5s" <<
+            dbgDebug(D_WAAP_SERIALIZE) << "current time: " << timeBeforeSyncWorker.count() << " \u00b5s" <<
                 ": assetId='" << m_assetId << "'" <<
                 ", owner='" << m_owner << "'" <<
                 ", daysCount=" << m_daysCount <<
@@ -604,7 +738,7 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
             m_pMainLoop->yield(remainingTime);
 
             timeBeforeSyncWorker = timer->getWalltime();
-            syncWorker();
+            m_pMainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::System, [this]() {syncWorker();}, "Sync worker");
             timeAfterSyncWorker = timer->getWalltime();
         }
     };
@@ -618,11 +752,11 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
 bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
 {
     bool isBackupSyncEnabled = getProfileAgentSettingWithDefault<bool>(
-        true,
+        false,
         "appsecLearningSettings.backupLocalSync");
 
     if (!isBackupSyncEnabled) {
-        dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Local sync is disabled";
+        dbgInfo(D_WAAP_SERIALIZE) << "Local sync is disabled";
         processData();
         saveData();
         return true;
@@ -630,7 +764,7 @@ bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
 
     RemoteFilesList rawDataFiles;
 
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Getting files of all agents";
+    dbgTrace(D_WAAP_SERIALIZE) << "Getting files of all agents";
 
     bool isSuccessful = sendObjectWithRetry(rawDataFiles,
         HTTPMethod::GET,
@@ -638,7 +772,7 @@ bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
 
     if (!isSuccessful)
     {
-        dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the list of files";
+        dbgError(D_WAAP_SERIALIZE) << "Failed to get the list of files";
         return false;
     }
 
@@ -662,7 +796,7 @@ void SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteService()
         RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
         if (remoteFiles.getFilesMetadataList().empty())
         {
-            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "no files generated by the remote service were found";
+            dbgWarning(D_WAAP_SERIALIZE) << "no files generated by the remote service were found";
             continue;
         }
         string lastModified = remoteFiles.getFilesMetadataList().begin()->modified;
@@ -670,26 +804,26 @@ void SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteService()
         {
             m_lastProcessedModified = lastModified;
             updateState(remoteFiles.getFilesList());
-            dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
+            dbgInfo(D_WAAP_SERIALIZE) << "Owner: " << m_owner <<
                 ". updated state generated by remote at " << m_lastProcessedModified;
             return;
         }
     }
-    dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "polling for update state timeout. for assetId='"
+    dbgWarning(D_WAAP_SERIALIZE) << "polling for update state timeout. for assetId='"
         << m_assetId << "', owner='" << m_owner;
     localSyncAndProcess();
 }
 
 void SerializeToLocalAndRemoteSyncBase::syncWorker()
 {
-    dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Running the sync worker for assetId='" << m_assetId << "', owner='" <<
+    dbgInfo(D_WAAP_SERIALIZE) << "Running the sync worker for assetId='" << m_assetId << "', owner='" <<
         m_owner << "'" << " last modified state: " << m_lastProcessedModified;
     incrementIntervalsCount();
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
     if (mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase() || !postData()) {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR)
+        dbgDebug(D_WAAP_SERIALIZE)
             << "Did not synchronize the data. for asset: "
             << m_assetId
             << " Remote URL: "
@@ -702,17 +836,17 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
         return;
     }
 
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Waiting for all agents to post their data";
+    dbgTrace(D_WAAP_SERIALIZE) << "Waiting for all agents to post their data";
     waitSync();
     // check if learning service is operational
     if (m_lastProcessedModified == "")
     {
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "check if remote service is operational";
+        dbgTrace(D_WAAP_SERIALIZE) << "check if remote service is operational";
         RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
         if (!remoteFiles.getFilesMetadataList().empty())
         {
             m_lastProcessedModified = remoteFiles.getFilesMetadataList()[0].modified;
-            dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "First sync by remote service: " << m_lastProcessedModified;
+            dbgInfo(D_WAAP_SERIALIZE) << "First sync by remote service: " << m_lastProcessedModified;
         }
     }
 
@@ -721,15 +855,15 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
         true,
         "appsecLearningSettings.remoteServiceEnabled");
 
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "using remote service: " << isRemoteServiceEnabled;
+    dbgDebug(D_WAAP_SERIALIZE) << "using remote service: " << isRemoteServiceEnabled;
     if ((m_lastProcessedModified == "" || !isRemoteServiceEnabled) && !localSyncAndProcess())
     {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "local sync and process failed";
+        dbgWarning(D_WAAP_SERIALIZE) << "local sync and process failed";
         return;
     }
 
     if (mode == OrchestrationMode::HYBRID) {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "detected running in standalone mode";
+        dbgDebug(D_WAAP_SERIALIZE) << "detected running in standalone mode";
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
 
@@ -738,6 +872,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
         MessageMetadata req_md(getLearningHost(), 80);
         req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
         req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         bool ok = messaging->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             "/api/sync",
@@ -745,14 +880,14 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
             MessageCategory::GENERIC,
             req_md
         );
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "sent learning sync notification ok: " << ok;
+        dbgDebug(D_WAAP_SERIALIZE) << "sent learning sync notification ok: " << ok;
         if (!ok) {
-            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to send learning notification";
+            dbgWarning(D_WAAP_SERIALIZE) << "failed to send learning notification";
         }
     } else {
         SyncLearningNotificationObject syncNotification(m_assetId, m_type, getWindowId());
 
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "sending sync notification: " << syncNotification;
+        dbgDebug(D_WAAP_SERIALIZE) << "sending sync notification: " << syncNotification;
 
         ReportMessaging(
             "sync notification for '" + m_assetId + "'",
@@ -766,6 +901,8 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
 
     if (m_lastProcessedModified != "" && isRemoteServiceEnabled)
     {
+        // wait for remote service to process the data
+        waitSync();
         updateStateFromRemoteService();
     }
 }
@@ -775,7 +912,7 @@ void SerializeToLocalAndRemoteSyncBase::restore()
     SerializeToFileBase::restore();
     if (!isBase())
     {
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "merge state from remote service";
+        dbgTrace(D_WAAP_SERIALIZE) << "merge state from remote service";
         mergeProcessedFromRemote();
     }
 }
@@ -789,7 +926,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getRemoteProcessedFilesList()
 
     if (!isRemoteServiceEnabled)
     {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "remote service is disabled";
+        dbgDebug(D_WAAP_SERIALIZE) << "remote service is disabled";
         return remoteFiles;
     }
 
@@ -800,7 +937,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getRemoteProcessedFilesList()
 
     if (!isSuccessful)
     {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the list of files";
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to get the list of files";
     }
     return remoteFiles;
 }
@@ -814,12 +951,12 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
     {
         const vector<FileMetaData>& filesMD = processedFilesList.getFilesMetadataList();
         if (filesMD.size() > 1) {
-            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "got more than 1 expected processed file";
+            dbgWarning(D_WAAP_SERIALIZE) << "got more than 1 expected processed file";
         }
         if (!filesMD.empty()) {
             m_lastProcessedModified = filesMD[0].modified;
         }
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "found " << filesMD.size() << " remote service state files. "
+        dbgTrace(D_WAAP_SERIALIZE) << "found " << filesMD.size() << " remote service state files. "
             "last modified: " << m_lastProcessedModified;
 
         return processedFilesList;
@@ -833,11 +970,11 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
 
     if (!isSuccessful)
     {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the list of files";
+        dbgDebug(D_WAAP_SERIALIZE) << "Failed to get the list of files";
     }
     else if (!processedFilesList.getFilesList().empty())
     {
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "found state files";
+        dbgTrace(D_WAAP_SERIALIZE) << "found state files";
         return processedFilesList;
     }
     // backward compatibility - try to get backup file with the buggy prefix tenantID/assetID/instanceID/
@@ -846,7 +983,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
     pos = bcRemotePath.find('/', pos + 1);
     if (!Singleton::exists<I_InstanceAwareness>())
     {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "missing instance of instance awareness,"
+        dbgDebug(D_WAAP_SERIALIZE) << "missing instance of instance awareness,"
             " can't check backward compatibility";
         return processedFilesList;
     }
@@ -854,13 +991,13 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
     Maybe<string> id = instanceAwareness->getUniqueID();
     if (!id.ok())
     {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "failed to get instance id err: " << id.getErr() <<
+        dbgDebug(D_WAAP_SERIALIZE) << "failed to get instance id err: " << id.getErr() <<
             ". can't check backward compatibility";
         return processedFilesList;
     }
     string idStr = id.unpack();
     bcRemotePath.insert(pos + 1, idStr + "/");
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "List of files is empty - trying to get the file from " <<
+    dbgDebug(D_WAAP_SERIALIZE) << "List of files is empty - trying to get the file from " <<
         bcRemotePath;
 
     isSuccessful = sendObject(
@@ -870,16 +1007,16 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
 
     if (!isSuccessful)
     {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the list of files";
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to get the list of files";
     }
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "backwards computability: got "
+    dbgDebug(D_WAAP_SERIALIZE) << "backwards computability: got "
         << processedFilesList.getFilesList().size() << " state files";
     return processedFilesList;
 }
 
 void SerializeToLocalAndRemoteSyncBase::mergeProcessedFromRemote()
 {
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Merging processed data from remote. assetId='" << m_assetId <<
+    dbgDebug(D_WAAP_SERIALIZE) << "Merging processed data from remote. assetId='" << m_assetId <<
         "', owner='" << m_owner << "'";
     m_pMainLoop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Offline,
@@ -903,7 +1040,7 @@ SerializeToLocalAndRemoteSyncBase::getLearningHost()
             m_learning_host = string(learningHost);
             return learningHost;
         }
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "learning host is not set. using default";
+        dbgWarning(D_WAAP_SERIALIZE) << "learning host is not set. using default";
     }
     return defaultLearningHost;
 }
@@ -919,7 +1056,7 @@ SerializeToLocalAndRemoteSyncBase::getSharedStorageHost()
             m_shared_storage_host = string(sharedStorageHost);
             return sharedStorageHost;
         }
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "shared storage host is not set. using default";
+        dbgWarning(D_WAAP_SERIALIZE) << "shared storage host is not set. using default";
     }
     return defaultSharedStorageHost;
 }

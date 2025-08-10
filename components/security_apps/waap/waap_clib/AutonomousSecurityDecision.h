@@ -30,14 +30,12 @@ public:
     void setFpMitigationScore(double fpMitigationScore);
     void setFinalScore(double finalScore);
     void setThreatLevel(ThreatLevel threatLevel);
-    void setOverridesLog(bool overridesLog);
     void setRelativeReputationMean(double relativeReputationMean);
     void setVariance(double variance);
     double getRelativeReputation() const;
     double getFpMitigationScore() const;
     double getFinalScore() const;
     ThreatLevel getThreatLevel() const;
-    bool getOverridesLog() const;
     double getRelativeReputationMean() const;
     double getVariance() const;
 
@@ -46,7 +44,6 @@ private:
     double m_fpMitigationScore;
     double m_finalScore;
     ThreatLevel m_threatLevel;
-    bool m_overridesLog;
     double m_relativeReputationMean;
     double m_variance;
 };

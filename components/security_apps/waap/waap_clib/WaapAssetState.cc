@@ -446,13 +446,14 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
         // update orig_size and orig_capacity after string copy
         orig_size = text.size();
         orig_capacity = text.capacity();
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (1) (after filterUTF7) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (1) (after filterUTF7) '" << text <<
+            "' size: " << text.size();
 
         // 2. Replace %xx sequences by their single-character equivalents.
         // Also replaces '+' symbol by space character.
         // Python equivalent: text = urllib.unquote_plus(text)
         text.erase(unquote_plus(text.begin(), text.end()), text.end());
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (2) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (2) '" << text << "' size: " << text.size();
 
         fixBreakingSpace(text);
 
@@ -460,38 +461,38 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
         // remove all characters whose ASCII code is >=128.
         // Python equivalent: text.encode('ascii',errors='ignore')
         filterUnicode(text);
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (3) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (3) '" << text << "' size: " << text.size();
 
         // 4. oh shi?... should I handle unicode html entities (python's htmlentitydefs module)???
         // Python equivalent: text = HTMLParser.HTMLParser().unescape(text)
         text.erase(escape_html(text.begin(), text.end()), text.end());
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (4) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (4) '" << text << "' size: " << text.size();
 
         // 5. Apply backslash escaping (like in C)
         // Python equivalent: text = text.decode('string_escape')
         text.erase(escape_backslashes(text.begin(), text.end()), text.end());
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (5) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (5) '" << text << "' size: " << text.size();
 
         // 6. remove all unicode characters from string. Basically,
         // remove all characters whose ASCII code is >=128.
         // Python equivalent: text.encode('ascii',errors='ignore')
         filterUnicode(text);
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (6) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (6) '" << text << "' size: " << text.size();
 
         // 7. Replace %xx sequences by their single-character equivalents.
         // Also replaces '+' symbol by space character.
         // Python equivalent: text = urllib.unquote_plus(text)
         text.erase(unquote_plus(text.begin(), text.end()), text.end());
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (7) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (7) '" << text << "' size: " << text.size();
 
         unescapeUnicode(text);
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "after unescapeUnicode '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "after unescapeUnicode '" << text << "' size: " << text.size();
 
         // 8. remove all unicode characters from string. Basically,
         // remove all characters whose ASCII code is >=128.
         // Python equivalent: text.encode('ascii',errors='ignore')
         filterUnicode(text);
-        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (8) '" << text << "'";
+        dbgTrace(D_WAAP_SAMPLE_PREPROCESS) << "unescape: (8) '" << text << "' size: " << text.size();
 
         // 9. ???
         //
@@ -530,7 +531,7 @@ WaapAssetState::WaapAssetState(std::shared_ptr<Signatures> signatures,
             << AlertInfo(AlertTeam::CORE, "WAAP sample processing")
             << "unescape: original size=" << orig_size << " capacity=" << orig_capacity
             << " new size=" << text.size() << " capacity=" << text.capacity()
-            << " text='" << text << "'";
+            << " text='" << text << "'" << " orig text='" << s << "'";
 
         return text;
     }
@@ -1098,6 +1099,9 @@ WaapAssetState::apply(
     // Detect long text spans, and also any-length spans that end with file extensions such as ".jpg"
     bool longTextFound = m_Signatures->longtext_re.hasMatch(res.unescaped_line);
 
+    // When this flag remains false until the last evasion handling, a second unescape is performed
+    bool evasion_detected = false;
+
     if (longTextFound) {
         dbgTrace(D_WAAP_SAMPLE_SCAN) << "longtext found";
     }
@@ -1297,6 +1301,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1326,6 +1331,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1409,6 +1415,42 @@ WaapAssetState::apply(
         dbgTrace(D_WAAP_EVASIONS) << "status after evasion checking " << nicePrint(res);
     }
 
+    bool tab_evasion = (res.unescaped_line.find('\t') != std::string::npos);
+
+    if (tab_evasion) {
+        dbgTrace(D_WAAP_EVASIONS) << "Tab character evasion detected";
+
+        // Create normalized version with tabs removed
+        std::string unescaped = res.unescaped_line;
+
+        // Remove all tab characters to normalize the string
+        std::string::iterator end_pos = std::remove(unescaped.begin(), unescaped.end(), '\t');
+        unescaped.erase(end_pos, unescaped.end());
+
+        size_t kwCount = res.keyword_matches.size();
+
+        if (res.unescaped_line != unescaped) {
+            SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+            checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
+                res.found_patterns, longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->words_regex, res.keyword_matches, res.found_patterns,
+                longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->pattern_regex, res.regex_matches, res.found_patterns,
+                longTextFound, binaryDataFound);
+        }
+
+        if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            // If new keywords were found, add a specific indication
+            res.keyword_matches.push_back("tab_character_evasion");
+
+            // Recalculate repetition and/or probing indicators
+            unsigned int newWordsCount = 0;
+            calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                newWordsCount);
+            // Take minimal words count because empirically it means evasion was probably successfully decoded
+            wordsCount = std::min(wordsCount, newWordsCount);
+        }
+    }
 
     bool quoutes_space_evasion = Waap::Util::find_in_map_of_stringlists_keys(
         "quotes_space_ev_fast_reg",
@@ -1471,6 +1513,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1499,7 +1542,7 @@ WaapAssetState::apply(
                     longTextFound, binaryDataFound);
         }
 
-
+        evasion_detected = true;
         // Recalculate repetition and/or probing indicators
         unsigned int newWordsCount = 0;
         calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1613,6 +1656,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1644,6 +1688,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1675,6 +1720,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1706,6 +1752,7 @@ WaapAssetState::apply(
         }
 
         if (kwCount != res.keyword_matches.size() && !binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1715,6 +1762,74 @@ WaapAssetState::apply(
         }
     }
 
+    // Detect evasion for command injection vulnerability using encoded characters (such as ^).
+    // example: "c^m^d /c d^i^r" -> "cmd /c dir"
+    // if '^' is found in the line, remove it and rescan
+    // search in scan result for any keyword with "os", "cmd", "exec" "command" or "shell" in it
+    // if not found, we don't want this evasion
+    // if found, we want to use its results
+    // Note: this is not a perfect solution, but it is better than nothing
+    if (line.find('^') != std::string::npos) {
+        dbgTrace(D_WAAP_EVASIONS) << "Windows command injection evasion suspected";
+
+        std::string unescaped = line;
+        bool is_win_cmd_evasion = false;
+        // remove all occurances of '^' character
+        unescaped.erase(std::remove(unescaped.begin(), unescaped.end(), '^'), unescaped.end());
+        dbgTrace(D_WAAP_EVASIONS) << "unescaped == '" << unescaped << "'";
+        if (!unescaped.empty()) {
+            std::vector<std::string> evKeywordMatches(res.keyword_matches);
+            std::vector<std::string> evRegexMatches(res.regex_matches);
+            Waap::Util::map_of_stringlists_t evFoundPatterns(res.found_patterns);
+            bool evLongTextFound = longTextFound;
+            bool evBinaryDataFound = binaryDataFound;
+
+            if (line != unescaped) {
+                SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+                checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, evKeywordMatches,
+                    res.found_patterns, evLongTextFound, evBinaryDataFound);
+                checkRegex(unescapedSample, m_Signatures->words_regex, evKeywordMatches, evFoundPatterns,
+                    evLongTextFound, evBinaryDataFound);
+                checkRegex(unescapedSample, m_Signatures->pattern_regex, evRegexMatches, evFoundPatterns,
+                    evLongTextFound, evBinaryDataFound);
+            }
+
+            if (evKeywordMatches.size() != res.keyword_matches.size()) {
+                if (Waap::Util::find_in_map_of_stringlists_keys("os_commands", evFoundPatterns)) {
+                    is_win_cmd_evasion = true;
+                } else {
+                    for (const auto &kw : evKeywordMatches) {
+                        if (kw.size() < 2 ||
+                                str_contains(kw, "cmd") ||
+                                str_contains(kw, "command") ||
+                                str_contains(kw, "os_") ||
+                                str_contains(kw, "exec")) {
+                            is_win_cmd_evasion = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (is_win_cmd_evasion) {
+                dbgTrace(D_WAAP_EVASIONS) << "Evasion and relevant matches found, updating results";
+                // found relevant keywords after unescaping, set to new matches
+                res.keyword_matches = evKeywordMatches;
+                res.regex_matches = evRegexMatches;
+                res.found_patterns = evFoundPatterns;
+                longTextFound = evLongTextFound;
+                binaryDataFound = evBinaryDataFound;
+                // Recalculate repetition and/or probing indicators
+                unsigned int newWordsCount = 0;
+                calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                    newWordsCount);
+                // Take minimal words count because empirically it means evasion was probably successfully decoded
+                wordsCount = std::min(wordsCount, newWordsCount);
+            } else {
+                dbgTrace(D_WAAP_EVASIONS) << "Evasion not relevant, will not apply to results";
+            }
+        }
+    }
 
     // python: escape ='hi_acur_fast_reg_evasion' in found_patterns
     bool escape = Waap::Util::find_in_map_of_stringlists_keys("evasion", res.found_patterns);
@@ -1757,6 +1872,7 @@ WaapAssetState::apply(
             escape = false;
         }
         else if (!binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1833,6 +1949,7 @@ WaapAssetState::apply(
             escape = false;
         }
         else if (!binaryDataFound) {
+            evasion_detected = true;
             // Recalculate repetition and/or probing indicators
             unsigned int newWordsCount = 0;
             calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
@@ -1841,6 +1958,42 @@ WaapAssetState::apply(
             wordsCount = std::min(wordsCount, newWordsCount);
         }
     }
+
+    // Handle second URL encoding evasion
+    if (!evasion_detected &&
+            !binaryDataFound &&
+            !longTextFound &&
+            Waap::Util::containsPercentEncoding(res.unescaped_line)) {
+        dbgTrace(D_WAAP_EVASIONS) << "Second URL encoding evasion detected";
+
+        std::string unescaped = unescape(res.unescaped_line);
+        size_t kwCount = res.keyword_matches.size();
+
+        if (res.unescaped_line != unescaped) {
+            SampleValue unescapedSample(unescaped, m_Signatures->m_regexPreconditions);
+            checkRegex(unescapedSample, m_Signatures->specific_acuracy_keywords_regex, res.keyword_matches,
+                res.found_patterns, longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->words_regex, res.keyword_matches, res.found_patterns,
+                longTextFound, binaryDataFound);
+            checkRegex(unescapedSample, m_Signatures->pattern_regex, res.regex_matches, res.found_patterns,
+                longTextFound, binaryDataFound);
+        }
+
+        if (kwCount == res.keyword_matches.size()) {
+            // Remove the evasion keyword if no real evasion found
+            keywordsToRemove.push_back("evasion");
+        }
+        else if (!binaryDataFound) {
+            evasion_detected = true;
+            // Recalculate repetition and/or probing indicators
+            unsigned int newWordsCount = 0;
+            calcRepetitionAndProbing(res, ignored_keywords, unescaped, detectedRepetition, detectedProbing,
+                newWordsCount);
+            // Take minimal words count because empirically it means evasion was probably succesfully decoded
+            wordsCount = std::min(wordsCount, newWordsCount);
+        }
+    }
+
     dbgTrace(D_WAAP_SAMPLE_SCAN) << "after evasions..." << nicePrint(res);
     // Remove evasion keywords that should not be reported because there's no real evasion found
     if (!keywordsToRemove.empty()) {

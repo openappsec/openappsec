@@ -376,16 +376,31 @@ public:
         verdict(event_verdict)
     {}
 
+    EventVerdict(
+        const ModificationList &mods,
+        ngx_http_cp_verdict_e event_verdict,
+        std::string response_id) :
+        modifications(mods),
+        verdict(event_verdict),
+        webUserResponseByPractice(response_id)
+    {}
+
 // LCOV_EXCL_START - sync functions, can only be tested once the sync module exists
     template <typename T> void serialize(T &ar, uint) { ar(verdict); }
 // LCOV_EXCL_STOP
 
     const ModificationList & getModifications() const { return modifications; }
     ngx_http_cp_verdict_e getVerdict() const { return verdict; }
+    const std::string getWebUserResponseByPractice() const { return webUserResponseByPractice; }
+    void setWebUserResponseByPractice(const std::string id) {
+        dbgTrace(D_HTTP_MANAGER) << "current verdict web user response set to: " << id;
+        webUserResponseByPractice = id;
+    }
 
 private:
     ModificationList modifications;
     ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    std::string webUserResponseByPractice;
 };
 
 #endif // __I_HTTP_EVENT_IMPL_H__

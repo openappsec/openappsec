@@ -23,7 +23,7 @@
 static const uint max_send_obj_retries = 3;
 static const std::chrono::microseconds wait_next_attempt(5000000);
 
-USE_DEBUG_FLAG(D_WAAP);
+USE_DEBUG_FLAG(D_WAAP_SERIALIZE);
 
 class RestGetFile : public ClientRest
 {
@@ -151,13 +151,14 @@ protected:
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::OFFLINE) {
-            dbgDebug(D_WAAP) << "offline mode not sending object";
+            dbgDebug(D_WAAP_SERIALIZE) << "offline mode not sending object";
             return false;
         }
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
             req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
             req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             auto req_status = messaging->sendSyncMessage(
                 method,
                 uri,
@@ -166,19 +167,22 @@ protected:
                 req_md
             );
             if (!req_status.ok()) {
-                dbgWarning(D_WAAP) << "failed to send request to uri: " << uri
+                dbgWarning(D_WAAP_SERIALIZE) << "failed to send request to uri: " << uri
                     << ", error: " << req_status.getErr().toString();
             }
             return req_status.ok();
         }
+        MessageMetadata req_md;
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_FOG_CONN);
         auto req_status = messaging->sendSyncMessage(
             method,
             uri,
             obj,
-            MessageCategory::GENERIC
+            MessageCategory::GENERIC,
+            req_md
         );
         if (!req_status.ok()) {
-            dbgWarning(D_WAAP) << "failed to send request to uri: " << uri
+            dbgWarning(D_WAAP_SERIALIZE) << "failed to send request to uri: " << uri
                 << ", error: " << req_status.getErr().toString();
         }
         return req_status.ok();
@@ -192,14 +196,14 @@ protected:
         {
             if (sendObject(obj, method, uri))
             {
-                dbgTrace(D_WAAP) <<
+                dbgTrace(D_WAAP_SERIALIZE) <<
                     "object sent successfully after " << i << " retry attempts";
                 return true;
             }
-            dbgInfo(D_WAAP) << "Failed to send object. Attempt: " << i;
+            dbgInfo(D_WAAP_SERIALIZE) << "Failed to send object. Attempt: " << i;
             mainloop->yield(wait_next_attempt);
         }
-        dbgWarning(D_WAAP) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
             max_send_obj_retries;
         return false;
     }
@@ -210,13 +214,14 @@ protected:
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
         I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::OFFLINE) {
-            dbgDebug(D_WAAP) << "offline mode not sending object";
+            dbgDebug(D_WAAP_SERIALIZE) << "offline mode not sending object";
             return false;
         }
         if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
             MessageMetadata req_md(getSharedStorageHost(), 80);
             req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
             req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             return messaging->sendSyncMessageWithoutResponse(
                 method,
                 uri,
@@ -225,11 +230,14 @@ protected:
                 req_md
             );
         }
+        MessageMetadata req_md;
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_FOG_CONN);
         return messaging->sendSyncMessageWithoutResponse(
             method,
             uri,
             obj,
-            MessageCategory::GENERIC
+            MessageCategory::GENERIC,
+            req_md
         );
     }
 
@@ -241,14 +249,14 @@ protected:
         {
             if (sendNoReplyObject(obj, method, uri))
             {
-                dbgTrace(D_WAAP) <<
+                dbgTrace(D_WAAP_SERIALIZE) <<
                     "object sent successfully after " << i << " retry attempts";
                 return true;
             }
-            dbgInfo(D_WAAP) << "Failed to send object. Attempt: " << i;
+            dbgInfo(D_WAAP_SERIALIZE) << "Failed to send object. Attempt: " << i;
             mainloop->yield(wait_next_attempt);
         }
-        dbgWarning(D_WAAP) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
             max_send_obj_retries;
         return false;
     }
@@ -257,6 +265,7 @@ protected:
     std::chrono::seconds m_interval;
     std::string m_owner;
     const std::string m_assetId;
+    bool m_remoteSyncEnabled;
 
 private:
     bool localSyncAndProcess();
@@ -272,7 +281,6 @@ private:
     size_t m_daysCount;
     size_t m_windowsCount;
     size_t m_intervalsCounter;
-    bool m_remoteSyncEnabled;
     const bool m_isAssetIdUuid;
     std::string m_type;
     std::string m_lastProcessedModified;

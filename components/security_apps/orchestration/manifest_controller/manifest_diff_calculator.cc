@@ -115,9 +115,9 @@ ManifestDiffCalculator::buildRecInstallationQueue(
     const map<string, Package> &current_packages,
     const map<string, Package> &new_packages)
 {
-    const vector<string> &requires = package.getRequire();
+    const vector<string> &requires_packages = package.getRequire();
 
-    for (const auto &require : requires) {
+    for (const auto &require : requires_packages) {
         auto installed_package = current_packages.find(require);
         auto new_package = new_packages.find(require);
 

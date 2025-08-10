@@ -250,13 +250,14 @@ public:
     fetchReplicaCount()
     {
         string curl_cmd =
-            "curl -H \"Authorization: Bearer " + kubernetes_token + "\" "
+            base_curl_cmd + " -H \"Authorization: Bearer " + kubernetes_token + "\" "
             "https://kubernetes.default.svc.cluster.local/apis/apps/v1/namespaces/" + kubernetes_namespace +
-            "/deployments/${AGENT_DEPLOYMENT_NAME} -k  -s | jq .status.replicas";
+            "/deployments/${AGENT_DEPLOYMENT_NAME} -k -s | jq .status.replicas";
         auto maybe_replicas = i_shell_cmd->getExecOutput(curl_cmd);
         if (maybe_replicas.ok()) {
             try {
                 replicas = std::stoi(maybe_replicas.unpack());
+                dbgTrace(D_RATE_LIMIT) << "replicas is set to " << replicas;
             } catch (const std::exception &e) {
                 dbgWarning(D_RATE_LIMIT) << "error while converting replicas: " << e.what();
             }
@@ -706,7 +707,9 @@ public:
         i_shell_cmd = Singleton::Consume<I_ShellCmd>::by<RateLimit>();
         i_env_details = Singleton::Consume<I_EnvDetails>::by<RateLimit>();
         env_type = i_env_details->getEnvType();
-        if (env_type == EnvType::K8S) {
+        const char *nexus_env = getenv("KUBERNETES_METADATA");
+        if (nexus_env == nullptr) return;
+        if (env_type == EnvType::K8S && string(nexus_env) == "true") {
             kubernetes_token = i_env_details->getToken();
             kubernetes_namespace = i_env_details->getNameSpace();
             fetchReplicaCount();
@@ -742,6 +745,13 @@ private:
     EnvType env_type;
     string kubernetes_namespace = "";
     string kubernetes_token = "";
+#if defined(gaia)
+    const string base_curl_cmd = "curl_cli";
+#elif defined(alpine)
+    const string base_curl_cmd = "LD_LIBRARY_PATH=/usr/lib/:/usr/lib/cpnano curl";
+#else
+    const string base_curl_cmd = "curl";
+#endif
 };
 
 RateLimit::RateLimit() : Component("RateLimit"), pimpl(make_unique<Impl>()) {}

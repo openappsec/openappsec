@@ -21,6 +21,7 @@
 #include <memory>
 #include "debug.h"
 #include "CidrMatch.h"
+#include "DecisionType.h"
 #include "RegexComparator.h"
 
 USE_DEBUG_FLAG(D_WAAP_OVERRIDE);
@@ -265,6 +266,15 @@ public:
     template <typename _A>
     void serialize(_A &ar) {
         try {
+            ar(cereal::make_nvp("parsedMatch", m_match));
+        }
+        catch(const cereal::Exception &e)
+        {
+            dbgDebug(D_WAAP_OVERRIDE) << "An override rule was not loaded, parsedMatch error:" << e.what();
+            isValid = false;
+        }
+
+        try {
             ar(cereal::make_nvp("id", m_id));
         }
         catch (const cereal::Exception &e)
@@ -272,7 +282,6 @@ public:
             dbgDebug(D_WAAP_OVERRIDE) << "An override rule has no id.";
             m_id.clear();
         }
-        ar(cereal::make_nvp("parsedMatch", m_match));
         if (!m_match.isValidMatch()) {
             dbgDebug(D_WAAP_OVERRIDE) << "An override rule was not load";
             isValid = false;
@@ -342,14 +351,50 @@ private:
     bool isValid;
 };
 
+class ExceptionsByPractice
+{
+public:
+    template <typename _A>
+    void serialize(_A& ar)
+    {
+        ar(
+            cereal::make_nvp("WebApplicationExceptions", m_web_app_ids),
+            cereal::make_nvp("APIProtectionExceptions", m_api_protect_ids),
+            cereal::make_nvp("AntiBotExceptions", m_anti_bot_ids)
+        );
+        m_all_ids.insert(m_web_app_ids.begin(), m_web_app_ids.end());
+        m_all_ids.insert(m_api_protect_ids.begin(), m_api_protect_ids.end());
+        m_all_ids.insert(m_anti_bot_ids.begin(), m_anti_bot_ids.end());
+    }
+
+    bool operator==(const ExceptionsByPractice &other) const;
+    const std::vector<std::string>& getExceptionsOfPractice(DecisionType practiceType) const;
+    const std::set<std::string>& getAllExceptions() const;
+    bool isIDInWebApp(const std::string &id) const;
+private:
+    std::vector<std::string> m_web_app_ids;
+    std::vector<std::string> m_api_protect_ids;
+    std::vector<std::string> m_anti_bot_ids;
+    std::set<std::string> m_all_ids;
+};
+
 class Policy {
 public:
     template <typename _A>
     Policy(_A &ar) {
+        try {
+            ar(
+                cereal::make_nvp("exceptionsPerPractice", m_exceptionsByPractice)
+            );
+        }
+        catch (std::runtime_error & e) {
+            ar.setNextName(nullptr);
+            dbgInfo(D_WAAP_OVERRIDE) << "Failed to load exceptions per practice, error: ", e.what();
+            m_exceptionsByPractice = ExceptionsByPractice();
+        }
         std::vector<Waap::Override::Rule> rules;
         ar(cereal::make_nvp("overrides", rules));
         m_isOverrideResponse = false;
-
         for (std::vector<Waap::Override::Rule>::const_iterator it = rules.begin(); it != rules.end(); ++it) {
             const Waap::Override::Rule& rule = *it;
             if (!rule.isValidRule()) {
@@ -379,6 +424,14 @@ public:
         const std::vector<Waap::Override::Rule>& rules = requestOverrides ? m_RequestOverrides : m_ResponseOverrides;
         dbgTrace(D_WAAP_OVERRIDE) << "Start matching override rules ...";
         for (const Waap::Override::Rule &rule : rules) {
+            if (m_exceptionsByPractice.getAllExceptions().size() > 0 &&
+                !m_exceptionsByPractice.isIDInWebApp(rule.getId())
+            ) {
+                dbgInfo(D_WAAP_OVERRIDE)
+                << "match rule id is not in web application exceptions by practice: "
+                << rule.getId();
+                continue;
+            }
             dbgTrace(D_WAAP_OVERRIDE) << "Matching override rule ...";
             rule.match(testFunctor, matchedBehaviors, matchedOverrideIds);
         }
@@ -389,9 +442,17 @@ public:
         return m_isOverrideResponse;
     }
 
+    bool isValidRules() {
+        return !m_RequestOverrides.empty() || !m_ResponseOverrides.empty();
+    }
+
+    const ExceptionsByPractice& getExceptionsByPractice() const {
+        return m_exceptionsByPractice;
+    }
 private:
     std::vector<Waap::Override::Rule> m_RequestOverrides; //overrides that change request data
     std::vector<Waap::Override::Rule> m_ResponseOverrides; //overrides that change response/log data
+    ExceptionsByPractice m_exceptionsByPractice;
     bool m_isOverrideResponse;
 };
 
@@ -403,7 +464,7 @@ struct State {
     bool bForceException;
     std::set<std::string> forceExceptionIds;
     // overrides decision in case log should be ignored
-    bool bIgnoreLog;
+    bool bSupressLog;
     // user identfier override to be applied
     bool bSourceIdentifierOverride;
     std::string sSourceIdentifierMatch;
@@ -437,8 +498,8 @@ struct State {
 
             if (matchedBehavior.getLog() == "ignore")
             {
-                dbgTrace(D_WAAP_OVERRIDE) << "applyOverride(): setting bIgnoreLog due to override behavior.";
-                bIgnoreLog = true;
+                dbgTrace(D_WAAP_OVERRIDE) << "applyOverride(): setting bSupressLog due to override behavior.";
+                bSupressLog = true;
             }
 
             sSourceIdentifierMatch = matchedBehavior.getSourceIdentifier();

@@ -41,15 +41,16 @@ LogGenWrapper::LogGenWrapper(
     }
     else {
         m_log_gen = std::make_unique<LogGen>(
-            maybe_trigger.unpack(),
             title,
-            security_type,
+            ReportIS::Level::LOG,
+            ReportIS::Audience::SECURITY,
             severity,
             priority,
-            is_action_drop_or_prevent,
             ReportIS::Tags::WAF,
-            ReportIS::Tags::THREAT_PREVENTION
-            );
+            ReportIS::Tags::THREAT_PREVENTION,
+            maybe_trigger.unpack().getStreams(security_type, is_action_drop_or_prevent),
+            maybe_trigger.unpack().getEnrechments(security_type)
+        );
     }
 }
 

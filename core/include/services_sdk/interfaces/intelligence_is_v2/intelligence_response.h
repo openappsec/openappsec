@@ -21,6 +21,7 @@
 #include <maybe_res.h>
 #include "asset_reply.h"
 #include "bulk_query_response_v2.h"
+#include "intelligence_invalidation.h"
 
 USE_DEBUG_FLAG(D_INTELLIGENCE);
 
@@ -39,6 +40,11 @@ public:
     Maybe<void> load();
     Intelligence_IS_V2::ResponseStatus getResponseStatus() const;
     const std::string getCursor() const { return single_response.getCursor(); }
+    const std::vector<ExternalSourceError> & getExternalSourcesErrorStatus() const
+    {
+        return single_response.getExternalSourcesErrorStatus();
+    }
+
     void setJsonResponse(const std::string &jsonResponse) { json_response = jsonResponse; }
     template <typename UserSerializableReplyAttr>
     IntelligenceQueryResponseT<UserSerializableReplyAttr> getSerializableResponse() const
@@ -98,10 +104,14 @@ public:
         return bulk_data;
     }
 
+    const std::vector<Invalidation>& getInvalidations() const { return invalidations; }
+    Maybe<void> loadInvalidations();
+
 private:
     std::string json_response;
     std::vector<IntelligenceQueryResponse> responses;
     IntelligenceQueryResponse single_response;
+    std::vector<Invalidation> invalidations;
     size_t size = 0;
     bool is_bulk = false;
 };

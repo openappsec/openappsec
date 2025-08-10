@@ -58,6 +58,20 @@ Response::load()
     return {};
 }
 
+Maybe<void>
+Response::loadInvalidations()
+{
+    try {
+        stringstream in;
+        in.str(json_response);
+        cereal::JSONInputArchive in_ar(in);
+        in_ar(cereal::make_nvp("invalidations", invalidations));
+    } catch(const std::exception &e) {
+        return genError("Load invalidations failed. Error: " + string(e.what()));
+    }
+    return {};
+}
+
 Intelligence_IS_V2::ResponseStatus
 Response::getResponseStatus() const
 {

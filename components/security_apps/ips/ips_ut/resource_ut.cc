@@ -2,6 +2,7 @@
 #include "cptest.h"
 #include "environment.h"
 #include "config_component.h"
+#include "mock/mock_mainloop.h"
 
 using namespace std;
 using namespace testing;
@@ -61,6 +62,9 @@ TEST(resources, basic_resource)
 {
     ConfigComponent conf;
     ::Environment env;
+    NiceMock<MockMainLoop> mock_mainloop;
+    auto err = genError("not coroutine");
+    EXPECT_CALL(mock_mainloop, getCurrentRoutineId()).WillRepeatedly(Return(Maybe<I_MainLoop::RoutineID>(err)));
 
     conf.preload();
 

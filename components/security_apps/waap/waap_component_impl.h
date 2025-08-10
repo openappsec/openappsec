@@ -59,7 +59,7 @@ private:
     void init(const std::string &waapDataFileName);
     EventVerdict waapDecisionAfterHeaders(IWaf2Transaction& waf2Transaction);
     EventVerdict waapDecision(IWaf2Transaction& waf2Transaction);
-    void finishTransaction(IWaf2Transaction& waf2Transaction);
+    void finishTransaction(IWaf2Transaction& waf2Transaction, EventVerdict& verdict);
 
     bool waf2_proc_start(const std::string& waapDataFileName);
     void waf2_proc_exit();
@@ -73,6 +73,7 @@ private:
     EventVerdict pending_response;
     EventVerdict accept_response;
     EventVerdict drop_response;
+    EventVerdict limit_response_headers;
     WaapMetricWrapper waap_metric;
     AssetsMetric assets_metric;
     I_Table* waapStateTable;

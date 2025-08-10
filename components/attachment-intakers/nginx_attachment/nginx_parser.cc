@@ -28,7 +28,6 @@ USE_DEBUG_FLAG(D_NGINX_ATTACHMENT_PARSER);
 
 Buffer NginxParser::tenant_header_key = Buffer();
 static const Buffer proxy_ip_header_key("X-Forwarded-For", 15, Buffer::MemoryType::STATIC);
-static const Buffer waf_tag_key("x-waf-tag", 9, Buffer::MemoryType::STATIC);
 static const Buffer source_ip("sourceip", 8, Buffer::MemoryType::STATIC);
 bool is_keep_alive_ctx = getenv("SAAS_KEEP_ALIVE_HDR_NAME") != nullptr;
 
@@ -244,8 +243,6 @@ NginxParser::parseRequestHeaders(const Buffer &data, const unordered_set<string>
             opaque.setSessionTenantAndProfile(active_tenant_and_profile[0], active_tenant_and_profile[1]);
         } else if (proxy_ip_header_key == header_key) {
             source_identifiers.setXFFValuesToOpaqueCtx(header, UsersAllIdentifiersConfig::ExtractType::PROXYIP);
-        } else if (waf_tag_key == header_key) {
-            source_identifiers.setWafTagValuesToOpaqueCtx(header);
         }
     }
 
@@ -382,12 +379,15 @@ NginxParser::parseResponseBody(const Buffer &raw_response_body, CompressionStrea
 Maybe<CompressionType>
 NginxParser::parseContentEncoding(const vector<HttpHeader> &headers)
 {
-    static const Buffer content_encoding_header_key("Content-Encoding");
+    dbgFlow(D_NGINX_ATTACHMENT_PARSER) << "Parsing \"Content-Encoding\" header";
+    static const Buffer content_encoding_header_key("content-encoding");
 
     auto it = find_if(
         headers.begin(),
         headers.end(),
-        [&] (const HttpHeader &http_header) { return http_header.getKey() == content_encoding_header_key; }
+        [&] (const HttpHeader &http_header) {
+            return http_header.getKey().isEqualLowerCase(content_encoding_header_key);
+        }
     );
     if (it == headers.end()) {
         dbgTrace(D_NGINX_ATTACHMENT_PARSER)

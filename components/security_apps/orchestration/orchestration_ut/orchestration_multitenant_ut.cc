@@ -145,6 +145,7 @@ public:
         EXPECT_CALL(mock_details_resolver, getArch()).WillRepeatedly(Return(string("x86_64")));
         EXPECT_CALL(mock_details_resolver, isReverseProxy()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isGw()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isVersionAboveR8110()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillRepeatedly(Return(no_nginx));

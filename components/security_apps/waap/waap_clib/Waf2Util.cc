@@ -642,7 +642,7 @@ void unescapeUnicode(string& text) {
         STATE_ESCAPE_X
     } state = STATE_COPY;
 
-    for (; it != text.end(); ++it) {
+    for (; it != text.end() && result <= it; ++it) {
         const char ch = *it;
 
         switch (state) {
@@ -682,16 +682,10 @@ void unescapeUnicode(string& text) {
                 state = STATE_ESCAPE_U;
             }
             else if (ch == 'x') {
-#if 1
                 digitsAnticipated = 1; // anticipate at least one HEX digit after \x
                 code = 0;
                 nonZeroHexCounter = 0;
                 state = STATE_ESCAPE_X;
-#else
-                digitsAnticipated = 2; // parse/skip 2 hex digits
-                code = 0;
-                state = STATE_ESCAPE_U;
-#endif
             }
             else {
                 // this is invalid escape sequence: rollback and copy this character too
@@ -794,10 +788,12 @@ void unescapeUnicode(string& text) {
             *result++ = ch;
         }
 
+        dbgAssertOpt(!pAcc || size_t(pAcc - acc) < sizeof(acc))
+            << AlertInfo(AlertTeam::WAAP, "WAAP string unescape") <<
+            "Buffer overflow detected";
         // Accumulate
-        if (pAcc) {
+        if (pAcc && size_t(pAcc - acc) < sizeof(acc)) {
             // Ensure we don't have buffer overflow
-            assert(size_t(pAcc - acc) < sizeof(acc));
             *pAcc++ = ch;
         }
     }
@@ -806,7 +802,7 @@ void unescapeUnicode(string& text) {
         digitsAnticipated << ", acc='" << string(acc, pAcc ? (int)(pAcc - acc) : 0) << "'";
 
     // Output code if we just finished decoding an escape sequence succesully and reached end of string
-    if (state == STATE_ESCAPE_U && digitsAnticipated == 0) {
+    if (state == STATE_ESCAPE_U && digitsAnticipated == 0 && result < text.end()) {
         // only output ASCII codes <= 127. "swallow" all unicode.
         if (code <= 127) {
             *result++ = (char)code;
@@ -823,7 +819,7 @@ void unescapeUnicode(string& text) {
         if (isSpecialUnicode(code)) {
             *result++ = convertSpecialUnicode(code);
         }
-        else
+        else if (digitsAnticipated == 0)
         {
             *result++ = (char)code;
         }
@@ -831,7 +827,7 @@ void unescapeUnicode(string& text) {
 
     // flush any accumulated left-overs into output buffer
     if (pAcc) {
-        for (p = acc; p < pAcc; p++) {
+        for (p = acc; p < pAcc && result < text.end(); p++) {
             *result++ = *p;
         }
     }
@@ -1034,8 +1030,7 @@ base64_decode_status decideStatusBase64Decoded(
                     && decoded_entropy > BASE64_ENTROPY_DECODED_THRESHOLD
                     && !called_with_prefix
                     && decoded.size() > BASE64_MIN_SIZE_LIMIT
-                    && decoded.size() < BASE64_MAX_SIZE_LIMIT
-                    && terminatorCharsSeen != 0;
+                    && decoded.size() < BASE64_MAX_SIZE_LIMIT;
                 if (!empiric_condition) {
                     if (clear_on_error) decoded.clear();
                     return B64_DECODE_SUSPECTED;
@@ -1070,7 +1065,8 @@ base64_decode_status decideStatusBase64Decoded(
                 && decoded_entropy > BASE64_ENTROPY_DECODED_THRESHOLD
                 && !called_with_prefix
                 && decoded.size() > BASE64_MIN_SIZE_LIMIT
-                && decoded.size() < BASE64_MAX_SIZE_LIMIT;
+                && decoded.size() < BASE64_MAX_SIZE_LIMIT
+                && nonPrintableCharsCount != 0;
             if (empiric_condition) {
                 dbgTrace(D_WAAP_BASE64) << "Empiric test failed, non-base64 chunk, return B64_DECODE_INVALID";
                 decoded.clear();
@@ -1372,10 +1368,23 @@ static const SingleRegex base64_key_detector_re(
     "^[^<>{};,&\\?|=\\s]+={1}",
     err,
     "base64_key");
+// Matches valid Base64 prefixes: "data:" URIs with optional parameters or bare "base64,"
+// strings. Ensures correct MIME types, strict Base64 encoding with padding, and anchoring
+// at string-start or after '=' (with optional whitespace). Prevents invalid injections.
 static const SingleRegex base64_prefix_detector_re(
-    "data:\\S*;base64,\\S+|base64,\\S+",
+    "^data:[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+(?:;[a-zA-Z0-9.+-]+=[a-zA-Z0-9.+-]+)*;base64,[A-Za-z0-9+/]+"
+    "={0,2}|^base64,[A-Za-z0-9+/]+={0,2}|=\\s*data:[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+(?:;[a-zA-Z0-9.+-]+"
+    "=[a-zA-Z0-9.+-]+)*;base64,[A-Za-z0-9+/]+={0,2}|=\\s*base64,[A-Za-z0-9+/]+={0,2}",
     err,
     "base64_prefix");
+static const SingleRegex percent_encoding_re(
+    "%[A-Fa-f0-9]{2}",
+    err,
+    "percent_encoding");
+static const SingleRegex nosql_key_evasion_detector_re(
+    "\\w{1,48}\\s*[\\[\\{\\(]\\s*\\$\\w{1,48}\\s*[\\]\\}\\)]",
+    err,
+    "nosql_key_evasion_detector");
 
 // looks for combination <param>={<some text>*:<some text>*}
 //used to allow parsing param=JSON to reduce false positives
@@ -1909,6 +1918,16 @@ containsInvalidUtf8(const string &payload)
     return invalid_hex_evasion_re.hasMatch(payload);
 }
 
+bool
+containsPercentEncoding(const string &payload)
+{
+    static const size_t min_matches = 2;
+    vector<RegexMatch> regex_matches;
+    size_t counter = percent_encoding_re.findAllMatches(payload, regex_matches, min_matches);
+    // Check if there are at least two matches
+    return counter >= min_matches;
+}
+
 string
 unescapeInvalidUtf8(const string &payload)
 {
@@ -2181,6 +2200,10 @@ void decodeUtf16Value(const ValueStatsAnalyzer &valueStats, string &cur_val)
 
     // Return the value converted from UTF-16 to UTF-8
     cur_val = utf8Out;
+}
+
+bool testNoSQLKeySuspect(const string &key) {
+    return Waap::Util::nosql_key_evasion_detector_re.hasMatch(key);
 }
 
 bool testUrlBareUtf8Evasion(const string &line) {

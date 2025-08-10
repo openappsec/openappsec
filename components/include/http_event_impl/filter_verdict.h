@@ -27,9 +27,18 @@ public:
         verdict(_verdict)
     {}
 
+    FilterVerdict(
+        ngx_http_cp_verdict_e _verdict,
+        const std::string &_web_reponse_id)
+            :
+        verdict(_verdict),
+        web_user_response_id(_web_reponse_id)
+    {}
+
     FilterVerdict(const EventVerdict &_verdict, ModifiedChunkIndex _event_idx = -1)
             :
-        verdict(_verdict.getVerdict())
+        verdict(_verdict.getVerdict()),
+        web_user_response_id(_verdict.getWebUserResponseByPractice())
     {
         if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT) {
             addModifications(_verdict.getModifications(), _event_idx);
@@ -59,10 +68,12 @@ public:
     uint getModificationsAmount() const { return total_modifications; }
     ngx_http_cp_verdict_e getVerdict() const { return verdict; }
     const std::vector<EventModifications> & getModifications() const { return modifications; }
+    const std::string getWebUserResponseID() const { return web_user_response_id; }
 
 private:
     ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
     std::vector<EventModifications> modifications;
+    std::string web_user_response_id;
     uint total_modifications = 0;
 };
 

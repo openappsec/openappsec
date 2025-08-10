@@ -97,7 +97,9 @@ private:
         if (!external_certificate.empty()) conn.setExternalCertificate(external_certificate);
 
         auto connected = conn.establishConnection();
-        persistent_connections.emplace(conn_key, conn);
+        if (!metadata.getConnectionFlags().isSet(MessageConnectionConfig::ONE_TIME_FOG_CONN)) {
+            persistent_connections.emplace(conn_key, conn);
+        }
 
         if (!connected.ok()) {
             string connection_err = "Failed to establish connection. Error: " + connected.getErr();
@@ -140,8 +142,9 @@ private:
         }
 
         dbgTrace(D_CONNECTION) << "Connection over proxy established succssesfuly";
-
-        persistent_connections.emplace(conn_key, conn);
+        if (!metadata.getConnectionFlags().isSet(MessageConnectionConfig::ONE_TIME_FOG_CONN)) {
+            persistent_connections.emplace(conn_key, conn);
+        }
         return conn;
     }
 

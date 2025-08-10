@@ -45,6 +45,8 @@ static const map<string, IPSLevel> levels = {
     { "Very Low",    IPSLevel::VERY_LOW }
 };
 
+int CompleteSignature::yield_on_load_cnt = DEFAULT_IPS_YIELD_COUNT;
+
 static IPSLevel
 getLevel(const string &level_string, const string &attr_name)
 {
@@ -219,6 +221,18 @@ IPSSignatureMetaData::getYear() const
 void
 CompleteSignature::load(cereal::JSONInputArchive &ar)
 {
+    static int sigs_load_counter = 0;
+    static I_Environment *env = Singleton::Consume<I_Environment>::by<IPSComp>();
+    static bool post_init = false;
+
+    if (!post_init) {
+        auto routine_id = Singleton::Consume<I_MainLoop>::by<IPSComp>()->getCurrentRoutineId();
+        if (routine_id.ok()) {
+            post_init = true;
+            dbgInfo(D_IPS) << "Loading signatures post init, enabling yield with limit " << yield_on_load_cnt;
+        }
+    }
+
     try {
         ar(cereal::make_nvp("protectionMetadata", metadata));
         RuleDetection rule_detection(metadata.getName());
@@ -228,6 +242,15 @@ CompleteSignature::load(cereal::JSONInputArchive &ar)
     } catch (cereal::Exception &e) {
         is_loaded = false;
         dbgWarning(D_IPS) << "Failed to load signature: " << e.what();
+    }
+
+    if (post_init && (yield_on_load_cnt > 0) && (++sigs_load_counter == yield_on_load_cnt)) {
+        sigs_load_counter = 0;
+        auto maybe_is_async = env->get<bool>("Is Async Config Load");
+        if (maybe_is_async.ok() && *maybe_is_async == true) {
+            dbgTrace(D_IPS) << "Yielding after " << yield_on_load_cnt << " signatures";
+            Singleton::Consume<I_MainLoop>::by<IPSComp>()->yield(false);
+        }
     }
 }
 

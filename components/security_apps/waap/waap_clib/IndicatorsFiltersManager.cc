@@ -89,6 +89,7 @@ bool IndicatorsFiltersManager::shouldFilterKeyword(const std::string &key, const
             shouldFilter |= m_keywordsFreqFilter->shouldFilterKeyword(type, keyword);
         }
     }
+
     if (m_matchedOverrideKeywords.size() > 0 &&
             m_matchedOverrideKeywords.find(keyword) != m_matchedOverrideKeywords.end())
     {

@@ -26,6 +26,7 @@ public:
     virtual Maybe<std::string> getArch() = 0;
     virtual std::string getAgentVersion() = 0;
     virtual bool isKernelVersion3OrHigher() = 0;
+    virtual bool isGw() = 0;
     virtual bool isGwNotVsx() = 0;
     virtual bool isVersionAboveR8110() = 0;
     virtual bool isReverseProxy() = 0;

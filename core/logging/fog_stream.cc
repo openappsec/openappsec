@@ -37,6 +37,7 @@ FogStream::sendLog(const Report &log)
     ScopedContext ctx;
     ctx.registerValue<bool>("Obfuscate log field", true);
 
+    dbgTrace(D_REPORT) << "Sending log to fog";
     LogRest rest(log);
     i_msg->sendAsyncMessage(HTTPMethod::POST, fog_log_uri, rest, MessageCategory::LOG);
 }

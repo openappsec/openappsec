@@ -32,6 +32,13 @@ HttpManagerOpaque::setApplicationVerdict(const string &app_name, ngx_http_cp_ver
     applications_verdicts[app_name] = verdict;
 }
 
+void
+HttpManagerOpaque::setApplicationWebResponse(const string &app_name, string web_user_response_id)
+{
+    dbgTrace(D_HTTP_MANAGER) << "Security app: " << app_name << ", has web user response: " << web_user_response_id;
+    applications_web_user_response[app_name] = web_user_response_id;
+}
+
 ngx_http_cp_verdict_e
 HttpManagerOpaque::getApplicationsVerdict(const string &app_name) const
 {
@@ -51,8 +58,12 @@ HttpManagerOpaque::getCurrVerdict() const
     for (const auto &app_verdic_pair : applications_verdicts) {
         switch (app_verdic_pair.second) {
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP:
+                dbgTrace(D_HTTP_MANAGER) << "Verdict DROP for app: " << app_verdic_pair.first;
+                current_web_user_response = applications_web_user_response.at(app_verdic_pair.first);
+                dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
                 return app_verdic_pair.second;
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT:
+                // Sent in ResponseHeaders and ResponseBody.
                 verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
                 break;
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT:
@@ -60,11 +71,16 @@ HttpManagerOpaque::getCurrVerdict() const
                 break;
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT:
                 break;
+            case ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS:
+                // Sent in End Request.
+                verdict = ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS;
+                break;
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT:
                 dbgTrace(D_HTTP_MANAGER) << "Verdict 'Irrelevant' is not yet supported. Returning Accept";
                 accepted_apps++;
                 break;
             case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT:
+                // Sent in Request Headers and Request Body.
                 verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
                 break;
             default:
