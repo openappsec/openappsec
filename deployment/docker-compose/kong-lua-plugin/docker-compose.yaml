@@ -28,7 +28,7 @@ services:
       - user_email=${APPSEC_USER_EMAIL}
       - AGENT_TOKEN=${APPSEC_AGENT_TOKEN}
       - autoPolicyLoad=${APPSEC_AUTO_POLICY_LOAD}
-      - registered_server=Kong
+      - registered_server=KongLua
     ipc: shareable
     restart: unless-stopped
     volumes:
