@@ -6,7 +6,7 @@
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6629/badge)](https://bestpractices.coreinfrastructure.org/projects/6629)
 
 # About
-[open-appsec](https://www.openappsec.io) (openappsec.io) builds on machine learning to provide preemptive web app & API threat protection against OWASP-Top-10 and zero-day attacks. It can be deployed as an add-on to Kubernetes Ingress, NGINX, Envoy (soon), and API Gateways.
+[open-appsec](https://www.openappsec.io) (openappsec.io) builds on machine learning to provide preemptive web app & API threat protection against OWASP-Top-10 and zero-day attacks. It can be deployed as an add-on to Linux, Docker or K8s deployments, on NGINX, Kong, APISIX, or Envoy.
 
 The open-appsec engine learns how users normally interact with your web application. It then uses this information to automatically detect requests that fall outside of normal operations, and conducts further analysis to decide whether the request is malicious or not.
 
@@ -39,13 +39,13 @@ open-appsec can be managed using multiple methods:
 * [Using SaaS Web Management](https://docs.openappsec.io/getting-started/using-the-web-ui-saas)
 
 open-appsec Web UI:
-![image](https://github.com/openappsec/openappsec/assets/114033741/22d99379-df52-45c8-984f-1b820635f3b9)
+<img width="1854" height="775" alt="image" src="https://github.com/user-attachments/assets/4c6f7b0a-14f3-4f02-9ab0-ddadc9979b8d" />
+
 
 
 ## Deployment Playgrounds (Virtual labs)
 You can experiment with open-appsec using [Playgrounds](https://www.openappsec.io/playground)
-
-![image](https://github.com/openappsec/openappsec/assets/114033741/14d35d69-4577-48fc-ae87-ea344888e94d)
+<img width="781" height="878" alt="image" src="https://github.com/user-attachments/assets/0ddee216-5cdf-4288-8c41-cc28cfbf3297" />
 
 # Resources
 * [Project Website](https://openappsec.io)
@@ -54,21 +54,15 @@ You can experiment with open-appsec using [Playgrounds](https://www.openappsec.i
 
 # Installation
 
-For Kubernetes (NGINX Ingress) using the installer:
+For Kubernetes (NGINX /Kong / APISIX / Istio) using Helm: follow [documentation](https://docs.openappsec.io/getting-started/start-with-kubernetes)
 
-```bash
-$ wget https://downloads.openappsec.io/open-appsec-k8s-install && chmod +x open-appsec-k8s-install
-$ ./open-appsec-k8s-install
-```
-
-For Kubernetes (NGINX or Kong) using Helm: follow [documentation](https://docs.openappsec.io/getting-started/start-with-kubernetes/install-using-helm-ingress-nginx-and-kong) – use this method if you’ve built your own containers. 
-
-For Linux (NGINX or Kong) using the installer (list of supported/pre-compiled NGINX attachments is available [here](https://downloads.openappsec.io/packages/supported-nginx.txt)):
+For Linux (NGINX / Kong / APISIX) using the installer (list of supported/pre-compiled NGINX attachments is available [here](https://downloads.openappsec.io/packages/supported-nginx.txt)):
 
 ```bash
 $ wget https://downloads.openappsec.io/open-appsec-install && chmod +x open-appsec-install
 $ ./open-appsec-install --auto
 ```
+For kong Lua Based plug in follow [documentation](https://docs.openappsec.io/getting-started/start-with-linux)
 
 For Linux, if you’ve built your own package use the following commands:
 
