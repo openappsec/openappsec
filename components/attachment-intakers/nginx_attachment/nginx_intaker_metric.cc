@@ -18,7 +18,7 @@ USE_DEBUG_FLAG(D_METRICS_NGINX_ATTACHMENT);
 void
 nginxIntakerEvent::resetAllCounters()
 {
-    successfull_inspection_counter = 0;
+    successful_inspection_counter = 0;
     open_failure_inspection_counter = 0;
     close_failure_inspection_counter = 0;
     transparent_mode_counter = 0;
@@ -68,7 +68,7 @@ nginxIntakerEvent::addPluginMetricCounter(const ngx_http_cp_metric_data_t *recie
         uint64_t amount = recieved_metric_data->data[i];
         switch (metric_type) {
             case ngx_http_plugin_metric_type_e::INSPECTION_SUCCESSES_COUNT: {
-                successfull_inspection_counter += amount;
+                successful_inspection_counter += amount;
                 break;
             }
             case ngx_http_plugin_metric_type_e::INSPECTION_OPEN_FAILURES_COUNT: {
@@ -276,7 +276,7 @@ nginxIntakerEvent::getPluginMetricCounter(ngx_http_plugin_metric_type_e metric_t
 {
     switch (metric_type) {
         case ngx_http_plugin_metric_type_e::INSPECTION_SUCCESSES_COUNT:
-            return successfull_inspection_counter;
+            return successful_inspection_counter;
         case ngx_http_plugin_metric_type_e::INSPECTION_OPEN_FAILURES_COUNT:
             return open_failure_inspection_counter;
         case ngx_http_plugin_metric_type_e::INSPECTION_CLOSE_FAILURES_COUNT:
@@ -381,7 +381,7 @@ nginxIntakerEvent::getPluginMetricCounter(ngx_http_plugin_metric_type_e metric_t
 void
 nginxIntakerMetric::upon(const nginxIntakerEvent &event)
 {
-    successfull_inspection_counter.report(
+    successful_inspection_counter.report(
         event.getPluginMetricCounter(ngx_http_plugin_metric_type_e::INSPECTION_SUCCESSES_COUNT)
     );
     transparent_mode_counter.report(

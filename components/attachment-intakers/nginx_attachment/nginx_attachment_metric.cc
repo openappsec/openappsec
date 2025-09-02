@@ -18,7 +18,7 @@ USE_DEBUG_FLAG(D_METRICS_NGINX_ATTACHMENT);
 void
 nginxAttachmentEvent::resetAllCounters()
 {
-    successfull_registrations_counter = 0;
+    successful_registrations_counter = 0;
     failed_registrations_counter = 0;
     failed_connections_counter = 0;
     accept_verdict_counter = 0;
@@ -35,7 +35,7 @@ nginxAttachmentEvent::addNetworkingCounter(networkVerdict _verdict)
 {
     switch (_verdict) {
         case networkVerdict::REGISTRATION_SUCCESS: {
-            successfull_registrations_counter += 1;
+            successful_registrations_counter += 1;
             break;
         }
         case networkVerdict::REGISTRATION_FAIL: {
@@ -102,7 +102,7 @@ nginxAttachmentEvent::getNetworkingCounter(networkVerdict _verdict) const
 {
     switch (_verdict) {
         case networkVerdict::REGISTRATION_SUCCESS:
-            return successfull_registrations_counter;
+            return successful_registrations_counter;
         case networkVerdict::REGISTRATION_FAIL:
             return failed_registrations_counter;
         case networkVerdict::CONNECTION_FAIL:
@@ -146,7 +146,7 @@ nginxAttachmentEvent::getResponseInspectionCounter() const
 void
 nginxAttachmentMetric::upon(const nginxAttachmentEvent &event)
 {
-    successfull_registrations.report(
+    successful_registrations.report(
         event.getNetworkingCounter(nginxAttachmentEvent::networkVerdict::REGISTRATION_SUCCESS)
     );
     failed_registrations.report(
