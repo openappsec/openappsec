@@ -272,22 +272,14 @@ private:
         }
 
         // Use detail_resolver to determine platform-specific certificate directory
-        auto maybe_platform = Singleton::Consume<I_DetailsResolver>::by<Messaging>()->getPlatform();
+#if defined(alpine)
+       string platform = "alpine";
+#else
+       string platform = "linux";
+#endif
 
-        if (!maybe_platform.ok()) {
-            dbgTrace(D_CONNECTION)
-                << "Failed to get platform for default certificate directory: "
-                << maybe_platform.getErr();
-            return "/usr/lib/ssl/certs/"; // Fallback for failed platform detection
-        }
-
-        auto platform = maybe_platform.unpack();
         if (platform == "alpine") {
             return "/etc/ssl/certs/";
-        }
-
-        if (platform == "linux") {
-            return "/usr/lib/ssl/certs/";
         }
 
         return "/usr/lib/ssl/certs/";
