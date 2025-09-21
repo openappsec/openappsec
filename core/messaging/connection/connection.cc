@@ -262,6 +262,37 @@ public:
     }
 
 private:
+    string
+    getCertificateDirectory()
+    {
+        auto details_ssl_dir = Singleton::Consume<I_AgentDetails>::by<Messaging>()->getOpenSSLDir();
+
+        if (details_ssl_dir.ok()) {
+            return *details_ssl_dir;
+        }
+
+        // Use detail_resolver to determine platform-specific certificate directory
+        auto maybe_platform = Singleton::Consume<I_DetailsResolver>::by<Messaging>()->getPlatform();
+
+        if (!maybe_platform.ok()) {
+            dbgTrace(D_CONNECTION)
+                << "Failed to get platform for default certificate directory: "
+                << maybe_platform.getErr();
+            return "/usr/lib/ssl/certs/"; // Fallback for failed platform detection
+        }
+
+        auto platform = maybe_platform.unpack();
+        if (platform == "alpine") {
+            return "/etc/ssl/certs/";
+        }
+
+        if (platform == "linux") {
+            return "/usr/lib/ssl/certs/";
+        }
+
+        return "/usr/lib/ssl/certs/";
+    }
+
     Maybe<void>
     setSSLContext()
     {
@@ -296,10 +327,11 @@ private:
         }
 
         dbgTrace(D_CONNECTION) << "Setting CA authentication";
-        auto details_ssl_dir = Singleton::Consume<I_AgentDetails>::by<Messaging>()->getOpenSSLDir();
-        auto openssl_dir = details_ssl_dir.ok() ? *details_ssl_dir : "/usr/lib/ssl/certs/";
-        auto configured_ssl_dir = getConfigurationWithDefault(openssl_dir, "message", "Trusted CA directory");
-        const char *ca_dir = configured_ssl_dir.empty() ? nullptr : configured_ssl_dir.c_str();
+
+        auto default_ssl_dir = getCertificateDirectory();
+        auto configured_ssl_dir =
+            getProfileAgentSettingWithDefault<string>(default_ssl_dir, "agent.config.message.capath");
+        const char *ca_dir = configured_ssl_dir.empty() ? "/usr/lib/ssl/certs/" : configured_ssl_dir.c_str();
 
         if (SSL_CTX_load_verify_locations(ssl_ctx.get(), ca_path.c_str(), ca_dir) != 1) {
             return genError("Failed to load certificate locations");

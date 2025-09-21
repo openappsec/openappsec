@@ -28,6 +28,7 @@
 #include "i_shell_cmd.h"
 #include "i_rest_api.h"
 #include "i_instance_awareness.h"
+#include "i_details_resolver.h"
 
 #include "config.h"
 
@@ -43,7 +44,8 @@ class Messaging
     Singleton::Consume<I_ShellCmd>,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_RestApi>,
-    Singleton::Consume<I_InstanceAwareness>
+    Singleton::Consume<I_InstanceAwareness>,
+    Singleton::Consume<I_DetailsResolver>
 {
 public:
     Messaging();
