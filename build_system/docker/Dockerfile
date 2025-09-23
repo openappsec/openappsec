@@ -1,7 +1,8 @@
 FROM alpine
 
 ENV OPENAPPSEC_NANO_AGENT=TRUE
-
+RUN apk update 
+RUN apk upgrade --no-cache
 RUN apk add --no-cache -u busybox
 RUN apk add --no-cache -u zlib
 RUN apk add --no-cache bash
