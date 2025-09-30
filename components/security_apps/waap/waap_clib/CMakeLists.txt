@@ -12,6 +12,7 @@ add_library(waap_clib
     ParserJson.cc
     ParserMultipartForm.cc
     ParserRaw.cc
+    ParserGzip.cc
     ParserUrlEncode.cc
     ParserXML.cc
     ParserDelimiter.cc

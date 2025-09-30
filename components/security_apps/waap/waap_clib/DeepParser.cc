@@ -22,6 +22,7 @@
 #include "ParserXML.h"
 #include "ParserHTML.h"
 #include "ParserBinary.h"
+#include "ParserGzip.h"
 #include "ParserMultipartForm.h"
 #include "ParserPercentEncode.h"
 #include "ParserPairs.h"
@@ -1260,6 +1261,10 @@ DeepParser::createInternalParser(
         // HTML detected
         dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse an HTML file";
         m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserHTML>>(*this, parser_depth + 1));
+        offset = 0;
+    } else if (isBodyPayload && Waap::Util::isGzipped(cur_val)){
+        dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a gzip file";
+        m_parsersDeque.push_back(std::make_shared<BufferedParser<ParserGzip>>(*this, parser_depth + 1));
         offset = 0;
     } else if (cur_val.size() > 0 && signatures->php_serialize_identifier.hasMatch(cur_val)) {
         // PHP value detected

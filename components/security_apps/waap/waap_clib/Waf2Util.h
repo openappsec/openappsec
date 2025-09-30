@@ -1135,6 +1135,7 @@ namespace Util {
     std::string obfuscateXor(const std::string& toEncrypt);
     std::string obfuscateXorBase64(const std::string& toEncrypt);
 
+    bool isGzipped(const std::string &stream);
     bool containsInvalidUtf8(const std::string &payload);
 
     bool containsPercentEncoding(const std::string &payload);

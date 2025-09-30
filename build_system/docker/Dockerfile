@@ -13,7 +13,9 @@ RUN apk add --no-cache libunwind
 RUN apk add --no-cache gdb
 RUN apk add --no-cache libxml2
 RUN apk add --no-cache pcre2
+RUN apk add --no-cache ca-certificates
 RUN apk add --update coreutils
+
 
 COPY self_managed_openappsec_manifest.json /tmp/self_managed_openappsec_manifest.json
 

@@ -44,14 +44,6 @@ static const string defaultSharedStorageHost = "appsec-shared-storage-svc";
 #define SHARED_STORAGE_HOST_ENV_NAME "SHARED_STORAGE_HOST"
 #define LEARNING_HOST_ENV_NAME "LEARNING_HOST"
 
-static bool
-isGZipped(const string &stream)
-{
-    if (stream.size() < 2) return false;
-    auto unsinged_stream = reinterpret_cast<const u_char *>(stream.data());
-    return unsinged_stream[0] == 0x1f && unsinged_stream[1] == 0x8b;
-}
-
 void yieldIfPossible(const string& func, int line)
 {
     // Check if we are in the main loop
@@ -73,7 +65,7 @@ bool RestGetFile::loadJson(const string& json)
     string json_str;
 
     json_str = json;
-    if (!isGZipped(json_str))
+    if (!Waap::Util::isGzipped(json_str))
     {
         return ClientRest::loadJson(json_str);
     }
@@ -343,7 +335,7 @@ void SerializeToFileBase::saveData()
 }
 
 string decompress(string fileContent) {
-    if (!isGZipped(fileContent)) {
+    if (!Waap::Util::isGzipped(fileContent)) {
         dbgTrace(D_WAAP_SERIALIZE) << "file note zipped";
         return fileContent;
     }

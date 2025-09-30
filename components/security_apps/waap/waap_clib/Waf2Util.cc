@@ -1913,6 +1913,17 @@ base64Decode(const string &input)
 }
 
 bool
+isGzipped(const string &stream)
+{
+    if (stream.size() < 2) return false;
+    auto unsinged_stream = reinterpret_cast<const u_char *>(stream.data());
+    dbgTrace(D_WAAP) << "isGzipped: first two bytes: "
+        << std::hex << static_cast<int>(unsinged_stream[0]) << " "
+        << std::hex << static_cast<int>(unsinged_stream[1]);
+    return unsinged_stream[0] == 0x1f && unsinged_stream[1] == 0x8b;
+}
+
+bool
 containsInvalidUtf8(const string &payload)
 {
     return invalid_hex_evasion_re.hasMatch(payload);
