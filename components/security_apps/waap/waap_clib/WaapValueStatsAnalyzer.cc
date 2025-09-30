@@ -103,7 +103,7 @@ ValueStatsAnalyzer::ValueStatsAnalyzer(const std::string &cur_val)
     bool lastNul = false; // whether last processed character was ASCII NUL
     size_t curValLength = cur_val.length();
 
-    if (curValLength == 0) {
+    if (curValLength == 0 || Waap::Util::isGzipped(cur_val)) {
         canSplitSemicolon = false;
         canSplitPipe = false;
         return;
