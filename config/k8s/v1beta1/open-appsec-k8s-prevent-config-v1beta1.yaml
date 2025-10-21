@@ -40,7 +40,7 @@ spec:
         stdout:
             format: json
         cef-service: []
---
+---
 apiVersion: openappsec.io/v1beta1
 kind: Practice
 metadata:
@@ -56,7 +56,7 @@ spec:
   web-attacks:
     minimum-confidence: high
     override-mode: prevent-learn
---
+---
 apiVersion: openappsec.io/v1beta1
 kind: CustomResponse
 metadata:
