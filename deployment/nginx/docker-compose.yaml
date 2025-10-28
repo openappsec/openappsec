@@ -81,14 +81,14 @@ services:
   appsec-db:
     profiles:
       - standalone
-    image: postgres
+    image: postgres:${POSTGRES_VERSION}
     container_name: appsec-db
     restart: always
     environment:
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_USER=${DB_USER} 
     volumes:
-      - ${POSTGRES_STORAGE}:/var/lib/postgresql/data
+      - ${POSTGRES_STORAGE}:/var/lib/postgresql
 
 ## example juice-shop backend container (vulnerable webserver, USE ONLY FOR TESTING AND IN LAB ENV)
 ##
