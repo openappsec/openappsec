@@ -18,15 +18,18 @@ init=
 active_watchdog_pid=
 
 cleanup() {
-    # Stop watchdog process if running
+    local signal="$1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Signal ${signal} was received, exiting gracefully..." >&2
     if [ -n "${active_watchdog_pid}" ] && ps -p ${active_watchdog_pid} > /dev/null 2>&1; then
         kill -TERM ${active_watchdog_pid} 2>/dev/null || true
         wait ${active_watchdog_pid} 2>/dev/null || true
     fi
+    echo "Cleanup completed. Exiting now." >&2
     exit 0
 }
 
-trap cleanup SIGTERM SIGINT
+trap 'cleanup SIGTERM' SIGTERM
+trap 'cleanup SIGINT' SIGINT
 
 if [ ! -f /nano-service-installers/$ORCHESTRATION_INSTALLATION_SCRIPT ]; then
     echo "Error: agent installation package doesn't exist."
