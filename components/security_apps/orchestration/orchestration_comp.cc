@@ -1522,6 +1522,12 @@ private:
 
         agent_data_report << make_pair("registeredServer", i_agent_details->getRegisteredServer());
 
+        const char *prometheus_env = getenv("PROMETHEUS");
+        if (prometheus_env != nullptr) {
+            auto enable_prometheus = string(prometheus_env) == "true";
+            agent_data_report << AgentReportFieldWithLabel("enablePrometheus", enable_prometheus ? "true" : "false");
+        }
+
 #if defined(gaia) || defined(smb)
         if (i_details_resolver->compareCheckpointVersion(8100, greater_equal<int>())) {
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER81", "true");
