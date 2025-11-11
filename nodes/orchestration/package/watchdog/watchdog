@@ -115,6 +115,11 @@ load_paths()
     if [ -n "${CP_ENV_LOG_FILE}" ]; then
         LOG_FILE_PATH=$CP_ENV_LOG_FILE
     fi
+
+    if [ -n "${PROMETHEUS}" ]; then
+        export PROMETHEUS=$PROMETHEUS
+    fi
+
     if [ -n "${CP_VS_ID}" ]; then
         VS_ID=${CP_VS_ID}
         VS_EVAL_PREFIX="ip netns exec CTX0000${VS_ID} env"

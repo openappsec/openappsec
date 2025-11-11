@@ -209,6 +209,9 @@ save_local_policy_config()
 if [ -n "${CP_ENV_FILESYSTEM}" ] ; then
     export FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
 fi
+if [ -n "${PROMETHEUS}" ] ; then
+    export PROMETHEUS=$PROMETHEUS
+fi
 if [ -n "${CP_ENV_LOG_FILE}" ] ; then
     LOG_FILE_PATH=$CP_ENV_LOG_FILE
 fi
@@ -433,7 +436,7 @@ if command -v which &>/dev/null; then
     var_which_cmd_exists=1
 fi
 
-if [ $var_arch != "gaia" ] && [ $var_arch != "gaia_arm" ] && [ $var_which_cmd_exists -eq 1 ]; then 
+if [ $var_arch != "gaia" ] && [ $var_arch != "gaia_arm" ] && [ $var_which_cmd_exists -eq 1 ]; then
     if [ -n "$(which systemctl)" ]; then
         var_startup_service="systemd"
     else
@@ -974,7 +977,7 @@ install_orchestration()
         fi
         ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/
         ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/
-        cp_print "Done successfully doing only unpacking lib64 to Path: ${USR_LIB_PATH}" ${FORCE_STDOUT}	
+        cp_print "Done successfully doing only unpacking lib64 to Path: ${USR_LIB_PATH}" ${FORCE_STDOUT}
         exit 0
     fi
 
@@ -1149,6 +1152,9 @@ install_orchestration()
 		if [ -n "${FILESYSTEM_PATH}" ]; then
 			echo "CP_ENV_FILESYSTEM=${FILESYSTEM_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
 		fi
+        if [ -n "${PROMETHEUS}" ]; then
+            echo "PROMETHEUS=${PROMETHEUS}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
+        fi
 		if [ -n "${VS_ID}" ]; then
 			echo "CP_VS_ID=${VS_ID}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
 		fi

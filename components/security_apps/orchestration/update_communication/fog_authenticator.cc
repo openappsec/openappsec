@@ -227,6 +227,11 @@ FogAuthenticator::registerAgent(
 
     request << make_pair("userEdition", getUserEdition());
 
+    const char *prometheus_env = getenv("PROMETHEUS");
+    if (prometheus_env != nullptr) {
+        request << make_pair("enablePrometheus", string(prometheus_env) == "true" ? "true" : "false");
+    }
+
     if (getDeplymentType() == "Docker" || getDeplymentType() == "K8S") {
         const char *image_version_otp = getenv("IMAGE_VERSION");
         if (image_version_otp) {
