@@ -36,7 +36,7 @@ if [ ! -f /nano-service-installers/$ORCHESTRATION_INSTALLATION_SCRIPT ]; then
     exit 1
 fi
 
-if [ -z $1 ]; then
+if [ -z "$1" ]; then
     var_mode="--hybrid_mode"
 fi
 
@@ -60,30 +60,30 @@ while true; do
     shift
 done
 
-if [ -z $var_token ] && [ $var_mode != "--hybrid_mode" ]; then
+if [ -z "$var_token" ] && [ "$var_mode" != "--hybrid_mode" ]; then
     var_token=$(env | grep 'AGENT_TOKEN=' | cut -d'=' -f2-)
-    if  [ -z $var_token ]; then
+    if  [ -z "$var_token" ]; then
         echo "Error: Token was not provided as input argument."
         exit 1
     fi
 fi
 
 orchestration_service_installation_flags="--container_mode --skip_registration"
-if [ ! -z $var_token ]; then
+if [ -n "$var_token" ]; then
     export AGENT_TOKEN="$var_token"
     orchestration_service_installation_flags="$orchestration_service_installation_flags --token $var_token"
 fi
-if [ ! -z $var_fog_address ]; then
+if [ -n "$var_fog_address" ]; then
     orchestration_service_installation_flags="$orchestration_service_installation_flags --fog $var_fog_address"
 fi
-if [ ! -z $var_proxy ]; then
+if [ -n "$var_proxy" ]; then
     orchestration_service_installation_flags="$orchestration_service_installation_flags --proxy $var_proxy"
 fi
 
-if [ ! -z $var_mode ]; then
+if [ -n "$var_mode" ]; then
     orchestration_service_installation_flags="$orchestration_service_installation_flags $var_mode"
 fi
-if [ ! -z "$var_ignore" ]; then
+if [ -n "$var_ignore" ]; then
     orchestration_service_installation_flags="$orchestration_service_installation_flags $var_ignore"
 fi
 
@@ -114,7 +114,7 @@ fi
 # use advanced model if exist as data for agent
 FILE=/advanced-model/open-appsec-advanced-model.tgz
 if [ -f "$FILE" ]; then
-    tar -xzvf $FILE -C /etc/cp/conf/waap
+    tar -xzvf "$FILE" -C /etc/cp/conf/waap
 fi
 
 touch /etc/cp/watchdog/wd.startup
