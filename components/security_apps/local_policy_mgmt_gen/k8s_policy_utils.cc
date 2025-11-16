@@ -515,60 +515,63 @@ K8sPolicyUtils::createAppsecPolicyK8sFromV1beta2Crds(
 }
 // LCOV_EXCL_STOP
 
-std::tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>>
+tuple<Maybe<AppsecLinuxPolicy>, Maybe<V1beta2AppsecLinuxPolicy>>
 K8sPolicyUtils::createAppsecPolicyK8s(const string &policy_name, const string &ingress_mode) const
 {
-    auto maybe_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<AppsecPolicySpec>>(
-        "/apis/openappsec.io/v1beta1/policies/" + policy_name
+    string ns_suffix = getAppSecScopeType() == "namespaced" ? "ns" : "";
+    string ns = getAppSecScopeType() == "namespaced" ? "namespaces/" : "";
+    auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
+        "/apis/openappsec.io/v1beta2/" + ns + agent_ns + "policies" + ns_suffix + "/" + policy_name
     );
 
-    if (!maybe_appsec_policy_spec.ok() ||
-        maybe_appsec_policy_spec.unpack().getApiVersion().find("v1beta1") == std::string::npos
+    if (!maybe_v1beta2_appsec_policy_spec.ok() ||
+        maybe_v1beta2_appsec_policy_spec.unpack().getApiVersion().find("v1beta2") == std::string::npos
     ) {
         try {
-            std::string v1beta1_error =
-                maybe_appsec_policy_spec.ok() ? "There is no v1beta1 policy" : maybe_appsec_policy_spec.getErr();
+            string policy_error = maybe_v1beta2_appsec_policy_spec.getErr();
+            string v1beta2_error =
+                maybe_v1beta2_appsec_policy_spec.ok() ? "There is no v1beta2 policy" : policy_error;
             dbgWarning(D_LOCAL_POLICY
             ) << "Failed to retrieve Appsec policy with crds version: v1beta1, Trying version: v1beta2";
-            string ns_suffix = getAppSecScopeType() == "namespaced" ? "ns" : "";
-            string ns = getAppSecScopeType() == "namespaced" ? "namespaces/" : "";
-            auto maybe_v1beta2_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<NewAppsecPolicySpec>>(
-                "/apis/openappsec.io/v1beta2/" + ns + agent_ns + "policies" + ns_suffix + "/" + policy_name
+            auto maybe_appsec_policy_spec = getObjectFromCluster<AppsecSpecParser<AppsecPolicySpec>>(
+                "/apis/openappsec.io/v1beta1/policies/" + policy_name
             );
 
-            if (!maybe_v1beta2_appsec_policy_spec.ok()) {
+            if (!maybe_appsec_policy_spec.ok()) {
                 dbgWarning(D_LOCAL_POLICY)
-                    << "Failed to retrieve AppSec policy. Error: " << maybe_v1beta2_appsec_policy_spec.getErr();
+                    << "Failed to retrieve AppSec policy. Error: " << maybe_appsec_policy_spec.getErr();
                 return std::make_tuple(
-                    genError("Failed to retrieve AppSec v1beta1 policy. Error: " + v1beta1_error),
+                    genError("Failed to retrieve AppSec v1beta1 policy. Error: " + maybe_appsec_policy_spec.getErr()),
                     genError(
-                        "Failed to retrieve AppSec v1beta2 policy. Error: " + maybe_v1beta2_appsec_policy_spec.getErr()
+                        "Failed to retrieve AppSec v1beta2 policy. Error: " + v1beta2_error
                     )
                 );
             }
             return std::make_tuple(
-                genError("There is no v1beta1 policy"),
-                createAppsecPolicyK8sFromV1beta2Crds(maybe_v1beta2_appsec_policy_spec.unpack(), ingress_mode)
+                createAppsecPolicyK8sFromV1beta1Crds(maybe_appsec_policy_spec.unpack(), ingress_mode),
+                genError("There is no v1beta2 policy")
             );
+
         } catch (const PolicyGenException &e) {
             dbgDebug(D_LOCAL_POLICY) << "Failed in policy generation. Error: " << e.what();
-            return std::make_tuple(
+            return make_tuple(
                 genError("There is no v1beta1 policy"),
                 genError("Failed to retrieve AppSec v1beta2 policy. Error: " + string(e.what()))
             );
         }
     }
 
-    return std::make_tuple(
-        createAppsecPolicyK8sFromV1beta1Crds(maybe_appsec_policy_spec.unpack(), ingress_mode),
-        genError("There is no v1beta2 policy"));
+    return make_tuple(
+        genError("There is no v1beta1 policy"),
+        createAppsecPolicyK8sFromV1beta2Crds(maybe_v1beta2_appsec_policy_spec.unpack(), ingress_mode)
+    );
 }
 
 template<class T, class K>
 void
 K8sPolicyUtils::createPolicyFromIngress(
     T &appsec_policy,
-    map<std::string, T> &policies,
+    map<string, T> &policies,
     map<AnnotationKeys, string> &annotations_values,
     const SingleIngressData &item) const
 {
@@ -608,7 +611,7 @@ template<class T, class K>
 void
 K8sPolicyUtils::createPolicyFromActivation(
     T &appsec_policy,
-    map<std::string, T> &policies,
+    map<string, T> &policies,
     const EnabledPolicy &policy) const
 {
     if (policies.find(policy.getName()) == policies.end()) {
