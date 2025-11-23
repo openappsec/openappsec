@@ -227,7 +227,11 @@ typedef enum ngx_web_response_type
 #endif
 {
     CUSTOM_WEB_RESPONSE,
-    REDIRECT_WEB_RESPONSE
+    CUSTOM_WEB_BLOCK_PAGE_RESPONSE,
+    RESPONSE_CODE_ONLY,
+    REDIRECT_WEB_RESPONSE,
+
+    NO_WEB_RESPONSE
 } ngx_web_response_type_e;
 
 typedef struct __attribute__((__packed__)) ngx_http_cp_inject_data {
