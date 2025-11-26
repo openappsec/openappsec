@@ -36,11 +36,6 @@ services:
       - ${APPSEC_LOGS}:/var/log/nano_agent
       - ${APPSEC_LOCALCONFIG}:/ext/appsec
       - ${NGINX_CONFIG}:/etc/nginx/conf.d
-## advanced configuration - volume mount for nginx.conf file:
-## to change global instructions it's possible to also mount your own nginx.conf file by uncommenting the two lines below
-## make sure to include the line starting with "load_module" which loads the appsec attachment
-## and is included in /etc/nginx/conf.d/nginx.conf file as part of the nginx-attachment container
-#     - ${NGINX_CONF_FILE}:/etc/nginx/nginx.conf
     ports:
       - "80:80"
       - "443:443"
