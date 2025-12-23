@@ -1,7 +1,8 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : policies.openappsec.io
+metadata:
+  name: policies.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -138,9 +139,9 @@ spec:
                   items:
                     type: object
                     required:
-                    - mode
-                    - threatPreventionPractices
-                    - accessControlPractices
+                      - mode
+                      - threatPreventionPractices
+                      - accessControlPractices
                     properties:
                       name:
                         type: string
@@ -188,8 +189,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : accesscontrolpractices.openappsec.io
+metadata:
+  name: accesscontrolpractices.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -279,8 +280,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : customresponses.openappsec.io
+metadata:
+  name: customresponses.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -344,8 +345,6 @@ spec:
                 redirectAddXEventId:
                   type: boolean
                   default: false
-              required:
-                - mode
   scope: Cluster
   names:
     plural: customresponses
@@ -465,8 +464,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : logtriggers.openappsec.io
+metadata:
+  name: logtriggers.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -689,8 +688,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : sourcesidentifiers.openappsec.io
+metadata:
+  name: sourcesidentifiers.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -728,8 +727,7 @@ spec:
           properties:
             spec:
               type: object
-              properties:
-              type: object
+
               required:
                 - sourcesIdentifiers
               properties:
@@ -766,8 +764,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : threatpreventionpractices.openappsec.io
+metadata:
+  name: threatpreventionpractices.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1126,8 +1124,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : trustedsources.openappsec.io
+metadata:
+  name: trustedsources.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1181,7 +1179,7 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
+metadata:
   name: policyactivations.openappsec.io
 spec:
   group: openappsec.io
@@ -1223,8 +1221,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : policiesns.openappsec.io
+metadata:
+  name: policiesns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1331,8 +1329,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : accesscontrolpracticesns.openappsec.io
+metadata:
+  name: accesscontrolpracticesns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1423,7 +1421,7 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name : customresponsesns.openappsec.io
+  name: customresponsesns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1463,8 +1461,6 @@ spec:
                 redirectAddXEventId:
                   type: boolean
                   default: false
-              required:
-                - mode
   scope: Namespaced
   names:
     plural: customresponsesns
@@ -1475,7 +1471,7 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
+metadata:
   name: exceptionsns.openappsec.io
 spec:
   group: openappsec.io
@@ -1525,8 +1521,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : logtriggersns.openappsec.io
+metadata:
+  name: logtriggersns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1656,8 +1652,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : sourcesidentifiersns.openappsec.io
+metadata:
+  name: sourcesidentifiersns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -1670,8 +1666,6 @@ spec:
           type: object
           properties:
             spec:
-              type: object
-              properties:
               type: object
               required:
                 - sourcesIdentifiers
@@ -1708,8 +1702,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : threatpreventionpracticesns.openappsec.io
+metadata:
+  name: threatpreventionpracticesns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
@@ -2068,8 +2062,8 @@ spec:
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
-metadata :
-  name : trustedsourcesns.openappsec.io
+metadata:
+  name: trustedsourcesns.openappsec.io
   creationTimestamp: null
 spec:
   group: openappsec.io
