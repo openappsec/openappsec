@@ -106,7 +106,7 @@ HttpAttachmentConfiguration::save(cereal::JSONOutputArchive &archive) const
             "waiting_for_verdict_thread_timeout_msec",
             getNumericalValue("waiting_for_verdict_thread_timeout_msec")
         ),
-        cereal::make_nvp("nginx_inspection_mode", getNumericalValue("inspection_mode")),
+        cereal::make_nvp("nginx_inspection_mode", getNumericalValue("nginx_inspection_mode")),
         cereal::make_nvp("num_of_nginx_ipc_elements", getNumericalValue("num_of_nginx_ipc_elements")),
         cereal::make_nvp("keep_alive_interval_msec", getNumericalValue("keep_alive_interval_msec")),
         cereal::make_nvp("min_retries_for_verdict", getNumericalValue("min_retries_for_verdict")),
@@ -114,7 +114,12 @@ HttpAttachmentConfiguration::save(cereal::JSONOutputArchive &archive) const
         cereal::make_nvp("hold_verdict_retries", getNumericalValue("hold_verdict_retries")),
         cereal::make_nvp("hold_verdict_polling_time", getNumericalValue("hold_verdict_polling_time")),
         cereal::make_nvp("body_size_trigger", getNumericalValue("body_size_trigger")),
-        cereal::make_nvp("remove_server_header", getNumericalValue("remove_server_header"))
+        cereal::make_nvp("remove_server_header", getNumericalValue("remove_server_header")),
+        cereal::make_nvp("decompression_pool_size", getNumericalValue("decompression_pool_size")),
+        cereal::make_nvp("recompression_pool_size", getNumericalValue("recompression_pool_size")),
+        cereal::make_nvp("is_paired_affinity_enabled", getNumericalValue("is_paired_affinity_enabled")),
+        cereal::make_nvp("is_async_mode_enabled", getNumericalValue("is_async_mode_enabled")),
+        cereal::make_nvp("is_brotli_inspection_enabled", getNumericalValue("is_brotli_inspection_enabled"))
     );
 }
 
@@ -173,6 +178,21 @@ HttpAttachmentConfiguration::load(cereal::JSONInputArchive &archive)
     loadNumericalValue(archive, "hold_verdict_polling_time", 1);
     loadNumericalValue(archive, "body_size_trigger", 200000);
     loadNumericalValue(archive, "remove_server_header", 0);
+    loadNumericalValue(archive, "decompression_pool_size", 262144);
+    loadNumericalValue(archive, "recompression_pool_size", 16384);
+    loadNumericalValue(archive, "is_paired_affinity_enabled", 0);
+    loadNumericalValue(archive, "is_brotli_inspection_enabled", 0);
+
+    int g_env_async_mode = 1;
+    char *env_async_mode = getenv("CP_ASYNC_MODE");
+    if (env_async_mode != NULL) {
+        if (strcmp(env_async_mode, "true") == 0 || strcmp(env_async_mode, "1") == 0) {
+            g_env_async_mode = 1;
+        } else {
+            g_env_async_mode = 0;
+        }
+    }
+    loadNumericalValue(archive, "is_async_mode_enabled", g_env_async_mode);
 }
 
 bool

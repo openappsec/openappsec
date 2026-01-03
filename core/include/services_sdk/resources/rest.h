@@ -180,10 +180,31 @@ public:
 
     /// @brief Performs the REST call using the input stream.
     /// @param in The input stream containing the JSON data for the REST call.
+    /// @param headers The HTTP headers from the request.
     /// @return A Maybe object containing the result of the REST call (either the JSON data or an error message).
-    Maybe<std::string> performRestCall(std::istream &in);
+    Maybe<std::string> performRestCall(std::istream &in, const std::map<std::string, std::string> &headers);
+
+    /// @brief Performs the REST call using the input stream (backwards compatibility overload).
+    /// @param in The input stream containing the JSON data for the REST call.
+    /// @return A Maybe object containing the result of the REST call (either the JSON data or an error message).
+    Maybe<std::string> performRestCall(std::istream &in) {
+        return performRestCall(in, std::map<std::string, std::string>());
+    }
+
+    /// @brief Indicates whether this handler wants to receive HTTP headers.
+    /// @return True if the handler wants headers, false otherwise. Default is false.
+    virtual bool wantsHeaders() const { return false; }
+
+    /// @brief Sets the HTTP headers for this handler (used by bulk handlers to propagate headers).
+    /// @param headers The HTTP headers to set.
+    void setRequestHeaders(const std::map<std::string, std::string> &headers) {
+        request_headers = headers;
+    }
 
 protected:
+    /// @brief HTTP headers from the current request (only populated if wantsHeaders() returns true).
+    std::map<std::string, std::string> request_headers;
+
     /// @brief Determines if the direction is for input.
     /// @param dir The direction of the communication.
     /// @return True if the direction is for input, false otherwise.

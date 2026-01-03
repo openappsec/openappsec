@@ -9,7 +9,7 @@
 #include "i_mainloop.h"
 #include "i_time_get.h"
 #include "rate_limit_config.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 #include "http_inspection_events.h"
 #include "Waf2Util.h"
 #include "generic_rulebase/evaluators/asset_eval.h"
@@ -329,7 +329,7 @@ public:
             auto asset_location =
                 Singleton::Consume<I_GeoLocation>::by<RateLimit>()->lookupLocation(maybe_source_ip.unpack());
             if (!asset_location.ok()) {
-                dbgWarning(D_RATE_LIMIT)
+                dbgDebug(D_RATE_LIMIT)
                     << "Rate limit lookup location failed for source: "
                     << source_ip
                     << ", Error: "
@@ -400,7 +400,19 @@ public:
 
         if (calcRuleAction(rule) == RateLimitAction::PREVENT) {
             dbgTrace(D_RATE_LIMIT) << "Received DROP verdict, this request will be blocked by rate limit";
-            return DROP;
+
+            EventVerdict verdict = DROP;
+            ScopedContext rate_limit_ctx;
+            rate_limit_ctx.registerValue<GenericConfigId>(AssetMatcher::ctx_key, asset_id);
+            auto maybe_rate_limit_config = getConfiguration<RateLimitConfig>("rulebase", "rateLimit");
+            if (maybe_rate_limit_config.ok()) {
+                const string &web_user_response_id = maybe_rate_limit_config.unpack().getWebUserResponse();
+                if (!web_user_response_id.empty()) {
+                    verdict.setWebUserResponseByPractice(web_user_response_id);
+                    dbgTrace(D_RATE_LIMIT) << "Set web user response: " << web_user_response_id;
+                }
+            }
+            return verdict;
         }
 
         dbgTrace(D_RATE_LIMIT) << "Received DROP in detect mode, will not block.";
@@ -490,7 +502,7 @@ public:
             return;
         }
 
-        auto maybe_rule_by_ctx = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+        auto maybe_rule_by_ctx = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
         if (!maybe_rule_by_ctx.ok()) {
             dbgWarning(D_RATE_LIMIT)
                 << "rule was not found by the given context. Reason: "
@@ -732,9 +744,9 @@ public:
     I_EnvDetails* i_env_details = nullptr;
 
 private:
-    static constexpr auto DROP = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
-    static constexpr auto ACCEPT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-    static constexpr auto INSPECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    static constexpr auto DROP = ServiceVerdict::TRAFFIC_VERDICT_DROP;
+    static constexpr auto ACCEPT = ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
+    static constexpr auto INSPECT = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
 
     RateLimitAction practice_action;
     string rate_limit_lua_script_hash;
@@ -761,8 +773,8 @@ RateLimit::~RateLimit() = default;
 void
 RateLimit::preload()
 {
-    registerExpectedConfiguration<WaapConfigApplication>("WAAP", "WebApplicationSecurity");
-    registerExpectedConfiguration<WaapConfigAPI>("WAAP", "WebAPISecurity");
+    registerExpectedConfigurationWithCache<WaapConfigApplication>("assetId", "WAAP", "WebApplicationSecurity");
+    registerExpectedConfigurationWithCache<WaapConfigAPI>("assetId", "WAAP", "WebAPISecurity");
     registerExpectedConfigFile("waap", Config::ConfigFileType::Policy);
     registerExpectedConfiguration<RateLimitConfig>("rulebase", "rateLimit");
     registerExpectedConfigFile("accessControlV2", Config::ConfigFileType::Policy);

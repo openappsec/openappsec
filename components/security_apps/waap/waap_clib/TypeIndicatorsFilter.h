@@ -41,7 +41,7 @@ public:
 
     virtual void registerKeywords(const std::string& key, Waap::Keywords::KeywordsSet& keyword,
         IWaf2Transaction* pTransaction);
-
+    bool shouldTrack(const std::string& key, const IWaf2Transaction* pTransaction);
     void registerKeywords(const std::string& key, const std::string& sample, IWaf2Transaction* pTransaction);
 
     void loadParams(std::shared_ptr<Waap::Parameters::WaapParameters> pParams);

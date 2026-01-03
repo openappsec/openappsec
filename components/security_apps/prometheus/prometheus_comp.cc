@@ -40,7 +40,13 @@ struct ServiceData
 class PrometheusMetricData
 {
 public:
-    PrometheusMetricData(const string &n, const string &t, const string &d) : name(n), type(t), description(d) {}
+    PrometheusMetricData(const string &n, const string &u, const string &t, const string &d)
+            :
+        name(n),
+        unique_name(u),
+        type(t),
+        description(d)
+    {}
 
     void
     addElement(const string &labels, const string &value)
@@ -55,7 +61,9 @@ public:
 
         string representative_name = "";
         if (!name.empty()) {
-            auto metric_name = convertMetricName(name);
+            string metric_name;
+            if (!unique_name.empty()) metric_name = convertMetricName(unique_name);
+            if (metric_name.empty()) metric_name = convertMetricName(name);
             !metric_name.empty() ? representative_name = metric_name : representative_name = name;
         }
 
@@ -73,6 +81,7 @@ public:
 private:
 
     string name;
+    string unique_name;
     string type;
     string description;
     map<string, string> metric_labels_to_values;
@@ -98,6 +107,7 @@ public:
         for(auto &metric : metrics) {
             auto &metric_object = getDataObject(
                 metric.name,
+                metric.unique_name,
                 metric.type,
                 metric.description
             );
@@ -107,11 +117,14 @@ public:
 
 private:
     PrometheusMetricData &
-    getDataObject(const string &name, const string &type, const string &description)
+    getDataObject(const string &name, const string &unique_name, const string &type, const string &description)
     {
-        auto elem = prometheus_metrics.find(name);
+        auto elem = prometheus_metrics.find(unique_name);
         if (elem == prometheus_metrics.end()) {
-            elem = prometheus_metrics.emplace(name, PrometheusMetricData(name, type, description)).first;
+            elem = prometheus_metrics.emplace(
+                unique_name,
+                PrometheusMetricData(name, unique_name, type, description)
+            ).first;
         }
 
         return elem->second;

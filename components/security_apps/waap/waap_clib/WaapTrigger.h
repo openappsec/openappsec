@@ -201,7 +201,7 @@ struct Policy {
         }
         catch (std::runtime_error &e) {
             ar.setNextName(nullptr);
-            dbgInfo(D_WAAP) << "Failed to load triggers per practice, error: " << e.what();
+            dbgDebug(D_WAAP) << "Failed to load triggers per practice, error: " << e.what();
             triggersByPractice = TriggersByPractice();
         }
         try {
@@ -211,7 +211,7 @@ struct Policy {
         }
         catch (std::runtime_error &e) {
             ar.setNextName(nullptr);
-            dbgInfo(D_WAAP) << "Failed to load web user response per practice, error: " << e.what();
+            dbgDebug(D_WAAP) << "Failed to load web user response per practice, error: " << e.what();
             responseByPractice = WebUserResponseByPractice();
         }
         ar(

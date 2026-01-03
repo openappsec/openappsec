@@ -68,8 +68,12 @@ public:
     const std::vector<IpProtoRange> & getProtoValue() const { return ip_proto_value; }
     const std::vector<MatchQuery> & getItems() const { return items; }
     std::string getFirstValue() const { return first_value; }
-    MatchResult getMatch(const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
-    bool matchAttributes(const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
+    MatchResult getMatch(
+        const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
+        bool skip_irrelevant_key = false) const;
+    bool matchAttributes(
+        const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
+        bool skip_irrelevant_key = false) const;
     bool matchException(const std::string &behaviorKey, const std::string &behaviorValue) const;
     bool isKeyTypeIp() const;
     bool isKeyTypePort() const;
@@ -82,7 +86,8 @@ public:
 private:
     bool matchAttributes(
             const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
-            std::set<std::string> &matched_override_keywords) const;
+            std::set<std::string> &matched_override_keywords,
+            bool skip_irrelevant_key = false) const;
     StaticKeys getKeyByName(const std::string &key_type_name);
     bool matchAttributes(const std::set<std::string> &values,
             std::set<std::string> &matched_override_keywords) const;

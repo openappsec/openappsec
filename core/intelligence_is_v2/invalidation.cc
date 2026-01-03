@@ -274,44 +274,44 @@ Invalidation::serialize(cereal::JSONInputArchive &ar)
     try {
         ar(cereal::make_nvp("class", class_));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgWarning(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("category", category));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("family", family));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("group", group));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("order", order));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("kind", kind));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("mainAttributes", main_attributes));
         ar(cereal::make_nvp("attributes", attributes));
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
@@ -323,21 +323,21 @@ Invalidation::serialize(cereal::JSONInputArchive &ar)
             throw std::invalid_argument("Invalid string for ObjectType: " + object_type_);
         }
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("sourceId", source_id_));
         source_id = source_id_;
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("invalidationRegistrationId", registration_id_));
         registration_id = registration_id_;
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     try {
@@ -349,14 +349,14 @@ Invalidation::serialize(cereal::JSONInputArchive &ar)
             throw std::invalid_argument("Invalid string for InvalidationType: " + invalidation_type_);
         }
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgWarning(D_INTELLIGENCE) << e.what();
     }
 
     try {
         ar(cereal::make_nvp("listeningId", listening_id_));
         listening_id = listening_id_;
     } catch (const cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 
     classifiers[ClassifierType::CLASS] = class_;
@@ -379,6 +379,35 @@ Invalidation::addMainAttr(const StrAttributes &attr)
 {
     main_attributes.emplace_back(attr);
     return *this;
+}
+
+Invalidation &
+Invalidation::addHeader(const string &name, const string &value)
+{
+    headers[name] = value;
+    return *this;
+}
+
+Maybe<string>
+Invalidation::getHeader(const string &name) const
+{
+    auto it = headers.find(name);
+    if (it != headers.end()) {
+        return it->second;
+    }
+    return genError("Header not found: " + name);
+}
+
+const map<string, string> &
+Invalidation::getHeaders() const
+{
+    return headers;
+}
+
+bool
+Invalidation::hasHeader(const string &name) const
+{
+    return headers.find(name) != headers.end();
 }
 
 Maybe<string>
@@ -660,11 +689,26 @@ IpAttributes::serialize(cereal::JSONInputArchive &ar)
 {
     try {
         ar(cereal::make_nvp("ipv4Addresses", ipv4_addresses));
+    } catch (cereal::Exception &e) {
+        dbgTrace(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
         ar(cereal::make_nvp("ipv4AddressesRange", ipv4_address_ranges));
+    } catch (cereal::Exception &e) {
+        dbgTrace(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
         ar(cereal::make_nvp("ipv6Addresses", ipv6_addresses));
+    } catch (cereal::Exception &e) {
+        dbgTrace(D_INTELLIGENCE) << e.what();
+    }
+
+    try {
         ar(cereal::make_nvp("ipv6AddressesRange", ipv6_address_ranges));
     } catch (cereal::Exception &e) {
-        dbgError(D_INTELLIGENCE) << e.what();
+        dbgTrace(D_INTELLIGENCE) << e.what();
     }
 }
 

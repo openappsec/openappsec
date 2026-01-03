@@ -12,11 +12,11 @@
 // limitations under the License.
 
 #include "KeywordIndicatorFilter.h"
+#include "i_transaction.h"
 #include "waap.h"
 #include "WaapConfigApi.h"
 #include "WaapConfigApplication.h"
 #include "FpMitigation.h"
-#include "i_transaction.h"
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
@@ -98,12 +98,24 @@ bool KeywordIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapPa
     return m_confidence_calc.reset(params);
 }
 
+bool KeywordIndicatorFilter::shouldTrack(const std::string& key, const Waap::Keywords::KeywordsSet& keywords)
+{
+    for (const auto& keyword : keywords)
+    {
+        if (m_confidence_calc.shouldTrackParameter(key, keyword))
+        {
+            return true;
+        }
+    }
+    return m_confidence_calc.shouldTrackParameter(key, "");
+}
 
 void KeywordIndicatorFilter::registerKeywords(const std::string& key, Waap::Keywords::KeywordsSet& keywords,
     IWaf2Transaction* pTransaction)
 {
     std::string source(pTransaction->getSourceIdentifier());
-    std::string trusted_source = getTrustedSource(pTransaction);
+    auto trusted_source_maybe = getTrustedSource(pTransaction);
+    std::string trusted_source = trusted_source_maybe.ok() ? trusted_source_maybe.unpack() : "";
     if (keywords.empty())
     {
         registerSource(key, source);

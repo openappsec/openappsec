@@ -211,6 +211,8 @@ CPUManager::init()
         }
     }
 
+    registerConfigLoadCb([this]() { loadCPUConfig(); });
+
     i_mainloop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Timer,
         [this]() { checkCPUStatus(); },
@@ -265,8 +267,6 @@ void
 CPUManager::checkCPUStatus()
 {
     while (true) {
-        loadCPUConfig();
-
         auto is_orchestrator = Singleton::Consume<I_Environment>::by<CPUManager>()->get<bool>("Is Orchestrator");
         if (is_orchestrator.ok() && is_orchestrator.unpack()) {
             Maybe<double> current_general_cpu = i_cpu->getCurrentGeneralCPUUsage();

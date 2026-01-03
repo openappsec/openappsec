@@ -53,8 +53,13 @@ public:
         const std::string &uri,
         const std::function<std::string(const std::string &)> &callback
     ) = 0;
+    virtual bool addPostCall(
+        const std::string &uri,
+        const std::function<Maybe<std::string>(const std::string &)> &callback
+    ) = 0;
 
     virtual uint16_t getListeningPort() const = 0;
+    virtual uint16_t getStartingPortRange() const = 0;
 
 protected:
     ~I_RestApi() {}

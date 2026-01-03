@@ -69,7 +69,12 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"hold_verdict_retries\": 3,\n"
             "\"hold_verdict_polling_time\": 1,\n"
             "\"body_size_trigger\": 777,\n"
-            "\"remove_server_header\": 1\n"
+            "\"remove_server_header\": 1,\n"
+            "\"decompression_pool_size\": 524288,\n"
+            "\"recompression_pool_size\": 32768,\n"
+            "\"is_paired_affinity_enabled\": 0,\n"
+            "\"is_async_mode_enabled\": 0,\n"
+            "\"is_brotli_inspection_enabled\": 1\n"
         "}\n";
     ofstream valid_configuration_file(attachment_configuration_file_name);
     valid_configuration_file << valid_configuration;
@@ -97,10 +102,13 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(getMaxRetriesForVerdict(), 3u);
     EXPECT_EQ(getReqBodySizeTrigger(), 777u);
     EXPECT_EQ(getWaitingForVerdictThreadTimeout(), 75u);
-    EXPECT_EQ(getInspectionMode(), ngx_http_inspection_mode::BLOCKING_THREAD);
+    EXPECT_EQ(getInspectionMode(), NanoHttpInspectionMode::BLOCKING_THREAD);
     EXPECT_EQ(getRemoveResServerHeader(), 1u);
+    EXPECT_EQ(getDecompressionPoolSize(), 524288u);
+    EXPECT_EQ(getRecompressionPoolSize(), 32768u);
     EXPECT_EQ(getHoldVerdictRetries(), 3u);
     EXPECT_EQ(getHoldVerdictPollingTime(), 1u);
+    EXPECT_EQ(getIsBrotliInspectionEnabled(), 1u);
 
     EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/abc"), 1);
     EXPECT_EQ(isDebugContext("1.2.3.9", "5.6.7.8", 80, "GET", "test", "/abc"), 0);
@@ -125,6 +133,9 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(isSkipSource("0:0:0:0:0:0:0:4"), 1);
     EXPECT_EQ(isSkipSource("0:0:0:0:0:0:0:5"), 1);
     EXPECT_EQ(isSkipSource("0:0:0:0:0:0:0:6"), 0);
+
+    EXPECT_EQ(isPairedAffinityEnabled(), 0u);
+    EXPECT_EQ(isAsyncModeEnabled(), 0u);
 }
 
 TEST_F(HttpAttachmentUtilTest, CheckIPAddrValidity)

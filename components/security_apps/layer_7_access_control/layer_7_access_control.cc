@@ -7,7 +7,7 @@
 #include "config.h"
 #include "cache.h"
 #include "http_inspection_events.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 #include "intelligence_comp_v2.h"
 #include "intelligence_is_v2/query_request_v2.h"
 #include "log_generator.h"
@@ -117,12 +117,12 @@ public:
 
         if (!isAppEnabled()) {
             dbgTrace(D_L7_ACCESS_CONTROL) << "Returning Accept verdict as the Layer-7 Access Control app is disabled";
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+            return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
         }
 
         if (!event.isLastHeader()) {
             dbgTrace(D_L7_ACCESS_CONTROL) << "Returning Inspect verdict";
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+            return ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
         }
 
         return handleEvent();
@@ -133,7 +133,7 @@ public:
     {
         if (!isAppEnabled()) {
             dbgTrace(D_L7_ACCESS_CONTROL) << "Returning Accept verdict as the Layer-7 Access Control app is disabled";
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+            return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
         }
 
         dbgTrace(D_L7_ACCESS_CONTROL) << "Handling wait verdict";
@@ -217,13 +217,13 @@ Layer7AccessControl::Impl::queryIpReputation(const string &source_ip)
     if (!ip_reputation.ok()) {
         dbgTrace(D_L7_ACCESS_CONTROL) << "Scheduling Intelligence query  - returning Wait verdict";
         scheduleIntelligenceQuery(source_ip);
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
+        return ServiceVerdict::TRAFFIC_VERDICT_DELAYED;
     }
 
     if (!ip_reputation.unpack().isMalicious()) {
         dbgTrace(D_L7_ACCESS_CONTROL) << "Accepting IP: " << source_ip;
         ip_reputation_cache.deleteEntry(source_ip);
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+        return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
     }
 
     return generateLog(source_ip, ip_reputation.unpack());
@@ -246,7 +246,7 @@ Layer7AccessControl::Impl::handleEvent()
     }
 
     dbgWarning(D_L7_ACCESS_CONTROL) << "Could not extract the Client IP address from context";
-    return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+    return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
 }
 
 void
@@ -354,11 +354,11 @@ Layer7AccessControl::Impl::generateLog(const string &source_ip, const Intelligen
 
     if (isPrevent()) {
         dbgTrace(D_L7_ACCESS_CONTROL) << "Dropping IP: " << source_ip;
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        return ServiceVerdict::TRAFFIC_VERDICT_DROP;
     }
 
     dbgTrace(D_L7_ACCESS_CONTROL) << "Detecting IP: " << source_ip;
-    return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+    return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
 }
 
 Maybe<LogField, Context::Error>

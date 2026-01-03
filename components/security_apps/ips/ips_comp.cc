@@ -13,7 +13,7 @@
 #include "virtual_modifiers.h"
 #include "helper.h"
 #include "ips_common_types.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 
 using namespace std;
 
@@ -46,9 +46,9 @@ class IPSComp::Impl
     public Listener<HttpResponseBodyEvent>,
     public Listener<EndTransactionEvent>
 {
-    static constexpr auto DROP = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
-    static constexpr auto ACCEPT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-    static constexpr auto INSPECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    static constexpr auto DROP = ServiceVerdict::TRAFFIC_VERDICT_DROP;
+    static constexpr auto ACCEPT = ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
+    static constexpr auto INSPECT = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
 
     class SigsFirstTierAgg
     {
@@ -383,8 +383,8 @@ IPSComp::preload()
     registerExpectedResource<SnortSignaturesResource>("IPSSnortSigs", "protections");
     registerExpectedConfiguration<IPSConfiguration>("IPS", "IpsConfigurations");
     registerExpectedConfiguration<uint>("IPS", "Max Field Size");
-    registerExpectedConfiguration<IPSSignatures>("IPS", "IpsProtections");
-    registerExpectedConfiguration<SnortSignatures>("IPSSnortSigs", "SnortProtections");
+    registerExpectedConfigurationWithCache<IPSSignatures>("assetId", "IPS", "IpsProtections");
+    registerExpectedConfigurationWithCache<SnortSignatures>("assetId", "IPSSnortSigs", "SnortProtections");
     registerExpectedConfigFile("ips", Config::ConfigFileType::Policy);
     registerExpectedConfigFile("ips", Config::ConfigFileType::Data);
     registerExpectedConfigFile("snort", Config::ConfigFileType::Policy);

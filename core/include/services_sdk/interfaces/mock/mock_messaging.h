@@ -54,6 +54,7 @@ public:
     MOCK_METHOD4(setFogConnection, bool(const string &, uint16_t, bool, MessageCategory));
     MOCK_METHOD0(setFogConnection, bool());
     MOCK_METHOD1(setFogConnection, bool(MessageCategory));
+    MOCK_METHOD0(clearConnections, void());
 };
 
 static std::ostream &

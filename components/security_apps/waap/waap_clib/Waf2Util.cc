@@ -48,6 +48,49 @@ USE_DEBUG_FLAG(D_WAAP_JSON);
 #define MIN_HEX_LENGTH 6
 #define charToDigit(c) (c - '0')
 
+// Base64 decoding lookup table constants
+#define BASE64_INVALID -1
+#define BASE64_PADDING -2
+
+// Base64 lookup table for optimized decoding
+static int base64_table[256];
+static bool base64_table_initialized = false;
+
+// Initialize the base64 lookup table for optimized decoding
+static void initialize_base64_table()
+{
+    if (base64_table_initialized) {
+        return;
+    }
+
+    // Initialize all entries to invalid
+    for (int i = 0; i < 256; i++) {
+        base64_table[i] = BASE64_INVALID;
+    }
+
+    // Set valid base64 characters (A-Z = 0-25)
+    for (int i = 0; i < 26; i++) {
+        base64_table['A' + i] = i;
+    }
+
+    // Set valid base64 characters (a-z = 26-51)
+    for (int i = 0; i < 26; i++) {
+        base64_table['a' + i] = 26 + i;
+    }
+
+    // Set valid base64 characters (0-9 = 52-61)
+    for (int i = 0; i < 10; i++) {
+        base64_table['0' + i] = 52 + i;
+    }
+
+    // Set special base64 characters
+    base64_table['+'] = 62;
+    base64_table['/'] = 63;
+    base64_table['='] = BASE64_PADDING;
+
+    base64_table_initialized = true;
+}
+
 // See https://dev.w3.org/html5/html-author/charref
 const  struct HtmlEntity g_htmlEntities[] =
 {
@@ -1086,6 +1129,19 @@ base64_decode_status decideStatusBase64Decoded(
     return B64_DECODE_INVALID;
 }
 
+//
+// Base64 decoding with direct array lookup
+// Performance optimization notes:
+// - Replaced unordered_map lookups with direct array indexing
+// - Improved cache locality with a simple 256-element array
+// - Eliminated hash computation and collision handling overhead
+// - One-time initialization of the lookup table
+//
+// The table maps each ASCII character to its base64 value:
+// - For valid base64 characters (A-Z, a-z, 0-9, +, /): returns 0-63 value
+// - For padding character ('='): returns BASE64_PADDING (-2)
+// - For invalid characters: returns BASE64_INVALID (-1)
+//
 
 // Attempts to validate and decode base64-encoded chunk.
 // Value is the full value inside which potential base64-encoded chunk was found,
@@ -1107,6 +1163,9 @@ base64_decode_status decodeBase64Chunk(
         bool clear_on_error,
         bool called_with_prefix)
 {
+    // Initialize the base64 lookup table on first call
+    initialize_base64_table();
+
     decoded.clear();
     uint32_t acc = 0;
     int acc_bits = 0; // how many bits are filled in acc
@@ -1135,8 +1194,9 @@ base64_decode_status decodeBase64Chunk(
             return B64_DECODE_INVALID;
         }
 
-        std::unordered_map<char, double> original_occurences_counter;
-        std::unordered_map<char, double> decoded_occurences_counter;
+        // Fixed arrays for character counting - Proposal 1 optimization
+        uint32_t original_counts[256] = {0};     // Count for each ASCII character in original
+        uint32_t decoded_counts[256] = {0};      // Count for each byte value in decoded
 
         while (it != end) {
             unsigned char c = *it;
@@ -1159,35 +1219,21 @@ base64_decode_status decodeBase64Chunk(
 
                 // allow for more terminator characters
                 it++;
-                original_occurences_counter[c]++;
+                original_counts[static_cast<unsigned char>(c)]++;
                 continue;
             }
 
-            unsigned char val = 0;
+            // Use lookup table for faster decoding
+            int lookup_value = base64_table[static_cast<unsigned char>(c)];
 
-            if (c >= 'A' && c <= 'Z') {
-                val = c - 'A';
-            }
-            else if (c >= 'a' && c <= 'z') {
-                val = c - 'a' + 26;
-            }
-            else if (isdigit(c)) {
-                val = c - '0' + 52;
-            }
-            else if (c == '+') {
-                val = 62;
-            }
-            else if (c == '/') {
-                val = 63;
-            }
-            else if (c == '=') {
-                // Start tracking terminator characters
+            if (lookup_value == BASE64_PADDING) {
+                // Start tracking terminator characters ('=')
                 terminatorCharsSeen++;
                 it++;
-                original_occurences_counter[c]++;
+                original_counts[static_cast<unsigned char>(c)]++;
                 continue;
             }
-            else {
+            else if (lookup_value == BASE64_INVALID) {
                 dbgTrace(D_WAAP_BASE64)
                     << "(leave as-is) because of non-base64 character ('"
                     << c
@@ -1198,6 +1244,8 @@ base64_decode_status decodeBase64Chunk(
                     << ")";
                 return B64_DECODE_INVALID; // non-base64 character
             }
+
+            unsigned char val = static_cast<unsigned char>(lookup_value);
 
             acc = (acc << 6) | val;
             acc_bits += 6;
@@ -1218,11 +1266,11 @@ base64_decode_status decodeBase64Chunk(
                 }
 
                 decoded += (char)code;
-                decoded_occurences_counter[(char)code]++;
+                decoded_counts[static_cast<unsigned char>(code)]++;
             }
 
             it++;
-            original_occurences_counter[c]++;
+            original_counts[static_cast<unsigned char>(c)]++;
         }
 
         // end of encoded sequence decoded.
@@ -1242,13 +1290,21 @@ base64_decode_status decodeBase64Chunk(
         double entropy = 0;
         double p = 0;
         double decoded_entropy = 0;
-        for (const auto& pair : original_occurences_counter) {
-            p = pair.second / length;
-            entropy -= p * std::log2(p);
+
+        // Calculate entropy from original character counts
+        for (int i = 0; i < 256; i++) {
+            if (original_counts[i] > 0) {
+                p = static_cast<double>(original_counts[i]) / length;
+                entropy -= p * std::log2(p);
+            }
         }
-        for (const auto &pair : decoded_occurences_counter) {
-            p = pair.second / decoded.size();
-            decoded_entropy -= p * std::log2(p);
+
+        // Calculate entropy from decoded character counts
+        for (int i = 0; i < 256; i++) {
+            if (decoded_counts[i] > 0) {
+                p = static_cast<double>(decoded_counts[i]) / decoded.size();
+                decoded_entropy -= p * std::log2(p);
+            }
         }
         dbgTrace(D_WAAP_BASE64)
             << "Base entropy = "
@@ -1917,9 +1973,6 @@ isGzipped(const string &stream)
 {
     if (stream.size() < 2) return false;
     auto unsinged_stream = reinterpret_cast<const u_char *>(stream.data());
-    dbgTrace(D_WAAP) << "isGzipped: first two bytes: "
-        << std::hex << static_cast<int>(unsinged_stream[0]) << " "
-        << std::hex << static_cast<int>(unsinged_stream[1]);
     return unsinged_stream[0] == 0x1f && unsinged_stream[1] == 0x8b;
 }
 
@@ -2310,7 +2363,7 @@ string extractForwardedIp(const string &x_forwarded_hdr_val)
     vector<string> trusted_ips;
     string forward_ip;
 
-    auto identify_config = getConfiguration<UsersAllIdentifiersConfig>(
+    auto identify_config = getConfigurationWithCache<UsersAllIdentifiersConfig>(
         "rulebase",
         "usersIdentifiers"
     );

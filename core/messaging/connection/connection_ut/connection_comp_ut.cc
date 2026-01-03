@@ -24,6 +24,7 @@
 #include "rest.h"
 #include "rest_server.h"
 #include "dummy_socket.h"
+#include <atomic>
 
 using namespace std;
 using namespace testing;
@@ -100,6 +101,11 @@ TEST_F(TestConnectionComp, testSetAndGetConnection)
     EXPECT_EQ(get_conn.getConnKey().getHostName(), "127.0.0.1");
     EXPECT_EQ(get_conn.getConnKey().getPort(), 8080);
     EXPECT_EQ(get_conn.getConnKey().getCategory(), MessageCategory::LOG);
+
+    i_conn->clearConnections();
+    maybe_get_connection = i_conn->getPersistentConnection("127.0.0.1", 8080, MessageCategory::LOG);
+    ASSERT_FALSE(maybe_get_connection.ok());
+
 }
 
 TEST_F(TestConnectionComp, testEstablishNewConnection)
@@ -279,19 +285,27 @@ TEST_F(TestConnectionComp, testSendRequestWithOneTimeFogConnection)
     auto req = HTTPRequest::prepareRequest(conn, HTTPMethod::POST, "/test", conn_metadata.getHeaders(), "test-body");
     ASSERT_TRUE(req.ok());
 
+    // Ensure we accept+respond exactly once regardless of yield overload order
+    std::atomic<bool> responded{false};
     EXPECT_CALL(mock_mainloop, yield(A<std::chrono::microseconds>()))
-        .WillOnce(
-            InvokeWithoutArgs(
-                [&]() {
-                    cerr << "accepting socket" << endl;
-                    dummy_socket.acceptSocket();
-                    dummy_socket.writeToSocket("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmy-test");
-                }
-            )
-        ).WillRepeatedly(Return());
+        .WillRepeatedly(InvokeWithoutArgs([&]() {
+            if (!responded.exchange(true)) {
+                cerr << "accepting socket" << endl;
+                dummy_socket.acceptSocket();
+                dummy_socket.writeToSocket("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmy-test");
+            }
+        }));
+    EXPECT_CALL(mock_mainloop, yield(A<bool>()))
+        .WillRepeatedly(InvokeWithoutArgs([&]() {
+            if (!responded.exchange(true)) {
+                cerr << "accepting socket while receiving" << endl;
+                dummy_socket.acceptSocket();
+                dummy_socket.writeToSocket("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmy-test");
+            }
+        }));
 
     EXPECT_CALL(mock_timer, getMonotonicTime())
-        .WillRepeatedly(Invoke([]() { static int j = 0; return chrono::microseconds(++j * 10); }));
+        .WillRepeatedly(Invoke([]() { static int j = 0; return chrono::microseconds(++j * 1000 * 1000); }));
 
     auto maybe_response = i_conn->sendRequest(conn, *req);
     if (!maybe_response.ok()) {

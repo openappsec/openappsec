@@ -93,6 +93,14 @@ add_library(waap_clib
     ParserBinaryFile.cc
     RegexComparator.cc
     RequestsMonitor.cc
+    WaapHyperscanEngine.cc
+    buffered_compressed_stream.cc
+    UnifiedIndicatorsContainer.cc
+)
+
+add_library(
+    UnifiedIndicatorsContainer
+    UnifiedIndicatorsContainer.cc
 )
 
 add_definitions("-Wno-unused-function")

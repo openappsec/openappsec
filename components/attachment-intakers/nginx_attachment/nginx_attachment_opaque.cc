@@ -51,18 +51,19 @@ NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_da
     std::stringstream client_ip_str;
     client_ip_str << client_ip;
     setSourceIdentifier("sourceip", client_ip_str.str());
-
     ctx.registerValue("eventReferenceId", uuid, EnvKeyAttr::LogSection::DATA);
     ctx.registerValue<string>(HttpTransactionData::http_proto_ctx, transaction_data.getHttpProtocol());
     ctx.registerValue<string>(HttpTransactionData::method_ctx, transaction_data.getHttpMethod());
-    ctx.registerValue<string>(HttpTransactionData::host_name_ctx, transaction_data.getParsedHost());
-    ctx.registerValue<uint16_t>(HttpTransactionData::listening_port_ctx, transaction_data.getListeningPort());
+    ctx.registerQuickAccessValue<string>(HttpTransactionData::host_name_ctx, transaction_data.getParsedHost());
+    ctx.registerQuickAccessValue<uint16_t>(
+        HttpTransactionData::listening_port_ctx,
+        transaction_data.getListeningPort());
     ctx.registerValue<IPAddr>(HttpTransactionData::listening_ip_ctx, transaction_data.getListeningIP());
     ctx.registerValue<IPAddr>(HttpTransactionData::client_ip_ctx, transaction_data.getSourceIP());
     ctx.registerValue<uint16_t>(HttpTransactionData::client_port_ctx, transaction_data.getSourcePort());
     ctx.registerFunc<string>(HttpTransactionData::source_identifier, [this](){ return source_identifier; });
 
-    ctx.registerValue<string>(HttpTransactionData::uri_ctx, transaction_data.getParsedURI());
+    ctx.registerQuickAccessValue<string>(HttpTransactionData::uri_ctx, transaction_data.getParsedURI());
     auto decoder = makeVirtualContainer<HexDecoder<'%'>>(transaction_data.getURI());
     string decoded_url(decoder.begin(), decoder.end());
     auto question_mark_location = decoded_url.find('?');
@@ -143,6 +144,7 @@ NginxAttachmentOpaque::setKeepAliveCtx(const string &hdr_key, const string &hdr_
             ctx.registerValue("keep_alive_request_ctx", true);
             return true;
         }
+        dbgTrace(D_HTTP_MANAGER) << "Not a keep alive header";
         return false;
     }
 

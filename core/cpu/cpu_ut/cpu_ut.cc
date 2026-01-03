@@ -47,8 +47,6 @@ public:
     StrictMock<MockMainLoop> mock_ml;
     StrictMock<MockTimeGet> mock_time;
     I_Environment *i_env;
-
-private:
     ConfigComponent conf;
     ::Environment env;
 };
@@ -261,8 +259,24 @@ TEST_F(CPUTest, noDebugTest)
     StrictMock<MockCPU> mock_cpu;
     CPUManager cpu;
     cpu.preload();
-    setConfiguration<uint>(0, string("CPU"), string("debug period"));
     cpu.init();
+    // Test loadConfiguration functionality like in compression_ut
+    string config_json =
+        "{"
+        "    \"CPU\": {"
+        "        \"debug period\": ["
+        "            {"
+        "                \"value\": 0"
+        "            }"
+        "        ]"
+        "    }"
+        "}";
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(ss);
+
+    auto loaded_debug_period = getConfiguration<uint>("CPU", "debug period");
+    EXPECT_TRUE(loaded_debug_period.ok());
+    EXPECT_EQ((int)loaded_debug_period.unpack(), 0);
 
     doFWError();
     EXPECT_THAT(debug_output.str(), HasSubstr("!!!] FW error message\n"));

@@ -284,6 +284,25 @@ private:
     const string test_files_dir_name = "test_files";
 };
 
+TEST_F(CompressionUtilsTest, BrotliBufferLimitTest)
+{
+    // Create a large string with highly compressible data that will expand significantly
+    // This should trigger the buffer size limit if max_ratio is too restrictive
+    string large_compressible_string = string(10000, 'A') + string(10000, 'B') + "CCCCCC"; // 10KB of 'A' characters
+
+    Maybe<string> compressed = compressString(CompressionType::BROTLI, large_compressible_string);
+    EXPECT_TRUE(compressed.ok());
+
+    cout << "Compressed size: " << compressed.unpack().size() << ". compression ratio: "
+        << static_cast<double>(large_compressible_string.size()) / compressed.unpack().size() << endl;
+
+    // This decompression should fail if max_ratio is too restrictive (like 1)
+    // because decompressed data (100KB) will be much larger than compressed data
+    Maybe<string> decompressed = decompressString(compressed.unpack());
+    ASSERT_TRUE(decompressed.ok());
+    EXPECT_EQ(large_compressible_string, decompressed.unpack());
+}
+
 TEST_F(CompressionUtilsTest, CompressAndDecompressSimpleString)
 {
     for (auto single_compression_type : compression_types) {
@@ -459,4 +478,178 @@ TEST_F(CompressionUtilsTest, DecompressPlainText)
         capture_debug.str(),
         HasSubstr("error in 'inflate': Invalid or corrupted stream data")
     );
+}
+
+TEST_F(CompressionUtilsTest, BrotliCompressAndDecompressSimpleString)
+{
+    Maybe<string> compressed_string_maybe = compressString(
+        CompressionType::BROTLI,
+        simple_test_string
+    );
+    EXPECT_TRUE(compressed_string_maybe.ok());
+
+    Maybe<string> decompressed_string_maybe = decompressString(compressed_string_maybe.unpack());
+    EXPECT_TRUE(decompressed_string_maybe.ok());
+
+    EXPECT_EQ(simple_test_string, decompressed_string_maybe.unpack());
+}
+
+TEST_F(CompressionUtilsTest, BrotliCompressAndDecompressChunkSizedString)
+{
+    string test_string = readTestFileContents(chunk_sized_string_file_name);
+
+    Maybe<string> compressed_string_maybe = compressString(
+        CompressionType::BROTLI,
+        test_string
+    );
+    EXPECT_TRUE(compressed_string_maybe.ok());
+
+    Maybe<string> decompressed_string_maybe = decompressString(compressed_string_maybe.unpack());
+    EXPECT_TRUE(decompressed_string_maybe.ok());
+
+    EXPECT_EQ(test_string, decompressed_string_maybe.unpack());
+}
+
+TEST_F(CompressionUtilsTest, BrotliCompressMultipleChunkSizedStringAndDecompress)
+{
+    string test_string = readTestFileContents(multi_chunk_sized_string_file_name);
+    Maybe<string> chunked_compress_result = chunkedCompressString(CompressionType::BROTLI, test_string);
+    EXPECT_TRUE(chunked_compress_result.ok());
+
+    Maybe<string> chunked_decompress_result = chunkedDecompressString(chunked_compress_result.unpack());
+    EXPECT_TRUE(chunked_decompress_result.ok());
+
+    EXPECT_EQ(chunked_decompress_result.unpack(), test_string);
+}
+
+TEST_F(CompressionUtilsTest, BrotliEmptyBuffer)
+{
+    auto compression_stream = initCompressionStream();
+    stringstream compressed_stream;
+
+    Maybe<string> compressed_string = compressString(
+        CompressionType::BROTLI,
+        simple_test_string,
+        false,
+        compression_stream
+    );
+    EXPECT_TRUE(compressed_string.ok());
+    compressed_stream << compressed_string.unpack();
+
+    compressed_string = compressString(
+        CompressionType::BROTLI,
+        "",
+        true,
+        compression_stream
+    );
+    finiCompressionStream(compression_stream);
+    EXPECT_TRUE(compressed_string.ok());
+    compressed_stream << compressed_string.unpack();
+
+    int is_last_chunk;
+    auto decompression_stream = initCompressionStream();
+
+    Maybe<string> decompressed_string = decompressString(
+        compressed_stream.str(),
+        &is_last_chunk,
+        decompression_stream
+    );
+
+    EXPECT_TRUE(decompressed_string.ok());
+    EXPECT_EQ(decompressed_string.unpack(), simple_test_string);
+    finiCompressionStream(decompression_stream);
+}
+
+TEST_F(CompressionUtilsTest, BrotliCompressionRatio)
+{
+    // Test if Brotli provides reasonable compression ratio for highly compressible content
+    string test_string = string(10000, 'A');
+
+    Maybe<string> gzip_compressed = compressString(CompressionType::GZIP, test_string);
+    Maybe<string> brotli_compressed = compressString(CompressionType::BROTLI, test_string);
+
+    EXPECT_TRUE(gzip_compressed.ok());
+    EXPECT_TRUE(brotli_compressed.ok());
+
+    // Both should compress well
+    EXPECT_LT(gzip_compressed.unpack().size(), test_string.size() / 10);
+    EXPECT_LT(brotli_compressed.unpack().size(), test_string.size() / 10);
+}
+
+TEST_F(CompressionUtilsTest, BrotliVariousSizedPayloads)
+{
+    const vector<string> test_strings = {
+        "", // Empty string
+        "a", // Single character
+        "Hello, Brotli compression!", // Short string
+        string(1024, 'A'), // 1KB of repeating data
+        readTestFileContents(chunk_sized_string_file_name) // Test file
+    };
+
+    for (const auto& test_string : test_strings) {
+        Maybe<string> compressed_string_maybe = compressString(
+            CompressionType::BROTLI,
+            test_string
+        );
+        EXPECT_TRUE(compressed_string_maybe.ok());
+
+        Maybe<string> decompressed_string_maybe = decompressString(compressed_string_maybe.unpack());
+        EXPECT_TRUE(decompressed_string_maybe.ok());
+
+        EXPECT_EQ(test_string, decompressed_string_maybe.unpack());
+    }
+}
+
+TEST_F(CompressionUtilsTest, ExceptionHandling_NullDataPointer)
+{
+    auto compression_stream = initCompressionStream();
+    
+    CompressionResult result = compressData(
+        compression_stream,
+        CompressionType::GZIP,
+        100,
+        nullptr,  // Null data pointer
+        1
+    );
+    EXPECT_EQ(result.ok, 0);
+    EXPECT_THAT(
+        capture_debug.str(),
+        HasSubstr("Compression failed Data pointer is NULL")
+    );
+
+    finiCompressionStream(compression_stream);
+}
+
+TEST_F(CompressionUtilsTest, ExceptionHandling_InvalidDecompressionData)
+{
+    auto compression_stream = initCompressionStream();
+
+    unsigned char invalid_data[] = "This is not compressed data";
+    DecompressionResult result = decompressData(
+        compression_stream,
+        sizeof(invalid_data),
+        invalid_data
+    );
+    EXPECT_EQ(result.ok, 0);
+    EXPECT_THAT(
+        capture_debug.str(),
+        AnyOf(HasSubstr("Decompression failed"), HasSubstr("error in 'inflate'"))
+    );
+
+    finiCompressionStream(compression_stream);
+}
+
+TEST_F(CompressionUtilsTest, ExceptionHandling_ResourceCleanup)
+{
+    // Verify no memory leaks by creating and destroying multiple streams
+    // with failing operations
+    unsigned char invalid_data[] = "This is not compressed data";
+
+    for (int i = 0; i < 10; i++) {
+        auto temp_stream = initCompressionStream();
+        decompressData(temp_stream, 5, invalid_data);  // This should fail
+        finiCompressionStream(temp_stream);
+    }
+    
+    // No crashes = success
 }

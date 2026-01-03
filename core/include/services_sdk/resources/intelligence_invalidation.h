@@ -188,6 +188,11 @@ public:
     bool matches(const Invalidation &other) const;
     void serialize(cereal::JSONInputArchive &ar);
 
+    Invalidation & addHeader(const std::string &key, const std::string &value);
+    Maybe<std::string> getHeader(const std::string &key) const;
+    const std::map<std::string, std::string> & getHeaders() const;
+    bool hasHeader(const std::string &key) const;
+
 private:
     bool attr_matches(const std::vector<StrAttributes> &current, const std::vector<StrAttributes> &other) const;
     bool attr_matches(const std::vector<IpAttributes> &current, const std::vector<IpAttributes> &other) const;
@@ -200,6 +205,7 @@ private:
     Maybe<InvalidationType> invalidation_type;
     Maybe<uint> listening_id;
     Maybe<std::string> registration_id;
+    std::map<std::string, std::string> headers;
 };
 
 } // namespace Intelligence

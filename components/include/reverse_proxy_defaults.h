@@ -44,6 +44,7 @@ static const std::string default_syslog_socket_address = "127.0.0.1:1514";
 static const std::string rpm_full_load_path = "/tmp/rpm_full_load";
 static const std::string rpm_partial_load_path = "/tmp/rpm_partial_load";
 static const std::string first_rpm_policy_load_path = "/tmp/first_rpm_policy_load";
+static const std::string readiness_file_path = "/tmp/readiness";
 
 static const int default_port = 5555;
 

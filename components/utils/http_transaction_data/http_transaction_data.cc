@@ -19,7 +19,7 @@
 
 #include "enum_array.h"
 #include "buffer.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 
 using namespace std;
 

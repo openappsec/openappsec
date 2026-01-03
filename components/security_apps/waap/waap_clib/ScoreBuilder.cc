@@ -113,6 +113,7 @@ ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState) :
     restore();
 }
 
+
 ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& baseScores) :
     m_scoreTrigger(0),
     m_fpStore(),

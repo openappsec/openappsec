@@ -14,6 +14,7 @@
 #include "nginx_attachment_config.h"
 
 #include <stdlib.h>
+#include <algorithm>
 
 #include "nginx_attachment.h"
 #include "config.h"
@@ -25,7 +26,7 @@ USE_DEBUG_FLAG(D_NGINX_ATTACHMENT);
 
 using namespace std;
 
-using DebugLevel = ngx_http_cp_debug_level_e;
+using DebugLevel = nano_http_cp_debug_level_e;
 
 void
 HttpAttachmentConfig::init()
@@ -43,6 +44,8 @@ HttpAttachmentConfig::init()
     setDebugByContextValues();
     setKeepAliveIntervalMsec();
     setRetriesForVerdict();
+    setPairedAffinityEnabled();
+    setAsyncMode();
 }
 
 bool
@@ -210,15 +213,36 @@ HttpAttachmentConfig::setFailOpenTimeout()
         "Response server header removal"
     ));
 
+    conf_data.setNumericalValue("decompression_pool_size", getAttachmentConf<uint>(
+        262144,
+        "agent.decompressionPoolSize.nginxModule",
+        "HTTP manager",
+        "Decompression pool size in bytes"
+    ));
+
+    conf_data.setNumericalValue("recompression_pool_size", getAttachmentConf<uint>(
+        16384,
+        "agent.recompressionPoolSize.nginxModule",
+        "HTTP manager",
+        "Recompression pool size in bytes"
+    ));
+
+    conf_data.setNumericalValue("is_brotli_inspection_enabled", getAttachmentConf<uint>(
+        0,
+        "agent.isBrotliInspectionEnabled.nginxModule",
+        "HTTP manager",
+        "Brotli inspection enabled"
+    ));
+
     uint inspection_mode = getAttachmentConf<uint>(
-        static_cast<uint>(ngx_http_inspection_mode_e::NON_BLOCKING_THREAD),
+        static_cast<uint>(NanoHttpInspectionMode::NON_BLOCKING_THREAD),
         "agent.inspectionMode.nginxModule",
         "HTTP manager",
         "NGINX inspection mode"
     );
 
-    if (inspection_mode >= ngx_http_inspection_mode_e::INSPECTION_MODE_COUNT) {
-        inspection_mode = ngx_http_inspection_mode_e::NON_BLOCKING_THREAD;
+    if (inspection_mode >= static_cast<uint>(NanoHttpInspectionMode::INSPECTION_MODE_COUNT)) {
+        inspection_mode = static_cast<uint>(NanoHttpInspectionMode::NON_BLOCKING_THREAD);
     }
     conf_data.setNumericalValue("nginx_inspection_mode", inspection_mode);
 }
@@ -376,4 +400,46 @@ HttpAttachmentConfig::setDebugByContextValues()
         << new_ctx_cfg.method
         << ", listening_port: "
         << new_ctx_cfg.port;
+}
+
+void
+HttpAttachmentConfig::setPairedAffinityEnabled() {
+    bool is_paired_affinity_enabled = getAttachmentConf<bool>(
+        false,
+        "agent.pairedAffinity.nginxModule",
+        "HTTP manager",
+        "Paired Affinity state"
+    );
+
+    // Check environment variable to allow runtime override
+    const char* env_enable_affinity = getenv("ENABLE_AFFINITY_PAIRING");
+    if (env_enable_affinity != nullptr) {
+        string env_value(env_enable_affinity);
+        // Convert to lowercase for case insensitive comparison
+        transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+        is_paired_affinity_enabled = (env_value == "true");
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "Paired affinity overridden by environment variable ENABLE_AFFINITY_PAIRING="
+            << env_enable_affinity;
+    }
+
+    dbgTrace(D_NGINX_ATTACHMENT)
+        << "Attachment paired affinity is: "
+        << (is_paired_affinity_enabled ? "Enabled" : "Disabled");
+    conf_data.setNumericalValue("is_paired_affinity_enabled", is_paired_affinity_enabled);
+}
+
+void
+HttpAttachmentConfig::setAsyncMode() {
+    bool is_async_mode_enabled = getAttachmentConf<bool>(
+        false,
+        "agent.asyncMode.nginxModule",
+        "HTTP manager",
+        "Async Mode state"
+    );
+
+    dbgTrace(D_NGINX_ATTACHMENT)
+        << "Attachment async mode is: "
+        << (is_async_mode_enabled ? "Enabled" : "Disabled");
+    conf_data.setNumericalValue("is_async_mode_enabled", is_async_mode_enabled);
 }

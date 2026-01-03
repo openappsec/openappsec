@@ -54,6 +54,7 @@ public:
         is_server_socket = from.is_server_socket;
         socket_int = from.socket_int;
         from.socket_int = -1;
+        i_mainloop = Singleton::Consume<I_MainLoop>::by<SocketIS>();
     }
 
     virtual ~SocketInternal()
@@ -107,6 +108,115 @@ public:
             }
 
             bytes_sent += res;
+        }
+
+        return true;
+    }
+
+    bool
+    writeDataAsync(const vector<char> &data)
+    {
+        uint32_t bytes_sent = 0;
+        bool is_first_iter = true;
+        uint32_t max_retries = 10;
+        uint32_t retry_count = 0;
+        
+        while (bytes_sent < data.size() && retry_count < max_retries) {
+            if (!is_first_iter && !is_blocking) {
+                dbgTrace(D_SOCKET)
+                    << "Trying to yield before writing to socket again. Bytes written: "
+                    << bytes_sent
+                    << ", Total bytes: "
+                    << data.size();
+
+                if (!i_mainloop) {
+                    i_mainloop = Singleton::Consume<I_MainLoop>::by<SocketIS>();
+                }
+                i_mainloop->yield(false);
+            }
+            is_first_iter = false;
+
+            int res = send(socket_int, data.data() + bytes_sent, data.size() - bytes_sent, MSG_NOSIGNAL);
+            if (res <= 0) {
+                int err = errno;
+                
+                // Check if it's a temporary error that can be retried
+                if (res == -1 && (err == EAGAIN || err == EWOULDBLOCK)) {
+                    dbgTrace(D_SOCKET)
+                        << "Send would block (EAGAIN/EWOULDBLOCK), waiting for socket to become writable. "
+                        << "Bytes sent so far: "
+                        << bytes_sent;
+
+                    // Use poll to wait for socket to become writable with 10ms timeout
+                    struct pollfd pfd;
+                    pfd.fd = socket_int;
+                    pfd.events = POLLOUT;
+                    pfd.revents = 0;
+                    
+                    int poll_result = poll(&pfd, 1, 10);
+                    
+                    if (poll_result > 0 && (pfd.revents & POLLOUT)) {
+                        dbgTrace(D_SOCKET) << "Socket became writable, retrying send";
+                        retry_count++;
+                        continue;
+                    } else if (poll_result == 0) {
+                        dbgWarning(D_SOCKET)
+                            << "Timeout waiting for socket to become writable after 100ms. "
+                            << "Bytes sent: " << bytes_sent << "/" << data.size();
+                        retry_count++;
+                        continue;
+                    } else {
+                        dbgWarning(D_SOCKET)
+                            << "Poll failed while waiting for writable socket. Error: "
+                            << strerror(errno);
+                        return false;
+                    }
+                }
+
+                if (
+                    res == 0
+                    || err == EPIPE
+                    || err == ECONNRESET
+                    || err == ENOTCONN
+                    || err == ESHUTDOWN
+                    || err == EBADF
+                    || err == EINVAL
+                ) {
+                    dbgWarning(D_SOCKET)
+                        << "Fatal error sending data. Error: "
+                        << strerror(err)
+                        << ", bytes sent: "
+                        << bytes_sent
+                        << "/"
+                        << data.size();
+                    return false;
+                }
+
+                if (err == EINTR) {
+                    dbgTrace(D_SOCKET) << "Send interrupted (EINTR), retrying immediately";
+                    retry_count++;
+                    continue;
+                }
+                
+                dbgWarning(D_SOCKET)
+                    << "Unexpected error sending data. Error: "
+                    << strerror(err)
+                    << ", errno: "
+                    << err
+                    << ", bytes sent: "
+                    << bytes_sent
+                    << "/"
+                    << data.size();
+                return false;
+            }
+
+            bytes_sent += res;
+            retry_count = 0;
+        }
+
+        if (retry_count >= max_retries) {
+            dbgWarning(D_SOCKET) << "Reached max retries (" << max_retries << ") for socket write";
+            return false;
         }
 
         return true;
@@ -223,6 +333,7 @@ protected:
     bool is_blocking = false;
     bool is_server_socket = true;
     int socket_int = -1;
+    I_MainLoop *i_mainloop = nullptr;
 
 private:
     Maybe<string>
@@ -718,6 +829,7 @@ public:
 
     void closeSocket(socketFd &socket_fd) override;
     bool writeData(socketFd socket_fd, const vector<char> &data) override;
+    bool writeDataAsync(socketFd socket_fd, const vector<char> &data) override;
     Maybe<vector<char>> receiveData(socketFd socket_fd, uint data_size, bool is_blocking = true) override;
     bool isDataAvailable(socketFd socket) override;
 
@@ -818,6 +930,18 @@ SocketIS::Impl::writeData(socketFd socket_fd, const vector<char> &data)
     }
 
     return sock->second->writeData(data);
+}
+
+bool
+SocketIS::Impl::writeDataAsync(socketFd socket_fd, const vector<char> &data)
+{
+    auto sock = active_sockets.find(socket_fd);
+    if (sock == active_sockets.end()) {
+        dbgWarning(D_SOCKET) << "The provided socket file descriptor does not exist. Socket FD: " << socket_fd;
+        return false;
+    }
+
+    return sock->second->writeDataAsync(data);
 }
 
 Maybe<vector<char>>

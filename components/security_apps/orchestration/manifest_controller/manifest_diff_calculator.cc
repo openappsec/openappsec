@@ -158,6 +158,12 @@ ManifestDiffCalculator::buildInstallationQueue(
         installation_queue.push_back(orchestration_it->second);
     }
 
+    auto shared_libs_it = new_packages.find("sharedLibs");
+    if (shared_libs_it != new_packages.end()) {
+        installation_queue.push_back(shared_libs_it->second);
+    }
+
+
     auto wlp_standalone_it = new_packages.find("wlpStandalone");
     if (wlp_standalone_it != new_packages.end()){
         installation_queue.push_back(wlp_standalone_it->second);

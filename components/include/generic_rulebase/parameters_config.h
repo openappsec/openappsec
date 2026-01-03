@@ -190,7 +190,7 @@ public:
     static void
     preload()
     {
-        registerExpectedConfiguration<ParameterException>("rulebase", "exception");
+        registerExpectedConfigurationWithCache<ParameterException>("assetId", "rulebase", "exception");
         registerConfigLoadCb([](){ is_geo_location_exception_exists = is_geo_location_exception_being_loaded; });
         registerConfigPrepareCb([](){ is_geo_location_exception_being_loaded = false; });
     }
@@ -198,14 +198,20 @@ public:
     void load(cereal::JSONInputArchive &archive_in);
 
     std::set<ParameterBehavior>
-    getBehavior(const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
+    getBehavior(
+        const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
+        bool skip_irrelevant_key = false) const;
 
     std::set<ParameterBehavior>
     getBehavior(
-            const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
-            std::set<std::string> &matched_override_keywords) const;
+        const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs,
+        std::set<std::string> &matched_override_keywords,
+        bool skip_irrelevant_key = false) const;
 
     static bool isGeoLocationExceptionExists() { return is_geo_location_exception_exists; }
+    const MatchQuery& getMatch() const { return match; }
+    bool isContainingKVPair() const { return is_containing_kv_pair; }
+    bool checkKVPair() const;
 
 private:
     class MatchBehaviorPair
@@ -221,6 +227,7 @@ private:
     ParameterBehavior behavior;
     static bool is_geo_location_exception_exists;
     static bool is_geo_location_exception_being_loaded;
+    bool is_containing_kv_pair;
 };
 
 static const ParameterBehavior action_ignore(BehaviorKey::ACTION, BehaviorValue::IGNORE);

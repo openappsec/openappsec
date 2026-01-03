@@ -19,7 +19,7 @@
 
 USE_DEBUG_FLAG(D_WAAP);
 
-KeywordTypeValidator::KeywordTypeValidator(const std::string& mapFilePath) :
+KeywordTypeValidator::KeywordTypeValidator(const std::string &mapFilePath) :
     SerializeToFileBase(mapFilePath),
     m_serializedData(),
     m_keywordTypeMap(m_serializedData.m_keywordTypeMap)
@@ -32,7 +32,7 @@ KeywordTypeValidator::~KeywordTypeValidator()
 
 }
 
-void KeywordTypeValidator::serialize(std::ostream& stream)
+void KeywordTypeValidator::serialize(std::ostream &stream)
 {
     (void)stream;
 }
@@ -42,7 +42,7 @@ void KeywordTypeValidator::saveData()
     // do not override existing file
 }
 
-void KeywordTypeValidator::deserialize(std::istream& stream)
+void KeywordTypeValidator::deserialize(std::istream &stream)
 {
     try
     {
@@ -54,6 +54,7 @@ void KeywordTypeValidator::deserialize(std::istream& stream)
     }
     catch (std::runtime_error & e) {
         dbgWarning(D_WAAP) << "failed to deserialize keyword types validator file. Error: " << e.what();
+        throw e;
     }
 
 }
@@ -62,7 +63,7 @@ void KeywordTypeValidator::operator=(const KeywordTypeValidator &other) {
     m_serializedData.m_keywordTypeMap = other.m_serializedData.m_keywordTypeMap;
 }
 
-bool KeywordTypeValidator::isKeywordOfType(const std::string& keyword, ParamType type) const
+bool KeywordTypeValidator::isKeywordOfType(const std::string &keyword, ParamType type) const
 {
     auto keywordEntry = m_keywordTypeMap.find(keyword);
     if (keywordEntry != m_keywordTypeMap.end())

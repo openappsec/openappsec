@@ -26,6 +26,7 @@ VS_ID=""
 VS_LIB_SUB_FOLDER=
 
 is_wlp_orchestration="false"
+is_static_orchestration="false"
 ORCHESTRATION_EXE_SOURCE_PATH="./bin/orchestration_comp"
 
 NGINX_METADAT_EXTRACTOR_PATH="./scripts/cp-nano-makefile-generator.sh"
@@ -54,6 +55,8 @@ var_default_us_fog_address="https://inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="https://inext-agents-aus1.cloud.ngen.checkpoint.com"
 var_default_in_fog_address="https://inext-agents-ind1.cloud.ngen.checkpoint.com"
 var_default_ae_fog_address="https://inext-agents-ae.cloud.ngen.checkpoint.com"
+var_default_ca_fog_address="https://inext-agents-ca.cloud.ngen.checkpoint.com"
+
 var_fog_address=
 var_certs_dir=
 var_public_key=
@@ -206,6 +209,9 @@ save_local_policy_config()
 }
 
 [ -f /etc/environment ] && . "/etc/environment"
+if [ -n "${CP_ENV_WAAP_USE_HYPERSCAN}" ]; then
+    export WAAP_USE_HYPERSCAN=${CP_ENV_WAAP_USE_HYPERSCAN}
+fi
 if [ -n "${CP_ENV_FILESYSTEM}" ] ; then
     export FILESYSTEM_PATH=$CP_ENV_FILESYSTEM
 fi
@@ -237,6 +243,9 @@ while true; do
     elif [ "$1" = "--wlpOrchestration" ]; then
         is_wlp_orchestration="true"
         ORCHESTRATION_EXE_SOURCE_PATH="./bin/wlpStandalone"
+    elif [ "$1" = "--staticOrchestration" ]; then
+        is_static_orchestration="true"
+        ORCHESTRATION_EXE_SOURCE_PATH="./bin/orchestration_comp_static"
     elif [ "$1" = "--arm32_rpi" ]; then
         var_arch="arm"
         var_arch_flag="--arm32_rpi"
@@ -402,11 +411,15 @@ if [ "$RUN_MODE" = "install" ] && [ $var_offline_mode = false ]; then
             in_prefix_uppercase="CP-IN-"
             ae_prefix="cp-ae-"
             ae_prefix_uppercase="CP-AE-"
+            ca_prefix="cp-ca-"
+            ca_prefix_uppercase="CP-CA-"
 
             if [ "${var_token#"$us_prefix"}" != "${var_token}" ] || [ "${var_token#"$us_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_us_fog_address"
             elif [ "${var_token#"$ae_prefix"}" != "${var_token}" ] || [ "${var_token#"$ae_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_ae_fog_address"
+            elif [ "${var_token#"$ca_prefix"}" != "${var_token}" ] || [ "${var_token#"$ca_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_ca_fog_address"
             elif [ "${var_token#$au_prefix}" != "${var_token}" ] || [ "${var_token#"$au_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_au_fog_address"
             elif [ "${var_token#$in_prefix}" != "${var_token}" ] || [ "${var_token#"$in_prefix_uppercase"}" != "${var_token}" ]; then
@@ -602,7 +615,7 @@ install_watchdog()
     if [ "$old_cp_nano_watchdog_md5" = "$new_cp_nano_watchdog_md5" ]; then
         # Watchdog did not changed
         cp_print "There is no update in watchdog. Everything is up to date. Reregistering services to be on the same side."
-        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME} $var_arch_flag"
         if [ "$IS_K8S_ENV" = "true" ]; then
             cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
         fi
@@ -619,7 +632,7 @@ install_watchdog()
     cp_exec "chmod 700 ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/revert_orchestrator_version.sh"
     cp_exec "touch ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wd.services"
 
-    cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+    cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register $is_upgrade ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME} $var_arch_flag"
     if [ "$IS_K8S_ENV" = "true" ]; then
         cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
     fi
@@ -852,7 +865,7 @@ copy_orchestration_executable()
         cp_exec "ln -s /ext/appsec/local_policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml"
     else
         if [ ! -f ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml ]; then
-            cp_copy local-default-policy.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
+            cp_copy local-default-policy-v1beta2.yaml ${FILESYSTEM_PATH}/${CONF_PATH}/local_policy.yaml
         fi
     fi
 }
@@ -991,8 +1004,13 @@ install_orchestration()
         cp_copy smb_egg/nano-egg-internal /opt/fw1/bin/nano-egg-internal
         chmod +x  /opt/fw1/bin/nano-egg-internal
     fi
-    ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
-    ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
+
+    if [ "$is_static_orchestration" != "true" ]; then
+        ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
+        ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
+    else
+        cp_print "Skipping shared library installation for static orchestration" ${FORCE_STDOUT}
+    fi
 
     if [ $var_compact_mode = true ]; then
         [ -f /etc/environment ] && . "/etc/environment"
@@ -1008,7 +1026,7 @@ install_orchestration()
         cp_exec "rm -f $FILESYSTEM_PATH/$CONF_PATH/custom_policy.cfg"
     fi
 
-    if command -v ldconfig &>/dev/null; then
+    if [ "$is_static_orchestration" != "true" ] && command -v ldconfig &>/dev/null; then
         cp_exec "ldconfig" ${FORCE_STDOUT}
     fi
     cp_print "Copy cp-agent-info tool"
@@ -1032,7 +1050,7 @@ install_orchestration()
         cp_print "\nStarting upgrading of open-appsec Nano Agent [$INSTALLATION_TIME]" ${FORCE_STDOUT}
         install_cp_nano_ctl
         add_uninstall_script
-        cp_exec "cp -f certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem"
+        cp_exec "cp -f certificate/inext-ca-bundle.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem"
 
         if [ -n "${OTP_TOKEN}" ]; then
             cp_print "Saving authentication token to file"
@@ -1079,7 +1097,7 @@ install_orchestration()
         update_cloudguard_appsec_manifest
         upgrade_conf_if_needed
 
-        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/cp-nano-orchestration $var_arch_flag"
+        cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME} $var_arch_flag"
         if [ "$IS_K8S_ENV" = "true" ]; then
             cp_exec "${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog --un-register ${FILESYSTEM_PATH}/${SERVICE_PATH}/k8s-check-update-listener.sh"
         fi
@@ -1104,19 +1122,6 @@ install_orchestration()
 
         cp_print "Upgrade completed successfully" ${FORCE_STDOUT}
 
-        if [ -f /etc/systemd/system/${NANO_AGENT_SERVICE_FILE} ]; then
-            cat "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}" | grep -q "EnvironmentFile=/etc/environment"
-            result=$?
-
-            if [ $var_container_mode = false ] && [ $result -eq 0 ]; then
-                sed -i "$ d" /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
-                echo "EnvironmentFile=/etc/environment" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
-                echo >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
-                check_and_run_restorecon "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
-                cp_exec "systemctl daemon-reload"
-                cp_exec "systemctl restart nano_agent"
-            fi
-        fi
         exit 0
     fi
 
@@ -1214,11 +1219,11 @@ install_orchestration()
         cp_print "Run Orchestration nano service in offline mode" ${FORCE_STDOUT}
     elif [ $var_hybrid_mode = true ]; then
         cp_print "Run Orchestration nano service in hybrid mode" ${FORCE_STDOUT}
-        cp_copy certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem
+        cp_copy certificate/inext-ca-bundle.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem
 
         save_local_policy_config
     else
-        cp_copy certificate/ngen.body.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem
+        cp_copy certificate/inext-ca-bundle.crt ${FILESYSTEM_PATH}/${CERTS_PATH}/fog.pem
     fi
     cp_exec "chmod 600 ${FILESYSTEM_PATH}/${ORCHESTRATION_CONF_FILE}"
 
@@ -1312,7 +1317,7 @@ run_pre_install_test()
 
 run_post_install_test()
 {
-    if [ $var_is_alpine = false ]; then
+    if [ "$var_is_alpine" = "false" ] && [ "$is_static_orchestration" = "false" ]; then
         if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_chrono.so* ]; then
             cp_print "Error, libboost_chrono .so file is missing" ${FORCE_STDOUT}
             exit 1

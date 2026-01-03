@@ -34,6 +34,7 @@ public:
     static bool getWaapAPIConfig(WaapConfigAPI &ngenAPIConfig);
     static void notifyAssetsCount();
     static void clearAssetsCount();
+    virtual WaapConfigType getType() const override { return WaapConfigType::API; }
 
 private:
 

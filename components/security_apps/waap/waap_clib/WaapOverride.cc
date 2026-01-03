@@ -103,7 +103,7 @@ const std::vector<std::string>& ExceptionsByPractice::getExceptionsOfPractice(De
     case DecisionType::AUTONOMOUS_SECURITY_DECISION:
         return m_web_app_ids;
     default:
-        dbgError(D_WAAP) <<
+        dbgDebug(D_WAAP) <<
         "Can't find practice type for exceptions by practice: " <<
         practiceType <<
         ", return web app exceptions";

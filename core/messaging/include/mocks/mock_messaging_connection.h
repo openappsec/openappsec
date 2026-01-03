@@ -29,6 +29,7 @@ public:
 
     MOCK_METHOD3(mockSendRequest, Maybe<HTTPResponse, HTTPResponse>(Connection &, HTTPRequest, bool));
 
+    MOCK_METHOD0(clearConnections, void());
     MOCK_METHOD3(getPersistentConnection, Maybe<Connection>(const string &, uint16_t, MessageCategory));
     MOCK_METHOD1(getFogConnectionByCategory, Maybe<Connection>(MessageCategory));
 };

@@ -33,16 +33,35 @@ MetricMetadata::Description operator"" _desc(const char *str, size_t) { return M
 
 static const set<string> default_metrics = {
     "watchdogProcessStartupEventsSum",
-    "reservedNgenA",
-    "reservedNgenB",
-    "reservedNgenC"
-    "reservedNgenD"
-    "reservedNgenE",
-    "reservedNgenF",
-    "reservedNgenG"
-    "reservedNgenH",
-    "reservedNgenI",
-    "reservedNgenJ",
+    "reservedNgenA_WAAP telemetry",
+    "reservedNgenB_WAAP telemetry",
+    "reservedNgenC_WAAP telemetry",
+    "reservedNgenD_WAAP telemetry",
+    "reservedNgenE_WAAP telemetry",
+    "reservedNgenF_WAAP telemetry",
+    "reservedNgenG_WAAP telemetry",
+    "reservedNgenH_WAAP telemetry",
+    "reservedNgenI_WAAP telemetry",
+    "reservedNgenJ_WAAP telemetry",
+    "reservedNgenA_WAAP traffic telemetry",
+    "reservedNgenB_WAAP traffic telemetry",
+    "reservedNgenC_WAAP traffic telemetry",
+    "reservedNgenD_WAAP traffic telemetry",
+    "reservedNgenE_WAAP traffic telemetry",
+    "reservedNgenF_WAAP traffic telemetry",
+    "reservedNgenG_WAAP traffic telemetry",
+    "reservedNgenH_WAAP traffic telemetry",
+    "reservedNgenI_WAAP traffic telemetry",
+    "reservedNgenJ_WAAP traffic telemetry",
+    "reservedNgenA_WAAP attack type telemetry",
+    "reservedNgenB_WAAP attack type telemetry",
+    "reservedNgenC_WAAP attack type telemetry",
+    "reservedNgenD_WAAP attack type telemetry",
+    "reservedNgenE_WAAP attack type telemetry",
+    "reservedNgenF_WAAP attack type telemetry",
+    "reservedNgenG_WAAP attack type telemetry",
+    "reservedNgenH_WAAP attack type telemetry",
+    "reservedNgenI_WAAP attack type telemetry",
     "numberOfProtectedAssetsSample",
     "preventEngineMatchesSample",
     "detectEngineMatchesSample",
@@ -115,6 +134,7 @@ MetricCalc::getPrometheusMetrics(const std::string &metric_name, const string &a
     PrometheusData res;
 
     res.name = getMetricDotName() != "" ? getMetricDotName() : getMetricName();
+    res.unique_name = res.name + "_" + metric_name;
     res.type = getMetricType() == MetricType::GAUGE ? "gauge" : "counter";
     res.description = getMetircDescription();
 

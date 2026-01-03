@@ -18,6 +18,7 @@
 #include "ConfidenceFile.h"
 #include "i_agent_details.h"
 #include "i_mainloop.h"
+#include "buffered_compressed_stream.h"
 #include <sys/stat.h>
 #include <math.h>
 #include <dirent.h> // For DIR, opendir, readdir, closedir
@@ -32,13 +33,15 @@ USE_DEBUG_FLAG(D_WAAP);
 #define BUSY_WAIT_TIME chrono::microseconds(100000) // 0.1 seconds
 #define WAIT_LIMIT 10
 #define BENIGN_PARAM_FACTOR 2
+#define MAX_TRACKING_KEYS 1000 // Maximum number of keys to track
 
 double logn(double x, double n)
 {
     return log(x) / log(n);
 }
 
-ConfidenceCalculator::ConfidenceCalculator(size_t minSources,
+ConfidenceCalculator::ConfidenceCalculator(
+    size_t minSources,
     size_t minIntervals,
     chrono::minutes intervalDuration,
     double ratioThreshold,
@@ -65,11 +68,16 @@ ConfidenceCalculator::ConfidenceCalculator(size_t minSources,
     m_ignoreSources(ignoreSrc),
     m_tuning(tuning),
     m_estimated_memory_usage(0),
+    m_post_index(0),
     m_mainLoop(Singleton::Consume<I_MainLoop>::by<WaapComponent>()),
     m_routineId(0),
-    m_filesToRemove()
+    m_filesToRemove(),
+    m_indicator_tracking_keys(),
+    m_tracking_keys_received(false)
 {
     restore();
+
+    extractLowConfidenceKeys(m_confidence_level);
 
     // Start asynchronous deletion of existing carry-on data files
     garbageCollector();
@@ -103,9 +111,10 @@ void ConfidenceCalculator::hardReset()
     m_estimated_memory_usage = 0;
     m_confidence_level.clear();
     m_confident_sets.clear();
+    m_indicator_tracking_keys.clear();
+    m_tracking_keys_received = false;
     remove(m_filePath.c_str());
 }
-
 
 void ConfidenceCalculator::reset()
 {
@@ -120,7 +129,7 @@ void ConfidenceCalculator::reset()
     }
 }
 
-bool ConfidenceCalculator::reset(ConfidenceCalculatorParams& params)
+bool ConfidenceCalculator::reset(ConfidenceCalculatorParams &params)
 {
     if (params == m_params)
     {
@@ -138,15 +147,16 @@ bool ConfidenceCalculator::reset(ConfidenceCalculatorParams& params)
 class WindowLogPost : public RestGetFile
 {
 public:
-    WindowLogPost(ConfidenceCalculator::KeyValSourcesLogger& _window_logger)
-        : window_logger(_window_logger)
+    WindowLogPost(std::shared_ptr<ConfidenceCalculator::KeyValSourcesLogger> _window_logger_ptr)
     {
+        // Initialize the RestParam with a reference to the shared data
+        // do not copy the shared pointer, but move it to avoid copying - do not use the ptr after it
+        window_logger = std::move(*_window_logger_ptr);
     }
 
     ~WindowLogPost()
     {
-        window_logger.get().clear();
-        window_logger.get().rehash(0);
+        // Container will be automatically cleaned up when RestParam goes out of scope
     }
 
 private:
@@ -169,73 +179,9 @@ private:
     S2C_PARAM(ConfidenceCalculator::KeyValSourcesLogger, window_logger)
 };
 
-
-// Function to handle compression
-void compressDataWrapper(const string& uncompressed_data, size_t chunk_size, vector<unsigned char>& compressed_data) {
-    auto compression_stream = initCompressionStream();
-    size_t offset = 0;
-
-    while (offset < uncompressed_data.size()) {
-        size_t current_chunk_size = std::min(chunk_size, uncompressed_data.size() - offset);
-        bool is_last = (offset + current_chunk_size >= uncompressed_data.size());
-        CompressionResult chunk_res = compressData(
-            compression_stream,
-            CompressionType::GZIP,
-            static_cast<uint32_t>(current_chunk_size),
-            reinterpret_cast<const unsigned char*>(uncompressed_data.c_str() + offset),
-            is_last ? 1 : 0
-        );
-
-        if (!chunk_res.ok) {
-            finiCompressionStream(compression_stream);
-            throw runtime_error("Compression failed");
-        }
-
-        if (chunk_res.output && chunk_res.num_output_bytes > 0) {
-            compressed_data.insert(
-                compressed_data.end(),
-                chunk_res.output,
-                chunk_res.output + chunk_res.num_output_bytes
-            );
-            free(chunk_res.output);
-        }
-
-        offset += current_chunk_size;
-    }
-
-    finiCompressionStream(compression_stream);
-}
-
-
-Maybe<void> ConfidenceCalculator::writeToFile(const string& path, const vector<unsigned char>& data)
-{
-    ofstream file(path, ios::binary);
-    if (!file.is_open()) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to open file: " << path
-            << ", errno: " << errno << ", strerror: " << strerror(errno);
-        return genError("Failed to open file");
-    }
-
-    // Write compressed data to file in chunks to avoid large memory usage
-    const uint CHUNK_SIZE = getProfileAgentSettingWithDefault<uint>(
-        64 * 1024, // 64 KiB
-        "appsecLearningSettings.writeChunkSize"
-    );
-    size_t offset = 0;
-    while (offset < data.size()) {
-        size_t current_chunk_size = min(static_cast<size_t>(CHUNK_SIZE), data.size() - offset);
-        file.write(reinterpret_cast<const char *>(data.data()) + offset, current_chunk_size);
-        offset += current_chunk_size;
-        m_mainLoop->yield(false);
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Write progress: " << offset << "/" << data.size()
-            << " bytes (" << (offset * 100 / data.size()) << "%) - yielded";
-    }
-    file.close();
-    return Maybe<void>();
-}
-
 void ConfidenceCalculator::saveTimeWindowLogger()
 {
+    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Saving the time window logger to: " << m_path_to_backup;
     if (m_path_to_backup != "") // remove old file from exceed memory cap flow
     {
         remove(m_path_to_backup.c_str());
@@ -257,69 +203,34 @@ void ConfidenceCalculator::saveTimeWindowLogger()
 
     m_path_to_backup = temp_filename;
 
-    stringstream ss;
-    {
-        cereal::JSONOutputArchive archive(ss);
-        archive(cereal::make_nvp("logger", *m_time_window_logger));
-    }
-
-    m_mainLoop->yield(false);
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "JSON serialized, size: " << ss.str().size() << " bytes";
-
-    string data = ss.str();
-
-    const uint COMPRESSED_CHUNK_SIZE = getProfileAgentSettingWithDefault<uint>(
-        16 * 1024, // 16KB
-        "appsecLearningSettings.compressionChunkSize"
-    );
-    auto compression_stream = initCompressionStream();
-    size_t offset = 0;
-    vector<unsigned char> compressed_data;
-    bool ok = true;
-
-    while (offset < data.size()) {
-        size_t chunk_size = min(static_cast<size_t>(COMPRESSED_CHUNK_SIZE), data.size() - offset);
-        bool is_last = (offset + chunk_size >= data.size());
-        CompressionResult chunk_res = compressData(
-            compression_stream,
-            CompressionType::GZIP,
-            static_cast<uint32_t>(chunk_size),
-            reinterpret_cast<const unsigned char *>(data.c_str() + offset),
-            is_last ? 1 : 0
-        );
-        if (!chunk_res.ok) {
-            ok = false;
-            break;
+    try {
+        ofstream file(m_path_to_backup, ios::binary);
+        if (!file.is_open()) {
+            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to open file: " << m_path_to_backup
+                << ", errno: " << errno << ", strerror: " << strerror(errno);
+            m_time_window_logger_backup = m_time_window_logger;
+            return;
         }
-        if (chunk_res.output && chunk_res.num_output_bytes > 0) {
-            compressed_data.insert(
-                compressed_data.end(),
-                chunk_res.output,
-                chunk_res.output + chunk_res.num_output_bytes
-            );
-            free(chunk_res.output);
+
+        BufferedCompressedOutputStream compressed_out(file);
+        {
+            cereal::JSONOutputArchive archive(compressed_out);
+            archive(cereal::make_nvp("logger", *m_time_window_logger));
         }
-        offset += chunk_size;
+        compressed_out.close();
+        file.close();
+
         m_mainLoop->yield(false);
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Compression progress: " << offset << "/" << data.size()
-            << " bytes processed (" << (offset * 100 / data.size()) << "%) - yielded";
+        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "JSON serialized and compressed to file: " << m_path_to_backup;
     }
-    finiCompressionStream(compression_stream);
-
-    if (!ok) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to compress data";
+    catch (const std::exception &e) {
+        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to serialize and compress data: " << e.what();
         m_time_window_logger_backup = m_time_window_logger;
+        m_path_to_backup = "";
         return;
     }
 
-    auto maybeError = writeToFile(m_path_to_backup, compressed_data);
-    if (!maybeError.ok()) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to write the backup file: " << m_path_to_backup;
-        m_time_window_logger_backup = m_time_window_logger;
-        m_path_to_backup = "";
-    } else {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Finished writing the backup file: " << m_path_to_backup;
-    }
+    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Finished writing the backup file: " << m_path_to_backup;
 }
 
 shared_ptr<ConfidenceCalculator::KeyValSourcesLogger> ConfidenceCalculator::loadTimeWindowLogger()
@@ -330,107 +241,41 @@ shared_ptr<ConfidenceCalculator::KeyValSourcesLogger> ConfidenceCalculator::load
         return nullptr;
     }
 
-    ifstream file(m_path_to_backup, ios::binary);
+    ifstream file(m_path_to_backup);
     if (!file.is_open()) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to open file: " << m_path_to_backup
             << ", errno: " << errno << ", strerror: " << strerror(errno);
         return nullptr;
     }
 
-    stringstream buffer;
-    // Read the file in chunks to avoid large memory usage
-    const uint READ_CHUNK_SIZE = getProfileAgentSettingWithDefault<uint>(
-        16 * 1024,
-        "appsecLearningSettings.readChunkSize"); // 16 KiB
-    vector<char> chunk(READ_CHUNK_SIZE);
-    size_t chunk_size = static_cast<size_t>(READ_CHUNK_SIZE);
-    size_t total_bytes_read = 0;
-    size_t chunks_read = 0;
-
-    while (file.peek() != EOF) {
-        file.read(chunk.data(), chunk_size);
-        streamsize bytesRead = file.gcount();
-        if (bytesRead > 0) {
-            buffer.write(chunk.data(), bytesRead);
-            total_bytes_read += bytesRead;
-            chunks_read++;
-        }
-        m_mainLoop->yield(false);
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Read chunk " << chunks_read
-            << " (" << total_bytes_read << " bytes total) - yielded";
-    }
-    file.close();
-
-    remove(m_path_to_backup.c_str());
-    m_path_to_backup = "";
-
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Completed reading " << total_bytes_read
-        << " bytes in " << chunks_read << " chunks";
-
-    string compressed_data = buffer.str();
-    auto compression_stream = initCompressionStream();
-
-    chunk_size = static_cast<size_t>(
-        getProfileAgentSettingWithDefault<uint>(
-            32 * 1024, // 32KiB
-            "appsecLearningSettings.compressionChunkSize"
-        )
-    );
-    size_t offset = 0;
-    string decompressed_data;
-
-    while (offset < compressed_data.size()) {
-        size_t current_chunk_size = min(chunk_size, compressed_data.size() - offset);
-        DecompressionResult res = decompressData(
-            compression_stream,
-            current_chunk_size,
-            reinterpret_cast<const unsigned char *>(compressed_data.c_str() + offset)
-        );
-
-        if (!res.ok) {
-            dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to decompress data from file: " << m_path_to_backup;
-            finiCompressionStream(compression_stream);
-            return nullptr;
-        }
-
-        decompressed_data.append(reinterpret_cast<const char *>(res.output), res.num_output_bytes);
-        free(res.output);
-        res.output = nullptr;
-        res.num_output_bytes = 0;
-
-        offset += current_chunk_size;
-
-        // Yield control after processing each chunk
-        m_mainLoop->yield(false);
-        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Decompression progress: " << offset << "/" << compressed_data.size()
-            << " bytes (" << (offset * 100 / compressed_data.size()) << "%) - yielded";
-    }
-
-    finiCompressionStream(compression_stream);
-
-    dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Decompressed data size: " << decompressed_data.size()
-        << " bytes (compression ratio: " << (float)decompressed_data.size() / compressed_data.size() << "x)";
-
-    stringstream decompressed_stream(decompressed_data);
     auto window_logger = make_shared<KeyValSourcesLogger>();
 
     try {
-        cereal::JSONInputArchive archive(decompressed_stream);
+        BufferedCompressedInputStream compressed_in(file);
+        cereal::JSONInputArchive archive(compressed_in);
         archive(cereal::make_nvp("logger", *window_logger));
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Successfully deserialized logger from JSON";
-    } catch (cereal::Exception& e) {
+    } catch (cereal::Exception &e) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to load the time window logger: " << e.what();
+        file.close();
         return nullptr;
     }
+
+    file.close();
 
     return window_logger;
 }
 
 bool ConfidenceCalculator::postData()
 {
+    if (m_time_window_logger->empty())
+    {
+        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "No data to post, skipping";
+        return true; // Nothing to post
+    }
     saveTimeWindowLogger();
     m_mainLoop->yield(false);
-    WindowLogPost currentWindow(*m_time_window_logger);
+    WindowLogPost currentWindow(m_time_window_logger);
     m_mainLoop->yield(false);
     m_time_window_logger = make_shared<ConfidenceCalculator::KeyValSourcesLogger>();
     string url = getPostDataUrl() + to_string(m_post_index++);
@@ -447,7 +292,7 @@ bool ConfidenceCalculator::postData()
     return ok;
 }
 
-void ConfidenceCalculator::pullData(const vector<string>& files)
+void ConfidenceCalculator::pullData(const vector<string> &files)
 {
     if (getIntervalsCount() == m_params.minIntervals)
     {
@@ -465,7 +310,7 @@ void ConfidenceCalculator::pullData(const vector<string>& files)
     string url = getPostDataUrl();
     string sentFile = url.erase(0, strlen("/storage/waap/"));
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "pulling files, skipping: " << sentFile;
-    for (auto file : files)
+    for (const auto &file : files) // Use const reference to avoid copying
     {
         if (file == sentFile)
         {
@@ -483,13 +328,13 @@ void ConfidenceCalculator::pullData(const vector<string>& files)
         }
 
         KeyValSourcesLogger remoteLogger = getWindow.getWindowLogger().unpack();
-        for (auto& log : remoteLogger)
+        for (const auto &log : remoteLogger) // Use const reference
         {
-            const string & key = log.first;
-            for (auto& entry : log.second)
+            const string &key = log.first;
+            for (const auto &entry : log.second) // Use const reference
             {
-                const string & value = entry.first;
-                for (auto & source : entry.second)
+                const string &value = entry.first;
+                for (const auto &source : entry.second) // Use const reference
                 {
                     (*m_time_window_logger_backup)[key][value].insert(source);
                 }
@@ -504,7 +349,7 @@ void ConfidenceCalculator::processData()
     m_post_index = 0;
     if (m_time_window_logger_backup == nullptr || m_time_window_logger_backup->empty())
     {
-        if (m_path_to_backup != "")
+        if (!m_path_to_backup.empty())
         {
             m_time_window_logger_backup = loadTimeWindowLogger();
             m_mainLoop->yield(false);
@@ -523,14 +368,14 @@ void ConfidenceCalculator::processData()
     // clear temp data
     m_time_window_logger_backup->clear();
     m_time_window_logger_backup.reset();
-    if (m_path_to_backup != "")
+    if (!m_path_to_backup.empty())
     {
         remove(m_path_to_backup.c_str());
-        m_path_to_backup = "";
+        m_path_to_backup.clear();
     }
 }
 
-void ConfidenceCalculator::updateState(const vector<string>& files)
+void ConfidenceCalculator::updateState(const vector<string> &files)
 {
     pullProcessedData(files);
     // clear temp data
@@ -539,23 +384,23 @@ void ConfidenceCalculator::updateState(const vector<string>& files)
         m_time_window_logger_backup->clear();
         m_time_window_logger_backup.reset();
     }
-    if (m_path_to_backup != "")
-    {
-        remove(m_path_to_backup.c_str());
-        m_path_to_backup = "";
-    }
 }
 
-void ConfidenceCalculator::pullProcessedData(const vector<string>& files)
+Maybe<string> ConfidenceCalculator::getRemoteStateFilePath() const
+{
+    return m_remotePath + "/remote/confidence.data";
+}
+
+void ConfidenceCalculator::pullProcessedData(const vector<string> &files)
 {
     dbgTrace(D_WAAP) << "Fetching the confidence set object";
     m_post_index = 0;
     bool is_first_pull = true;
     bool is_ok = false;
-    for (auto file : files)
+    for (const auto &file : files) // Use const reference to avoid copying
     {
         ConfidenceFileDecryptor getConfFile;
-        bool res = sendObjectWithRetry(getConfFile,
+        bool res = sendObject(getConfFile,
             HTTPMethod::GET,
             getUri() + "/" + file);
         is_ok |= res;
@@ -564,15 +409,32 @@ void ConfidenceCalculator::pullProcessedData(const vector<string>& files)
             mergeFromRemote(getConfFile.getConfidenceSet().unpackMove(), is_first_pull);
             is_first_pull = false;
         }
+        if (res && getConfFile.getTrackingKeys().ok())
+        {
+            auto trackingKeys = getConfFile.getTrackingKeys().unpackMove();
+            m_indicator_tracking_keys = unordered_set<string>(trackingKeys.begin(), trackingKeys.end());
+            dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Received tracking keys: " << m_indicator_tracking_keys.size();
+            m_tracking_keys_received = true;
+        }
         if (res && getConfFile.getConfidenceLevels().ok())
         {
             // write to disk the confidence levels
-            saveConfidenceLevels(getConfFile.getConfidenceLevels());
+            saveConfidenceLevels(getConfFile.getConfidenceLevels().unpackMove());
+        }
+        else
+        {
+            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get tracking keys from file: " << file;
         }
     }
     // is_ok = false -> no file was downloaded and merged
     if (!is_ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to get the remote state";
+        return;
+    }
+    if (m_path_to_backup != "")
+    {
+        remove(m_path_to_backup.c_str());
+        m_path_to_backup = "";
     }
 }
 
@@ -591,7 +453,7 @@ void ConfidenceCalculator::postProcessedData()
         postUrl);
 }
 
-void ConfidenceCalculator::serialize(ostream& stream)
+void ConfidenceCalculator::serialize(ostream &stream)
 {
     cereal::JSONOutputArchive archive(stream);
 
@@ -604,7 +466,7 @@ void ConfidenceCalculator::serialize(ostream& stream)
         cereal::make_nvp("latest_index", m_latest_index + getIntervalsCount())
     );
 }
-void ConfidenceCalculator::deserialize(istream& stream)
+void ConfidenceCalculator::deserialize(istream &stream)
 {
     size_t version;
     cereal::JSONInputArchive archive(stream);
@@ -639,7 +501,7 @@ void ConfidenceCalculator::deserialize(istream& stream)
     }
 }
 
-void ConfidenceCalculator::loadVer0(cereal::JSONInputArchive& archive)
+void ConfidenceCalculator::loadVer0(cereal::JSONInputArchive &archive)
 {
     if (!tryParseVersionBasedOnNames(
         archive,
@@ -660,13 +522,13 @@ void ConfidenceCalculator::loadVer0(cereal::JSONInputArchive& archive)
 
 }
 
-void ConfidenceCalculator::convertWindowSummaryToConfidenceLevel(const WindowsConfidentValuesList& windows)
+void ConfidenceCalculator::convertWindowSummaryToConfidenceLevel(const WindowsConfidentValuesList &windows)
 {
-    for (const auto& windowKey : windows)
+    for (const auto &windowKey : windows)
     {
-        for (const auto& window : windowKey.second)
+        for (const auto &window : windowKey.second)
         {
-            for (const auto& value : window)
+            for (const auto &value : window)
             {
                 m_confidence_level[windowKey.first][value] += ceil(SCORE_THRESHOLD / m_params.minIntervals);
             }
@@ -674,7 +536,7 @@ void ConfidenceCalculator::convertWindowSummaryToConfidenceLevel(const WindowsCo
     }
 }
 
-void ConfidenceCalculator::loadVer2(cereal::JSONInputArchive& archive)
+void ConfidenceCalculator::loadVer2(cereal::JSONInputArchive &archive)
 {
     ConfidenceCalculatorParams params;
     ConfidenceSet confidenceSets;
@@ -687,11 +549,11 @@ void ConfidenceCalculator::loadVer2(cereal::JSONInputArchive& archive)
     );
     params.maxMemoryUsage = defaultConfidenceMemUsage;
     reset(params);
-    for (auto& confidentSet : confidenceSets)
+    for (auto &confidentSet : confidenceSets)
     {
         m_confident_sets[normalize_param(confidentSet.first)] = confidentSet.second;
     }
-    for (auto& confidenceLevel : confidenceLevels)
+    for (auto &confidenceLevel : confidenceLevels)
     {
         string normParam = normalize_param(confidenceLevel.first);
         if (m_confidence_level.find(normParam) == m_confidence_level.end())
@@ -700,7 +562,7 @@ void ConfidenceCalculator::loadVer2(cereal::JSONInputArchive& archive)
         }
         else
         {
-            for (auto& valueLevelItr : confidenceLevel.second)
+            for (auto &valueLevelItr : confidenceLevel.second)
             {
                 if (m_confidence_level[normParam].find(valueLevelItr.first) == m_confidence_level[normParam].end())
                 {
@@ -717,7 +579,7 @@ void ConfidenceCalculator::loadVer2(cereal::JSONInputArchive& archive)
     }
 }
 
-void ConfidenceCalculator::loadVer3(cereal::JSONInputArchive& archive)
+void ConfidenceCalculator::loadVer3(cereal::JSONInputArchive &archive)
 {
     ConfidenceCalculatorParams params;
     archive(
@@ -745,7 +607,7 @@ void ConfidenceCalculator::loadVer3(cereal::JSONInputArchive& archive)
 }
 
 
-void ConfidenceCalculator::loadVer1(cereal::JSONInputArchive& archive)
+void ConfidenceCalculator::loadVer1(cereal::JSONInputArchive &archive)
 {
     WindowsConfidentValuesList windows_summary_list;
     ConfidenceCalculatorParams params;
@@ -764,7 +626,7 @@ void ConfidenceCalculator::loadVer1(cereal::JSONInputArchive& archive)
 }
 
 bool ConfidenceCalculator::tryParseVersionBasedOnNames(
-    cereal::JSONInputArchive& archive,
+    cereal::JSONInputArchive &archive,
     const string &params_field_name,
     const string &indicators_update_field_name,
     const string &windows_summary_field_name,
@@ -837,17 +699,17 @@ bool ConfidenceCalculator::tryParseVersionBasedOnNames(
 }
 
 void ConfidenceCalculator::mergeConfidenceSets(
-    ConfidenceSet& confidence_set,
-    const ConfidenceSet& confidence_set_to_merge,
-    size_t& last_indicators_update
+    ConfidenceSet &confidence_set,
+    const ConfidenceSet &confidence_set_to_merge,
+    size_t &last_indicators_update
 )
 {
-    for (auto& set : confidence_set_to_merge)
+    for (auto &set : confidence_set_to_merge)
     {
         size_t num_of_values = confidence_set[set.first].first.size();
         dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Merging the set for the key: " << set.first <<
             ". Number of present values: " << num_of_values;
-        for (auto& value : set.second.first)
+        for (auto &value : set.second.first)
         {
             confidence_set[normalize_param(set.first)].first.insert(value);
         }
@@ -857,7 +719,7 @@ void ConfidenceCalculator::mergeConfidenceSets(
     }
 };
 
-void ConfidenceCalculator::mergeFromRemote(const ConfidenceSet& remote_confidence_set, bool is_first_pull)
+void ConfidenceCalculator::mergeFromRemote(const ConfidenceSet &remote_confidence_set, bool is_first_pull)
 {
     if (is_first_pull) {
         m_confident_sets.clear();
@@ -875,7 +737,7 @@ bool ConfidenceCalculator::is_confident(const Key &key, const Val &value) const
         return false;
     }
 
-    const ValuesSet& confidentValues = confidentSetItr->second.first;
+    const ValuesSet &confidentValues = confidentSetItr->second.first;
     if (confidentValues.find(value) != confidentValues.end())
     {
         dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner << " -" <<
@@ -895,10 +757,10 @@ void ConfidenceCalculator::calcConfidentValues()
         m_confident_sets.clear();
     }
 
-    for (auto& confidenceLevels : m_confidence_level)
+    for (auto &confidenceLevels : m_confidence_level)
     {
         Key key = confidenceLevels.first;
-        for (auto& valConfidenceLevel : confidenceLevels.second)
+        for (auto &valConfidenceLevel : confidenceLevels.second)
         {
             Val value = valConfidenceLevel.first;
             dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "key: " << key << ", value: " << value
@@ -939,25 +801,28 @@ size_t ConfidenceCalculator::getLastConfidenceUpdate()
 
 void ConfidenceCalculator::log(const Key &key, const Val &value, const string &source)
 {
-    auto& sources_set = (*m_time_window_logger)[key][value];
-    auto result = sources_set.insert(source);
-    if (result.second) {
-        // New entry added, update memory usage
-        if ((*m_time_window_logger)[key][value].size() == 1) {
-            // first source for this value - means new value
-            m_estimated_memory_usage += sizeof(value) + value.capacity();
-            m_estimated_memory_usage += sizeof(SourcesSet);
+    // Only track in time window logger if we should track this parameter
+    if (shouldTrackParameter(key, value)) {
+        auto &sources_set = (*m_time_window_logger)[key][value];
+        auto result = sources_set.insert(source);
+        if (result.second) {
+            // New entry added, update memory usage
+            if ((*m_time_window_logger)[key][value].size() == 1) {
+                // first source for this value - means new value
+                m_estimated_memory_usage += sizeof(value) + value.capacity();
+                m_estimated_memory_usage += sizeof(SourcesSet);
 
-            if ((*m_time_window_logger)[key].size() == 1) {
-                // first value for this key - means new key
-                m_estimated_memory_usage += sizeof(key) + key.capacity();
-                m_estimated_memory_usage += sizeof(SourcesCounters);
+                if ((*m_time_window_logger)[key].size() == 1) {
+                    // first value for this key - means new key
+                    m_estimated_memory_usage += sizeof(key) + key.capacity();
+                    m_estimated_memory_usage += sizeof(SourcesCounters);
+                }
             }
+            m_estimated_memory_usage += sizeof(source) + source.capacity();
         }
-        m_estimated_memory_usage += sizeof(source) + source.capacity();
+        dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "memory usage: " << m_estimated_memory_usage <<
+            "/" << m_params.maxMemoryUsage;
     }
-    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "memory usage: " << m_estimated_memory_usage <<
-        "/" << m_params.maxMemoryUsage;
 
     if (value != m_null_obj)
     {
@@ -987,7 +852,65 @@ void ConfidenceCalculator::logSourceHit(const Key &key, const string &source)
     log(key, m_null_obj, source);
 }
 
-void ConfidenceCalculator::removeBadSources(SourcesSet& sources, const vector<string>* badSources)
+void ConfidenceCalculator::setIndicatorTrackingKeys(const std::vector<std::string>& keys)
+{
+    m_indicator_tracking_keys.clear();
+    for (const auto& key : keys) {
+        m_indicator_tracking_keys.insert(key);
+    }
+    m_tracking_keys_received = true;
+    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
+        " - received " << keys.size() << " indicator tracking keys from service";
+}
+
+void ConfidenceCalculator::markKeyAsConfident(const Key &key)
+{
+    // This method is kept for API compatibility but doesn't affect conditional tracking
+    // The confidence set is managed independently and not altered by conditional tracking feature
+    // Add the key to confident sets if not already present
+    if (m_confident_sets.find(key) == m_confident_sets.end()) {
+        size_t current_time = chrono::duration_cast<chrono::seconds>(
+            Singleton::Consume<I_TimeGet>::by<WaapComponent>()->getWalltime()
+        ).count();
+        m_confident_sets[key] = std::make_pair(ValuesSet(), current_time);
+    }
+}
+
+bool ConfidenceCalculator::shouldTrackParameter(const Key &key, const Val &value)
+{
+    // For backward compatibility: if tracking list hasn't been received from service yet, track all
+    if (!m_tracking_keys_received) {
+        return true;
+    }
+
+    // Should NOT track if key->value combination is already in confidence set
+    if (is_confident(key, value)) {
+        return !m_params.learnPermanently; // If learnPermanently is true, we don't track confident values
+    }
+    if (!m_params.learnPermanently && m_confident_sets.find(key) != m_confident_sets.end()) {
+        m_indicator_tracking_keys.insert(key); // Ensure the key is in the tracking list
+        return true;
+    }
+
+    // Should NOT track if key is not in tracking list AND value is null obj
+    bool keyInTrackingList = (m_indicator_tracking_keys.find(key) != m_indicator_tracking_keys.end());
+    if (!keyInTrackingList && value == m_null_obj) {
+        return false;
+    }
+
+    if (!keyInTrackingList) {
+        // If tracking list is full, do not track this key
+        m_indicator_tracking_keys.insert(key); // Ensure the key is in the tracking list
+        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
+            " - tracking key: " << key << ", value: " << value;
+    }
+    // Should track if:
+    // 1. Key is in tracking list, OR
+    // 2. New value (not null obj) AND key->value not in confidence set (already checked above)
+    return keyInTrackingList || (value != m_null_obj);
+}
+
+void ConfidenceCalculator::removeBadSources(SourcesSet &sources, const vector<string>* badSources)
 {
     if (badSources == nullptr)
     {
@@ -999,14 +922,14 @@ void ConfidenceCalculator::removeBadSources(SourcesSet& sources, const vector<st
     }
 }
 
-size_t ConfidenceCalculator::sumSourcesWeight(const SourcesSet& sources)
+size_t ConfidenceCalculator::sumSourcesWeight(const SourcesSet &sources)
 {
     size_t sourcesWeights = sources.size();
     if (m_tuning == nullptr)
     {
         return sourcesWeights;
     }
-    for (const auto& source : sources)
+    for (const auto &source : sources)
     {
         if (m_tuning->getDecision(source, SOURCE) == BENIGN)
         {
@@ -1026,86 +949,28 @@ void ConfidenceCalculator::loadConfidenceLevels()
     string file_path = m_filePath + ".levels." + to_string((m_latest_index + getIntervalsCount() - 1) % 2) + ".gz";
     ifstream file(file_path, ios::binary);
     if (!file.is_open()) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to open the file: " << file_path;
+        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to open the file: " << file_path <<
+            ", errno: " << errno << ", strerror: " << strerror(errno);
         return;
     }
-
-    stringstream buffer;
-    // Read the file in chunks to avoid large memory usage
-    const uint READ_CHUNK_SIZE = getProfileAgentSettingWithDefault<uint>(
-        16 * 1024,
-        "appsecLearningSettings.readChunkSize"); // 16 KiB
-    vector<char> chunk(READ_CHUNK_SIZE);
-    size_t chunk_size = static_cast<size_t>(READ_CHUNK_SIZE);
-    while (file.peek() != EOF) {
-        file.read(chunk.data(), chunk_size);
-        streamsize bytesRead = file.gcount();
-        if (bytesRead > 0) {
-            buffer.write(chunk.data(), bytesRead);
-        }
-        m_mainLoop->yield(false);
-    }
-    file.close();
-
-    string compressed_data = buffer.str();
-
-    auto compression_stream = initCompressionStream();
-    DecompressionResult res;
-    res.ok = true;
-    res.output = nullptr;
-    res.num_output_bytes = 0;
-    size_t offset = 0;
-    const size_t CHUNK_SIZE = static_cast<size_t>(
-        getProfileAgentSettingWithDefault<uint>(
-            16 * 1024, // 16KiB
-            "appsecLearningSettings.compressionChunkSize"
-        )
-    );
-    vector<char> decompressed_data_vec;
-    while (offset < compressed_data.size()) {
-        size_t current_chunk_size = min(CHUNK_SIZE, compressed_data.size() - offset);
-        DecompressionResult chunk_res = decompressData(
-            compression_stream,
-            current_chunk_size,
-            reinterpret_cast<const unsigned char *>(compressed_data.c_str() + offset)
-        );
-        if (!chunk_res.ok) {
-            res.ok = false;
-            break;
-        }
-        if (chunk_res.output && chunk_res.num_output_bytes > 0) {
-            // Append directly to the vector to avoid extra copies
-            size_t old_size = decompressed_data_vec.size();
-            decompressed_data_vec.resize(old_size + chunk_res.num_output_bytes);
-            memcpy(decompressed_data_vec.data() + old_size, chunk_res.output, chunk_res.num_output_bytes);
-            free(chunk_res.output);
-        }
-        offset += current_chunk_size;
-        m_mainLoop->yield(false);
-    }
-    finiCompressionStream(compression_stream);
-
-    if (!res.ok) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to decompress the confidence levels data.";
-        return;
-    }
-
-    string decompressed_data(decompressed_data_vec.begin(), decompressed_data_vec.end());
-    stringstream decompressed_stream(decompressed_data);
-
     try {
+        BufferedCompressedInputStream decompressed_stream(file);
         cereal::JSONInputArchive archive(decompressed_stream);
         archive(cereal::make_nvp("confidence_levels", m_confidence_level));
     } catch (runtime_error &e) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to load the confidence levels from disk: " << e.what();
+        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR)
+            << "Failed to load the confidence levels, owner: "
+            << m_owner << ", error: " << e.what();
     }
+    file.close();
     dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
         " - loaded the confidence levels from disk, latest index: " << m_latest_index <<
         ", intervals count: " << getIntervalsCount();
     m_mainLoop->yield(false);
     if (m_confidence_level.empty())
     {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to load the confidence levels from disk";
+        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "confidence levels are empty, owner: " << m_owner <<
+            ", file: " << file_path;
     }
 }
 
@@ -1117,34 +982,42 @@ void ConfidenceCalculator::saveConfidenceLevels()
 
 void ConfidenceCalculator::saveConfidenceLevels(Maybe<ConfidenceCalculator::ConfidenceLevels> confidenceLevels)
 {
+    if (!confidenceLevels.ok())
+    {
+        // if confidence levels are not available, use the current confidence level
+        extractLowConfidenceKeys(m_confidence_level);
+    }
+    else
+    {
+        // if confidence levels are empty, use the current confidence level
+        extractLowConfidenceKeys(confidenceLevels.unpackMove());
+    }
     string file_path = m_filePath + ".levels." + to_string((m_latest_index + getIntervalsCount()) % 2) + ".gz";
-    stringstream serialized_data;
-
-    try {
-        {
-            cereal::JSONOutputArchive archive(serialized_data);
-            if (confidenceLevels.ok()) {
-                archive(cereal::make_nvp("confidence_levels", confidenceLevels.unpackMove()));
-            } else {
-                archive(cereal::make_nvp("confidence_levels", m_confidence_level));
-            }
-        }
-    } catch (runtime_error &e) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to serialize the confidence levels: " << e.what();
+    ofstream file(file_path, ios::binary);
+    if (!file.is_open()) {
+        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to open file: " << file_path
+            << ", errno: " << errno << ", strerror: " << strerror(errno);
         return;
     }
-    m_mainLoop->yield(false);
-
-    string uncompressed_data = serialized_data.str();
-    const size_t CHUNK_SIZE = 16 * 1024; // 16 KiB
-    vector<unsigned char> compressed_data;
-
-    try {
-        compressDataWrapper(uncompressed_data, CHUNK_SIZE, compressed_data);
-        writeToFile(file_path, compressed_data);
-    } catch (const runtime_error& e) {
-        dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to compress the confidence levels data: " << e.what();
+    {
+        try {
+            BufferedCompressedOutputStream compressed_out(file);
+            cereal::JSONOutputArchive archive(compressed_out);
+            if (confidenceLevels.ok()) {
+                archive(cereal::make_nvp("confidence_levels", confidenceLevels.unpackMove()));
+            }
+            else
+            {
+                archive(cereal::make_nvp("confidence_levels", m_confidence_level));
+            }
+        } catch (runtime_error &e) {
+            file.close();
+            dbgWarning(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to serialize the confidence levels: " << e.what();
+            return;
+        }
     }
+    file.close();
+    m_mainLoop->yield(false);
 
     m_confidence_level.clear();
 
@@ -1176,14 +1049,13 @@ void ConfidenceCalculator::calculateInterval()
     }
 
     int itr = 0;
-
     for (auto sourcesCtrItr : *m_time_window_logger_backup)
     {
         if (++itr % 20 == 0) {
             // yield every 20 iterations
             m_mainLoop->yield(false);
         }
-        SourcesCounters& srcCtrs = sourcesCtrItr.second;
+        SourcesCounters &srcCtrs = sourcesCtrItr.second;
         Key key = sourcesCtrItr.first;
         ValuesSet summary;
         double factor = 1.0;
@@ -1203,7 +1075,7 @@ void ConfidenceCalculator::calculateInterval()
         dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner << " -" <<
             " calculate window summary for the parameter: " << key;
         // get all unique sources from the null object counter
-        SourcesSet& sourcesUnion = srcCtrs[m_null_obj];
+        SourcesSet &sourcesUnion = srcCtrs[m_null_obj];
         removeBadSources(sourcesUnion, sourcesToIgnore);
         size_t numOfSources = sumSourcesWeight(sourcesUnion);
 
@@ -1219,7 +1091,7 @@ void ConfidenceCalculator::calculateInterval()
         for (auto srcSets : srcCtrs)
         {
             // log the ratio of unique sources from all sources for each value
-            SourcesSet& currentSourcesSet = srcSets.second;
+            SourcesSet &currentSourcesSet = srcSets.second;
             Val value = srcSets.first;
             if (value == m_null_obj)
             {
@@ -1227,7 +1099,7 @@ void ConfidenceCalculator::calculateInterval()
             }
             removeBadSources(currentSourcesSet, sourcesToIgnore);
             size_t currentSourcesCount = sumSourcesWeight(currentSourcesSet);
-            auto& confidenceLevel = m_confidence_level[key][value];
+            auto &confidenceLevel = m_confidence_level[key][value];
             if (currentSourcesCount == 0)
             {
                 confidenceLevel -= ceil(SCORE_THRESHOLD / m_params.minIntervals);
@@ -1244,9 +1116,9 @@ void ConfidenceCalculator::calculateInterval()
         }
     }
 
-    for (auto& keyMap : m_confidence_level)
+    for (auto &keyMap : m_confidence_level)
     {
-        for (auto& valMap : keyMap.second)
+        for (auto &valMap : keyMap.second)
         {
             if (m_time_window_logger_backup->find(keyMap.first) != m_time_window_logger_backup->end() &&
                 (*m_time_window_logger_backup)[keyMap.first].find(valMap.first) ==
@@ -1263,12 +1135,12 @@ void ConfidenceCalculator::calculateInterval()
     saveConfidenceLevels();
 }
 
-void ConfidenceCalculator::setOwner(const string& owner)
+void ConfidenceCalculator::setOwner(const string &owner)
 {
     m_owner = owner + "/ConfidenceCalculator";
 }
 
-bool ConfidenceCalculatorParams::operator==(const ConfidenceCalculatorParams& other)
+bool ConfidenceCalculatorParams::operator==(const ConfidenceCalculatorParams &other)
 {
     return (minSources == other.minSources &&
         minIntervals == other.minIntervals &&
@@ -1278,7 +1150,7 @@ bool ConfidenceCalculatorParams::operator==(const ConfidenceCalculatorParams& ot
         maxMemoryUsage == other.maxMemoryUsage);
 }
 
-ostream& operator<<(ostream& os, const ConfidenceCalculatorParams& ccp)
+ostream &operator<<(ostream &os, const ConfidenceCalculatorParams &ccp)
 {
     os << "min sources: " << ccp.minSources <<
         " min intervals: " << ccp.minIntervals <<
@@ -1296,6 +1168,7 @@ void ConfidenceCalculator::garbageCollector()
 
     I_MainLoop *mainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
     mainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::Offline,
+        // LCOV_EXCL_START
         [this, mainLoop]() {
             dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
                 " - running garbage collection of carry-on data files";
@@ -1406,6 +1279,47 @@ void ConfidenceCalculator::garbageCollector()
             dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
                 " - finished garbage collection.";
         },
+        // LCOV_EXCL_STOP
         "ConfidenceCalculator garbage collection"
     );
+}
+
+void ConfidenceCalculator::extractLowConfidenceKeys(const ConfidenceLevels& confidence_levels)
+{
+    const double LOW_CONFIDENCE_THRESHOLD = 100.0;
+    size_t keys_added = 0;
+    m_tracking_keys_received = true; // Ensure tracking keys are considered received
+
+    for (const auto& keyEntry : confidence_levels) {
+        const std::string& key = keyEntry.first;
+        const auto& valueConfidenceMap = keyEntry.second;
+
+        if (!m_params.learnPermanently) {
+            m_indicator_tracking_keys.insert(key); // Ensure the key is in the tracking list
+            continue;
+        }
+
+        // Check if any value for this key has confidence level below threshold
+        bool hasLowConfidence = false;
+        for (const auto& valueEntry : valueConfidenceMap) {
+            if (valueEntry.second < LOW_CONFIDENCE_THRESHOLD) {
+                hasLowConfidence = true;
+                break;
+            }
+        }
+
+        // If key has low confidence values, add it to tracking keys
+        if (hasLowConfidence) {
+            auto result = m_indicator_tracking_keys.insert(key);
+            if (result.second) { // Key was newly inserted
+                keys_added++;
+                dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
+                    " - added key '" << key << "' to tracking list (has confidence < " <<
+                    LOW_CONFIDENCE_THRESHOLD << ")";
+            }
+        }
+    }
+
+    dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
+        " - added " << keys_added << " keys with low confidence values to tracking list";
 }

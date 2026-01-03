@@ -39,7 +39,7 @@ using namespace smartBIO;
 USE_DEBUG_FLAG(D_CONNECTION);
 
 static const HTTPResponse sending_timeout(HTTPStatusCode::HTTP_UNKNOWN, "Failed to send all data in time");
-static const HTTPResponse receving_timeout(HTTPStatusCode::HTTP_UNKNOWN, "Failed to receive all data in time");
+static const HTTPResponse receiving_timeout(HTTPStatusCode::HTTP_UNKNOWN, "Failed to receive all data in time");
 static const HTTPResponse parsing_error(HTTPStatusCode::HTTP_UNKNOWN, "Failed to parse the HTTP response");
 static const HTTPResponse close_error(
     HTTPStatusCode::HTTP_UNKNOWN,
@@ -271,18 +271,11 @@ private:
             return *details_ssl_dir;
         }
 
-        // Use detail_resolver to determine platform-specific certificate directory
 #if defined(alpine)
-       string platform = "alpine";
+        return "/etc/ssl/certs/";
 #else
-       string platform = "linux";
-#endif
-
-        if (platform == "alpine") {
-            return "/etc/ssl/certs/";
-        }
-
         return "/usr/lib/ssl/certs/";
+#endif
     }
 
     Maybe<void>
@@ -741,20 +734,54 @@ private:
             }
         }
 
-        auto receiving_end_time = i_time->getMonotonicTime() + getConnectionTimeout();
+        auto base_timeout_config = getProfileAgentSettingWithDefault<uint>(
+            10,
+            "agent.config.message.chunk.connection.timeout"
+        );
+        auto base_timeout = chrono::seconds(base_timeout_config); // 10 seconds between data chunks
+        
+        auto global_timeout_config = getProfileAgentSettingWithDefault<uint>(
+            600,
+            "agent.config.message.global.connection.timeout"
+        );
+        auto global_timeout = chrono::seconds(global_timeout_config); // 600 seconds maximum for entire download
+        
+        auto receiving_end_time = i_time->getMonotonicTime() + base_timeout;
+        auto global_end_time = i_time->getMonotonicTime() + global_timeout;
         HTTPResponseParser http_parser;
-        dbgTrace(D_CONNECTION) << "Sent the message, now waiting for response";
+        dbgTrace(D_CONNECTION)
+            << "Sent the message, now waiting for response (global timeout: "
+            << global_timeout.count()
+            << " seconds)";
+
         while (!http_parser.hasReachedError()) {
+            // Check global timeout first
+            if (i_time->getMonotonicTime() > global_end_time) {
+                should_close_connection = true;
+                dbgWarning(D_CONNECTION)
+                    << "Global receive timeout reached after "
+                    << global_timeout.count() << " seconds";
+                return genError(receiving_timeout);
+            }
+            
+            // Check per-chunk timeout
             if (i_time->getMonotonicTime() > receiving_end_time) {
                 should_close_connection = true;
-                return genError(receving_timeout);
-            };
+                dbgWarning(D_CONNECTION) << "No data received for " << base_timeout.count() << " seconds";
+                return genError(receiving_timeout);
+            }
+
             auto receieved = receiveData();
             if (!receieved.ok()) {
                 should_close_connection = true;
                 return receieved.passErr();
             }
+            // Reset timeout each time we receive data
+            if (!receieved.unpack().empty()) {
+                receiving_end_time = i_time->getMonotonicTime() + base_timeout;
+            }
             auto response = http_parser.parseData(*receieved, is_connect);
+
             i_mainloop->yield(receieved.unpack().empty());
             if (response.ok()) {
                 dbgTrace(D_MESSAGING) << printOut(response.unpack().toString());

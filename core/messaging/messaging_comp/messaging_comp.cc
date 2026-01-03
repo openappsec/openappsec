@@ -72,6 +72,11 @@ MessagingComp::init()
     auto i_time_get = Singleton::Consume<I_TimeGet>::by<Messaging>();
     auto cache_timeout = getConfigurationWithDefault<int>(40, "message", "Cache timeout");
     fog_get_requests_cache.startExpiration(chrono::seconds(cache_timeout), i_mainloop, i_time_get);
+    proxy_addr = getConfigurationWithDefault<string>(
+        getProfileAgentSettingWithDefault<string>("", "proxy.address"),
+        "message",
+        "Proxy Address"
+    );
 
     should_buffer_failed_messages = getConfigurationWithDefault<bool>(
         getProfileAgentSettingWithDefault<bool>(true, "eventBuffer.bufferFailedRequests"),
@@ -125,7 +130,7 @@ MessagingComp::sendMessage(
         dbgWarning(D_MESSAGING) << "Failed to get connection. Error: " << maybe_conn.getErr();
         return genError<HTTPResponse>(HTTPStatusCode::HTTP_UNKNOWN, maybe_conn.getErr());
     }
-
+    
     Connection conn = maybe_conn.unpack();
     if (message_metadata.shouldSuspend() && conn.isSuspended()) {
         return suspendMessage(body, method, uri, category, message_metadata);
@@ -133,12 +138,11 @@ MessagingComp::sendMessage(
 
     bool is_to_fog = isMessageToFog(message_metadata);
     auto metadata = message_metadata;
-
+    
     if (is_to_fog) {
         if (method == HTTPMethod::GET && fog_get_requests_cache.doesKeyExists(uri)) {
             HTTPResponse res = fog_get_requests_cache.getEntry(uri);
             dbgTrace(D_MESSAGING) << "Response returned from Fog cache. res body: " << res.getBody();
-
             return fog_get_requests_cache.getEntry(uri);
         }
 
@@ -197,7 +201,6 @@ MessagingComp::sendSyncMessage(
 )
 {
     Maybe<HTTPResponse, HTTPResponse> is_msg_send = sendMessage(method, uri, body, category, message_metadata);
-
     if (is_msg_send.ok()) return *is_msg_send;
 
     if (should_buffer_failed_messages && message_metadata.shouldBufferMessage()) {
@@ -411,4 +414,11 @@ MessagingComp::suspendMessage(
     return genError<HTTPResponse>(
         HTTPStatusCode::HTTP_SUSPEND, "The connection is suspended due to consecutive message sending errors."
     );
+}
+
+void
+MessagingComp::clearConnections()
+{
+    dbgTrace(D_MESSAGING) << "Clearing all connections (called from AgentDetails)";
+    i_conn->clearConnections();
 }

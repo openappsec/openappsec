@@ -14,6 +14,7 @@
 #include "i_indicatorsFilter.h"
 #include "IndicatorsFilterBase.h"
 #include "Waf2Engine.h"
+#include "maybe_res.h"
 
 IndicatorFilterBase::IndicatorFilterBase(const std::string& confidence_path,
     const std::string& trusted_path,
@@ -113,12 +114,12 @@ bool IndicatorFilterBase::isTrustedSourceOfType(const std::string& source,
 }
 
 
-std::string IndicatorFilterBase::getTrustedSource(IWaf2Transaction* pTransaction)
+Maybe<std::string> IndicatorFilterBase::getTrustedSource(IWaf2Transaction* pTransaction)
 {
     if (m_policy == nullptr)
     {
         dbgTrace(D_WAAP) << "Policy for trusted sources is not set";
-        return "";
+        return genError<std::string>("Policy for trusted sources is not set");
     }
     auto trustedTypes = m_policy->getTrustedTypes();
     std::string xFwdVal;
@@ -171,7 +172,7 @@ std::string IndicatorFilterBase::getTrustedSource(IWaf2Transaction* pTransaction
         }
     }
 
-    return "";
+    return genError<std::string>("No trusted source found");
 }
 
 void IndicatorFilterBase::registerKeyword(const std::string& key,
@@ -191,3 +192,5 @@ void IndicatorFilterBase::registerKeyword(const std::string& key,
         m_trusted_confidence_calc.log(key, keyword, trusted_src);
     }
 }
+
+//TODO: update states function (use getRemoteStateFilePath)

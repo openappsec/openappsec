@@ -26,7 +26,7 @@ set<string> WaapConfigAPI::assets_ids_aggregation{};
 
 bool
 WaapConfigAPI::getWaapAPIConfig(WaapConfigAPI& ngenAPIConfig) {
-    auto &maybe_ngen_config = getConfiguration<WaapConfigAPI>(
+    auto &maybe_ngen_config = getConfigurationWithCache<WaapConfigAPI>(
         "WAAP",
         "WebAPISecurity"
     );

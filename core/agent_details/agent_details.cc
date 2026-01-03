@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
+#include "i_messaging.h"
 
 #include "config.h"
 #include "debug.h"
@@ -64,19 +65,37 @@ AgentDetails::init()
         writeAgentDetails();
     }
 
+    previous_proxy = proxy;
+
     registerConfigLoadCb(
         [&]()
         {
-            auto proxy_config = getProfileAgentSetting<string>("agent.config.message.proxy");
-            if (proxy_config.ok()) {
-                is_proxy_configured_via_settings = true;
-                setProxy(*proxy_config);
-                writeAgentDetails();
-            } else if (is_proxy_configured_via_settings) {
-                is_proxy_configured_via_settings = false;
-                setProxy(string(""));
-                writeAgentDetails();
+            auto load_env_proxy = loadProxy();
+            auto proxy_config = getProxy();
+            if (proxy != previous_proxy) {
+                dbgInfo(D_ORCHESTRATOR)
+                    << "Proxy configuration changed from '"
+                    << previous_proxy
+                    << "' to '"
+                    << proxy
+                    << "'";
+                auto messaging = Singleton::Consume<I_Messaging>::by<AgentDetails>();
+                messaging->clearConnections();
             }
+            if (!proxy_config.ok() || proxy_config.unpack() == "none") {
+                auto proxy_config = getProfileAgentSetting<string>("agent.config.message.proxy");
+                if (proxy_config.ok()) {
+                    is_proxy_configured_via_settings = true;
+                    setProxy(*proxy_config);
+                    writeAgentDetails();
+                } else if (is_proxy_configured_via_settings) {
+                    is_proxy_configured_via_settings = false;
+                    setProxy(string(""));
+                    writeAgentDetails();
+                }
+            }
+
+            previous_proxy = proxy;
         }
     );
 

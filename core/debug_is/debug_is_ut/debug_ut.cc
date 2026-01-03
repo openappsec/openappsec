@@ -587,6 +587,13 @@ public:
         return msg;
     }
 
+    void
+    clearDebugMessage()
+    {
+        capture_debug.str("");
+        capture_debug.clear();
+    }
+
     bool
     loadConfiguration(const string &conf_str)
     {
@@ -667,6 +674,7 @@ TEST_F(DebugConfigTest, debug_all)
     CPTestTempfile debug_file;
 
     loadConfiguration("{\"Output\": \"STDOUT\", \"D_PM\": \"Error\", \"D_ALL\": \"Trace\"}");
+    clearDebugMessage();
 
     doFWWarning();
     EXPECT_EQ(getDebugMessage(),

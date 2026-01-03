@@ -179,6 +179,12 @@ AgentDetailsReporter::Impl::addAttr(const string &key, const string &val, bool a
         }
     }
 
+    if (val.empty()) {
+        deleteAttr(key);
+        dbgDebug(D_AGENT_DETAILS) << "Attribute " << key << " was empty, deleting";
+        return true;
+    }
+
     if (persistant_attributes[key] == val) {
         dbgDebug(D_AGENT_DETAILS) << "Attribute " << key << " did not change. Value: " << val;
         return true;

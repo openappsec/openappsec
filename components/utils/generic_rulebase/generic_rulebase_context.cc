@@ -64,8 +64,12 @@ GenericRulebaseContext::activate(const BasicRuleConfig &rule)
                 ZoneMatcher::ctx_key,
                 rule.getZoneId()
             );
-            ctx.registerValue<GenericConfigId>(
+            ctx.registerQuickAccessValue<GenericConfigId>(
                 AssetMatcher::ctx_key,
+                rule.getAssetId()
+            );
+            ctx.registerQuickAccessValue<GenericConfigId>(
+                TriggerMatcher::ctx_key,
                 rule.getAssetId()
             );
             ctx.activate();
@@ -87,7 +91,7 @@ GenericRulebaseContext::activate()
 {
     switch(registration_state) {
         case RuleRegistrationState::UNINITIALIZED: {
-            auto maybe_rule = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+            auto maybe_rule = setConfigurationInCache<BasicRuleConfig>("rulebase", "rulesConfig");
             if (!maybe_rule.ok()) {
                 registration_state = RuleRegistrationState::UNREGISTERED;
                 return;

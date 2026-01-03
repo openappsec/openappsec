@@ -254,3 +254,226 @@ TEST_F(AgentCoreUtilUT, regexReplaceTest)
         EXPECT_EQ(replaced, testCase.expected);
     }
 }
+
+TEST_F(AgentCoreUtilUT, createFileWithContentTest)
+{
+    // Test basic file creation with content
+    string test_file_path = cptestFnameInExeDir("test_create_file.txt");
+    string content = "Hello, World!\nThis is test content.";
+    unsigned int permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
+    
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Verify content was written correctly
+    ifstream file_stream(test_file_path);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    EXPECT_EQ(read_content, content);
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentEmptyContentTest)
+{
+    // Test creating file with empty content
+    string test_file_path = cptestFnameInExeDir("test_empty_file.txt");
+    string empty_content = "";
+    unsigned int permissions = S_IRUSR | S_IWUSR;
+    
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, empty_content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Verify file is empty
+    ifstream file_stream(test_file_path);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    EXPECT_EQ(read_content, "");
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentLargeContentTest)
+{
+    // Test creating file with large content
+    string test_file_path = cptestFnameInExeDir("test_large_file.txt");
+    string large_content;
+    
+    // Create large content (10KB)
+    for (int i = 0; i < 1000; ++i) {
+        large_content += "0123456789";
+    }
+    
+    unsigned int permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, large_content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Verify content was written correctly
+    ifstream file_stream(test_file_path);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    EXPECT_EQ(read_content.size(), large_content.size());
+    EXPECT_EQ(read_content, large_content);
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentOverwriteFalseTest)
+{
+    // Test that overwrite=false prevents overwriting existing file
+    string test_file_path = cptestFnameInExeDir("test_no_overwrite.txt");
+    string original_content = "Original content";
+    string new_content = "New content that should not be written";
+    unsigned int permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+    
+    // Create initial file
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, original_content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Try to overwrite with overwrite=false (should fail)
+    EXPECT_FALSE(NGEN::Filesystem::createFileWithContent(test_file_path, new_content, false, permissions));
+    
+    // Verify original content is preserved
+    ifstream file_stream(test_file_path);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    EXPECT_EQ(read_content, original_content);
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentOverwriteTrueTest)
+{
+    // Test that overwrite=true allows overwriting existing file
+    string test_file_path = cptestFnameInExeDir("test_with_overwrite.txt");
+    string original_content = "Original content";
+    string new_content = "New content that should overwrite";
+    unsigned int permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+    
+    // Create initial file
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, original_content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Overwrite with overwrite=true (should succeed)
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, new_content, true, permissions));
+    
+    // Verify new content was written
+    ifstream file_stream(test_file_path);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    EXPECT_EQ(read_content, new_content);
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentDifferentPermissionsTest)
+{
+    // Test creating files with different permission sets
+    string test_file_path = cptestFnameInExeDir("test_permissions.txt");
+    string content = "Content for permission test";
+    
+    // Test read-only permissions
+    unsigned int read_only_permissions = S_IRUSR | S_IRGRP | S_IROTH;
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, content, false, read_only_permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+    
+    // Test read-write permissions
+    unsigned int read_write_permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, content, false, read_write_permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+    
+    // Test full permissions
+    unsigned int full_permissions;
+    full_permissions = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH;
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, content, false, full_permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentSpecialCharactersTest)
+{
+    // Test creating file with special characters in content
+    string test_file_path = cptestFnameInExeDir("test_special_chars.txt");
+    string content = "Special chars: !@#$%^&*()[]{}|\\:;\"'<>?,./\n\t\r\n";
+    content += "Unicode: \u00A9 \u00AE \u2122\n";
+    content += "Null byte in middle: before\0after\n";
+    unsigned int permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+    
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Verify content (note: null byte will terminate string reading early)
+    ifstream file_stream(test_file_path, ios::binary);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    // Content should match up to the special characters
+    EXPECT_THAT(read_content, HasSubstr("Special chars: !@#$%^&*()[]{}|\\:;\"'<>?,./"));
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentInvalidPathTest)
+{
+    // Test creating file with invalid/inaccessible path
+    string invalid_path = "/root/inaccessible/path/test_file.txt";
+    string content = "This should fail";
+    unsigned int permissions = S_IRUSR | S_IWUSR;
+    
+    // This should fail due to invalid/inaccessible path
+    EXPECT_FALSE(NGEN::Filesystem::createFileWithContent(invalid_path, content, false, permissions));
+    EXPECT_FALSE(NGEN::Filesystem::exists(invalid_path));
+}
+
+TEST_F(AgentCoreUtilUT, createFileWithContentCreateDirectoryTest)
+{
+    // Test creating file in a subdirectory (should create intermediate directories)
+    string test_dir = cptestFnameInExeDir("test_subdir");
+    string test_file_path = test_dir + "/nested_file.txt";
+    string content = "Content in nested directory";
+    unsigned int permissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+    
+    // Ensure directory doesn't exist initially
+    EXPECT_FALSE(NGEN::Filesystem::exists(test_dir));
+    
+    // Create directory first
+    EXPECT_TRUE(NGEN::Filesystem::makeDir(test_dir));
+    
+    // Now create file in the directory
+    EXPECT_TRUE(NGEN::Filesystem::createFileWithContent(test_file_path, content, false, permissions));
+    EXPECT_TRUE(NGEN::Filesystem::exists(test_file_path));
+    
+    // Verify content
+    ifstream file_stream(test_file_path);
+    ASSERT_TRUE(file_stream.good());
+    stringstream buffer;
+    buffer << file_stream.rdbuf();
+    string read_content = buffer.str();
+    file_stream.close();
+    
+    EXPECT_EQ(read_content, content);
+    
+    // Cleanup
+    EXPECT_TRUE(NGEN::Filesystem::deleteFile(test_file_path));
+    EXPECT_TRUE(NGEN::Filesystem::deleteDirectory(test_dir));
+}

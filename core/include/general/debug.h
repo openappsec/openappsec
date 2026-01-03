@@ -36,6 +36,13 @@ class I_SignalHandler;
 namespace Config { enum class Errors; }
 std::ostream & operator<<(std::ostream &, const Config::Errors &);
 
+template <typename Rep, typename Period>
+std::ostream& operator<<(std::ostream& os, const std::chrono::duration<Rep, Period>& d)
+{
+    os << d.count();
+    return os;
+}
+
 enum class AlertTeam { CORE, WAAP, SDWAN, IOT };
 
 class AlertInfo
@@ -233,9 +240,11 @@ public:
 
     static void setNewDefaultStdout(std::ostream *new_stream);
     static void setUnitTestFlag(DebugFlags flag, DebugLevel level);
+    static void setDebugFlag(DebugFlags flag, DebugLevel level);
 
     static std::string findDebugFilePrefix(const std::string &file_name);
     static std::string getExecutableName();
+    static bool getDebugFlagFromString(const std::string &flag_name, DebugFlags &flag);
 
 private:
     template <typename T, typename... Args>

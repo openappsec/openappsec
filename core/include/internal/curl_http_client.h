@@ -8,6 +8,16 @@
 #include "messaging/http_response.h"
 #include "i_http_client.h"
 
+struct CurlHttpClientConfig {
+    int timeout_seconds = 30;
+    int connect_timeout_seconds = 10;
+    bool verbose_enabled = false;
+    bool ssl_verify_peer = true;
+    bool ssl_verify_host = true;
+    long http_version = CURL_HTTP_VERSION_NONE;
+    std::string user_agent = "";
+};
+
 class CurlHttpClient : public I_HttpClient
 {
 public:
@@ -17,6 +27,7 @@ public:
     void setProxy(const std::string& hosts) override;
     void setBasicAuth(const std::string& username, const std::string& password) override;
     void authEnabled(bool enabled) override;
+    void setConfigs(const CurlHttpClientConfig& config);
 
     HTTPResponse
     get(
@@ -70,6 +81,8 @@ private:
     bool auth_enabled;
     std::string username;
     std::string password;
+    CurlHttpClientConfig config;
+
 };
 
 #endif // __CURL_HTTP_CLIENT_H__

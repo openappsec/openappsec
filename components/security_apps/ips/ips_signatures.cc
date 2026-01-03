@@ -321,6 +321,9 @@ SignatureAndAction::getAction(const IPSEntry &ips_state) const
             override_actions.insert(behavior.getValue());
             const string &override_id = behavior.getId();
             if (!override_id.empty()) override_ids.push_back(override_id);
+        } else if(behavior.getKey() == BehaviorKey::LOG && behavior.getValue() == BehaviorValue::IGNORE) {
+            dbgTrace(D_IPS) << "setting bSupressLog due to override behavior: " << behavior.getId();
+            bSupressLog = true;
         }
     }
 
@@ -358,8 +361,10 @@ set<ParameterBehavior>
 SignatureAndAction::getBehavior(const unordered_map<string, set<string>> &exceptions_dict) const
 {
     I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<IPSComp>();
-    if (exception_id.empty()) return i_rulebase->getBehavior(exceptions_dict);
-
+    if (exception_id.empty()) {
+        dbgTrace(D_RULEBASE_CONFIG) << "No exception id provided, using default behavior";
+        return i_rulebase->getBehavior(exceptions_dict);
+    }
     return i_rulebase->getParameterException(exception_id).getBehavior(exceptions_dict);
 }
 
@@ -453,10 +458,25 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
         return false;
     }
 
-    dbgDebug(D_IPS) << "Signature matched - sending log";
+    bool is_prevent = get<0>(override_action) == IPSSignatureSubTypes::SignatureAction::PREVENT;
+    if(bSupressLog) {
+        dbgTrace(D_IPS) << "Signature matched - not sending log due to exception behavior";
+    } else {
+        sendLog(context_buffer, ips_state, override_action, is_prevent);
+    }
+    return is_prevent;
+}
+
+void SignatureAndAction::sendLog(
+    const Buffer &context_buffer,
+    const IPSEntry &ips_state,
+    const tuple<IPSSignatureSubTypes::SignatureAction, string, vector<string>> &override_action,
+    bool is_prevent
+) const
+{
+    dbgFlow(D_IPS) << "Signature matched - sending log";
 
     auto trigger = getTrigger();
-    bool is_prevent = get<0>(override_action) == IPSSignatureSubTypes::SignatureAction::PREVENT;
 
     auto severity = signature->getSeverity() < IPSLevel::HIGH ? Severity::HIGH : Severity::CRITICAL;
     if (get<0>(override_action) == IPSSignatureSubTypes::SignatureAction::DETECT) severity = Severity::INFO;
@@ -560,7 +580,7 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
     uint res_size = res_body.ok() && trigger.isWebLogFieldActive(::res_body) ? res_body.unpack().size() : 0;
     if (req_size + res_size > max_size) {
         if (req_size + 500 > max_size) {
-            res_size = std::min(500u, res_size);
+            res_size = min(500u, res_size);
             req_size = max_size - res_size;
         } else {
             res_size = max_size - req_size;
@@ -572,10 +592,8 @@ SignatureAndAction::isMatchedPrevent(const Buffer &context_buffer, const set<PMP
     log << LogField("waapOverride", get<1>(override_action));
 
     if (!get<2>(override_action).empty()) log.addToOrigin(LogField("exceptionIdList", get<2>(override_action)));
-    
-    log << LogField("securityAction", is_prevent ? "Prevent" : "Detect");
 
-    return is_prevent;
+    log << LogField("securityAction", is_prevent ? "Prevent" : "Detect");
 }
 
 void

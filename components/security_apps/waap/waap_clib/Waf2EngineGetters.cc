@@ -22,6 +22,8 @@
 #include <memory>
 
 USE_DEBUG_FLAG(D_WAAP_ULIMITS);
+USE_DEBUG_FLAG(D_WAAP);
+USE_DEBUG_FLAG(D_WAAP_OVERRIDE);
 
 #define LOW_REPUTATION_THRESHOLD 4
 #define NORMAL_REPUTATION_THRESHOLD 6
@@ -363,7 +365,7 @@ void Waf2Transaction::sendAutonomousSecurityLog(
     const ReportIS::Priority priority =
         Waap::Util::computePriorityFromThreatLevel(autonomousSecurityDecision->getThreatLevel());
 
-    auto maybeLogTriggerConf = getConfiguration<LogTriggerConf>("rulebase", "log");
+    auto maybeLogTriggerConf = getConfigurationWithCache<LogTriggerConf>("rulebase", "log");
     LogGenWrapper logGenWrapper(
                             maybeLogTriggerConf,
                             "Web Request",
@@ -445,12 +447,12 @@ void Waf2Transaction::createUserLimitsState()
     }
 }
 
-ngx_http_cp_verdict_e
+ServiceVerdict
 Waf2Transaction::getUserLimitVerdict()
 {
     if (!isUserLimitReached()) {
         // Either limit not reached or attack mitigation mode is DISABLED
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+        return ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
     }
 
     std::string msg;
@@ -460,7 +462,7 @@ Waf2Transaction::getUserLimitVerdict()
     std::string reason;
     reason = "  reason: " + getViolatedUserLimitTypeStr();
 
-    ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
     const AttackMitigationMode mode = WaapConfigBase::get_WebAttackMitigationMode(*m_siteConfig);
     auto decision = m_waapDecision.getDecision(USER_LIMITS_DECISION);
     if (mode == AttackMitigationMode::LEARNING) {
@@ -469,19 +471,19 @@ Waf2Transaction::getUserLimitVerdict()
             // detect mode and no active drop exception
             decision->setBlock(false);
             if (isIllegalMethodViolation()) {
-                dbgInfo(D_WAAP_ULIMITS) << msg << "INSPECT" << reason << " in detect mode";
-                verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+                dbgDebug(D_WAAP_ULIMITS) << msg << "INSPECT" << reason << " in detect mode";
+                verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
             }
             else {
-                dbgInfo(D_WAAP_ULIMITS) << msg << "PASS" << reason;
-                verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+                dbgDebug(D_WAAP_ULIMITS) << msg << "PASS" << reason;
+                verdict = ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
             }
         } else {
             // detect mode and active drop exception
             decision->setBlock(true);
             decision->setForceBlock(true);
-            dbgInfo(D_WAAP_ULIMITS) << msg << "Override Block" << reason;
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+            dbgDebug(D_WAAP_ULIMITS) << msg << "Override Block" << reason;
+            verdict = ServiceVerdict::TRAFFIC_VERDICT_DROP;
         }
     }
     else if (mode == AttackMitigationMode::PREVENT) {
@@ -489,14 +491,14 @@ Waf2Transaction::getUserLimitVerdict()
         if (!m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION].bForceException) {
             // prevent mode and no active accept exception
             decision->setBlock(true);
-            dbgInfo(D_WAAP_ULIMITS) << msg << "BLOCK" << reason;
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+            dbgDebug(D_WAAP_ULIMITS) << msg << "BLOCK" << reason;
+            verdict = ServiceVerdict::TRAFFIC_VERDICT_DROP;
         } else {
             // prevent mode and active accept exception
             decision->setBlock(false);
             decision->setForceAllow(true);
-            dbgInfo(D_WAAP_ULIMITS) << msg << "Override Accept" << reason;
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+            dbgDebug(D_WAAP_ULIMITS) << msg << "Override Accept" << reason;
+            verdict = ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
         }
     }
 
@@ -662,25 +664,79 @@ Waf2Transaction::getBehaviors(
     std::set<ParameterBehavior> all_params;
     I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<Waf2Transaction>();
     for (const auto &id : exceptions) {
-        dbgTrace(D_WAAP) << "get parameter exception for: " << id;
-        auto params = i_rulebase->getParameterException(id).getBehavior(exceptions_dict);
+        dbgTrace(D_WAAP_OVERRIDE) << "get parameter exception for: " << id;
 
-        if (checkResponse && !getResponseBody().empty()) {
-            std::unordered_map<std::string, std::set<std::string>> response_dict = {
-                {"responseBody", {getResponseBody()}}
-            };
-            auto params = i_rulebase->getParameterException(id).getBehavior(response_dict);
+        const auto &paramException = i_rulebase->getParameterException(id);
+        auto params = paramException.getBehavior(exceptions_dict);
+        bool hasKVPair = paramException.isContainingKVPair();
+
+        // If isContainingKVPair() is false, continue as usual
+        if (!hasKVPair) {
+            dbgTrace(D_WAAP_OVERRIDE) << "Using traditional matching for exception " << id << " (no KV pairs)";
+            if (checkResponse && !getResponseBody().empty()) {
+                std::unordered_map<std::string, std::set<std::string>> response_dict = {
+                    {"responseBody", {getResponseBody()}}
+                };
+                auto responseParams = paramException.getBehavior(response_dict);
+                if (responseParams.size() > 0) {
+                dbgTrace(D_WAAP_OVERRIDE) << "got responseBody behavior, setApplyOverride(true)";
+                    m_responseInspectReasons.setApplyOverride(true);
+                    all_params.insert(responseParams.begin(), responseParams.end());
+                    // once found, no need to check again
+                    checkResponse = false;
+                }
+            }
+
+            dbgTrace(D_WAAP_OVERRIDE) << "got "<< params.size() << " behaviors (non-KV pair)";
+            all_params.insert(params.begin(), params.end());
+        } else {
             if (params.size() > 0) {
-                dbgTrace(D_WAAP) << "got responseBody behavior, setApplyOverride(true)";
-                m_responseInspectReasons.setApplyOverride(true);
-                all_params.insert(params.begin(), params.end());
-                // once found, no need to check again
-                checkResponse = false;
+                bool anyKVMatched = false;
+                std::set<ParameterBehavior> kvParams;
+
+                dbgTrace(D_WAAP_OVERRIDE) << "Using KV pair matching for exception " << id;
+                // Check parameter name/value pairs
+                for (const DeepParser::KeywordInfo& keywordInfo : getKeywordInfo()) {
+                    std::unordered_map<std::string, std::set<std::string>> kv_dict = {
+                        {"paramName", {keywordInfo.getName()}},
+                        {"paramValue", {keywordInfo.getValue()}}
+                    };
+                    auto kvBehaviors = i_rulebase->getParameterException(id).getBehavior(kv_dict, true);
+                    if (kvBehaviors.size() > 0) {
+                        anyKVMatched = true;
+                        kvParams.insert(kvBehaviors.begin(), kvBehaviors.end());
+                    }
+                }
+
+                // Check header name/value pairs
+                for (const auto& hdr_pair : getHdrPairs()) {
+                    std::string name = hdr_pair.first;
+                    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+                    std::string value = hdr_pair.second;
+                    std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+
+                    std::unordered_map<std::string, std::set<std::string>> kv_dict = {
+                        {"headerName", {name}},
+                        {"headerValue", {value}}
+                    };
+                    auto kvBehaviors = i_rulebase->getParameterException(id).getBehavior(kv_dict, true);
+                    if (kvBehaviors.size() > 0) {
+                        anyKVMatched = true;
+                        kvParams.insert(kvBehaviors.begin(), kvBehaviors.end());
+                    }
+                }
+
+                // Consider matches only if at least one of the key/value pairs have been successfully matched
+                if (anyKVMatched) {
+                    dbgTrace(D_WAAP_OVERRIDE) << "got "<< kvParams.size() << " behaviors (KV pair matched)";
+                    all_params.insert(kvParams.begin(), kvParams.end());
+                } else {
+                    dbgTrace(D_WAAP_OVERRIDE) << "KV pair exception found but no specific pairs matched";
+                }
+            } else {
+                dbgTrace(D_WAAP_OVERRIDE) << "KV pair exception found but no initial match";
             }
         }
-
-        dbgTrace(D_WAAP) << "got "<< params.size() << " behaviors";
-        all_params.insert(params.begin(), params.end());
     }
     return all_params;
 }
@@ -696,26 +752,26 @@ bool Waf2Transaction::shouldEnforceByPracticeExceptions(DecisionType practiceTyp
         auto exceptions = overridePolicy->getExceptionsByPractice().getExceptionsOfPractice(practiceType);
 
         if (!exceptions.empty()) {
-            dbgTrace(D_WAAP) << "get behaviors for practice: " << practiceType;
+            dbgTrace(D_WAAP_OVERRIDE) << "get behaviors for practice: " << practiceType;
 
             auto behaviors = getBehaviors(getExceptionsDict(practiceType), exceptions);
             if (behaviors.size() > 0)
             {
                 auto it = m_overrideStateByPractice.find(practiceType);
                 if (it == m_overrideStateByPractice.end()) {
-                    dbgWarning(D_WAAP) << "no override state for practice: " << practiceType;
+                    dbgDebug(D_WAAP_OVERRIDE) << "no override state for practice: " << practiceType;
                     return false;
                 }
                 setOverrideState(behaviors, it->second);
                 if (it->second.bForceBlock) {
-                    dbgTrace(D_WAAP)
+                    dbgTrace(D_WAAP_OVERRIDE)
                     << "should block by exceptions for practice: " << practiceType;
                     decision->setBlock(true);
                     decision->setForceBlock(true);
                     shouldEnforce = true;
                 }
                 if (it->second.bForceException) {
-                    dbgTrace(D_WAAP)
+                    dbgTrace(D_WAAP_OVERRIDE)
                     << "should not block by exceptions for practice: " << practiceType;
                     decision->setBlock(false);
                     decision->setForceAllow(true);
@@ -748,16 +804,16 @@ void Waf2Transaction::setOverrideState(const std::set<ParameterBehavior>& behavi
         m_matchedOverrideIds.insert(behavior.getId());
         if (behavior.getKey() == BehaviorKey::ACTION) {
             if (behavior.getValue() == BehaviorValue::ACCEPT) {
-                dbgTrace(D_WAAP) << "setting bForceException due to override behavior: " << behavior.getId();
+                dbgTrace(D_WAAP_OVERRIDE) << "setting bForceException due to override behavior: " << behavior.getId();
                 state.bForceException = true;
                 state.forceExceptionIds.insert(behavior.getId());
             } else if (behavior.getValue() == BehaviorValue::REJECT) {
-                dbgTrace(D_WAAP) << "setting bForceBlock due to override behavior: " << behavior.getId();
+                dbgTrace(D_WAAP_OVERRIDE) << "setting bForceBlock due to override behavior: " << behavior.getId();
                 state.bForceBlock = true;
                 state.forceBlockIds.insert(behavior.getId());
             }
         } else if(behavior.getKey() == BehaviorKey::LOG && behavior.getValue() == BehaviorValue::IGNORE) {
-            dbgTrace(D_WAAP) << "setting bSupressLog due to override behavior: " << behavior.getId();
+            dbgTrace(D_WAAP_OVERRIDE) << "setting bSupressLog due to override behavior: " << behavior.getId();
             state.bSupressLog = true;
         }
     }
@@ -771,11 +827,11 @@ Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
         auto exceptions = overridePolicy->getExceptionsByPractice().
             getExceptionsOfPractice(AUTONOMOUS_SECURITY_DECISION);
         if (!exceptions.empty()) {
-            dbgTrace(D_WAAP) << "get behaviors for override state";
+            dbgTrace(D_WAAP_OVERRIDE) << "get behaviors for override state";
             m_responseInspectReasons.setApplyOverride(false);
             auto behaviors = getBehaviors(getExceptionsDict(AUTONOMOUS_SECURITY_DECISION), exceptions, true);
             if (behaviors.size() > 0) {
-                dbgTrace(D_WAAP) << "set override state by practice found behaviors";
+                dbgTrace(D_WAAP_OVERRIDE) << "set override state by practice found behaviors";
                 setOverrideState(behaviors, m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION]);
             }
             m_isHeaderOverrideScanRequired = false;
@@ -819,10 +875,10 @@ const Maybe<LogTriggerConf, Config::Errors> Waf2Transaction::getTriggerLog(const
 
     ScopedContext ctx;
     ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
-    auto trigger_config = getConfiguration<LogTriggerConf>("rulebase", "log");
+    auto trigger_config = getConfigurationWithCache<LogTriggerConf>("rulebase", "log");
 
     if (!trigger_config.ok()) {
-        dbgError(D_WAAP) << "Failed to get log trigger configuration, err: " << trigger_config.getErr();
+        dbgDebug(D_WAAP) << "Failed to get log trigger configuration, err: " << trigger_config.getErr();
     }
     return trigger_config;
 }
@@ -851,9 +907,9 @@ bool Waf2Transaction::isTriggerReportExists(const std::shared_ptr<
 
     ScopedContext ctx;
     ctx.registerValue<std::set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
-    auto trigger_config = getConfiguration<ReportTriggerConf>("rulebase", "report");
+    auto trigger_config = getConfigurationWithCache<ReportTriggerConf>("rulebase", "report");
     if (!trigger_config.ok()) {
-        dbgWarning(D_WAAP) << "Failed to get report trigger configuration, err: " << trigger_config.getErr();
+        dbgDebug(D_WAAP) << "Failed to get report trigger configuration, err: " << trigger_config.getErr();
         m_triggerReport = false;
         return false;
     }

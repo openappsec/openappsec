@@ -34,6 +34,7 @@
 #include "ScanResult.h"
 #include "WaapSampleValue.h"
 #include "RequestsMonitor.h"
+#include "WaapHyperscanEngine.h"
 
 enum space_stage {SPACE_SYNBOL, BR_SYMBOL, BN_SYMBOL, BRN_SEQUENCE, BNR_SEQUENCE, NO_SPACES};
 
@@ -43,18 +44,34 @@ class WaapAssetState : public boost::noncopyable, public I_WaapAssetState
 {
 private: //ugly but needed for build
     std::shared_ptr<Signatures> m_Signatures;
+    std::shared_ptr<WaapHyperscanEngine> m_hyperscanEngine;
     std::string m_waapDataFileName;
     std::map<std::string, std::vector<std::string>> m_filtered_keywords_verbose;
 
     void checkRegex(const SampleValue &sample, const Regex & pattern, std::vector<std::string>& keyword_matches,
         Waap::Util::map_of_stringlists_t & found_patterns, bool longTextFound, bool binaryDataFound) const;
 
+    // Helper function to perform the common pattern of checkRegex calls (2 or 3 calls based on parameter)
+    void performStandardRegexChecks(const SampleValue &sample, Waf2ScanResult &res,
+        bool longTextFound, bool binaryDataFound, bool includePatternRegex = true) const;
+
+    // Helper function to perform response body/header pattern of two checkRegex calls
+    void performResponseRegexChecks(const SampleValue &sample, Waf2ScanResult &res,
+        bool longTextFound, bool binaryDataFound) const;
+
+    // Helper function to perform pattern subset match only
+    void performPatternRegexChecks(const SampleValue &sample, Waf2ScanResult &res,
+        bool longTextFound, bool binaryDataFound) const;
+
     void filterKeywordsDueToLongText(Waf2ScanResult &res) const;
     std::string nicePrint(Waf2ScanResult &res) const;
 
 public:
-    // Load and compile signatures from file
-    explicit WaapAssetState(std::shared_ptr<Signatures> signatures, const std::string& waapDataFileName,
+
+    explicit WaapAssetState(
+        std::shared_ptr<Signatures> signatures,
+        const std::string &waapDataFileName,
+        std::shared_ptr<WaapHyperscanEngine> hyperscanEngine = nullptr,
         size_t cleanCacheCapacity = SIGS_APPLY_CLEAN_CACHE_CAPACITY,
         size_t suspiciousCacheCapacity = SIGS_APPLY_SUSPICIOUS_CACHE_CAPACITY,
         size_t sampleTypeCacheCapacity = SIGS_SAMPLE_TYPE_CACHE_CAPACITY,
@@ -110,7 +127,6 @@ public:
     void clearRateLimitingState();
     void clearErrorLimitingState();
     void clearSecurityHeadersState();
-
 
     std::shared_ptr<Waap::RateLimiting::State>& getRateLimitingState();
     std::shared_ptr<Waap::RateLimiting::State>& getErrorLimitingState();

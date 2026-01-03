@@ -55,6 +55,7 @@ void WaapAssetStatesManager::setAssetDirectoryPath(const std::string &assetDirec
 
 WaapAssetStatesManager::Impl::Impl() :
     m_signatures(nullptr),
+    m_hyperscanEngine(nullptr),
     m_basicWaapSigs(nullptr),
     m_AssetBasedWaapSigs(),
     m_assetDirectoryPath(BACKUP_DIRECTORY_PATH)
@@ -67,18 +68,33 @@ WaapAssetStatesManager::Impl::~Impl()
 
 bool WaapAssetStatesManager::Impl::initBasicWaapSigs(const std::string& waapDataFileName)
 {
-    if (m_signatures && !m_signatures->fail() && m_basicWaapSigs)
+    if (m_signatures && !m_signatures->fail() && m_hyperscanEngine && m_basicWaapSigs)
     {
         // already initialized successfully.
         return true;
     }
     try {
         m_signatures = std::make_shared<Signatures>(waapDataFileName);
+        
+        // Initialize Hyperscan engine
+        m_hyperscanEngine = std::make_shared<WaapHyperscanEngine>();
+        if (!Signatures::shouldUseHyperscan()) {
+            dbgTrace(D_WAAP) << "Hyperscan disabled by configuration, will use PCRE2";
+        } else if (!m_hyperscanEngine->initialize(m_signatures)) {
+            dbgTrace(D_WAAP) << "Hyperscan initialization failed, will use PCRE2";
+        } else {
+            m_signatures->setHyperscanInitialized(true);
+            dbgTrace(D_WAAP) << "Hyperscan initialized successfully";
+        }
+
         m_basicWaapSigs = std::make_shared<WaapAssetState>(
             m_signatures,
             waapDataFileName,
+            m_hyperscanEngine,
             SIGS_APPLY_CLEAN_CACHE_CAPACITY,
-            SIGS_APPLY_SUSPICIOUS_CACHE_CAPACITY);
+            SIGS_APPLY_SUSPICIOUS_CACHE_CAPACITY,
+            SIGS_SAMPLE_TYPE_CACHE_CAPACITY,
+            "");
     }
     catch (std::runtime_error & e) {
         // TODO:: properly handle component initialization failure
@@ -89,7 +105,7 @@ bool WaapAssetStatesManager::Impl::initBasicWaapSigs(const std::string& waapData
         return false;
     }
 
-    return m_signatures && !m_signatures->fail() && m_basicWaapSigs;
+    return m_signatures && !m_signatures->fail() && m_hyperscanEngine && m_basicWaapSigs;
 }
 
 std::shared_ptr<WaapAssetState> WaapAssetStatesManager::Impl::getWaapAssetStateGlobal()

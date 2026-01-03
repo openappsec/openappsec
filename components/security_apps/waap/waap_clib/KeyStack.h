@@ -21,62 +21,49 @@
 // Represent string (key) that is concatenation of  substrings (subkeys) separated by '.' character.
 // Mostly emulates API of C++ std::string class, with addition of push() and pop() methods
 // that append individual subkey and delete last subkey from the string efficiently.
+// Uses fixed buffer for performance with fallback to dynamic string for long keys.
 class KeyStack {
 public:
     KeyStack(const char *name);
     void push(const char *subkey, size_t subkeySize, bool countDepth=true);
     void pop(const char* log, bool countDepth=true);
-    bool empty() const { return m_key.empty(); }
-    void clear() { m_key.clear(); m_stack.clear(); }
+    bool empty() const { return m_using_buffer ? m_positions.empty() : m_fallback_key.empty(); }
+    void clear();
     void print(std::ostream &os) const;
     size_t depth() const { return m_nameDepth; }
-    size_t size() const {
-        return str().size();
-    }
-    const char *c_str() const {
-        // If pushed none - return empty string.
-        // If pushed once - still return empty string (the once-pushed subkey will only be returned
-        //                  by the first() method.
-        // If pushed twice or more - return all subkeys starting from the second one.
-        // Also, even if pushed 2 or more times, but pushed empty strings as subkeys,
-        // then it could happen that m_key is still empty, in which case we should still return empty string.
-        if (m_stack.size() <= 1 || m_stack[1] + 1 >= m_key.size()) {
-            return "";
-        }
+    size_t size() const;
+    const char *c_str() const;
+    const std::string str() const;
+    const std::string first() const;
 
-        return m_key.c_str() + m_stack[1] + 1;
-    }
-    const std::string str() const {
-        // If pushed none - return empty string.
-        // If pushed once - still return empty string (the once-pushed subkey will only be returned
-        //                  by the first() method.
-        // If pushed twice or more - return all subkeys starting from the second one.
-        // Also, even if pushed 2 or more times, but pushed empty strings as subkeys,
-        // then it could happen that m_key is still empty, in which case we should still return empty string.
-        if (m_stack.size() <= 1 || m_stack[1] + 1 >= m_key.size()) {
-            return "";
-        }
-
-        return m_key.substr(m_stack[1] + 1);
-    }
-    const std::string first() const {
-        if (m_stack.size() == 0) {
-            return "";
-        }
-        else if (m_stack.size() == 1) {
-            return m_key;
-        }
-        else {
-            // m_stack.size() > 1, so m_stack[1] is valid
-            return m_key.substr(0, m_stack[1]);
-        }
-    }
 private:
+    static const size_t MAX_KEY_SIZE = 1024;
+
     const char *m_name;
-    std::string m_key;
-    std::vector<size_t> m_stack;    // position of individual key name starts in m_key,
-                                    // used to backtrack 1 key at a time.
     int m_nameDepth;
+
+    // Fixed buffer approach for common case (fast path)
+    char m_buffer[MAX_KEY_SIZE];
+    std::vector<size_t> m_positions;    // Start positions of each subkey in buffer
+    std::vector<size_t> m_lengths;      // Length of each subkey
+    size_t m_total_length;
+    bool m_using_buffer;
+
+    // Fallback to dynamic approach for long keys (slow path)
+    std::string m_fallback_key;
+    std::vector<size_t> m_fallback_stack;
+
+    // Caching for frequently accessed methods
+    mutable std::string m_cached_str;
+    mutable std::string m_cached_first;
+    mutable bool m_str_cache_valid;
+    mutable bool m_first_cache_valid;
+
+    // Helper methods
+    void switch_to_fallback();
+    void rebuild_buffer_from_fallback();
+    bool can_fit_in_buffer(size_t additional_size) const;
+    void invalidate_cache();
 };
 
 #endif // __KEYSTACK_H__0a8039e6

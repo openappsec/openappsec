@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #pragma once
+
 #include <chrono>
 #include <fstream>
 #include "i_time_get.h"
@@ -19,17 +20,23 @@
 #include "i_messaging.h"
 #include "i_mainloop.h"
 #include "i_agent_details.h"
+#include "compression_utils.h"
+#include <sstream>
+#include <vector>
 
 static const uint max_send_obj_retries = 3;
 static const std::chrono::microseconds wait_next_attempt(5000000);
 
 USE_DEBUG_FLAG(D_WAAP_SERIALIZE);
 
+// Forward declarations
+class WaapComponent;
+
 class RestGetFile : public ClientRest
 {
 public:
     // decrypts and load json
-    bool loadJson(const std::string& json);
+    bool loadJson(const std::string &json);
     // gen json and encrypt
     Maybe<std::string> genJson() const;
 };
@@ -47,10 +54,10 @@ public:
 
     // parses xml instead of json
     // extracts a file list in <Contents><Key>
-    bool loadJson(const std::string& xml);
+    bool loadJson(const std::string &xml);
 
-    const std::vector<FileMetaData>& getFilesMetadataList() const;
-    const std::vector<std::string>& getFilesList() const;
+    const std::vector<FileMetaData> &getFilesMetadataList() const;
+    const std::vector<std::string> &getFilesList() const;
 
 private:
     RestParam<std::vector<FileMetaData>> files;
@@ -59,18 +66,19 @@ private:
 
 class I_Serializable {
 public:
-    virtual void serialize(std::ostream& stream) = 0;
-    virtual void deserialize(std::istream& stream) = 0;
+    virtual void serialize(std::ostream &stream) = 0;
+    virtual void deserialize(std::istream &stream) = 0;
 };
 
 class I_RemoteSyncSerialize {
 public:
     virtual bool postData() = 0;
-    virtual void pullData(const std::vector<std::string>& files) = 0;
+    virtual void pullData(const std::vector<std::string> &files) = 0;
     virtual void processData() = 0;
     virtual void postProcessedData() = 0;
-    virtual void pullProcessedData(const std::vector<std::string>& files) = 0;
-    virtual void updateState(const std::vector<std::string>& files) = 0;
+    virtual void pullProcessedData(const std::vector<std::string> &files) = 0;
+    virtual void updateState(const std::vector<std::string> &files) = 0;
+    virtual Maybe<std::string> getRemoteStateFilePath() const { return genError("No remote state file path defined"); }
 };
 
 class I_Backup {
@@ -86,7 +94,7 @@ class SerializeToFileBase :
     public I_Serializable
 {
 public:
-    SerializeToFileBase(std::string filePath);
+    SerializeToFileBase(const std::string &filePath);
     virtual ~SerializeToFileBase();
 
     virtual void saveData();
@@ -96,13 +104,13 @@ protected:
     // saved file name for testing
     std::string m_filePath;
 private:
-    void loadFromFile(std::string filePath);
+    void loadFromFile(const std::string &filePath); // Updated to match implementation
 };
 
 class SerializeToFilePeriodically : public SerializeToFileBase
 {
 public:
-    SerializeToFilePeriodically(std::chrono::seconds pollingIntervals, std::string filePath);
+    SerializeToFilePeriodically(std::chrono::seconds pollingIntervals, const std::string &filePath);
     virtual ~SerializeToFilePeriodically();
 
     void setInterval(std::chrono::seconds newInterval);
@@ -122,16 +130,16 @@ class SerializeToLocalAndRemoteSyncBase : public I_RemoteSyncSerialize, public S
 public:
     SerializeToLocalAndRemoteSyncBase(std::chrono::minutes interval,
         std::chrono::seconds waitForSync,
-        const std::string& filePath,
-        const std::string& remotePath,
-        const std::string& assetId,
-        const std::string& owner);
+        const std::string &filePath,
+        const std::string &remotePath,
+        const std::string &assetId,
+        const std::string &owner);
     virtual ~SerializeToLocalAndRemoteSyncBase();
 
     virtual void restore();
 
     virtual void syncWorker();
-
+    bool shouldNotSync() const;
     void setInterval(std::chrono::seconds newInterval);
     std::chrono::seconds getIntervalDuration() const;
     void setRemoteSyncEnabled(bool enabled);
@@ -143,7 +151,7 @@ protected:
     std::string getUri();
     size_t getIntervalsCount();
     void incrementIntervalsCount();
-    bool isBase();
+    bool isBase() const;
 
     template<typename T>
     bool sendObject(T &obj, HTTPMethod method, std::string uri)
@@ -242,7 +250,7 @@ protected:
     }
 
     template<typename T>
-    bool sendNoReplyObjectWithRetry(T &obj, HTTPMethod method, std::string uri)
+    bool sendNoReplyObjectWithRetry(T &obj, HTTPMethod method, const std::string &uri)
     {
         I_MainLoop *mainloop= Singleton::Consume<I_MainLoop>::by<WaapComponent>();
         for (uint i = 0; i < max_send_obj_retries; i++)
@@ -270,10 +278,16 @@ protected:
 private:
     bool localSyncAndProcess();
     void updateStateFromRemoteService();
+    Maybe<std::string> getStateTimestampByListing();
+    bool checkAndUpdateStateTimestamp(const std::string& currentStateTimestamp);
     RemoteFilesList getProcessedFilesList();
     RemoteFilesList getRemoteProcessedFilesList();
     std::string getLearningHost();
     std::string getSharedStorageHost();
+    std::string getStateTimestampPath();
+    Maybe<std::string> getStateTimestamp();
+    Maybe<void> updateStateFromRemoteFile();
+    bool shouldSendSyncNotification() const;
 
     I_MainLoop* m_pMainLoop;
     std::chrono::microseconds m_waitForSync;
@@ -287,3 +301,4 @@ private:
     Maybe<std::string> m_shared_storage_host;
     Maybe<std::string> m_learning_host;
 };
+

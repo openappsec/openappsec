@@ -110,13 +110,16 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"Horizon Telemetry Metrics", ReportIS::Tags::HORIZON_TELEMETRY_METRICS},
         {"Crowdsec", ReportIS::Tags::CROWDSEC},
         {"apiDiscoveryCloudMessaging", ReportIS::Tags::API_DISCOVERY},
+        {"lbHealthStatusEngine", ReportIS::Tags::LB_HEALTH_STATUS},
         {"Playground", ReportIS::Tags::PLAYGROUND},
         {"Nginx Proxy Manager", ReportIS::Tags::NGINX_PROXY_MANAGER},
         {"APISIX Server", ReportIS::Tags::WEB_SERVER_APISIX},
         {"Docker Deployment", ReportIS::Tags::DEPLOYMENT_DOCKER},
         {"SWAG Server", ReportIS::Tags::WEB_SERVER_SWAG},
         {"NGINX Unified Server", ReportIS::Tags::WEB_SERVER_NGINX_UNIFIED},
-        {"AI Guard", ReportIS::Tags::AIGUARD}
+        {"AI Guard", ReportIS::Tags::AIGUARD},
+        {"Central NGINX Manager", ReportIS::Tags::CENTRAL_NGINX_MANAGER},
+        {"Browser Agent", ReportIS::Tags::BROWSER_AGENT}
     };
     
     auto report_is_tag = strings_to_tags.find(tag);
@@ -280,6 +283,8 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::IDA_SAML_IDN_CLIENT_IP_NOTIFY: return "quantumIPNotifyIdn";
         case IssuingEngine::API_DISCOVERY: return "apiDiscoveryCloudMessaging";
         case IssuingEngine::HORIZON_TELEMETRY_METRICS: return "horizonTelemetryMetrics";
+        case IssuingEngine::LB_HEALTH_STATUS: return "lbHealthStatusEngine";
+        case IssuingEngine::BROWSER_AGENT: return "browserAgentEngine";
     }
 
     dbgAssertOpt(false) << alert << "Reached impossible engine value of: " << static_cast<int>(issuing_engine);
@@ -323,12 +328,15 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "Crowdsec",
     "Playground",
     "apiDiscoveryCloudMessaging",
+    "lbHealthStatusEngine",
     "Nginx Proxy Manager",
     "APISIX Server",
     "Docker Deployment",
     "SWAG Server",
     "NGINX Unified Server",
-    "AI Guard"
+    "AI Guard",
+    "Central NGINX Manager",
+    "Browser Agent"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

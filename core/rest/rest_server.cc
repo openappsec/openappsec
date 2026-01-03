@@ -53,11 +53,16 @@ public:
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
     bool addGetCall(const string &uri, const function<string()> &cb) override;
     bool addWildcardGetCall(const string &uri, const function<string(const string &)> &callback);
+    bool addPostCall(const string &uri, const function<Maybe<string>(const string &)> &callback) override;
     uint16_t getListeningPort() const override { return listening_port; }
+    uint16_t getStartingPortRange() const override { return starting_port_range; }
     Maybe<string> getSchema(const string &uri) const override;
-    Maybe<string> invokeRest(const string &uri, istream &in) const override;
+    Maybe<string> invokeRest(const string &uri, istream &in, const map<string, string> &headers) const override;
     bool isGetCall(const string &uri) const override;
     string invokeGet(const string &uri) const override;
+    bool isPostCall(const string &uri) const override;
+    Maybe<string> invokePost(const string &uri, const string &body) const override;
+    bool shouldCaptureHeaders(const string &uri) const override;
 
 private:
     void prepareConfiguration();
@@ -71,7 +76,9 @@ private:
     map<string, unique_ptr<RestInit>> rest_calls;
     map<string, function<string()>> get_calls;
     map<string, function<string(const string &)>> wildcard_get_calls;
+    map<string, function<Maybe<string>(const string &)>> post_calls;
     uint16_t listening_port = 0;
+    uint16_t starting_port_range = 0;
     vector<uint16_t> port_range;
 };
 
@@ -241,6 +248,9 @@ RestServer::Impl::prepareConfiguration()
             range_start = 0;
             range_end = 1;
         }
+        starting_port_range = range_start.unpack();
+        dbgInfo(D_API) << "Rest port range start: " << *range_start << ", end: " << *range_end;
+        // starting_port_range = *range_start;
         port_range.resize(*range_end - *range_start);
         for (uint16_t i = 0, port = *range_start; i < port_range.size(); i++, port++) {
             port_range[i] = port;
@@ -379,6 +389,14 @@ RestServer::Impl::addWildcardGetCall(const string &uri, const function<string(co
     return wildcard_get_calls.emplace(uri, callback).second;
 }
 
+bool
+RestServer::Impl::addPostCall(const string &uri, const function<Maybe<string>(const string&)> &callback)
+{
+    if (rest_calls.find(uri) != rest_calls.end()) return false;
+    if (get_calls.find(uri) != get_calls.end()) return false;
+    return post_calls.emplace(uri, callback).second;
+}
+
 Maybe<string>
 RestServer::Impl::getSchema(const string &uri) const
 {
@@ -392,12 +410,12 @@ RestServer::Impl::getSchema(const string &uri) const
 }
 
 Maybe<string>
-RestServer::Impl::invokeRest(const string &uri, istream &in) const
+RestServer::Impl::invokeRest(const string &uri, istream &in, const map<string, string> &headers) const
 {
     auto iter = rest_calls.find(uri);
     if (iter == rest_calls.end()) return genError("No matching REST call was found");
     auto instance = iter->second->getRest();
-    return instance->performRestCall(in);
+    return instance->performRestCall(in, headers);
 }
 
 bool
@@ -412,6 +430,13 @@ RestServer::Impl::isGetCall(const string &uri) const
     return false;
 }
 
+bool
+RestServer::Impl::isPostCall(const string &uri) const
+{
+    if (post_calls.find(uri) != post_calls.end()) return true;
+    return false;
+}
+
 string
 RestServer::Impl::invokeGet(const string &uri) const
 {
@@ -423,6 +448,23 @@ RestServer::Impl::invokeGet(const string &uri) const
     }
 
     return "";
+}
+
+Maybe<string>
+RestServer::Impl::invokePost(const string &uri, const string &body) const
+{
+    auto instance = post_calls.find(uri);
+    if (instance != post_calls.end()) return instance->second(body);
+    return genError("No matching POST call was found for URI: " + uri);
+}
+
+bool
+RestServer::Impl::shouldCaptureHeaders(const string &uri) const
+{
+    auto iter = rest_calls.find(uri);
+    if (iter == rest_calls.end()) return false;
+    auto instance = iter->second->getRest();
+    return instance->wantsHeaders();
 }
 
 string

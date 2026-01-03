@@ -414,7 +414,9 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
 
     if (valueStats.canSplitPipe || valueStats.canSplitSemicolon) {
         std::string key = IndicatorsFiltersManager::generateKey(m_key.first(), m_key.str(), m_pTransaction);
-        m_pWaapAssetState->m_filtersMngr->pushSample(key, cur_val, m_pTransaction);
+        if (m_pWaapAssetState->m_filtersMngr != nullptr) {
+            m_pWaapAssetState->m_filtersMngr->pushSample(key, cur_val, m_pTransaction);
+        }
     }
 
     // Detect and decode UTF-16 data
@@ -1090,7 +1092,7 @@ DeepParser::createInternalParser(
     int offset = -1;
     auto pWaapAssetState = m_pTransaction->getAssetState();
     std::shared_ptr<Signatures> signatures = m_pWaapAssetState->getSignatures();
-    if (pWaapAssetState != nullptr) {
+    if (pWaapAssetState != nullptr && pWaapAssetState->m_filtersMngr != nullptr) {
         // Find out learned type
         std::set<std::string> paramTypes = pWaapAssetState->m_filtersMngr->getParameterTypes(
             IndicatorsFiltersManager::generateKey(m_key.first(), m_key.str(), m_pTransaction)

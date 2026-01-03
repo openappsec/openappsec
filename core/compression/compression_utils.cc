@@ -22,12 +22,18 @@
 #include <strings.h>
 #include <string.h>
 #include <zlib.h>
+#include <brotli/encode.h>
+#include <brotli/decode.h>
 
 using namespace std;
 
 using DebugFunction = void(*)(const char *);
 
 static const int max_debug_level = static_cast<int>(CompressionUtilsDebugLevel::COMPRESSION_DBG_LEVEL_ASSERTION);
+
+static const int max_retries = 3;
+static const size_t default_brotli_buffer_size = 16384;
+static const size_t brotli_decompression_probe_size = 64;
 
 static void
 defaultPrint(const char *debug_message)
@@ -104,12 +110,23 @@ static const int zlib_no_flush = Z_NO_FLUSH;
 
 struct CompressionStream
 {
-    CompressionStream() { bzero(&stream, sizeof(z_stream)); }
+    CompressionStream()
+        :
+    br_encoder_state(nullptr),
+    br_decoder_state(nullptr)
+    {
+        bzero(&stream, sizeof(z_stream));
+    }
+
     ~CompressionStream() { fini(); }
 
     tuple<basic_string<unsigned char>, bool>
     decompress(const unsigned char *data, uint32_t size)
     {
+        if (state == TYPE::UNINITIALIZED && size > 0 && isBrotli(data, size)) return decompressBrotli(data, size);
+
+        if (state == TYPE::DECOMPRESS_BROTLI) return decompressBrotli(data, size);
+
         initInflate();
         if (state != TYPE::DECOMPRESS) throw runtime_error("Could not start decompression");
 
@@ -138,7 +155,7 @@ struct CompressionStream
                 res.append(work_space.data(), stream.total_out - old_total_out);
             } else {
                 ++retries;
-                if (retries > 3) {
+                if (retries > max_retries) {
                     fini();
                     throw runtime_error("No results from inflate more than three times");
                 }
@@ -156,6 +173,7 @@ struct CompressionStream
     basic_string<unsigned char>
     compress(CompressionType type, const unsigned char *data, uint32_t size, int is_last_chunk)
     {
+        if (type == CompressionType::BROTLI) return compressBrotli(data, size, is_last_chunk);
         initDeflate(type);
         if (state != TYPE::COMPRESS) throw runtime_error("Could not start compression");
 
@@ -183,7 +201,7 @@ struct CompressionStream
                 res.append(work_space.data(), stream.total_out - old_total_out);
             } else {
                 ++retries;
-                if (retries > 3) {
+                if (retries > max_retries) {
                     fini();
                     throw runtime_error("No results from deflate more than three times");
                 }
@@ -201,7 +219,7 @@ private:
     void
     initInflate()
     {
-        if (state != TYPE::UNINITIALIZAED) return;
+        if (state != TYPE::UNINITIALIZED) return;
 
         auto init_status = inflateInit2(&stream, default_num_window_bits + 32);
         if (init_status != zlib_ok_return_value) {
@@ -216,7 +234,7 @@ private:
     void
     initDeflate(CompressionType type)
     {
-        if (state != TYPE::UNINITIALIZAED) return;
+        if (state != TYPE::UNINITIALIZED) return;
 
         int num_history_window_bits;
         switch (type) {
@@ -227,6 +245,10 @@ private:
             case CompressionType::ZLIB: {
                 num_history_window_bits = default_num_window_bits;
                 break;
+            }
+            case CompressionType::BROTLI: {
+                zlibDbgAssertion << "Brotli compression should use compressBrotli()";
+                return;
             }
             default: {
                 zlibDbgAssertion
@@ -253,6 +275,190 @@ private:
         state = TYPE::COMPRESS;
     }
 
+    basic_string<unsigned char>
+    compressBrotli(const unsigned char *data, uint32_t size, int is_last_chunk)
+    {
+        if (state == TYPE::UNINITIALIZED) {
+            br_encoder_state = BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
+            if (!br_encoder_state) throw runtime_error("Failed to create Brotli encoder state");
+
+            BrotliEncoderSetParameter(br_encoder_state, BROTLI_PARAM_QUALITY, BROTLI_DEFAULT_QUALITY);
+            BrotliEncoderSetParameter(br_encoder_state, BROTLI_PARAM_LGWIN, BROTLI_DEFAULT_WINDOW);
+            state = TYPE::COMPRESS_BROTLI;
+        } else if (state != TYPE::COMPRESS_BROTLI) {
+            throw runtime_error("Compression stream in inconsistent state for Brotli compression");
+        }
+
+        basic_string<unsigned char> output;
+        vector<uint8_t> buffer(16384);
+        int retries = 0;
+        const uint8_t* next_in = data;
+        size_t available_in = size;
+
+        while (available_in > 0 || is_last_chunk) {
+            size_t available_out = buffer.size();
+            uint8_t* next_out = buffer.data();
+
+
+            BrotliEncoderOperation op = is_last_chunk ? BROTLI_OPERATION_FINISH : BROTLI_OPERATION_PROCESS;
+            auto brotli_success = BrotliEncoderCompressStream(
+                br_encoder_state,
+                op,
+                &available_in,
+                &next_in,
+                &available_out,
+                &next_out,
+                nullptr
+            );
+
+            if (brotli_success == BROTLI_FALSE) {
+                fini();
+                throw runtime_error("Brotli compression error");
+            }
+
+            size_t bytes_written = buffer.size() - available_out;
+            if (bytes_written > 0) {
+                output.append(buffer.data(), bytes_written);
+                retries = 0;
+            } else {
+                retries++;
+                if (retries > max_retries) {
+                    fini();
+                    throw runtime_error("Brotli compression error: Exceeded retry limit.");
+                }
+            }
+
+            if (BrotliEncoderIsFinished(br_encoder_state)) break;
+
+            if (available_in == 0 && !is_last_chunk) break;
+        }
+
+        if (is_last_chunk) fini();
+
+        return output;
+    }
+
+    tuple<basic_string<unsigned char>, bool>
+    decompressBrotli(const unsigned char *data, uint32_t size)
+    {
+        if (state != TYPE::DECOMPRESS_BROTLI) {
+            br_decoder_state = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
+
+            if (!br_decoder_state) throw runtime_error("Failed to create Brotli decoder state");
+
+            BrotliDecoderSetParameter(br_decoder_state, BROTLI_DECODER_PARAM_LARGE_WINDOW, 1u);
+            state = TYPE::DECOMPRESS_BROTLI;
+        }
+
+        basic_string<unsigned char> output;
+        const uint8_t* next_in = data;
+        size_t available_in = size;
+
+        size_t buffer_size = max<size_t>(size * 4, default_brotli_buffer_size);
+        vector<uint8_t> buffer(buffer_size);
+        
+        // Use a constant ratio for max buffer size relative to input size
+        const size_t max_buffer_size = 256 * 1024 * 1024; // 256 MB max buffer size
+
+        while (true) {
+            size_t available_out = buffer.size();
+            uint8_t* next_out = buffer.data();
+
+            BrotliDecoderResult result = BrotliDecoderDecompressStream(
+                br_decoder_state,
+                &available_in,
+                &next_in,
+                &available_out,
+                &next_out,
+                nullptr
+            );
+
+            if (result == BROTLI_DECODER_RESULT_ERROR) {
+                fini();
+                auto error_msg = string(BrotliDecoderErrorString(BrotliDecoderGetErrorCode(br_decoder_state)));
+                throw runtime_error("Brotli decompression error: " + error_msg);
+            }
+
+            // Handle any produced output
+            size_t bytes_produced = buffer.size() - available_out;
+            if (bytes_produced > 0) {
+                output.append(buffer.data(), bytes_produced);
+            }
+
+            if (result == BROTLI_DECODER_RESULT_SUCCESS) {
+                bool is_finished = BrotliDecoderIsFinished(br_decoder_state);
+                if (is_finished) fini();
+                return make_tuple(output, is_finished);
+            }
+
+            if (result == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) {
+                // Check if we've exceeded the maximum buffer size limit
+                if (buffer.size() >= max_buffer_size) {
+                    fini();
+                    throw runtime_error("Brotli decompression buffer size limit exceeded - possibly corrupted data");
+                }
+                
+                // Resize buffer to accommodate more output
+                size_t new_size = min(buffer.size() * 2, max_buffer_size);
+                buffer.resize(new_size);
+                continue; // Continue with the same input, new buffer
+            }
+
+            // If we reach here, we need more input but have no more to provide
+            if (available_in == 0) {
+                // No more input data available, return what we have so far
+                return make_tuple(output, false);
+            }
+        }
+
+        return make_tuple(output, false);
+    }
+
+    bool
+    isBrotli(const unsigned char *data, uint32_t size)
+    {
+        if (size < 4) return false;
+
+        BrotliDecoderState* test_decoder = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
+        if (!test_decoder) return false;
+
+        const uint8_t* next_in = data;
+        size_t available_in = min<size_t>(size, brotli_decompression_probe_size);
+        uint8_t output[brotli_decompression_probe_size];
+        size_t available_out = sizeof(output);
+        uint8_t* next_out = output;
+
+        BrotliDecoderResult result = BrotliDecoderDecompressStream(
+            test_decoder,
+            &available_in,
+            &next_in,
+            &available_out,
+            &next_out,
+            nullptr
+        );
+
+        bool is_brotli = false;
+
+        if (
+            result != BROTLI_DECODER_RESULT_ERROR &&
+            (
+                available_out < sizeof(output) ||
+                available_in < min<size_t>(size, brotli_decompression_probe_size)
+            )
+        ) {
+            is_brotli = true;
+        }
+
+        BrotliDecoderDestroyInstance(test_decoder);
+        if (is_brotli) {
+            br_decoder_state = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
+            BrotliDecoderSetParameter(br_decoder_state, BROTLI_DECODER_PARAM_LARGE_WINDOW, 1u);
+            state = TYPE::DECOMPRESS_BROTLI;
+            return true;
+        }
+        return false;
+    }
+
     void
     fini()
     {
@@ -261,11 +467,21 @@ private:
         if (state == TYPE::DECOMPRESS) end_stream_res = inflateEnd(&stream);
         if (state == TYPE::COMPRESS) end_stream_res = deflateEnd(&stream);
 
-        if (end_stream_res != zlib_ok_return_value) {
+        if (br_encoder_state) {
+            BrotliEncoderDestroyInstance(br_encoder_state);
+            br_encoder_state = nullptr;
+        }
+
+        if (br_decoder_state) {
+            BrotliDecoderDestroyInstance(br_decoder_state);
+            br_decoder_state = nullptr;
+        }
+
+        if (end_stream_res != zlib_ok_return_value && end_stream_res != Z_DATA_ERROR) {
             zlibDbgError << "Failed to clean state: " << getZlibError(end_stream_res);
         }
 
-        state = TYPE::UNINITIALIZAED;
+        state = TYPE::UNINITIALIZED;
     }
 
     string
@@ -288,7 +504,16 @@ private:
     }
 
     z_stream stream;
-    enum class TYPE { UNINITIALIZAED, COMPRESS, DECOMPRESS } state = TYPE::UNINITIALIZAED;
+        enum class TYPE {
+        UNINITIALIZED,
+        COMPRESS,
+        DECOMPRESS,
+        COMPRESS_BROTLI,
+        DECOMPRESS_BROTLI
+    } state = TYPE::UNINITIALIZED;
+
+    BrotliEncoderState* br_encoder_state = nullptr;
+    BrotliDecoderState* br_decoder_state = nullptr;
 };
 
 void

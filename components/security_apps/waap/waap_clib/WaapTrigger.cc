@@ -89,7 +89,7 @@ const std::vector<std::string>& TriggersByPractice::getTriggersByPractice(Decisi
     case DecisionType::AUTONOMOUS_SECURITY_DECISION:
         return m_web_app_ids;
     default:
-        dbgError(D_WAAP) <<
+        dbgDebug(D_WAAP) <<
         "Can't find practice type for triggers by practice: " <<
         practiceType <<
         ", return web app triggers";

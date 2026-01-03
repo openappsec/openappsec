@@ -5,6 +5,7 @@
 
 #include "mock/mock_encryptor.h"
 #include "mock/mock_shell_cmd.h"
+#include "mock/mock_messaging.h"
 #include "mock/mock_mainloop.h"
 #include "cptest.h"
 #include "config.h"
@@ -25,6 +26,7 @@ public:
 
     ::Environment env;
     ConfigComponent conf;
+    StrictMock<MockMessaging> mock_messaging;
     StrictMock<MockEncryptor> mock_encryptor;
     StrictMock<MockShellCmd> mock_shell_cmd;
     Config::I_Config *config = nullptr;

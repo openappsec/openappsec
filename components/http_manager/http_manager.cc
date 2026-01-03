@@ -36,14 +36,15 @@ static ostream &
 operator<<(ostream &os, const EventVerdict &event)
 {
     switch (event.getVerdict()) {
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT: return os << "Inspect";
-        case ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS: return os << "Limit Response Headers";
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT: return os << "Accept";
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP: return os << "Drop";
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT: return os << "Inject";
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT: return os << "Irrelevant";
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_RECONF: return os << "Reconf";
-        case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT: return os << "Wait";
+        case ServiceVerdict::TRAFFIC_VERDICT_INSPECT: return os << "Inspect";
+        case ServiceVerdict::LIMIT_RESPONSE_HEADERS: return os << "Limit Response Headers";
+        case ServiceVerdict::TRAFFIC_VERDICT_ACCEPT: return os << "Accept";
+        case ServiceVerdict::TRAFFIC_VERDICT_DROP: return os << "Drop";
+        case ServiceVerdict::TRAFFIC_VERDICT_INJECT: return os << "Inject";
+        case ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT: return os << "Irrelevant";
+        case ServiceVerdict::TRAFFIC_VERDICT_RECONF: return os << "Reconf";
+        case ServiceVerdict::TRAFFIC_VERDICT_DELAYED: return os << "Wait";
+        case ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE: return os << "Force 200";
     }
 
     dbgAssert(false)
@@ -66,6 +67,13 @@ public:
         i_transaction_table = Singleton::Consume<I_Table>::by<HttpManager>();
 
         Singleton::Consume<I_Logging>::by<HttpManager>()->addGeneralModifier(compressAppSecLogs);
+        custom_header = getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging");
+
+        registerConfigLoadCb(
+            [this]() {
+                custom_header = getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging");
+            }
+    );
     }
 
     FilterVerdict
@@ -94,9 +102,7 @@ public:
         ctx.registerValue(app_sec_marker_key, i_transaction_table->keyToString(), EnvKeyAttr::LogSection::MARKER);
 
         HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
-        
-        const auto &custom_header = getProfileAgentSettingWithDefault<string>("", "agent.customHeaderValueLogging");
-        
+
         if (event.getKey().isEqualLowerCase(custom_header)) {
             string event_value = static_cast<string>(event.getValue());
             dbgTrace(D_HTTP_MANAGER)
@@ -117,7 +123,7 @@ public:
             HttpRequestHeaderEvent(event).performNamedQuery() :
             HttpResponseHeaderEvent(event).performNamedQuery();
         FilterVerdict verdict = handleEvent(event_responds);
-        if (verdict.getVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT) {
+        if (verdict.getVerdict() == ServiceVerdict::TRAFFIC_VERDICT_INJECT) {
             applyInjectionModifications(verdict, event_responds, event.getHeaderIndex());
         }
         return verdict;
@@ -131,8 +137,8 @@ public:
             return FilterVerdict(default_verdict);
         }
 
-        ngx_http_cp_verdict_e body_size_limit_verdict = handleBodySizeLimit(is_request, event);
-        if (body_size_limit_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT) {
+        ServiceVerdict body_size_limit_verdict = handleBodySizeLimit(is_request, event);
+        if (body_size_limit_verdict != ServiceVerdict::TRAFFIC_VERDICT_INSPECT) {
             return FilterVerdict(body_size_limit_verdict);
         }
 
@@ -144,7 +150,7 @@ public:
             ctx.registerValue("UserDefined", state.getUserDefinedValue().unpack(), EnvKeyAttr::LogSection::DATA);
         }
 
-        FilterVerdict verdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
+        FilterVerdict verdict(ServiceVerdict::TRAFFIC_VERDICT_INSPECT);
         if (!is_request && event.getData().size() == 0 && !event.isLastChunk()) {
             dbgDebug(D_HTTP_MANAGER) << "Skipping inspection of first empty chunk for respond body";
             return verdict;
@@ -156,7 +162,7 @@ public:
             HttpResponseBodyEvent(event, state.getPreviousDataCache()).performNamedQuery();
         verdict = handleEvent(event_responds);
         state.saveCurrentDataToCache(event.getData());
-        if (verdict.getVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT) {
+        if (verdict.getVerdict() == ServiceVerdict::TRAFFIC_VERDICT_INJECT) {
             applyInjectionModifications(verdict, event_responds, event.getBodyChunkIndex());
         }
         return verdict;
@@ -252,13 +258,13 @@ public:
     }
 
 private:
-    ngx_http_cp_verdict_e
+    ServiceVerdict
     handleBodySizeLimit(bool is_request_body_type, const HttpBody &event)
     {
         HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
         state.updatePayloadSize(event.getData().size());
 
-        auto size_limit = getConfiguration<uint>(
+        auto size_limit = getConfigurationWithCache<uint>(
             "HTTP manager",
             is_request_body_type ? "Max Request Body Size" : "Max Response Body Size"
         );
@@ -270,12 +276,12 @@ private:
         );
 
         if (!size_limit.ok() || state.getAggeregatedPayloadSize() < size_limit.unpack()) {
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+            return ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
         }
 
-        ngx_http_cp_verdict_e verdict = size_limit_verdict == "Drop" ?
-            ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP :
-            ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+        ServiceVerdict verdict = size_limit_verdict == "Drop" ?
+            ServiceVerdict::TRAFFIC_VERDICT_DROP :
+            ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
 
         dbgDebug(D_HTTP_MANAGER)
             << "Transaction body size is over the limit. Max body size: "
@@ -295,7 +301,7 @@ private:
         ModifiedChunkIndex event_idx)
     {
         for (const pair<string, EventVerdict> &respond : event_responds) {
-            if (respond.second.getVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT) {
+            if (respond.second.getVerdict() == ServiceVerdict::TRAFFIC_VERDICT_INJECT) {
                 dbgTrace(D_HTTP_MANAGER)
                     << "Applying inject verdict modifications for security App: "
                     << respond.first;
@@ -310,7 +316,7 @@ private:
         HttpManagerOpaque &state = i_transaction_table->getState<HttpManagerOpaque>();
 
         for (const pair<string, EventVerdict> &respond : event_responds) {
-            if (state.getApplicationsVerdict(respond.first) == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT) {
+            if (state.getApplicationsVerdict(respond.first) == ServiceVerdict::TRAFFIC_VERDICT_ACCEPT) {
                 dbgTrace(D_HTTP_MANAGER)
                     << "Skipping event verdict for app that already accepted traffic. App: "
                     << respond.first;
@@ -325,12 +331,32 @@ private:
 
             state.setApplicationVerdict(respond.first, respond.second.getVerdict());
             state.setApplicationWebResponse(respond.first, respond.second.getWebUserResponseByPractice());
+            if (respond.second.getVerdict() == ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE) {
+                if (!respond.second.getCustomResponse().ok()) {
+                    dbgWarning(D_HTTP_MANAGER)
+                        << "Security app: "
+                        << respond.first
+                        << ", returned verdict CUSTOM_RESPONSE, but no custom response was found.";
+                    continue;
+                }
+                state.setCustomResponse(respond.first, respond.second.getCustomResponse().unpack());
+            }
         }
-        FilterVerdict aggregated_verdict(state.getCurrVerdict(), state.getCurrWebUserResponse());
-        if (aggregated_verdict.getVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
-            SecurityAppsDropEvent(state.getCurrentDropVerdictCausers()).notify();
+        auto ver = state.getCurrVerdict();
+        dbgTrace(D_HTTP_MANAGER) << "Aggregated verdict is: " << ver;
+        if (ver == ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE) {
+            if (!state.getCurrentCustomResponse().ok()) {
+                dbgWarning(D_HTTP_MANAGER) << "No custom response found for verdict CUSTOM_RESPONSE";
+                return FilterVerdict(ServiceVerdict::TRAFFIC_VERDICT_ACCEPT);
+            }
+            return FilterVerdict(ver, state.getCurrentCustomResponse().unpack());
+        } else {
+            FilterVerdict aggregated_verdict(ver, state.getCurrWebUserResponse());
+            if (aggregated_verdict.getVerdict() == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
+                SecurityAppsDropEvent(state.getCurrentDropVerdictCausers()).notify();
+            }
+            return aggregated_verdict;
         }
-        return aggregated_verdict;
     }
 
     static void
@@ -394,11 +420,12 @@ private:
     }
 
     I_Table *i_transaction_table;
-    static const ngx_http_cp_verdict_e default_verdict;
+    string custom_header = "";
+    static const ServiceVerdict default_verdict;
     static const string app_sec_marker_key;
 };
 
-const ngx_http_cp_verdict_e HttpManager::Impl::default_verdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
+const ServiceVerdict HttpManager::Impl::default_verdict(ServiceVerdict::TRAFFIC_VERDICT_DROP);
 const string HttpManager::Impl::app_sec_marker_key = "app_sec_marker";
 
 HttpManager::HttpManager() : Component("HttpManager"), pimpl(make_unique<Impl>()) {}
@@ -409,10 +436,10 @@ void HttpManager::init() { pimpl->init(); }
 void
 HttpManager::preload()
 {
-    registerExpectedConfiguration<uint>("HTTP manager", "Previous Buffer Cache size");
-    registerExpectedConfiguration<uint>("HTTP manager", "Max Request Body Size");
-    registerExpectedConfiguration<uint>("HTTP manager", "Max Response Body Size");
-    registerExpectedConfiguration<string>("HTTP manager", "Request Size Limit Verdict");
-    registerExpectedConfiguration<string>("HTTP manager", "Response Size Limit Verdict");
+    registerExpectedConfigurationWithCache<uint>("assetId", "HTTP manager", "Previous Buffer Cache size");
+    registerExpectedConfigurationWithCache<uint>("assetId", "HTTP manager", "Max Request Body Size");
+    registerExpectedConfigurationWithCache<uint>("assetId", "HTTP manager", "Max Response Body Size");
+    registerExpectedConfigurationWithCache<string>("assetId", "HTTP manager", "Request Size Limit Verdict");
+    registerExpectedConfigurationWithCache<string>("assetId", "HTTP manager", "Response Size Limit Verdict");
     registerConfigLoadCb([this] () { pimpl->sendPolicyLog(); });
 }

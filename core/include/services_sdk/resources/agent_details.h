@@ -55,7 +55,8 @@ class AgentDetails
     Singleton::Consume<I_Encryptor>,
     Singleton::Consume<I_ShellCmd>,
     Singleton::Consume<I_Environment>,
-    Singleton::Consume<I_MainLoop>
+    Singleton::Consume<I_MainLoop>,
+    Singleton::Consume<I_Messaging>
 {
 public:
     AgentDetails() : Component("AgentDetails") {}
@@ -80,7 +81,10 @@ public:
 
     void setFogDomain(const std::string &_fog_domain)   { fog_domain  = _fog_domain; }
     void setFogPort(const uint16_t _fog_port)           { fog_port    = _fog_port; }
-    void setProxy(const std::string &_proxy)            { proxy       = _proxy; }
+    void setProxy(const std::string &_proxy)            {
+        previous_proxy = proxy;
+        proxy = _proxy;
+    }
     void setAgentId(const std::string &_agent_id)       { agent_id    = _agent_id; }
     void setProfileId(const std::string &_profile_id)   { profile_id  = _profile_id; }
     void setTenantId(const std::string &_tenant_id)     { tenant_id   = _tenant_id; }
@@ -121,6 +125,7 @@ private:
     OrchestrationMode orchestration_mode = OrchestrationMode::ONLINE;
     std::string server          = "Unknown";
     bool is_proxy_configured_via_settings = false;
+    std::string previous_proxy = "";
     std::map<ProxyProtocol, ProxyData> proxies;
 
     static const std::map<std::string, I_AgentDetails::MachineType> machineTypes;

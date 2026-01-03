@@ -16,6 +16,7 @@
 #include "Waf2Util.h"
 #include "WaapAssetState.h"
 #include "i_instance_awareness.h"
+#include "buffered_compressed_stream.h"
 #include <boost/regex.hpp>
 #include <sstream>
 #include <fstream>
@@ -33,7 +34,7 @@ USE_DEBUG_FLAG(D_WAAP_SERIALIZE);
 
 namespace ch = std::chrono;
 using namespace std;
-typedef ch::duration<size_t, std::ratio<86400>> days;
+typedef ch::duration<size_t, ratio<86400>> days;
 
 // Define interval between successful sync times
 static const ch::minutes assetSyncTimeSliceLength(10);
@@ -44,26 +45,40 @@ static const string defaultSharedStorageHost = "appsec-shared-storage-svc";
 #define SHARED_STORAGE_HOST_ENV_NAME "SHARED_STORAGE_HOST"
 #define LEARNING_HOST_ENV_NAME "LEARNING_HOST"
 
-void yieldIfPossible(const string& func, int line)
+bool RestGetFile::loadJson(const string &json)
 {
-    // Check if we are in the main loop
-    if (Singleton::exists<I_MainLoop>() &&
-        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->getCurrentRoutineId().ok())
-    {
-        // If we are not in the main loop, yield to allow other routines to run
-        // This is important for the main loop to be able to process other events
-        // and avoid blocking the entire system.
-        dbgTrace(D_WAAP_SERIALIZE) << "Yielding to main loop from: " << func << ":" << line;
-        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+    // Try streaming approach first - handles both encryption and compression
+    try {
+        dbgTrace(D_WAAP_SERIALIZE) << "Attempting to use streaming approach for JSON loading, data size: "
+            << json.size() << " bytes";
+        stringstream json_stream(json);
+        // if input json is big then yield to allow other routines to run
+        if (json.size() > 1000000) {
+            dbgTrace(D_WAAP_SERIALIZE) << "Input JSON is large, yielding to allow other routines to run";
+            YIELD_IF_POSSIBLE();
+        }
+        BufferedCompressedInputStream decompressed_stream(json_stream);
+        {
+            cereal::JSONInputArchive json_archive(decompressed_stream);
+            load(json_archive);
+        }
+        YIELD_IF_POSSIBLE();
+        dbgTrace(D_WAAP_SERIALIZE) << "Successfully loaded JSON using streaming approach";
+        return true;
     }
-}
+    catch (const exception &e) {
+        dbgDebug(D_WAAP_SERIALIZE) << "Failed to load JSON using streaming approach: " << e.what()
+            << ". Falling back to legacy approach.";
+        // Fall back to the legacy approach for backward compatibility
+    }
+    catch (...) {
+        dbgDebug(D_WAAP_SERIALIZE) << "Failed to load JSON using streaming approach"
+            << ". Falling back to legacy approach.";
+        // Fall back to the legacy approach for backward compatibility
+    }
 
-#define YIELD_IF_POSSIBLE() yieldIfPossible(__FUNCTION__, __LINE__)
-
-bool RestGetFile::loadJson(const string& json)
-{
+    // Legacy approach: manual decryption and decompression
     string json_str;
-
     json_str = json;
     if (!Waap::Util::isGzipped(json_str))
     {
@@ -87,7 +102,7 @@ bool RestGetFile::loadJson(const string& json)
 
     finiCompressionStream(compression_stream);
     YIELD_IF_POSSIBLE();
-    dbgTrace(D_WAAP_SERIALIZE) << "Yielded after decompression in loadJson, decompressed size: "
+    dbgTrace(D_WAAP_SERIALIZE) << "Yielded after legacy decompression in loadJson, decompressed size: "
         << json_str.size() << " bytes";
 
     return ClientRest::loadJson(json_str);
@@ -95,76 +110,42 @@ bool RestGetFile::loadJson(const string& json)
 
 Maybe<string> RestGetFile::genJson() const
 {
-    Maybe<string> json = ClientRest::genJson();
-    YIELD_IF_POSSIBLE();
-
-    if (json.ok())
+    stringstream output_stream;
+    try
     {
-        string data = json.unpack();
-
-        // Get chunk size from profile settings for compression chunks
-        const size_t COMPRESSED_CHUNK_SIZE = static_cast<size_t>(
-            getProfileAgentSettingWithDefault<uint>(64 * 1024, "appsecLearningSettings.compressionChunkSize"));
-
-        auto compression_stream = initCompressionStream();
-        size_t offset = 0;
-        std::vector<unsigned char> compressed_data;
-        bool ok = true;
-        size_t chunk_count = 0;
-
-        // Process data in chunks for compression
-        while (offset < data.size()) {
-            size_t chunk_size = std::min(COMPRESSED_CHUNK_SIZE, data.size() - offset);
-            bool is_last = (offset + chunk_size >= data.size());
-            CompressionResult chunk_res = compressData(
-                compression_stream,
-                CompressionType::GZIP,
-                static_cast<uint32_t>(chunk_size),
-                reinterpret_cast<const unsigned char *>(data.c_str() + offset),
-                is_last ? 1 : 0
-            );
-
-            if (!chunk_res.ok) {
-                ok = false;
-                break;
-            }
-
-            if (chunk_res.output && chunk_res.num_output_bytes > 0) {
-                compressed_data.insert(
-                    compressed_data.end(),
-                    chunk_res.output,
-                    chunk_res.output + chunk_res.num_output_bytes
-                );
-                free(chunk_res.output);
-                chunk_res.output = nullptr;
-            }
-
-            offset += chunk_size;
-            chunk_count++;
-            YIELD_IF_POSSIBLE();
-            dbgTrace(D_WAAP_SERIALIZE) << "Processed compression chunk " << chunk_count
-                << ", progress: " << offset << "/" << data.size() << " bytes ("
-                << (offset * 100 / data.size()) << "%) - yielded";
+        BufferedCompressedOutputStream compressed_out(output_stream);
+        {
+            cereal::JSONOutputArchive json_archive(compressed_out, cereal::JSONOutputArchive::Options::NoIndent());
+            save(json_archive);
         }
-
-        finiCompressionStream(compression_stream);
-        dbgDebug(D_WAAP_SERIALIZE) << "Yielded after finalizing compression stream. "
-            << "Total chunks: " << chunk_count << ", Compression ratio: "
-            << (data.size() > 0 ? (float)compressed_data.size() / data.size() : 0) << "x";
-
-        if (!ok) {
-            dbgWarning(D_WAAP_SERIALIZE) << "Failed to gzip data";
-            return genError("Failed to compress data");
-        }
-
-        // Create string from compressed data
-        string compressed_str(reinterpret_cast<const char*>(compressed_data.data()), compressed_data.size());
-
-        json = compressed_str;
+        compressed_out.close();
     }
-    return json;
+    catch (const exception &e)
+    {
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to generate JSON: " << e.what();
+        return genError("Failed to generate JSON: " + string(e.what()));
+    }
+    return output_stream.str();
 }
-SerializeToFilePeriodically::SerializeToFilePeriodically(ch::seconds pollingIntervals, string filePath) :
+
+// Class to handle retrieving the state timestamp file from learning service
+class StateTimestampRetriever : public ClientRest
+{
+public:
+    StateTimestampRetriever() {}
+
+    Maybe<string> getStateTimestamp() const
+    {
+        if (timestamp.get().empty()) {
+            return genError("State timestamp is empty");
+        }
+        return timestamp.get();
+    }
+private:
+    S2C_PARAM(string, timestamp);
+};
+
+SerializeToFilePeriodically::SerializeToFilePeriodically(ch::seconds pollingIntervals, const string &filePath) :
     SerializeToFileBase(filePath),
     m_lastSerialization(0),
     m_interval(pollingIntervals)
@@ -210,7 +191,7 @@ void SerializeToFilePeriodically::setInterval(ch::seconds newInterval)
     }
 }
 
-SerializeToFileBase::SerializeToFileBase(string fileName) : m_filePath(fileName)
+SerializeToFileBase::SerializeToFileBase(const string &fileName) : m_filePath(fileName)
 {
     dbgTrace(D_WAAP_SERIALIZE) << "SerializeToFileBase::SerializeToFileBase() fname='" << m_filePath
         << "'";
@@ -243,7 +224,7 @@ void SerializeToFileBase::saveData()
     if (maybe_routine.ok()) {
         Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
     }
-    string data = ss.str();
+    const string &data = ss.str(); // Use const reference to avoid copying
     dbgDebug(D_WAAP_SERIALIZE) << "Serialized data size: " << data.size() << " bytes";
 
     // Get chunk size from profile settings, with default of 16 MiB for compression chunks
@@ -255,13 +236,13 @@ void SerializeToFileBase::saveData()
 
     auto compression_stream = initCompressionStream();
     size_t offset = 0;
-    std::vector<unsigned char> compressed_data;
+    vector<unsigned char> compressed_data;
     bool ok = true;
     size_t chunk_count = 0;
 
     // Process data in chunks for compression
     while (offset < data.size()) {
-        size_t chunk_size = std::min(COMPRESSED_CHUNK_SIZE, data.size() - offset);
+        size_t chunk_size = min(COMPRESSED_CHUNK_SIZE, data.size() - offset);
         bool is_last = (offset + chunk_size >= data.size());
         CompressionResult chunk_res = compressData(
             compression_stream,
@@ -319,7 +300,7 @@ void SerializeToFileBase::saveData()
     size_t write_chunks = 0;
 
     while (offset < data_to_write.size()) {
-        size_t current_chunk_size = std::min(CHUNK_SIZE, data_to_write.size() - offset);
+        size_t current_chunk_size = min(CHUNK_SIZE, data_to_write.size() - offset);
         filestream.write(data_to_write.c_str() + offset, current_chunk_size);
         offset += current_chunk_size;
         write_chunks++;
@@ -334,7 +315,7 @@ void SerializeToFileBase::saveData()
         << " (" << data_to_write.size() << " bytes in " << write_chunks << " chunks)";
 }
 
-string decompress(string fileContent) {
+string decompress(const string &fileContent) {
     if (!Waap::Util::isGzipped(fileContent)) {
         dbgTrace(D_WAAP_SERIALIZE) << "file note zipped";
         return fileContent;
@@ -360,7 +341,7 @@ string decompress(string fileContent) {
     return fileContent;
 }
 
-void SerializeToFileBase::loadFromFile(string filePath)
+void SerializeToFileBase::loadFromFile(const string &filePath)
 {
     dbgTrace(D_WAAP_SERIALIZE) << "loadFromFile() file: " << filePath;
     fstream filestream;
@@ -368,7 +349,7 @@ void SerializeToFileBase::loadFromFile(string filePath)
     filestream.open(filePath, fstream::in);
 
     if (filestream.is_open() == false) {
-        dbgTrace(D_WAAP_SERIALIZE) << "failed to open file: " << filePath << " Error: " <<
+        dbgWarning(D_WAAP_SERIALIZE) << "failed to open file: " << filePath << " Error: " <<
             strerror(errno);
         if (!Singleton::exists<I_InstanceAwareness>() || errno != ENOENT)
         {
@@ -387,34 +368,48 @@ void SerializeToFileBase::loadFromFile(string filePath)
         size_t idPosition = filePath.find(idStr);
         if (idPosition != string::npos)
         {
-            filePath.erase(idPosition, idStr.length() - 1);
-            dbgDebug(D_WAAP_SERIALIZE) << "retry to load file from : " << filePath;
-            loadFromFile(filePath);
+            string modifiedFilePath = filePath;  // Create a mutable copy
+            modifiedFilePath.erase(idPosition, idStr.length() - 1);
+            dbgDebug(D_WAAP_SERIALIZE) << "retry to load file from : " << modifiedFilePath;
+            loadFromFile(modifiedFilePath);
         }
         return;
     }
 
     dbgTrace(D_WAAP_SERIALIZE) << "loading from file: " << filePath;
 
-    int length;
-    filestream.seekg(0, ios::end);    // go to the end
-    length = filestream.tellg();           // report location (this is the length)
+    try {
+        dbgTrace(D_WAAP_SERIALIZE) << "Attempting to load file using streaming approach";
+        BufferedCompressedInputStream decompressed_stream(filestream);
+        deserialize(decompressed_stream);
+        filestream.close();
+        dbgTrace(D_WAAP_SERIALIZE) << "Successfully loaded file using streaming approach";
+        return;
+    }
+    catch (const exception &e) {
+        dbgDebug(D_WAAP_SERIALIZE) << "Failed to load file using streaming approach: " << e.what()
+            << ". Falling back to legacy approach.";
+        // Fall back to the legacy approach for backward compatibility
+        filestream.clear();
+        filestream.seekg(0, ios::beg);
+    }
+
+    // Legacy approach: manual file reading, decryption, and decompression
+    filestream.seekg(0, ios::end);
+    int length = filestream.tellg();
     dbgTrace(D_WAAP_SERIALIZE) << "file length: " << length;
     assert(length >= 0); // length -1 really happens if filePath is a directory (!)
-    char* buffer = new char[length];       // allocate memory for a buffer of appropriate dimension
+    vector<char> buffer(length);       // Use vector instead of raw pointer for safety
     filestream.seekg(0, ios::beg);    // go back to the beginning
-    if (!filestream.read(buffer, length))  // read the whole file into the buffer
+    if (!filestream.read(buffer.data(), length))  // read the whole file into the buffer
     {
         filestream.close();
-        delete[] buffer;
         dbgWarning(D_WAAP_SERIALIZE) << "Failed to read file, file: " << filePath;
         return;
     }
     filestream.close();
 
-    string dataObfuscated(buffer, length);
-
-    delete[] buffer;
+    string dataObfuscated(buffer.begin(), buffer.end());
 
     stringstream ss;
     ss << decompress(dataObfuscated);
@@ -422,6 +417,7 @@ void SerializeToFileBase::loadFromFile(string filePath)
     try
     {
         deserialize(ss);
+        dbgTrace(D_WAAP_SERIALIZE) << "Successfully loaded file using legacy approach";
     }
     catch (runtime_error & e) {
         dbgWarning(D_WAAP_SERIALIZE) << "failed to deserialize file: " << m_filePath << ", error: " <<
@@ -441,7 +437,7 @@ RemoteFilesList::RemoteFilesList() : files(), filesPathsList()
 
 // parses xml instead of json
 // extracts a file list in <Contents><Key>
-bool RemoteFilesList::loadJson(const string& xml)
+bool RemoteFilesList::loadJson(const string &xml)
 {
     xmlDocPtr doc; // the resulting document tree
     dbgTrace(D_WAAP_SERIALIZE) << "XML input: " << xml;
@@ -497,8 +493,8 @@ bool RemoteFilesList::loadJson(const string& xml)
                 }
                 contents_node = contents_node->next;
             }
-            files.get().push_back(FileMetaData{ file, lastModified });
-            filesPathsList.push_back(file);
+            files.get().push_back(FileMetaData{ move(file), move(lastModified) });
+            filesPathsList.push_back(files.get().back().filename); // Use the moved string to avoid extra copy
         }
         node = node->next;
     }
@@ -511,12 +507,12 @@ bool RemoteFilesList::loadJson(const string& xml)
     return true;
 }
 
-const vector<string>& RemoteFilesList::getFilesList() const
+const vector<string> &RemoteFilesList::getFilesList() const
 {
     return filesPathsList;
 }
 
-const vector<FileMetaData>& RemoteFilesList::getFilesMetadataList() const
+const vector<FileMetaData> &RemoteFilesList::getFilesMetadataList() const
 {
     return files.get();
 }
@@ -547,6 +543,7 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
 {
     dbgInfo(D_WAAP_SERIALIZE) << "Create SerializeToLocalAndRemoteSyncBase. assetId='" << assetId <<
         "', owner='" << m_owner << "'";
+    m_pMainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
 
     if (Singleton::exists<I_AgentDetails>() &&
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() ==
@@ -586,11 +583,10 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
             m_type = type;
         }
     }
-    m_pMainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
     setInterval(interval);
 }
 
-bool SerializeToLocalAndRemoteSyncBase::isBase()
+bool SerializeToLocalAndRemoteSyncBase::isBase() const
 {
     return m_remotePath == "";
 }
@@ -656,13 +652,12 @@ void SerializeToLocalAndRemoteSyncBase::setRemoteSyncEnabled(bool enabled)
 
 void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
 {
-    dbgDebug(D_WAAP_SERIALIZE) << "setInterval: from " << m_interval.count() << " to " <<
-        newInterval.count() << " seconds. assetId='" << m_assetId << "', owner='" << m_owner << "'";
-
     if (newInterval == m_interval)
     {
         return;
     }
+    dbgDebug(D_WAAP_SERIALIZE) << "setInterval: from " << m_interval.count() << " to " <<
+        newInterval.count() << " seconds. assetId='" << m_assetId << "', owner='" << m_owner << "'";
 
     m_interval = newInterval;
 
@@ -730,7 +725,7 @@ void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
             m_pMainLoop->yield(remainingTime);
 
             timeBeforeSyncWorker = timer->getWalltime();
-            m_pMainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::System, [this]() {syncWorker();}, "Sync worker");
+            syncWorker();
             timeAfterSyncWorker = timer->getWalltime();
         }
     };
@@ -780,30 +775,115 @@ ch::seconds SerializeToLocalAndRemoteSyncBase::getIntervalDuration() const
     return m_interval;
 }
 
+Maybe<string> SerializeToLocalAndRemoteSyncBase::getStateTimestampByListing()
+{
+    RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
+    if (remoteFiles.getFilesMetadataList().empty())
+    {
+        return genError("No remote processed files available");
+    }
+    dbgDebug(D_WAAP_SERIALIZE) << "State timestamp by listing: "
+        << remoteFiles.getFilesMetadataList()[0].modified;
+
+    return remoteFiles.getFilesMetadataList()[0].modified;
+}
+
+bool SerializeToLocalAndRemoteSyncBase::checkAndUpdateStateTimestamp(const string& currentStateTimestamp)
+{
+    // Check if the state has been updated since last check
+    if (currentStateTimestamp != m_lastProcessedModified)
+    {
+        m_lastProcessedModified = currentStateTimestamp;
+        dbgDebug(D_WAAP_SERIALIZE) << "State timestamp updated: " << m_lastProcessedModified;
+        return true; // State was updated
+    }
+    return false; // State unchanged
+}
+
 void SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteService()
 {
+    bool useFallbackMethod = false;
     for (int i = 0; i < remoteSyncMaxPollingAttempts; i++)
     {
         m_pMainLoop->yield(ch::seconds(60));
-        RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
-        if (remoteFiles.getFilesMetadataList().empty())
+
+        // Try the dedicated timestamp file first
+        Maybe<string> timestampResult(genError("Failed to get state timestamp"));
+        if (!useFallbackMethod) {
+            timestampResult = getStateTimestamp();
+            if (!timestampResult.ok()) {
+                dbgDebug(D_WAAP_SERIALIZE) << "Failed to get state timestamp from file: "
+                    << timestampResult.getErr() << ", trying listing method";
+                useFallbackMethod = true; // Switch to listing method on first failure
+            }
+        }
+        else
         {
-            dbgWarning(D_WAAP_SERIALIZE) << "no files generated by the remote service were found";
+            dbgDebug(D_WAAP_SERIALIZE) << "trying listing method";
+            timestampResult = getStateTimestampByListing();
+        }
+
+        if (!timestampResult.ok())
+        {
+            dbgWarning(D_WAAP_SERIALIZE) << "Failed to get state timestamp using any method: "
+                << timestampResult.getErr();
             continue;
         }
-        string lastModified = remoteFiles.getFilesMetadataList().begin()->modified;
-        if (lastModified != m_lastProcessedModified)
+
+        string currentStateTimestamp = timestampResult.unpack();
+
+        if (checkAndUpdateStateTimestamp(currentStateTimestamp))
         {
-            m_lastProcessedModified = lastModified;
-            updateState(remoteFiles.getFilesList());
-            dbgInfo(D_WAAP_SERIALIZE) << "Owner: " << m_owner <<
-                ". updated state generated by remote at " << m_lastProcessedModified;
+            // Update state directly from the known remote file path
+            updateStateFromRemoteFile();
+            dbgInfo(D_WAAP_SERIALIZE) << "Owner: " << m_owner
+                << ". updated state using " << (useFallbackMethod ? "file listing (fallback)" : "timestamp file")
+                << ": " << m_lastProcessedModified;
             return;
         }
+        else
+        {
+            dbgWarning(D_WAAP_SERIALIZE) << "State timestamp unchanged ("
+                << (useFallbackMethod ? "file listing (fallback)" : "timestamp file") << "): "
+                << currentStateTimestamp;
+        }
     }
-    dbgWarning(D_WAAP_SERIALIZE) << "polling for update state timeout. for assetId='"
+
+    // All polling attempts failed - fall back to local sync
+    dbgWarning(D_WAAP_SERIALIZE) << "Polling for update state timeout, falling back to local sync. for assetId='"
         << m_assetId << "', owner='" << m_owner;
     localSyncAndProcess();
+}
+
+Maybe<void> SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteFile()
+{
+    auto maybeRemoteFilePath = getRemoteStateFilePath();
+    if (!maybeRemoteFilePath.ok())
+    {
+        string error = "Owner: " + m_owner + ", no remote state file path defined: " + maybeRemoteFilePath.getErr();
+        dbgWarning(D_WAAP_SERIALIZE) << error;
+        return genError(error);
+    }
+
+    string remoteFilePath = maybeRemoteFilePath.unpack();
+    vector<string> files = {remoteFilePath};
+    updateState(files);
+    dbgDebug(D_WAAP_SERIALIZE) << "updated state from remote file: " << remoteFilePath;
+    return Maybe<void>();
+}
+
+bool SerializeToLocalAndRemoteSyncBase::shouldNotSync() const
+{
+    OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
+        Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
+    return mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase();
+}
+
+bool SerializeToLocalAndRemoteSyncBase::shouldSendSyncNotification() const
+{
+    return getSettingWithDefault<bool>(true, "features", "learningLeader") &&
+        ((m_type == "CentralizedData") ==
+        (getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging")));
 }
 
 void SerializeToLocalAndRemoteSyncBase::syncWorker()
@@ -814,7 +894,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
-    if (mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase() || !postData()) {
+    if (shouldNotSync() || !postData()) {
         dbgDebug(D_WAAP_SERIALIZE)
             << "Did not synchronize the data. for asset: "
             << m_assetId
@@ -834,11 +914,30 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     if (m_lastProcessedModified == "")
     {
         dbgTrace(D_WAAP_SERIALIZE) << "check if remote service is operational";
-        RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
-        if (!remoteFiles.getFilesMetadataList().empty())
+        Maybe<string> maybeTimestamp = getStateTimestamp();
+        if (maybeTimestamp.ok() && !maybeTimestamp.unpack().empty())
         {
-            m_lastProcessedModified = remoteFiles.getFilesMetadataList()[0].modified;
+            m_lastProcessedModified = maybeTimestamp.unpack();
             dbgInfo(D_WAAP_SERIALIZE) << "First sync by remote service: " << m_lastProcessedModified;
+        }
+        else
+        {
+            dbgWarning(D_WAAP_SERIALIZE) << "Failed to get state timestamp from remote service: "
+                << maybeTimestamp.getErr();
+            maybeTimestamp = getStateTimestampByListing();
+            if (maybeTimestamp.ok() && !maybeTimestamp.unpack().empty())
+            {
+                m_lastProcessedModified = maybeTimestamp.unpack();
+                dbgInfo(D_WAAP_SERIALIZE) << "First sync by remote service using listing: " << m_lastProcessedModified;
+            }
+            else
+            {
+                dbgWarning(D_WAAP_SERIALIZE)
+                    << "Failed to get state timestamp from remote service by listing: "
+                    << maybeTimestamp.getErr()
+                    << " skipping syncWorker for assetId='"
+                    << m_assetId << "', owner='" << m_owner << "'";
+            }
         }
     }
 
@@ -853,6 +952,8 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
         dbgWarning(D_WAAP_SERIALIZE) << "local sync and process failed";
         return;
     }
+
+    // TODO: add should send sync notification function (e.g. do not sync if not leader)
 
     if (mode == OrchestrationMode::HYBRID) {
         dbgDebug(D_WAAP_SERIALIZE) << "detected running in standalone mode";
@@ -876,7 +977,8 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
         if (!ok) {
             dbgWarning(D_WAAP_SERIALIZE) << "failed to send learning notification";
         }
-    } else {
+    } else if (shouldSendSyncNotification())
+    {
         SyncLearningNotificationObject syncNotification(m_assetId, m_type, getWindowId());
 
         dbgDebug(D_WAAP_SERIALIZE) << "sending sync notification: " << syncNotification;
@@ -941,7 +1043,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
 
     if (!processedFilesList.getFilesList().empty())
     {
-        const vector<FileMetaData>& filesMD = processedFilesList.getFilesMetadataList();
+        const vector<FileMetaData> &filesMD = processedFilesList.getFilesMetadataList();
         if (filesMD.size() > 1) {
             dbgWarning(D_WAAP_SERIALIZE) << "got more than 1 expected processed file";
         }
@@ -1014,8 +1116,40 @@ void SerializeToLocalAndRemoteSyncBase::mergeProcessedFromRemote()
         I_MainLoop::RoutineType::Offline,
         [&]()
         {
-            RemoteFilesList processedFiles = getProcessedFilesList();
-            pullProcessedData(processedFiles.getFilesList());
+            // Instrumentation breadcrumbs to help diagnose startup crash inside this routine
+            dbgTrace(D_WAAP_SERIALIZE) << "start routine for assetId='" << m_assetId
+                << "', owner='" << m_owner << "'";
+            try {
+                auto success = updateStateFromRemoteFile();
+                if (!success.ok()) {
+                    dbgInfo(D_WAAP_SERIALIZE) << "direct state file unavailable: "
+                        << success.getErr() << ". Falling back to listing.";
+                    RemoteFilesList remoteFiles = getProcessedFilesList();
+                    if (remoteFiles.getFilesList().empty()) {
+                        dbgWarning(D_WAAP_SERIALIZE) << "no remote processed files";
+                        return;
+                    }
+                    const auto &md_list = remoteFiles.getFilesMetadataList();
+                    if (!md_list.empty()) {
+                        m_lastProcessedModified = md_list[0].modified;
+                    } else {
+                        dbgWarning(D_WAAP_SERIALIZE) << "metadata list empty while files list not empty";
+                    }
+                    updateState(remoteFiles.getFilesList());
+                    dbgInfo(D_WAAP_SERIALIZE) << "updated state from remote files. Last modified: "
+                        << m_lastProcessedModified;
+                } else {
+                    dbgTrace(D_WAAP_SERIALIZE) << "updated state via direct remote file";
+                }
+            } catch (const JsonError &j) {
+                dbgError(D_WAAP_SERIALIZE) << "JsonError caught: '" << j.getMsg()
+                    << "' assetId='" << m_assetId << "' owner='" << m_owner << "'";
+                throw std::runtime_error(std::string("mergeProcessedFromRemote JsonError: ") + j.getMsg());
+            } catch (const std::exception &e) {
+                dbgError(D_WAAP_SERIALIZE) << "std::exception caught: " << e.what()
+                    << " assetId='" << m_assetId << "' owner='" << m_owner << "'";
+                throw; // Let mainloop handle termination with detailed message
+            }
         },
         "Merge processed data from remote for asset Id: " + m_assetId + ", owner:" + m_owner
     );
@@ -1051,4 +1185,33 @@ SerializeToLocalAndRemoteSyncBase::getSharedStorageHost()
         dbgWarning(D_WAAP_SERIALIZE) << "shared storage host is not set. using default";
     }
     return defaultSharedStorageHost;
+}
+
+string SerializeToLocalAndRemoteSyncBase::getStateTimestampPath()
+{
+    return m_remotePath + "/internal/lastModified.data";
+}
+
+Maybe<string> SerializeToLocalAndRemoteSyncBase::getStateTimestamp()
+{
+    string timestampPath = getStateTimestampPath();
+    if (timestampPath.empty()) {
+        dbgWarning(D_WAAP_SERIALIZE) << "Cannot get state timestamp - invalid path";
+        return genError("Invalid timestamp path");
+    }
+
+    StateTimestampRetriever timestampRetriever;
+    bool isSuccessful = sendObject(
+        timestampRetriever,
+        HTTPMethod::GET,
+        getUri() + "/" + timestampPath);
+
+    if (!isSuccessful) {
+        dbgDebug(D_WAAP_SERIALIZE) << "Failed to get state timestamp file from: " << timestampPath;
+        return genError("Failed to retrieve timestamp file from: " + timestampPath);
+    }
+
+    dbgDebug(D_WAAP_SERIALIZE) << "Retrieved state timestamp: " << timestampRetriever.getStateTimestamp().unpack()
+        << " from path: " << timestampPath;
+    return timestampRetriever.getStateTimestamp().unpack();
 }

@@ -15,6 +15,8 @@
 
 #include <pwd.h>
 #include <grp.h>
+#include <sched.h>
+#include <errno.h>
 #include <iostream>
 #include <map>
 #include <queue>
@@ -29,6 +31,7 @@
 #include <unistd.h>
 #include <utility>
 #include <stdarg.h>
+#include <cstring>
 
 #include <boost/range/iterator_range.hpp>
 #include <boost/algorithm/string.hpp>
@@ -48,7 +51,7 @@
 #include "shmem_ipc.h"
 #include "i_http_manager.h"
 #include "http_transaction_common.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 #include "hash_combine.h"
 #include "cpu/failopen_mode_status.h"
 #include "attachment_registrator.h"
@@ -75,7 +78,7 @@ USE_DEBUG_FLAG(D_METRICS_NGINX_ATTACHMENT);
 
 using namespace std;
 
-using ChunkType = ngx_http_chunk_type_e;
+using ChunkType = AttachmentDataType;
 
 static const uint32_t corrupted_session_id = CORRUPTED_SESSION_ID;
 static const AlertInfo alert(AlertTeam::CORE, "nginx attachment");
@@ -130,14 +133,15 @@ class NginxAttachment::Impl
         :
     Singleton::Provide<I_StaticResourcesHandler>::From<NginxAttachment>
 {
-    static constexpr auto INSPECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
-    static constexpr auto LIMIT_RESPONSE_HEADERS = ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS;
-    static constexpr auto ACCEPT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-    static constexpr auto DROP = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
-    static constexpr auto INJECT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
-    static constexpr auto IRRELEVANT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
-    static constexpr auto RECONF = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_RECONF;
-    static constexpr auto WAIT = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
+    static constexpr auto INSPECT = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
+    static constexpr auto LIMIT_RESPONSE_HEADERS = ServiceVerdict::LIMIT_RESPONSE_HEADERS;
+    static constexpr auto ACCEPT = ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
+    static constexpr auto DROP = ServiceVerdict::TRAFFIC_VERDICT_DROP;
+    static constexpr auto INJECT = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
+    static constexpr auto IRRELEVANT = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
+    static constexpr auto RECONF = ServiceVerdict::TRAFFIC_VERDICT_RECONF;
+    static constexpr auto WAIT = ServiceVerdict::TRAFFIC_VERDICT_DELAYED;
+    static constexpr auto CUSTOM_RESPONSE = ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE;
 
 public:
     Impl()
@@ -196,6 +200,8 @@ public:
         num_of_nginx_ipc_elements = getProfileAgentSettingWithDefault<uint>(
             NUM_OF_NGINX_IPC_ELEMENTS, "nginxAttachment.numOfNginxIpcElements"
         );
+
+        dbgInfo(D_NGINX_ATTACHMENT) << "Async mode configuration: enabled=" << attachment_config.isAsyncModeEnabled();
 
         nginx_attachment_metric.init(
             "Nginx Attachment data",
@@ -366,10 +372,13 @@ public:
     }
 
     bool
-    registerStaticResource(const string &resource_name, const string &resource_path)
+    registerStaticResource(
+        const string &resource_name,
+        const string &resource_path,
+        bool overwrite_if_exists)
     {
         string dest_path = static_resources_path + "/" + resource_name;
-        if (NGEN::Filesystem::exists(dest_path)) {
+        if (!overwrite_if_exists && NGEN::Filesystem::exists(dest_path)) {
             dbgDebug(D_NGINX_ATTACHMENT) << "Static resource already exist. path: " << dest_path;
             return true;
         }
@@ -377,7 +386,7 @@ public:
         if (!NGEN::Filesystem::copyFile(
             resource_path,
             dest_path,
-            false,
+            overwrite_if_exists,
             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH
         )) {
             dbgWarning(D_NGINX_ATTACHMENT)
@@ -395,6 +404,36 @@ public:
             << resource_path;
 
         return true;
+    }
+
+    bool
+    registerStaticResourceByContent(
+        const string &resource_name,
+        const string &file_content
+    )
+    {
+        string dest_path = static_resources_path + "/" + resource_name;
+
+        if (!NGEN::Filesystem::createFileWithContent(
+            dest_path,
+            file_content,
+            true,
+            S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH
+        )) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Failed to create static resource file. Resource name: "
+                << resource_name
+                << ", destination path: " << dest_path
+                << ", content size: " << file_content.size();
+            return false;
+        }
+
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "Successfully created static resource. Resource name: "
+            << resource_name
+            << ", destination path: " << dest_path
+            << ", content size: " << file_content.size();
+            return true;
     }
 
     void
@@ -441,6 +480,11 @@ private:
         if (attachment_routine_id > 0 && mainloop->doesRoutineExist(attachment_routine_id)) {
             mainloop->stop(attachment_routine_id);
             attachment_routine_id = 0;
+        }
+
+        if (async_attachment_routine_id > 0 && mainloop->doesRoutineExist(async_attachment_routine_id)) {
+            mainloop->stop(async_attachment_routine_id);
+            async_attachment_routine_id = 0;
         }
 
         string curr_instance_unique_id = inst_awareness->getUniqueID().unpack();
@@ -548,7 +592,11 @@ private:
                 );
 
                 while (isSignalPending()) {
-                    if (!handleInspection()) break;
+                    if (attachment_config.isAsyncModeEnabled()) {
+                        if (!handleInspectionAsync()) break;
+                    } else {
+                        if (!handleInspection()) break;
+                    }
                 }
             },
             "Nginx Attachment inspection handler",
@@ -791,7 +839,7 @@ private:
     }
 
     void
-    sendMetricToKibana(const ngx_http_cp_metric_data_t *received_metric_data)
+    sendMetricToKibana(const NanoHttpMetricData *received_metric_data)
     {
         nginx_intaker_event.addPluginMetricCounter(received_metric_data);
         nginx_intaker_event.notify();
@@ -822,7 +870,7 @@ private:
             return "Request End";
         case ChunkType::METRIC_DATA_FROM_PLUGIN:
             return "Metrics";
-        case ChunkType::HOLD_DATA:
+        case ChunkType::REQUEST_DELAYED_VERDICT:
             return "HOLD_DATA";
         case ChunkType::COUNT:
             dbgAssert(false) << alert << "Invalid 'COUNT' ChunkType";
@@ -842,7 +890,7 @@ private:
             return default_verdict;
         }
 
-        auto rule_by_ctx = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+        auto rule_by_ctx = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
         if (rule_by_ctx.ok()) {
             BasicRuleConfig rule = rule_by_ctx.unpack();
             opaque.setSavedData("assetId", rule.getAssetId(), EnvKeyAttr::LogSection::SOURCEANDDATA);
@@ -917,6 +965,7 @@ private:
             FilterVerdict cur_verdict = http_manager->inspect(chunk, is_request);
             if (cur_verdict.getVerdict() == ACCEPT ||
                 cur_verdict.getVerdict() == DROP   ||
+                cur_verdict.getVerdict() == CUSTOM_RESPONSE ||
                 cur_verdict.getVerdict() == WAIT) {
                 return cur_verdict;
             }
@@ -1030,16 +1079,16 @@ private:
     handleChunkedData(ChunkType chunk_type, const Buffer &data, NginxAttachmentOpaque &opaque)
     {
         ScopedContext event_type;
-        event_type.registerValue<ngx_http_chunk_type_e>("HTTP Chunk type", chunk_type);
+        event_type.registerValue<AttachmentDataType>("HTTP Chunk type", chunk_type);
 
         if (chunk_type > ChunkType::REQUEST_HEADER && opaque.getApplicationState() == ApplicationState::UNKOWN) {
-            auto rule_by_ctx = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+            auto rule_by_ctx = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
             ApplicationState state = rule_by_ctx.ok() ? ApplicationState::DEFINED : ApplicationState::UNDEFINED;
             opaque.setApplicationState(state);
         }
 
         if (opaque.getApplicationState() == ApplicationState::UNDEFINED) {
-            ngx_http_cp_verdict_e verdict_action =
+            ServiceVerdict verdict_action =
                 getSettingWithDefault<bool>(false, "allowOnlyDefinedApplications") ? DROP : ACCEPT;
 
             dbgDebug(D_NGINX_ATTACHMENT)
@@ -1079,8 +1128,8 @@ private:
             case ChunkType::RESPONSE_END:
                 return FilterVerdict(http_manager->inspectEndTransaction());
             case ChunkType::METRIC_DATA_FROM_PLUGIN:
-                return FilterVerdict(ngx_http_cp_verdict::TRAFFIC_VERDICT_IRRELEVANT);
-            case ChunkType::HOLD_DATA:
+                return FilterVerdict(ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT);
+            case ChunkType::REQUEST_DELAYED_VERDICT:
                 return FilterVerdict(http_manager->inspectDelayedVerdict());
             case ChunkType::COUNT:
                 break;
@@ -1106,10 +1155,10 @@ private:
             << "Handling Injection of HTTP session modification data. Modifications amount: "
             << modifications_amount;
 
-        vector<ngx_http_cp_inject_data> injection_data_persistency(modifications_amount);
+        vector<HttpInjectData> injection_data_persistency(modifications_amount);
         for (const EventModifications &modifications : modifications_lists) {
             for (const ModificationBuffer &modification_buffer_list : modifications.second) {
-                ngx_http_cp_inject_data injection_data;
+                HttpInjectData injection_data;
                 injection_data.orig_buff_index = modifications.first;
                 injection_data.injection_pos = std::get<0>(modification_buffer_list);
                 injection_data.mod_type = std::get<1>(modification_buffer_list);
@@ -1149,22 +1198,9 @@ private:
         SharedMemoryIPC *ipc,
         vector<const char *> &verdict_data,
         vector<uint16_t> &verdict_data_sizes,
-        string web_user_response_id)
+        const WebTriggerConf &web_trigger_conf)
     {
-        ngx_http_cp_web_response_data_t web_response_data;
-        ScopedContext ctx;
-        if (web_user_response_id != "") {
-            dbgTrace(D_NGINX_ATTACHMENT)
-            << "web user response ID registered in contex: "
-            << web_user_response_id;
-            set<string> triggers_set{web_user_response_id};
-            ctx.registerValue<set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
-        }
-        WebTriggerConf web_trigger_conf = getConfigurationWithDefault<WebTriggerConf>(
-            WebTriggerConf::default_trigger_conf,
-            "rulebase",
-            "webUserResponse"
-        );
+        HttpWebResponseData web_response_data;
 
         bool remove_event_id_param =
             getProfileAgentSettingWithDefault<string>("false", "nginxAttachment.removeRedirectEventId") == "true";
@@ -1176,8 +1212,16 @@ private:
             uuid = opaque.getSessionUUID();
         }
         web_response_data.uuid_size = uuid.size();
-
-        if (web_trigger_conf.getDetailsLevel() == "Redirect") {
+        string details_level = web_trigger_conf.getDetailsLevel();
+        if (details_level == "Custom Block Page") {
+            auto body = web_trigger_conf.getResponseBody();
+            auto content_type = web_trigger_conf.getContentType();
+            auto response_code = web_trigger_conf.getResponseCode();
+            string processed_body = process_html_content(body, uuid);
+            auto custom_response = CustomResponse(processed_body, response_code, content_type);
+            handleCustomResponse(ipc, verdict_data, verdict_data_sizes, custom_response);
+            return;
+        } else if (details_level == "Redirect") {
             web_response_data.response_data.redirect_data.redirect_location_size =
                 web_trigger_conf.getRedirectURL().size();
             bool add_event = web_trigger_conf.getAddEventId();
@@ -1186,19 +1230,19 @@ private:
                     strlen("?event_id=") + uuid.size();
             }
             web_response_data.response_data.redirect_data.add_event_id = add_event ? 1 : 0;
-            web_response_data.web_repsonse_type = static_cast<uint8_t>(ngx_web_response_type_e::REDIRECT_WEB_RESPONSE);
+            web_response_data.web_response_type = static_cast<uint8_t>(NanoWebResponseType::REDIRECT_WEB_RESPONSE);
         } else {
             web_response_data.response_data.custom_response_data.title_size =
                 web_trigger_conf.getResponseTitle().size();
             web_response_data.response_data.custom_response_data.body_size = web_trigger_conf.getResponseBody().size();
             web_response_data.response_data.custom_response_data.response_code = web_trigger_conf.getResponseCode();
-            web_response_data.web_repsonse_type = static_cast<uint8_t>(ngx_web_response_type_e::CUSTOM_WEB_RESPONSE);
+            web_response_data.web_response_type = static_cast<uint8_t>(NanoWebResponseType::CUSTOM_WEB_RESPONSE);
         }
 
         verdict_data.push_back(reinterpret_cast<const char *>(&web_response_data));
-        verdict_data_sizes.push_back(sizeof(ngx_http_cp_web_response_data_t));
+        verdict_data_sizes.push_back(sizeof(HttpWebResponseData));
 
-        if (web_trigger_conf.getDetailsLevel() == "Redirect") {
+        if (details_level == "Redirect") {
             redirectUrl = web_trigger_conf.getRedirectURL();
             if (!remove_event_id_param && web_trigger_conf.getAddEventId()) {
                 redirectUrl += "?event-id=" + uuid;
@@ -1242,15 +1286,80 @@ private:
                 << " (title size: "
                 << static_cast<uint>(web_response_data.response_data.custom_response_data.title_size)
                 << "), Body: "
-                << web_trigger_conf.getResponseBody()
+                <<  web_trigger_conf.getResponseBody()
                 << " (body size: "
                 << static_cast<uint>(web_response_data.response_data.custom_response_data.body_size)
                 << "), UUID: "
                 << uuid
                 << " (UUID size: "
                 << static_cast<uint>(web_response_data.uuid_size)
+                << "), Response Type: "
+                << static_cast<uint>(web_response_data.web_response_type)
                 << ")";
         }
+
+        sendChunkedData(ipc, verdict_data_sizes.data(), verdict_data.data(), verdict_data.size());
+    }
+
+    string
+    process_html_content(const string &body, const string &uuid)
+    {
+        const string uuid_placeholder = "<!-- CHECK_POINT_USERCHECK_UUID_PLACEHOLDER-->";
+        size_t placeholder_pos = body.find(uuid_placeholder);
+
+        if (placeholder_pos == string::npos) {
+            dbgTrace(D_NGINX_ATTACHMENT) << "No UUID placeholder found in body content";
+            return body;
+        }
+
+        dbgTrace(D_NGINX_ATTACHMENT) << "Found UUID placeholder at position: " << placeholder_pos;
+
+        string incident_id_text = "Incident Id: " + uuid;
+        string processed_body = body;
+        processed_body.replace(placeholder_pos, uuid_placeholder.length(), incident_id_text);
+
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "UUID replacement: original_len=" << body.length()
+            << ", processed_len=" << processed_body.length()
+            << ", uuid=" << uuid;
+
+        return processed_body;
+    }
+
+    void
+    handleCustomResponse(
+        SharedMemoryIPC *ipc,
+        vector<const char *> &verdict_data,
+        vector<uint16_t> &verdict_data_sizes,
+        const CustomResponse &custom_response_data)
+    {
+        HttpJsonResponseData json_response_data;
+
+        json_response_data.response_code = custom_response_data.getStatusCode();
+        string response_body = custom_response_data.getBody();
+        string content_type = custom_response_data.getContentType();
+        json_response_data.body_size = response_body.size();
+
+        if (content_type == "application/json") {
+            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_APPLICATION_JSON;
+        } else if (content_type == "text/html") {
+            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_TEXT_HTML;
+        } else {
+            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_OTHER;
+        }
+
+        verdict_data.push_back(reinterpret_cast<const char *>(&json_response_data));
+        verdict_data_sizes.push_back(sizeof(HttpJsonResponseData));
+
+        verdict_data.push_back(reinterpret_cast<const char *>(response_body.data()));
+        verdict_data_sizes.push_back(response_body.size());
+
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "Added Custom JSON Response to current session."
+            << " Response code: "
+            << static_cast<uint>(json_response_data.response_code)
+            << ", Body size: "
+            << static_cast<uint>(json_response_data.body_size);
 
         sendChunkedData(ipc, verdict_data_sizes.data(), verdict_data.data(), verdict_data.size());
     }
@@ -1258,7 +1367,7 @@ private:
     void
     handleVerdictResponse(const FilterVerdict &verdict, SharedMemoryIPC *ipc, SessionID session_id, bool is_header)
     {
-        ngx_http_cp_reply_from_service_t verdict_to_send;
+        HttpReplyFromService verdict_to_send;
         verdict_to_send.verdict = static_cast<uint16_t>(verdict.getVerdict());
         verdict_to_send.session_id = session_id;
 
@@ -1281,7 +1390,31 @@ private:
         if (verdict.getVerdict() == DROP) {
             nginx_attachment_event.addTrafficVerdictCounter(nginxAttachmentEvent::trafficVerdict::DROP);
             verdict_to_send.modification_count = 1;
-            return handleCustomWebResponse(ipc, verdict_fragments, fragments_sizes, verdict.getWebUserResponseID());
+            ScopedContext ctx;
+            set<string> triggers_set{verdict.getWebUserResponseID()};
+            ctx.registerValue<set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers_set);
+            auto web_trigger_config = getConfiguration<WebTriggerConf>("rulebase", "webUserResponse");
+            WebTriggerConf web_trigger_conf = web_trigger_config.ok() ?
+                web_trigger_config.unpack() : WebTriggerConf::default_trigger_conf;
+
+            if (web_trigger_conf.getDetailsLevel() == "Custom Block Page") {
+                dbgTrace(D_NGINX_ATTACHMENT) << "Changing verdict from DROP to CUSTOM_BLOCK_PAGE";
+                verdict_to_send.verdict = static_cast<uint16_t>(CUSTOM_RESPONSE);
+            }
+            return handleCustomWebResponse(ipc, verdict_fragments, fragments_sizes, web_trigger_conf);
+        }
+
+        if (verdict.getVerdict() == CUSTOM_RESPONSE) {
+            verdict_to_send.modification_count = 1;
+            if (!verdict.getCustomResponse().ok()) {
+                dbgWarning(D_NGINX_ATTACHMENT)
+                    << "Failed to get custom web response data. Returning default verdict: "
+                    << ", Error: "
+                    << verdict.getCustomResponse().getErr();
+                return handleCustomResponse(ipc, verdict_fragments, fragments_sizes,
+                                            CustomResponse("{\"error\": \"Internal Server Error\"}", 500));
+            }
+            return handleCustomResponse(ipc, verdict_fragments, fragments_sizes, verdict.getCustomResponse().unpack());
         }
 
         if (verdict.getVerdict() == ACCEPT) {
@@ -1329,7 +1462,7 @@ private:
                 break;
             }
 
-            auto transaction_data = reinterpret_cast<const ngx_http_cp_request_data_t *>(incoming_data);
+            auto transaction_data = reinterpret_cast<const NanoHttpRequestData *>(incoming_data);
             if (transaction_data->session_id != cur_session_id) break;
 
             popData(attachment_ipc);
@@ -1371,15 +1504,15 @@ private:
         }
 
         if (SHOULD_FAIL(
-            incoming_data_size >= sizeof(ngx_http_cp_request_data_t),
+            incoming_data_size >= sizeof(NanoHttpRequestData),
             IntentionalFailureHandler::FailureType::GetDataFromAttchment,
             &did_fail_on_purpose
         )) {
             dbgError(D_NGINX_ATTACHMENT)
                 << "Corrupted transaction raw data received from NGINX attachment, size received: "
                 << incoming_data_size
-                << " is lower than ngx_http_cp_request_data_t size="
-                << sizeof(ngx_http_cp_request_data_t)
+                << " is lower than NanoHttpRequestData size="
+                << sizeof(NanoHttpRequestData)
                 << ". Resetting IPC"
                 << dumpIpcWrapper(attachment_ipc)
                 << (did_fail_on_purpose ? "[Intentional Failure]" : "");
@@ -1409,8 +1542,8 @@ private:
             return make_pair(corrupted_session_id, false);
         }
 
-        const ngx_http_cp_request_data_t *transaction_data =
-            reinterpret_cast<const ngx_http_cp_request_data_t *>(incoming_data);
+        const NanoHttpRequestData *transaction_data =
+            reinterpret_cast<const NanoHttpRequestData *>(incoming_data);
 
         Maybe<ChunkType> chunked_data_type = convertToEnum<ChunkType>(transaction_data->data_type);
         if (!chunked_data_type.ok()) {
@@ -1426,8 +1559,8 @@ private:
         }
 
         if (chunked_data_type.unpack() == ChunkType::METRIC_DATA_FROM_PLUGIN) {
-            const ngx_http_cp_metric_data_t *recieved_metric_data =
-                reinterpret_cast<const ngx_http_cp_metric_data_t *>(incoming_data);
+            const NanoHttpMetricData *recieved_metric_data =
+                reinterpret_cast<const NanoHttpMetricData *>(incoming_data);
             sendMetricToKibana(recieved_metric_data);
             popData(attachment_ipc);
             return pair<uint32_t, bool>(0, false);
@@ -1478,7 +1611,7 @@ private:
 
         const Buffer inspection_data(
             transaction_data->data,
-            incoming_data_size - sizeof(ngx_http_cp_request_data_t),
+            incoming_data_size - sizeof(NanoHttpRequestData),
             Buffer::MemoryType::VOLATILE
         );
 
@@ -1522,6 +1655,7 @@ private:
 
         bool is_final_verdict = verdict.getVerdict() == ACCEPT ||
                                 verdict.getVerdict() == DROP   ||
+                                verdict.getVerdict() == CUSTOM_RESPONSE ||
                                 verdict.getVerdict() == IRRELEVANT;
 
         dbgTrace(D_NGINX_ATTACHMENT)
@@ -1638,6 +1772,8 @@ private:
                 return "RECONF";
             case WAIT:
                 return "WAIT";
+            case CUSTOM_RESPONSE:
+                return "CUSTOM_RESPONSE";
         }
         dbgAssert(false) << alert << "Invalid EventVerdict enum: " << static_cast<int>(verdict.getVerdict());
         return string();
@@ -1716,7 +1852,16 @@ private:
                 Maybe<string> uid = getUidFromSocket(new_attachment_socket);
                 Maybe<uint32_t> nginx_user_id = readIdFromSocket(new_attachment_socket);
                 Maybe<uint32_t> nginx_group_id = readIdFromSocket(new_attachment_socket);
+                Maybe<int32_t> target_core = readSignedIdFromSocket(new_attachment_socket);
                 DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::RegisterAttchment);
+
+                // Target core failure should not block registration - maintain backward compatibility
+                bool target_core_available = target_core.ok();
+                if (!target_core_available) {
+                    dbgInfo(D_NGINX_ATTACHMENT) << "Failed to read target core (backward compatibility mode): "
+                        << target_core.getErr() << ". Proceeding without affinity information.";
+                }
+
                 if (SHOULD_FAIL(
                     nginx_user_id.ok() && nginx_group_id.ok() && uid.ok(),
                     IntentionalFailureHandler::FailureType::RegisterAttchment,
@@ -1743,6 +1888,7 @@ private:
                     return;
                 }
 
+                int32_t target_core_value = target_core_available ? *target_core : -1;
                 if (!registerAttachmentProcess(*nginx_user_id, *nginx_group_id, new_attachment_socket)) {
                     i_socket->closeSocket(new_attachment_socket);
                     new_attachment_socket = -1;
@@ -1753,6 +1899,48 @@ private:
                     nginx_attachment_event.notify();
                     nginx_attachment_event.resetAllCounters();
                     dbgWarning(D_NGINX_ATTACHMENT) << "Failed to register attachment";
+                } else {
+                    // Set affinity to core based on received target core from NGINX
+                    if (attachment_config.getIsPairedAffinityEnabled()
+                        && target_core_available && target_core_value >= 0) {
+                        auto uid_integer = getUidInteger(uid.unpack());
+                        if (!uid_integer.ok()) {
+                            dbgWarning(D_NGINX_ATTACHMENT)
+                                << "Failed to convert UID to integer. Error: " << uid_integer.getErr();
+                        } else {
+                            dbgDebug(D_NGINX_ATTACHMENT)
+                                << "Setting CPU affinity for NGINX attachment using target core from NGINX"
+                                << " UID: " << uid_integer.unpack()
+                                << ", unique_id: " << uid.unpack()
+                                << ", received_target_core: " << target_core_value;
+
+                            // Use common affinity function
+                            int result = set_affinity_to_core(target_core_value);
+                            if (result == 0) {
+                                dbgDebug(D_NGINX_ATTACHMENT)
+                                    << "Successfully set CPU affinity for NGINX attachment to core "
+                                    << target_core_value;
+                            } else {
+                                dbgWarning(D_NGINX_ATTACHMENT)
+                                    << "Failed to set CPU affinity for NGINX attachment to core "
+                                    << target_core_value
+                                    << ". Error code: "
+                                    << result;
+                            }
+                        }
+                    } else if (!target_core_available) {
+                        dbgTrace(D_NGINX_ATTACHMENT)
+                            << "Target core not available from NGINX"
+                            " (backward compatibility mode), skipping CPU affinity setting";
+                    } else if (target_core_value < 0) {
+                        dbgTrace(D_NGINX_ATTACHMENT)
+                            << "Paired affinity disabled by NGINX (target_core=" << target_core_value
+                            << "), skipping CPU affinity setting for NGINX attachment";
+                    } else {
+                        dbgTrace(D_NGINX_ATTACHMENT)
+                            << "Paired affinity is not enabled in service config, "
+                            "skipping setting CPU affinity for NGINX attachment";
+                    }
                 }
             };
         mainloop->addFileRoutine(
@@ -1812,6 +2000,35 @@ private:
     }
 
     Maybe<uint32_t>
+    getUidInteger(string uid)
+    {
+        if (uid.empty()) {
+            return genError("UID is empty");
+        }
+
+        uint32_t uid_integer = 0;
+        try {
+            // Handle both container format "{container_id}_{worker_id}" and simple format "{worker_id}"
+            size_t underscore_pos = uid.find_last_of('_');
+            string worker_id_str;
+
+            if (underscore_pos != string::npos) {
+                // Container format: extract worker_id after the last underscore
+                worker_id_str = uid.substr(underscore_pos + 1);
+            } else {
+                // Simple format: entire string is the worker_id
+                worker_id_str = uid;
+            }
+
+            uid_integer = stoul(worker_id_str);
+        } catch (const std::exception &e) {
+            return genError(string("Failed to convert UID to integer: ") + e.what());
+        }
+
+        return uid_integer;
+    }
+
+    Maybe<uint32_t>
     readIdFromSocket(I_Socket::socketFd new_attachment_socket)
     {
         bool did_fail_on_purpose = false;
@@ -1830,6 +2047,36 @@ private:
 
         uint32_t attachment_id = *reinterpret_cast<const uint32_t *>(id.unpack().data());
         dbgTrace(D_NGINX_ATTACHMENT) << "Attachment ID: " << static_cast<int>(attachment_id);
+        return attachment_id;
+    }
+
+    Maybe<int32_t>
+    readSignedIdFromSocket(I_Socket::socketFd new_attachment_socket)
+    {
+        bool did_fail_on_purpose = false;
+        DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::ReceiveDataFromSocket);
+
+        // Try to read target core - if this fails, it's likely backward compatibility
+        if (!i_socket->isDataAvailable(new_attachment_socket)) {
+            dbgTrace(D_NGINX_ATTACHMENT)
+                << "No target core data available on socket - likely backward compatibility mode";
+            return genError("No target core data available on socket");
+        }
+
+        Maybe<vector<char>> id = i_socket->receiveData(new_attachment_socket, sizeof(int32_t));
+        if (SHOULD_FAIL(
+            id.ok(),
+            IntentionalFailureHandler::FailureType::ReceiveDataFromSocket,
+            &did_fail_on_purpose
+        )) {
+            return genError(
+                string("Failed to read the signed attachment ID (likely backward compatibility issue): ") +
+                (did_fail_on_purpose ? "[Intentional Failure]" : id.getErr())
+            );
+        }
+
+        int32_t attachment_id = *reinterpret_cast<const int32_t *>(id.unpack().data());
+        dbgTrace(D_NGINX_ATTACHMENT) << "Signed Attachment ID: " << static_cast<int>(attachment_id);
         return attachment_id;
     }
 
@@ -1852,6 +2099,7 @@ private:
     SharedMemoryIPC *attachment_ipc = nullptr;
     HttpAttachmentConfig attachment_config;
     I_MainLoop::RoutineID attachment_routine_id = 0;
+    I_MainLoop::RoutineID async_attachment_routine_id = 0;
     bool traffic_indicator = false;
     unordered_set<string> ignored_headers;
 
@@ -1882,7 +2130,267 @@ private:
     nginxIntakerMetric nginx_intaker_metric;
     TransactionTableEvent transaction_table_event;
     TransactionTableMetric transaction_table_metric;
+
+    ///
+    /// @brief Async version of handleInspection - simplified for fastest response time
+    /// @return true on success, false on error
+    ///
+    // LCOV_EXCL_START Reason: Temporary INXT-49318
+    bool
+    handleInspectionAsync()
+    {
+        Maybe<vector<char>> comm_trigger = genError("comm trigger uninitialized");
+
+        static map<I_Socket::socketFd, bool> comm_status;
+        if (comm_status.find(attachment_sock) == comm_status.end()) {
+            comm_status[attachment_sock] = true;
+        }
+
+        DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::ReceiveDataFromSocket);
+
+        // Read session ID from socket (used as doorbell only)
+        uint32_t signaled_session_id = 0;
+        for (int retry = 0; retry < 3; retry++) {
+            comm_trigger = i_socket->receiveData(attachment_sock, sizeof(signaled_session_id));
+            if (comm_trigger.ok()) break;
+        }
+
+        bool did_fail_on_purpose = false;
+        if (SHOULD_FAIL(
+            comm_trigger.ok(),
+            IntentionalFailureHandler::FailureType::ReceiveDataFromSocket,
+            &did_fail_on_purpose
+        )) {
+            if (comm_status[attachment_sock] == true) {
+                dbgDebug(D_NGINX_ATTACHMENT)
+                    << "Failed to get signal from attachment socket (async mode)"
+                    << ", Socket: " << attachment_sock
+                    << ", Error: " << (did_fail_on_purpose ? "Intentional Failure" : comm_trigger.getErr());
+                comm_status[attachment_sock] = false;
+            }
+            return false;
+        }
+        
+        signaled_session_id = *reinterpret_cast<const uint32_t *>(comm_trigger.unpack().data());
+        comm_status.erase(attachment_sock);
+        traffic_indicator = true;
+
+        while (isDataAvailable(attachment_ipc)) {
+            traffic_indicator = true;
+            
+            uint32_t handled_session_id = handleRequestFromQueueAsync(attachment_ipc);
+            
+            if (handled_session_id == 0 || handled_session_id == corrupted_session_id) {
+                continue;
+            }
+            
+            // Always signal back to nginx - never leave it waiting
+            dbgTrace(D_NGINX_ATTACHMENT) << "Signaling attachment to read verdict (async mode)";
+            bool res = false;
+            vector<char> session_id_data(
+                reinterpret_cast<char *>(&handled_session_id),
+                reinterpret_cast<char *>(&handled_session_id) + sizeof(handled_session_id)
+            );
+
+            DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::WriteDataToSocket);
+
+            if (!SHOULD_FAIL(
+                true,
+                IntentionalFailureHandler::FailureType::WriteDataToSocket,
+                &did_fail_on_purpose
+            )) {
+            for (int retry = 0; retry < 3; retry++) {
+                    if (i_socket->writeDataAsync(attachment_sock, session_id_data)) {
+                        dbgTrace(D_NGINX_ATTACHMENT)
+                            << "Successfully sent signal to attachment (async mode).";
+                        res = true;
+                        break;
+                    }
+                    dbgDebug(D_NGINX_ATTACHMENT)
+                        << "Failed to send ACK to attachment (async mode, try " << retry << ")";
+                    mainloop->yield(true);
+                }
+            }
+
+            if (!res) {
+                dbgWarning(D_NGINX_ATTACHMENT) << "Failed to send ACK to attachment (async mode)"
+                    << (did_fail_on_purpose ? "[Intentional Failure]" : "");
+                if (!did_fail_on_purpose) {
+                    dbgWarning(D_NGINX_ATTACHMENT) << "Resetting IPC and socket";
+                    resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
+                }
+                return false;
+            }
+        }
+
+        return true;
+    }
+// LCOV_EXCL_STOP
+
+    ///
+    /// @brief Async version of handleRequestFromQueue - always signals back to nginx
+    /// @param[in] attachment_ipc IPC channel
+    /// @param[in] signaled_session_id Session ID that triggered the signal (not used, doorbell only)
+    /// @return session_id of processed request
+    ///
+// LCOV_EXCL_START Reason: Temporary INXT-49318
+    uint32_t
+    handleRequestFromQueueAsync(SharedMemoryIPC *attachment_ipc)
+    {
+        Maybe<pair<uint16_t, const char *>> read_data = readData(attachment_ipc);
+        if (!read_data.ok()) {
+            dbgWarning(D_NGINX_ATTACHMENT) << "Failed to read data. Error: " << read_data.getErr();
+            return corrupted_session_id;
+        }
+
+        uint16_t incoming_data_size = read_data.unpack().first;
+        const char *incoming_data = read_data.unpack().second;
+        if (incoming_data_size == 0 || incoming_data == nullptr) {
+            dbgWarning(D_NGINX_ATTACHMENT) << "No data received from NGINX attachment";
+            return corrupted_session_id;
+        }
+
+        const NanoHttpRequestData *transaction_data =
+            reinterpret_cast<const NanoHttpRequestData *>(incoming_data);
+
+        Maybe<ChunkType> chunked_data_type = convertToEnum<ChunkType>(transaction_data->data_type);
+        if (!chunked_data_type.ok()) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Could not convert "
+                <<  static_cast<int>(transaction_data->data_type)
+                << " to ChunkType enum. Resetting IPC"
+                << dumpIpcWrapper(attachment_ipc);
+            popData(attachment_ipc);
+            resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
+            nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
+            return corrupted_session_id;
+        }
+
+        if (chunked_data_type.unpack() == ChunkType::METRIC_DATA_FROM_PLUGIN) {
+            const NanoHttpMetricData *recieved_metric_data =
+                reinterpret_cast<const NanoHttpMetricData *>(incoming_data);
+            sendMetricToKibana(recieved_metric_data);
+            popData(attachment_ipc);
+            return 0; // No signaling needed for metrics
+        }
+
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "Reading "
+            << incoming_data_size
+            <<" bytes "
+            << convertChunkTypeToString(*chunked_data_type)
+            << "(type = "
+            << static_cast<int>(*chunked_data_type)
+            << ") of data from NGINX attachment for session ID: "
+            << transaction_data->session_id;
+
+        const uint32_t cur_session_id = transaction_data->session_id;
+
+        if (
+            isFailOpenTriggered()
+            && (
+                chunked_data_type.unpack() == ChunkType::REQUEST_START
+                || chunked_data_type.unpack() == ChunkType::REQUEST_HEADER
+            )
+        ) {
+            dbgTrace(D_NGINX_ATTACHMENT)
+                << "Agent is set to Fail Open Mode. Passing inspection and returning Accept."
+                << " Session ID: "
+                <<  cur_session_id
+                << ", Chunked data type: "
+                << static_cast<int>(*chunked_data_type);
+
+            if (i_transaction_table->hasEntry(cur_session_id)) {
+                i_transaction_table->deleteEntry(cur_session_id);
+            }
+
+            popData(attachment_ipc);
+            handleVerdictResponse(
+                FilterVerdict(ACCEPT),
+                attachment_ipc,
+                cur_session_id,
+                false
+            );
+            return cur_session_id;
+        }
+
+        if (!setActiveTransactionEntry(cur_session_id, chunked_data_type.unpack())) {
+            popData(attachment_ipc);
+            return cur_session_id;
+        }
+
+        const Buffer inspection_data(
+            transaction_data->data,
+            incoming_data_size - sizeof(NanoHttpRequestData),
+            Buffer::MemoryType::VOLATILE
+        );
+
+        if (*chunked_data_type == ChunkType::REQUEST_START && !createTransactionState(inspection_data)) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Failed to handle new request. Returning default verdict: "
+                << verdictToString(default_verdict.getVerdict());
+
+            handleVerdictResponse(
+                default_verdict,
+                attachment_ipc,
+                cur_session_id,
+                false
+            );
+            popData(attachment_ipc);
+            removeTransactionEntry(cur_session_id);
+            return cur_session_id;
+        }
+
+        if (i_transaction_table != nullptr) {
+            transaction_table_event.setTransactionTableSize(i_transaction_table->count());
+            transaction_table_event.notify();
+        }
+
+        NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
+        opaque.activateContext();
+
+        FilterVerdict verdict = handleChunkedData(*chunked_data_type, inspection_data, opaque);
+        bool is_header =
+            *chunked_data_type == ChunkType::REQUEST_HEADER  ||
+            *chunked_data_type == ChunkType::RESPONSE_HEADER ||
+            *chunked_data_type == ChunkType::CONTENT_LENGTH;
+
+        if (verdict.getVerdict() == LIMIT_RESPONSE_HEADERS) {
+            handleVerdictResponse(verdict, attachment_ipc, transaction_data->session_id, is_header);
+            popData(attachment_ipc);
+            verdict = FilterVerdict(INSPECT);
+        }
+
+        handleVerdictResponse(verdict, attachment_ipc, cur_session_id, is_header);
+
+        bool is_final_verdict = verdict.getVerdict() == ACCEPT ||
+                                verdict.getVerdict() == DROP   ||
+                                verdict.getVerdict() == CUSTOM_RESPONSE ||
+                                verdict.getVerdict() == IRRELEVANT;
+
+        dbgTrace(D_NGINX_ATTACHMENT)
+            << "Request handled successfully - for"
+            << " NGINX attachment session ID: "
+            << transaction_data->session_id
+            << " verdict: "
+            << verdictToString(verdict.getVerdict())
+            << " verdict_data_code="
+            << static_cast<int>(verdict.getVerdict());
+
+        popData(attachment_ipc);
+
+        opaque.deactivateContext();
+        if (is_final_verdict) {
+            removeTransactionEntry(cur_session_id);
+        } else {
+            i_transaction_table->unsetActiveKey();
+        }
+
+        // Always signal back in async mode - never leave nginx waiting
+        return cur_session_id;
+    }
 };
+// LCOV_EXCL_STOP
 
 NginxAttachment::NginxAttachment() : Component("NginxAttachment"), pimpl(make_unique<Impl>()) {}
 
@@ -1921,7 +2429,7 @@ NginxAttachment::preload()
     registerExpectedConfiguration<uint>("Nginx Attachment", "metric reporting interval");
     registerExpectedSetting<bool>("allowOnlyDefinedApplications");
     registerExpectedConfigFile("activeContextConfig", Config::ConfigFileType::Policy);
-    registerExpectedConfiguration<UsersAllIdentifiersConfig>("rulebase", "usersIdentifiers");
+    registerExpectedConfigurationWithCache<UsersAllIdentifiersConfig>("assetId", "rulebase", "usersIdentifiers");
     BasicRuleConfig::preload();
     WebTriggerConf::preload();
 }

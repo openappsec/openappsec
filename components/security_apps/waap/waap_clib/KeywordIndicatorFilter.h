@@ -36,10 +36,12 @@ public:
         size_t minIntervals = CONFIDENCE_MIN_INTERVALS,
         std::chrono::minutes intervalDuration = CONFIDENCE_WINDOW_INTERVAL,
         double ratioThreshold = CONFIDENCE_THRESHOLD);
+
     ~KeywordIndicatorFilter();
 
     virtual void registerKeywords(const std::string& key, Waap::Keywords::KeywordsSet& keywords,
         IWaf2Transaction* pTransaction);
+    bool shouldTrack(const std::string& key, const Waap::Keywords::KeywordsSet& keywords);
 
     virtual bool shouldFilterKeyword(const std::string &key, const std::string &keyword) const;
 

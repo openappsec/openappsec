@@ -21,13 +21,13 @@
 #include <vector>
 
 #include "config.h"
+#include "i_generic_rulebase.h"
 #include "i_first_tier_agg.h"
 #include "ips_entry.h"
 #include "ips_enums.h"
 #include "log_generator.h"
 #include "parsed_context.h"
 #include "pm_hook.h"
-#include "i_generic_rulebase.h"
 
 #define DEFAULT_IPS_YIELD_COUNT 500
 
@@ -402,6 +402,7 @@ public:
 
     LogTriggerConf getTrigger() const;
 
+
     std::set<ParameterBehavior>
     getBehavior(const std::unordered_map<std::string, std::set<std::string>> &exceptions_dict) const;
 
@@ -410,10 +411,21 @@ private:
     /// \param ips_state The IPS entry.
     ActionResults getAction(const IPSEntry &ips_state) const;
 
+    void sendLog(
+        const Buffer &context_buffer,
+        const IPSEntry &ips_state,
+        const std::tuple<
+            IPSSignatureSubTypes::SignatureAction,
+            std::string, std::vector<std::string>
+        > &override_action,
+        bool is_prevent
+    ) const;
+
     std::shared_ptr<CompleteSignature> signature;
     SignatureAction action;
     std::string trigger_id;
     std::string exception_id;
+    mutable bool bSupressLog = false;
 };
 } // namespace IPSSignatureSubTypes
 

@@ -35,13 +35,27 @@ public:
     init()
     {
         dbgTrace(D_GEO_FILTER) << "Init Http Geo filter component";
-        registerListener();
+        handleNewPolicy();
+        registerConfigLoadCb([this]() { handleNewPolicy(); });
     }
 
     void
     fini()
     {
         unregisterListener();
+    }
+
+    void
+    handleNewPolicy()
+    {
+        if (ParameterException::isGeoLocationExceptionExists()) {
+            registerListener();
+            return;
+        }
+
+        if (!ParameterException::isGeoLocationExceptionExists()) {
+            unregisterListener();
+        }
     }
 
     string getListenerName() const override { return "HTTP geo filter"; }
@@ -56,7 +70,7 @@ public:
                 << "Load http geo filter default action. Action: "
                 << default_action_maybe.unpack();
         } else {
-            default_action = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+            default_action = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
             dbgTrace(D_GEO_FILTER) << "No http geo filter default action. Action: Irrelevant";
         }
     }
@@ -66,7 +80,7 @@ public:
     {
         dbgTrace(D_GEO_FILTER) << getListenerName() << " new transaction event";
 
-        if (!event.isLastHeader()) return EventVerdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
+        if (!event.isLastHeader()) return EventVerdict(ServiceVerdict::TRAFFIC_VERDICT_INSPECT);
         std::set<std::string> ip_set;
         auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
         auto maybe_xff = env->get<std::string>(HttpTransactionData::xff_vals_ctx);
@@ -101,15 +115,17 @@ public:
         }
 
 
-        ngx_http_cp_verdict_e exception_verdict = getExceptionVerdict(ip_set);
-        if (exception_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
+        ServiceVerdict exception_verdict = getExceptionVerdict(ip_set);
+        if (exception_verdict != ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT) {
             return EventVerdict(exception_verdict);
         }
 
-        ngx_http_cp_verdict_e geo_lookup_verdict = getGeoLookupVerdict(ip_set);
-        if (geo_lookup_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) {
-            return EventVerdict(geo_lookup_verdict);
-        }
+        // deprecated for now
+        // ServiceVerdict geo_lookup_verdict = getGeoLookupVerdict(ip_set);
+        // if (geo_lookup_verdict != ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT) {
+        //     return EventVerdict(geo_lookup_verdict);
+        // }
+
         return EventVerdict(default_action);
     }
 
@@ -146,7 +162,7 @@ private:
     void
     removeTrustedIpsFromXff(std::set<std::string> &xff_set)
     {
-        auto identify_config = getConfiguration<UsersAllIdentifiersConfig>(
+        auto identify_config = getConfigurationWithCache<UsersAllIdentifiersConfig>(
             "rulebase",
             "usersIdentifiers"
         );
@@ -189,33 +205,34 @@ private:
         return os.str();
     }
 
-    ngx_http_cp_verdict_e
-    convertActionToVerdict(const string &action) const
-    {
-        if (action == "accept") return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-        if (action == "drop") return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
-    }
-
-    ngx_http_cp_verdict_e
+    ServiceVerdict
     convertBehaviorValueToVerdict(const BehaviorValue &behavior_value) const
     {
             if (behavior_value == BehaviorValue::ACCEPT || behavior_value == BehaviorValue::IGNORE) {
-                return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+                return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
             }
             if (behavior_value == BehaviorValue::DROP  || behavior_value == BehaviorValue::REJECT) {
-                return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+                return ServiceVerdict::TRAFFIC_VERDICT_DROP;
             }
-        return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+        return ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
     }
 
-    ngx_http_cp_verdict_e
+    // LCOV_EXCL_START Reason: deprecated for now
+    ServiceVerdict
+    convertActionToVerdict(const string &action) const
+    {
+        if (action == "accept") return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
+        if (action == "drop") return ServiceVerdict::TRAFFIC_VERDICT_DROP;
+        return ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
+    }
+
+    ServiceVerdict
     getGeoLookupVerdict(const std::set<std::string> &sources)
     {
         auto maybe_geo_config = getConfiguration<GeoConfig>("rulebase", "httpGeoFilter");
         if (!maybe_geo_config.ok()) {
             dbgTrace(D_GEO_FILTER) << "Failed to load HTTP Geo Filter config. Error:" << maybe_geo_config.getErr();
-            return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+            return ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
         }
         GeoConfig geo_config = maybe_geo_config.unpack();
         EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data;
@@ -252,12 +269,12 @@ private:
                     << ", country code: "
                     << country_code;
                 generateVerdictLog(
-                    ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT,
+                    ServiceVerdict::TRAFFIC_VERDICT_ACCEPT,
                     geo_config.getId(),
                     true,
                     geo_location_data
                 );
-                return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
+                return ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
             }
             if (geo_config.isBlockedCountry(country_code)) {
                 dbgTrace(D_GEO_FILTER)
@@ -266,12 +283,12 @@ private:
                     << ", country code: "
                     << country_code;
                 generateVerdictLog(
-                    ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP,
+                    ServiceVerdict::TRAFFIC_VERDICT_DROP,
                     geo_config.getId(),
                     true,
                     geo_location_data
                 );
-                return ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+                return ServiceVerdict::TRAFFIC_VERDICT_DROP;
             }
         }
         dbgTrace(D_GEO_FILTER)
@@ -286,22 +303,23 @@ private:
         );
         return convertActionToVerdict(geo_config.getDefaultAction());
     }
+    // LCOV_EXCL_STOP
 
-    Maybe<pair<ngx_http_cp_verdict_e, string>>
+    Maybe<pair<ServiceVerdict, string>>
     getBehaviorsVerdict(
         const unordered_map<string, set<string>> &behaviors_map_to_search,
         EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data)
     {
         bool is_matched = false;
         ParameterBehavior matched_behavior;
-        ngx_http_cp_verdict_e matched_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+        ServiceVerdict matched_verdict = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
         I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<HttpGeoFilter>();
         set<ParameterBehavior> behaviors_set = i_rulebase->getBehavior(behaviors_map_to_search);
         dbgTrace(D_GEO_FILTER) << "get verdict from: " << behaviors_set.size() << " behaviors";
         for (const ParameterBehavior &behavior : behaviors_set) {
             matched_verdict = convertBehaviorValueToVerdict(behavior.getValue());
             if (
-                matched_verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP
+                matched_verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP
             ){
                 dbgTrace(D_GEO_FILTER) << "behavior verdict: DROP, exception id: " << behavior.getId();
                 generateVerdictLog(
@@ -310,10 +328,10 @@ private:
                     false,
                     geo_location_data
                 );
-                return pair<ngx_http_cp_verdict_e, string>(matched_verdict, behavior.getId());
+                return pair<ServiceVerdict, string>(matched_verdict, behavior.getId());
             }
             else if (
-                matched_verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT
+                matched_verdict == ServiceVerdict::TRAFFIC_VERDICT_ACCEPT
             ){
                 dbgTrace(D_GEO_FILTER) << "behavior verdict: ACCEPT, exception id: " << behavior.getId();
                 matched_behavior = behavior;
@@ -321,19 +339,19 @@ private:
             }
         }
         if (is_matched) {
-            return pair<ngx_http_cp_verdict_e, string>(
-                ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT,
+            return pair<ServiceVerdict, string>(
+                ServiceVerdict::TRAFFIC_VERDICT_ACCEPT,
                 matched_behavior.getId()
             );
         }
         return genError("No exception matched to HTTP geo filter rule");
     }
 
-    ngx_http_cp_verdict_e
+    ServiceVerdict
     getExceptionVerdict(const std::set<std::string> &sources) {
 
-        pair<ngx_http_cp_verdict_e, string> curr_matched_behavior;
-        ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+        pair<ServiceVerdict, string> curr_matched_behavior;
+        ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
         I_GeoLocation *i_geo_location = Singleton::Consume<I_GeoLocation>::by<HttpGeoFilter>();
         EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data;
         auto env = Singleton::Consume<I_Environment>::by<HttpGeoFilter>();
@@ -389,7 +407,7 @@ private:
             if (matched_behavior_maybe.ok()) {
                 curr_matched_behavior = matched_behavior_maybe.unpack();
                 verdict = curr_matched_behavior.first;
-                if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+                if (verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
                     return verdict;
                 }
             }
@@ -402,13 +420,13 @@ private:
             if (matched_behavior_maybe.ok()) {
                 curr_matched_behavior = matched_behavior_maybe.unpack();
                 verdict = curr_matched_behavior.first;
-                if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+                if (verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
                     return verdict;
                 }
             }
         }
 
-        if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT) {
+        if (verdict == ServiceVerdict::TRAFFIC_VERDICT_ACCEPT) {
             generateVerdictLog(
                 verdict,
                 curr_matched_behavior.second,
@@ -421,7 +439,7 @@ private:
 
     void
     generateVerdictLog(
-        const ngx_http_cp_verdict_e &verdict,
+        const ServiceVerdict &verdict,
         const string &matched_id,
         bool is_geo_filter,
         const EnumArray<I_GeoLocation::GeoLocationField, std::string> geo_location_data,
@@ -430,7 +448,7 @@ private:
     {
         dbgTrace(D_GEO_FILTER) << "Generate Log for verdict - HTTP geo filter";
         auto &trigger = getConfigurationWithDefault(default_triger, "rulebase", "log");
-        bool is_prevent = verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        bool is_prevent = verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP;
         string matched_on = is_geo_filter ? "geoFilterPracticeId" : "exceptionId";
         LogGen log = trigger(
             "Web Request - HTTP Geo Filter",
@@ -469,7 +487,7 @@ private:
             << LogField("sourceCountryName", geo_location_data[I_GeoLocation::GeoLocationField::COUNTRY_NAME]);
     }
 
-    ngx_http_cp_verdict_e default_action = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT;
+    ServiceVerdict default_action = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
 };
 
 HttpGeoFilter::HttpGeoFilter() : Component("HttpGeoFilter"), pimpl(make_unique<HttpGeoFilter::Impl>()) {}
@@ -491,6 +509,6 @@ void
 HttpGeoFilter::preload()
 {
     registerExpectedConfiguration<GeoConfig>("rulebase", "httpGeoFilter");
-    registerExpectedConfiguration<UsersAllIdentifiersConfig>("rulebase", "usersIdentifiers");
+    registerExpectedConfigurationWithCache<UsersAllIdentifiersConfig>("assetId", "rulebase", "usersIdentifiers");
     registerConfigLoadCb([this]() { pimpl->loadDefaultAction(); });
 }

@@ -344,6 +344,7 @@ public:
         ON_CALL(mock_details, getFogDomain()).WillByDefault(Return(Maybe<string>(string("fog_domain.com"))));
         ON_CALL(mock_details, getFogPort()).WillByDefault(Return(Maybe<uint16_t>(443)));
 
+        env.preload();
         conf.preload();
         intelligence.preload();
         intelligence.init();
@@ -389,6 +390,8 @@ TEST_F(IntelligenceInvalidation, sending_incomplete_invalidation)
 
 TEST_F(IntelligenceInvalidation, sending_public_invalidation)
 {
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "idn");
+
     auto invalidation = Invalidation("aaa")
         .addMainAttr(main_attr)
         .addAttr(attr)
@@ -422,10 +425,16 @@ TEST_F(IntelligenceInvalidation, sending_public_invalidation)
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
     EXPECT_FALSE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
+
+    auto headers = md.getHeaders();
+    EXPECT_NE(headers.find("X-Calling-Service"), headers.end()) << "X-Calling-Service header should be present";
+    EXPECT_EQ(headers.at("X-Calling-Service"), "idn");
 }
 
 TEST_F(IntelligenceInvalidation, multiple_assets_invalidation)
 {
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "orchestration");
+
     auto main_attr_2 = StrAttributes()
         .addStringAttr("attr2", "22")
         .addStringSetAttr("attr3", {"33", "44"});
@@ -440,11 +449,13 @@ TEST_F(IntelligenceInvalidation, multiple_assets_invalidation)
         .setObjectType(Intelligence::ObjectType::ASSET);
 
     string invalidation_json;
+    MessageMetadata md;
     EXPECT_CALL(
         messaging_mock,
         sendSyncMessage(HTTPMethod::POST, invalidation_uri, _, MessageCategory::INTELLIGENCE, _)
     ).WillOnce(DoAll(
         SaveArg<2>(&invalidation_json),
+        SaveArg<4>(&md),
         Return(HTTPResponse(HTTPStatusCode::HTTP_OK, ""))
     ));
 
@@ -461,10 +472,16 @@ TEST_F(IntelligenceInvalidation, multiple_assets_invalidation)
         "\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.1\" ] } ]"
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
+
+    auto headers = md.getHeaders();
+    EXPECT_NE(headers.find("X-Calling-Service"), headers.end());
+    EXPECT_EQ(headers.at("X-Calling-Service"), "orchestration");
 }
 
 TEST_F(IntelligenceInvalidation, sending_private_invalidation)
 {
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "idn");
+
     auto invalidation = Invalidation("aaa")
         .addMainAttr(main_attr)
         .addAttr(attr)
@@ -511,6 +528,10 @@ TEST_F(IntelligenceInvalidation, sending_private_invalidation)
         " } ] }";
     EXPECT_EQ(invalidation_json, expected_json);
     EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
+
+    auto headers = md.getHeaders();
+    EXPECT_NE(headers.find("X-Calling-Service"), headers.end());
+    EXPECT_EQ(headers.at("X-Calling-Service"), "idn");
 }
 
 TEST_F(IntelligenceInvalidation, register_for_invalidation)
@@ -554,7 +575,7 @@ TEST_F(IntelligenceInvalidation, register_for_invalidation)
     EXPECT_THAT(body, HasSubstr("\"mainAttributes\": [ { \"attr2\": \"2\" } ]"));
     EXPECT_THAT(body, HasSubstr("\"attributes\": [ { \"ipv4Addresses\": [ \"1.1.1.1\" ] } ]"));
     EXPECT_TRUE(md.getConnectionFlags().isSet(MessageConnectionConfig::UNSECURE_CONN));
-    EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true }"));
+    EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true, \"returnRegistrationTTL\": true }"));
 
 }
 
@@ -599,7 +620,7 @@ TEST_F(IntelligenceInvalidation, register_for_multiple_assets_invalidation)
     ));
 
     EXPECT_NE(i_intelligence->registerInvalidation(invalidation, callback), 0);
-    EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true }"));
+    EXPECT_THAT(body, HasSubstr("\"capabilities\": { \"getBulkCallback\": true, \"returnRegistrationTTL\": true }"));
 
     EXPECT_THAT(
         body,

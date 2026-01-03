@@ -59,6 +59,7 @@ WebTriggerConf::load(cereal::JSONInputArchive &archive_in)
 
         parseJSONKey<string>("response body", response_body, archive_in);
         parseJSONKey<string>("response title", response_title, archive_in);
+        parseJSONKey<string>("content type", content_type, archive_in);
     } catch (const exception &e) {
         dbgWarning(D_RULEBASE_CONFIG) << "Failed to parse the web trigger configuration: '" << e.what() << "'";
         archive_in.setNextName(nullptr);
@@ -185,6 +186,7 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
         setTriggersFlag("acLogGeoLocation", archive_in, SecurityType::AccessControl, log_geo_location);
         setTriggersFlag("tpLogGeoLocation", archive_in, SecurityType::ThreatPrevention, log_geo_location);
         setTriggersFlag("complianceLogGeoLocation", archive_in, SecurityType::Compliance, log_geo_location);
+        setTriggersFlag("shouldIgnoreExceptionLog", archive_in, SecurityType::ThreatPrevention, should_log_exception);
 
         bool extend_logging = false;
         parseJSONKey<bool>("extendLogging", extend_logging, archive_in);

@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "compression_utils.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 #include "http_transaction_common.h"
 #include "http_inspection_events.h"
 #include "i_encryptor.h"

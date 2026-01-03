@@ -199,6 +199,11 @@ void
 resetIpc(SharedMemoryIPC *ipc, uint16_t num_of_data_segments)
 {
     writeDebug(TraceLevel, "Reseting IPC queues\n");
+    if (!ipc || !ipc->rx_queue || !ipc->tx_queue) {
+        writeDebug(WarningLevel, "resetIpc called with NULL ipc pointer\n");
+        return;
+    }
+
     resetRingQueue(ipc->rx_queue, num_of_data_segments);
     resetRingQueue(ipc->tx_queue, num_of_data_segments);
 }
@@ -207,6 +212,11 @@ void
 destroyIpc(SharedMemoryIPC *shmem, int is_owner)
 {
     writeDebug(TraceLevel, "Destroying IPC queues\n");
+
+    if (!shmem) {
+        writeDebug(WarningLevel, "Destroying IPC queues called with NULL shmem pointer\n");
+        return;
+    }
 
     if (shmem->rx_queue != NULL) {
         destroySharedRingQueue(shmem->rx_queue, is_owner, isTowardsOwner(is_owner, 0));
@@ -225,6 +235,10 @@ dumpIpcMemory(SharedMemoryIPC *ipc)
 {
     writeDebug(WarningLevel, "Ipc memory dump:\n");
     writeDebug(WarningLevel, "RX queue:\n");
+    if (!ipc || !ipc->rx_queue) {
+        writeDebug(WarningLevel, "RX queue is NULL\n");
+        return;
+    }
     dumpRingQueueShmem(ipc->rx_queue);
     writeDebug(WarningLevel, "TX queue:\n");
     dumpRingQueueShmem(ipc->tx_queue);
@@ -234,6 +248,10 @@ int
 sendData(SharedMemoryIPC *ipc, const uint16_t data_to_send_size, const char *data_to_send)
 {
     writeDebug(TraceLevel, "Sending data of size %u\n", data_to_send_size);
+    if (!ipc || !ipc->tx_queue) {
+        writeDebug(WarningLevel, "sendData called with NULL ipc pointer\n");
+        return -1;
+    }
     return pushToQueue(ipc->tx_queue, data_to_send, data_to_send_size);
 }
 
@@ -247,12 +265,22 @@ sendChunkedData(
 {
     writeDebug(TraceLevel, "Sending %u chunks of data\n", num_of_data_elem);
 
+    if (!ipc) {
+        writeDebug(WarningLevel, "sendChunkedData called with NULL ipc pointer\n");
+        return -1;
+    }
+
     return pushBuffersToQueue(ipc->tx_queue, data_elem_to_send, data_to_send_sizes, num_of_data_elem);
 }
 
 int
 receiveData(SharedMemoryIPC *ipc, uint16_t *received_data_size, const char **received_data)
 {
+    if (!ipc) {
+        writeDebug(WarningLevel, "receiveData called with NULL ipc pointer\n");
+        return -1;
+    }
+
     int res = peekToQueue(ipc->rx_queue, received_data, received_data_size);
     writeDebug(TraceLevel, "Received data from queue. Res: %d, data size: %u\n", res, *received_data_size);
     return res;
@@ -261,6 +289,10 @@ receiveData(SharedMemoryIPC *ipc, uint16_t *received_data_size, const char **rec
 int
 popData(SharedMemoryIPC *ipc)
 {
+    if (!ipc) {
+        writeDebug(WarningLevel, "popData called with NULL ipc pointer\n");
+        return -1;
+    }
     int res = popFromQueue(ipc->rx_queue);
     writeDebug(TraceLevel, "Popped data from queue. Res: %d\n", res);
     return res;
@@ -269,6 +301,10 @@ popData(SharedMemoryIPC *ipc)
 int
 isDataAvailable(SharedMemoryIPC *ipc)
 {
+    if (!ipc) {
+        writeDebug(WarningLevel, "isDataAvailable called with NULL ipc pointer\n");
+        return 0;
+    }
     int res = !isQueueEmpty(ipc->rx_queue);
     writeDebug(TraceLevel, "Checking if there is data pending to be read. Res: %d\n", res);
     return res;
@@ -277,6 +313,11 @@ isDataAvailable(SharedMemoryIPC *ipc)
 int
 isCorruptedShmem(SharedMemoryIPC *ipc, int is_owner)
 {
+    if (!ipc) {
+        writeDebug(WarningLevel, "isCorruptedShmem called with NULL ipc pointer\n");
+        return 1;
+    }
+
     if (isCorruptedQueue(ipc->rx_queue, isTowardsOwner(is_owner, 0)) ||
         isCorruptedQueue(ipc->tx_queue, isTowardsOwner(is_owner, 1))
     ) {

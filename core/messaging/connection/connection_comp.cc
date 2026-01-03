@@ -48,6 +48,13 @@ public:
         return establishNewConnection(metadata, category);
     }
 
+    void
+    clearConnections() override
+    {
+        dbgTrace(D_CONNECTION) << "Clearing all persistent connections";
+        persistent_connections.clear();
+    }
+
     Maybe<Connection>
     getPersistentConnection(const string &host_name, uint16_t port, MessageCategory category) override
     {

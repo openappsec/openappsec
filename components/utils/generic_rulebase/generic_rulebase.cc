@@ -104,7 +104,8 @@ GenericRulebase::Impl::getLogTriggerConf(const string& trigger_Id) const
     ScopedContext ctx;
     set<string> triggers = {trigger_Id};
     ctx.registerValue<set<GenericConfigId>>(TriggerMatcher::ctx_key, triggers);
-    return getConfigurationWithDefault(LogTriggerConf(), "rulebase", "log");
+    auto config = getConfigurationWithCache<LogTriggerConf>("rulebase", "log");
+    return config.ok() ? config.unpack() : LogTriggerConf();
 }
 
 ParameterException
@@ -113,19 +114,20 @@ GenericRulebase::Impl::getParameterException(const string& parameter_Id) const
     ScopedContext ctx;
     set<string> exceptions = {parameter_Id};
     ctx.registerValue<set<GenericConfigId>>(ParameterMatcher::ctx_key, exceptions);
-    return getConfigurationWithDefault(ParameterException(), "rulebase", "exception");
+    auto config = getConfigurationWithCache<ParameterException>("rulebase", "exception");
+    return config.ok() ? config.unpack() : ParameterException();
 }
 
 set<ParameterBehavior>
 GenericRulebase::Impl::getBehavior(const ParameterKeyValues &key_value_pairs) const
 {
-    auto &exceptions = getConfiguration<ParameterException>("rulebase", "exception");
+    auto exceptions = getConfigurationWithCache<ParameterException>("rulebase", "exception");
 
     if (!exceptions.ok()) {
         dbgTrace(D_RULEBASE_CONFIG) << "Could not find any exception with the current rule's context";
         return {};
     }
-    return (*exceptions).getBehavior(key_value_pairs);
+    return exceptions.unpack().getBehavior(key_value_pairs);
 }
 
 GenericRulebase::GenericRulebase() : Component("GenericRulebase"), pimpl(make_unique<Impl>()) {}

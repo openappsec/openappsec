@@ -19,6 +19,7 @@
 #include "generic_rulebase/generic_rulebase_context.h"
 #include "encryptor.h"
 #include "mock/mock_table.h"
+USE_DEBUG_FLAG(D_IPS);
 
 using namespace testing;
 using namespace std;
@@ -194,6 +195,101 @@ public:
         gen_ctx->activate();
     }
 
+    // Loads an exception with log: ignore behavior, as in the provided JSON
+    void loadExceptionsIgnoreLog()
+    {
+        BasicRuleConfig::preload();
+        registerExpectedConfiguration<ParameterException>("rulebase", "exception");
+
+        string test_config(
+            "{"
+            "  \"rulebase\": {"
+            "    \"rulesConfig\": ["
+            "      {"
+            "        \"context\": \"All()\","
+            "        \"priority\": 1,"
+            "        \"ruleId\": \"5eaef0726765c30010bae8bb\","
+            "        \"ruleName\": \"Acme web API\","
+            "        \"assetId\": \"5e243effd858007660b758ad\","
+            "        \"assetName\": \"Acme Power API\","
+            "        \"parameters\": ["
+            "          {"
+            "            \"parameterId\": \"6c3867be-4da5-42c2-93dc-8f509a764003\","
+            "            \"parameterType\": \"exceptions\","
+            "            \"parameterName\": \"exception\""
+            "          }"
+            "        ],"
+            "        \"zoneId\": \"\","
+            "        \"zoneName\": \"\""
+            "      }"
+            "    ],"
+            "    \"exception\": ["
+            "      {"
+            "        \"context\": \"Any(parameterId(6c3867be-4da5-42c2-93dc-8f509a764003))\","
+            "        \"exceptions\": ["
+            "          {"
+            "            \"match\": {"
+            "              \"type\": \"operator\","
+            "              \"op\": \"and\","
+            "              \"items\": ["
+            "                {"
+            "                  \"type\": \"condition\","
+            "                  \"op\": \"equals\","
+            "                  \"key\": \"sourceIdentifier\","
+            "                  \"value\": [\"1.1.1.1\"]"
+            "                }"
+            "              ]"
+            "            },"
+            "            \"behavior\": {"
+            "              \"key\": \"log\","
+            "              \"value\": \"ignore\""
+            "            }"
+            "          },"
+            "          {"
+            "            \"match\": {"
+            "              \"type\": \"operator\","
+            "              \"op\": \"or\","
+            "              \"items\": ["
+            "                {"
+            "                  \"type\": \"condition\","
+            "                  \"op\": \"equals\","
+            "                  \"key\": \"protectionName\","
+            "                  \"value\": [\"Test1\"]"
+            "                },"
+            "                {"
+            "                  \"type\": \"condition\","
+            "                  \"op\": \"equals\","
+            "                  \"key\": \"protectionName\","
+            "                  \"value\": [\"Test2\"]"
+            "                },"
+            "                {"
+            "                  \"type\": \"condition\","
+            "                  \"op\": \"equals\","
+            "                  \"key\": \"sourceIdentifier\","
+            "                  \"value\": [\"1.1.1.1\"]"
+            "                }"
+            "              ]"
+            "            },"
+            "            \"behavior\": {"
+            "              \"key\": \"action\","
+            "              \"value\": \"accept\""
+            "            }"
+            "          }"
+            "        ]"
+            "      }"
+            "    ]"
+            "  }"
+            "}"
+        );
+
+        istringstream ss(test_config);
+        auto i_config = Singleton::Consume<Config::I_Config>::from(config);
+        i_config->loadConfiguration(ss);
+
+        gen_ctx = make_unique<GenericRulebaseContext>();
+        gen_ctx->activate();
+    }
+
     void
     load(const IPSSignaturesResource &policy, const string &severity, const string &confidence)
     {
@@ -261,6 +357,7 @@ public:
     IPSSignaturesResource performance_signatures3;
     IPSSignaturesResource single_broken_signature;
     NiceMock<MockTable> table;
+    NiceMock<MockLogging> logs;
     MockAgg mock_agg;
 
 private:
@@ -273,7 +370,6 @@ private:
     ConfigComponent config;
     Encryptor encryptor;
     AgentDetails details;
-    StrictMock<MockLogging> logs;
     IPSEntry ips_state;
 
     string signature1 =
@@ -522,6 +618,23 @@ TEST_F(SignatureTest, basic_load_of_signatures)
     EXPECT_FALSE(sigs.isEmpty());
     EXPECT_TRUE(sigs.isEmpty("NO_CONTEXT"));
     EXPECT_FALSE(sigs.isEmpty("HTTP_REQUEST_BODY"));
+}
+
+TEST_F(SignatureTest, ignore_exception_suppresses_log)
+{
+    load(single_signature2, "Low or above", "Low");
+    loadExceptionsIgnoreLog();
+
+    expectLog("\"protectionId\": \"Test3\"", "\"eventSeverity\": \"Critical\"");
+
+    EXPECT_TRUE(checkData("gggddd"));
+
+    ScopedContext ctx;
+    ctx.registerValue<string>("sourceIdentifiers", "1.1.1.1");
+
+    // No log should be sent when the exception matches
+    EXPECT_CALL(logs, sendLog(_)).Times(0);
+    EXPECT_FALSE(checkData("gggddd"));
 }
 
 TEST_F(SignatureTest, single_signature_matching_override)

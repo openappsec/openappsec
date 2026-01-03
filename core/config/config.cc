@@ -19,6 +19,8 @@
 #include <fstream>
 #include <iostream>
 #include <cctype>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 #include "agent_core_utilities.h"
 #include "cereal/archives/json.hpp"
@@ -109,7 +111,7 @@ public:
     void init();
 
     const TypeWrapper & getConfiguration(const vector<string> &paths) const override;
-    PerContextValue getAllConfiguration(const std::vector<std::string> &paths) const;
+    PerContextValue getAllConfiguration(const vector<string> &paths) const;
     const TypeWrapper & getResource(const vector<string> &paths) const override;
     const TypeWrapper & getSetting(const vector<string> &paths) const override;
     string getProfileAgentSetting(const string &setting_name) const override;
@@ -120,15 +122,22 @@ public:
     const string & getFilesystemPathConfig() const override;
     const string & getLogFilesPathConfig() const override;
 
+    bool
+    isConfigCacheEnabled() const override
+    {
+        return is_cache_enabled && !policy_load_id.empty();
+    }
+    const string & getPolicyLoadId() const override { return policy_load_id; }
+
     string getPolicyConfigPath(
         const string &name,
         ConfigFileType type,
         const string &tenant = "",
         const string &profile = "") const override;
 
-    bool setConfiguration(TypeWrapper &&value, const std::vector<std::string> &paths) override;
-    bool setResource(TypeWrapper &&value, const std::vector<std::string> &paths) override;
-    bool setSetting(TypeWrapper &&value, const std::vector<std::string> &paths) override;
+    bool setConfiguration(TypeWrapper &&value, const vector<string> &paths) override;
+    bool setResource(TypeWrapper &&value, const vector<string> &paths) override;
+    bool setSetting(TypeWrapper &&value, const vector<string> &paths) override;
 
     void registerExpectedConfigFile(const string &file_name, ConfigFileType type) override;
     void registerExpectedConfiguration(unique_ptr<GenericConfig<true>> &&config) override;
@@ -145,6 +154,15 @@ public:
     void registerConfigLoadCb(ConfigCb) override;
     void registerConfigAbortCb(ConfigCb) override;
     void clearOldTenants() override;
+    void resetConfigCache() override;
+
+    // Cache statistics interface implementation
+    uint64_t getCacheHits() const override;
+    uint64_t getCacheMisses() const override;
+    void resetCacheStats() override;
+    void enableCacheTracking() override;
+    void disableCacheTracking() override;
+    bool isCacheTrackingEnabled() const override;
 
 private:
     bool areTenantAndProfileActive(const TenantProfilePair &tenant_profile) const;
@@ -157,7 +175,8 @@ private:
     void reloadConfigurationContinuesWrapper(const string &version, uint id);
     vector<string> fillMultiTenantConfigFiles(const map<string, set<string>> &tenants);
     vector<string> fillMultiTenantExpectedConfigFiles(const map<string, set<string>> &tenants);
-    map<string, string> getProfileAgentSetting() const;
+    map<string, string> & getProfileAgentSetting() const;
+
     void resolveVsId() const;
 
     string
@@ -234,7 +253,7 @@ private:
                 secondary_port_req_md
             );
         }
-        
+
         if (!service_config_status.ok()) {
             dbgWarning(D_CONFIG)
                 << "Could not send configuration to orchestrator 7778, error: "
@@ -343,6 +362,12 @@ private:
     string default_config_directory_path = "/conf/";
     string config_directory_path = "";
     string error_to_report = "";
+    string current_policy_version = "";
+    mutable size_t cached_last_policy_count = 0;
+    mutable map<string, string> cached_agent_settings;
+    size_t policy_load_count = 0;
+    string policy_load_id = "";
+    bool is_cache_enabled = false;
 
     TypeWrapper empty;
 };
@@ -350,6 +375,7 @@ private:
 void
 ConfigComponent::Impl::preload()
 {
+    resetConfigCache();
     I_Environment *environment = Singleton::Consume<I_Environment>::by<ConfigComponent>();
     auto executable = environment->get<string>("Base Executable Name");
     if (!executable.ok() || *executable == "") {
@@ -733,6 +759,7 @@ ConfigComponent::Impl::periodicRegistrationRefresh()
 {
     I_Environment *environment = Singleton::Consume<I_Environment>::by<ConfigComponent>();
     I_MainLoop *mainloop = Singleton::Consume<I_MainLoop>::by<ConfigComponent>();
+    I_Environment *env = Singleton::Consume<I_Environment>::by<ConfigComponent>();
 
     while (true) {
         auto env_listening_port = environment->get<int>("Listening Port");
@@ -742,15 +769,17 @@ ConfigComponent::Impl::periodicRegistrationRefresh()
                 << "Internal rest server listening port is not yet set."
                 << " Setting retry attempt to 500 milliseconds from now";
             mainloop->yield(chrono::milliseconds(500));
-        } else if (!sendOrchestatorConfMsg(env_listening_port.unpack())) {
-            mainloop->yield(chrono::milliseconds(500));
-        } else {
+        } else if (sendOrchestatorConfMsg(env_listening_port.unpack())) {
+            dbgInfo(D_CONFIG) << "Configuration update registration with orchestrator succeeded.";
+            env->registerValue<bool>("isRegisteredWithOrchestrator", true);
             uint next_iteration_in_sec = getConfigurationWithDefault<uint>(
                 600,
                 "Config Component",
                 "Refresh config update registration time interval"
             );
             mainloop->yield(chrono::seconds(next_iteration_in_sec));
+        } else {
+            mainloop->yield(chrono::milliseconds(500));
         }
     }
 }
@@ -758,6 +787,7 @@ ConfigComponent::Impl::periodicRegistrationRefresh()
 bool
 ConfigComponent::Impl::loadConfiguration(vector<shared_ptr<JSONInputArchive>> &file_archives, bool is_async)
 {
+    is_cache_enabled = false;
     auto mainloop = is_async ? Singleton::Consume<I_MainLoop>::by<ConfigComponent>() : nullptr;
 
     for (auto &cb : configuration_prepare_cbs) {
@@ -828,6 +858,15 @@ ConfigComponent::Impl::commitSuccess()
     for (auto &cb : configuration_commit_cbs) {
         cb();
     }
+    policy_load_count++;
+    try {
+        policy_load_id = to_string(boost::uuids::random_generator()());
+    } catch (const boost::uuids::entropy_error &e) {
+        dbgWarning(D_CONFIG) << "Failed to create random id for policy_load_id";
+        policy_load_id = "";
+    }
+    is_cache_enabled = true;
+    initializeCacheTracking();
     return true;
 }
 
@@ -842,6 +881,7 @@ ConfigComponent::Impl::commitFailure(const string &error)
     for (auto &cb : configuration_abort_cbs) {
         cb();
     }
+    policy_load_id = "";
     return false;
 }
 
@@ -933,24 +973,38 @@ ConfigComponent::Impl::reloadConfigurationImpl(const string &version, bool is_as
     env->registerValue<bool>("Is Async Config Load", is_async);
     bool res = loadConfiguration(archives, is_async);
     env->unregisterKey<bool>("Is Async Config Load");
-    if (res) env->registerValue<string>("Current Policy Version", version);
+
+    if (res) {
+        env->registerValue<string>("Current Policy Version", version);
+        current_policy_version = version;
+        dbgTrace(D_CONFIG) << "Successfully loaded configuration. Version: " << version
+                            << ", Policy Load Count: " << policy_load_count
+                            << ", Policy Load ID: " << policy_load_id;
+    }
     return res;
 }
 
-map<string, string>
+map<string, string> &
 ConfigComponent::Impl::getProfileAgentSetting() const
 {
-    auto general_sets = getSettingWithDefault(AgentProfileSettings::default_profile_settings, "generalAgentSettings");
+    if (!is_cache_enabled ||
+        policy_load_count == 0 ||
+        cached_last_policy_count != policy_load_count) {
+        cached_agent_settings.clear();
+        auto general_sets = getSettingWithDefault(
+            AgentProfileSettings::default_profile_settings,
+            "generalAgentSettings");
+        cached_agent_settings = general_sets.getSettings();
 
-    auto settings = general_sets.getSettings();
-
-    auto profile_sets = getSettingWithDefault(AgentProfileSettings::default_profile_settings, "agentSettings");
-    auto profile_settings = profile_sets.getSettings();
-    for (const auto &profile_setting : profile_settings) {
-        settings.insert(profile_setting);
+        auto profile_sets = getSettingWithDefault(AgentProfileSettings::default_profile_settings, "agentSettings");
+        auto profile_settings = profile_sets.getSettings();
+        for (const auto &profile_setting : profile_settings) {
+            cached_agent_settings.insert(profile_setting);
+        }
+        cached_last_policy_count = policy_load_count;
     }
 
-    return settings;
+    return cached_agent_settings;
 }
 
 void
@@ -963,7 +1017,7 @@ ConfigComponent::Impl::reloadConfigurationContinuesWrapper(const string &version
     LoadNewConfigurationStatus in_progress(id, service_name, false, false);
     auto routine_id = mainloop->addRecurringRoutine(
         I_MainLoop::RoutineType::Timer,
-        std::chrono::seconds(30),
+        chrono::seconds(30),
         [=] () { sendOrchestatorReloadStatusMsg(in_progress); },
         "A-Synchronize reload configuraion monitoring"
     );
@@ -1006,13 +1060,59 @@ ConfigComponent::Impl::resolveVsId() const
     return;
 }
 
+void
+ConfigComponent::Impl::resetConfigCache()
+{
+    cached_last_policy_count = 0;
+    policy_load_count = 0;
+    policy_load_id = "";
+    is_cache_enabled = false;
+    cached_agent_settings.clear();
+}
+
+uint64_t
+ConfigComponent::Impl::getCacheHits() const
+{
+    return CacheStats::getHits();
+}
+
+uint64_t
+ConfigComponent::Impl::getCacheMisses() const
+{
+    return CacheStats::getMisses();
+}
+
+void
+ConfigComponent::Impl::resetCacheStats()
+{
+    CacheStats::reset();
+}
+
+void
+ConfigComponent::Impl::enableCacheTracking()
+{
+    CacheStats::enableTracking();
+}
+
+void
+ConfigComponent::Impl::disableCacheTracking()
+{
+    CacheStats::disableTracking();
+}
+
+bool
+ConfigComponent::Impl::isCacheTrackingEnabled() const
+{
+    return CacheStats::isTrackingEnabled();
+}
+
 ConfigComponent::ConfigComponent() : Component("ConfigComponent"), pimpl(make_unique<Impl>()) {}
 ConfigComponent::~ConfigComponent() {}
 
 void
 ConfigComponent::preload()
 {
-    registerExpectedConfiguration<string>("Config Component", "configuration path");
+    registerExpectedConfigurationWithCache<string>("assetId", "Config Component", "configuration path");
     registerExpectedConfiguration<uint>("Config Component", "Refresh config update registration time interval");
     registerExpectedConfiguration<bool>("Config Component", "Periodic Registration Refresh");
     registerExpectedResource<bool>("Config Component", "Config Load Test");

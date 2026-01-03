@@ -49,10 +49,10 @@ public:
     void registerTransactionData();
     void verifyReport(const Report &report, const string &source_identifier, const string &security_action);
 
-    const EventVerdict drop_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
-    const EventVerdict accept_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT;
-    const EventVerdict inspect_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
-    const EventVerdict wait_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
+    const EventVerdict drop_verdict = ServiceVerdict::TRAFFIC_VERDICT_DROP;
+    const EventVerdict accept_verdict = ServiceVerdict::TRAFFIC_VERDICT_ACCEPT;
+    const EventVerdict inspect_verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
+    const EventVerdict wait_verdict = ServiceVerdict::TRAFFIC_VERDICT_DELAYED;
     Layer7AccessControl         l7_access_control;
     ::Environment               env;
     ConfigComponent             config;

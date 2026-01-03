@@ -19,44 +19,168 @@
 #include "FpMitigation.h"
 #include "Waf2Engine.h"
 #include "WaapKeywords.h"
+#include "config.h"
 
-IndicatorsFiltersManager::IndicatorsFiltersManager(const std::string& remotePath, const std::string &assetId,
+USE_DEBUG_FLAG(D_WAAP_LEARN);
+static constexpr int DEFAULT_SOURCES_LIMIT = 1000;
+
+
+using namespace std;
+
+// // Helper class for posting unified indicators
+// class UnifiedIndicatorsLogPost : public RestGetFile {
+// public:
+//     UnifiedIndicatorsLogPost(shared_ptr<UnifiedIndicatorsContainer> container_ptr)
+//     {
+//         window_logger = move(*container_ptr);
+//     }
+// private:
+//     C2S_PARAM(UnifiedIndicatorsContainer, window_logger);
+// };
+
+IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, const string &assetId,
     I_WaapAssetState* pWaapAssetState)
     :
-    SerializeToFileBase(pWaapAssetState->getWaapDataDir() + "/6.data"),
+    SerializeToLocalAndRemoteSyncBase(
+        chrono::minutes(120),
+        chrono::seconds(300),
+    pWaapAssetState->getWaapDataDir() + "/6.data",
+        (remotePath == "") ? remotePath : remotePath + "/CentralizedData",
+        assetId,
+        "IndicatorsFiltersManager"
+    ),
+    m_pWaapAssetState(pWaapAssetState),
     m_ignoreSources(pWaapAssetState->getWaapDataDir(), remotePath, assetId),
     m_tuning(remotePath),
-    m_matchedOverrideKeywords()
+    m_matchedOverrideKeywords(),
+    m_isLeading(getSettingWithDefault<bool>(true, "features", "learningLeader")),
+    m_sources_limit(DEFAULT_SOURCES_LIMIT),
+    m_uniqueSources(),
+    m_unifiedIndicators(make_shared<UnifiedIndicatorsContainer>())
 {
     restore();
-    m_keywordsFreqFilter = std::make_unique<KeywordIndicatorFilter>(
+    m_keywordsFreqFilter = make_unique<KeywordIndicatorFilter>(
         pWaapAssetState->getWaapDataDir(),
         remotePath,
         assetId,
         &m_ignoreSources,
         &m_tuning);
-    m_typeFilter = std::make_unique<TypeIndicatorFilter>(pWaapAssetState, remotePath, assetId, &m_tuning);
+    m_typeFilter = make_unique<TypeIndicatorFilter>(pWaapAssetState, remotePath, assetId, &m_tuning);
+    m_uniqueSources.reserve(m_sources_limit);
+
+    registerConfigLoadCb([this](){
+        updateSourcesLimit();
+        updateLearningLeaderFlag();
+    });
 }
 
 IndicatorsFiltersManager::~IndicatorsFiltersManager()
 {
 }
 
-void IndicatorsFiltersManager::registerKeywords(const std::string& key,
+bool IndicatorsFiltersManager::shouldRegister(
+    const string& key,
+    const Waap::Keywords::KeywordsSet& keywords,
+    const IWaf2Transaction* pTransaction)
+{
+    // Check if the learning leader flag is true
+    if (!m_isLeading) {
+        dbgDebug(D_WAAP_LEARN) << "Learning leader flag is false. Skipping source ID assertion.";
+        return false;
+    }
+
+    // if key needs tracking
+    if (m_keywordsFreqFilter->shouldTrack(key, keywords) ||
+        m_typeFilter->shouldTrack(key, pTransaction)) {
+        dbgDebug(D_WAAP_LEARN) << "Key '" << key << "' needs tracking.";
+    } else {
+        dbgTrace(D_WAAP_LEARN) << "Key '" << key << "' does not need tracking.";
+        return false;
+    }
+
+    auto sourceId = pTransaction->getSourceIdentifier();
+
+    // Check if the database has reached its limit and source is unknown
+    if (m_uniqueSources.size() >= static_cast<size_t>(m_sources_limit) &&
+        m_uniqueSources.find(sourceId) == m_uniqueSources.end() ) {
+        dbgDebug(D_WAAP_LEARN) << "Database limit reached. Cannot insert new source ID '" << sourceId << "'.";
+        return false;
+    }
+
+    // Insert the sourceId into the database when did not reached the limit
+    // If limit is reached, we know that sourceId is already in the database
+    auto insertResult = m_uniqueSources.insert(sourceId);
+    if (insertResult.second) {
+        dbgDebug(D_WAAP_LEARN) << "Inserted new source ID '" << sourceId << "' into the database.";
+    } else {
+        dbgTrace(D_WAAP_LEARN) << "source ID '" << sourceId << "' exists in database.";
+    }
+    return true;
+}
+
+void IndicatorsFiltersManager::registerKeywords(
+    const string& key,
     Waap::Keywords::KeywordsSet& keywords,
     IWaf2Transaction* pWaapTransaction)
 {
+    // Check should register - if false, do not collect data
+    if (!shouldRegister(key, keywords, pWaapTransaction)) {
+        return;
+    }
+
+    const std::string& sourceId = pWaapTransaction->getSourceIdentifier();
+
     if (m_tuning.getDecision(pWaapTransaction->getLastScanParamName(), PARAM_NAME) == MALICIOUS ||
         m_tuning.getDecision(pWaapTransaction->getLastScanSample(), PARAM_VALUE) == MALICIOUS ||
         m_tuning.getDecision(pWaapTransaction->getUri(), URL) == MALICIOUS ||
-        m_tuning.getDecision(pWaapTransaction->getSourceIdentifier(), SOURCE) == MALICIOUS)
+        m_tuning.getDecision(sourceId, SOURCE) == MALICIOUS)
     {
+        dbgDebug(D_WAAP_LEARN) << "Skipping registration due to tuning decision (malicious)";
         return;
     }
+
+    // TODO: add configuration to choose central logging and return, else do legacy
+    if(getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging")) {
+        dbgDebug(D_WAAP_LEARN) << "Central logging is enabled.";
+        // Build unified entry
+        UnifiedIndicatorsContainer::Entry entry;
+        entry.key = key;
+        entry.sourceId = pWaapTransaction->getSourceIdentifier();
+        
+        // Use the new getTrustedSource method for proper trusted source checking
+        if (m_keywordsFreqFilter) {
+            auto trustedSourceResult = m_keywordsFreqFilter->getTrustedSource(pWaapTransaction);
+            entry.isTrusted = trustedSourceResult.ok();
+            if (entry.isTrusted) {
+                dbgDebug(D_WAAP_LEARN) << "Entry is from trusted source: " << trustedSourceResult.unpack();
+            }
+        } else {
+            entry.isTrusted = false;
+        }
+        
+        for (const auto &kw : keywords) {
+            entry.indicators.push_back(kw);
+        }
+
+        // Add parameter types as TYPE indicators if applicable (skip url# keys)
+        if (key.rfind("url#", 0) != 0) {
+            string sample = pWaapTransaction->getLastScanSample();
+            auto sampleTypes = m_pWaapAssetState->getSampleType(sample);
+            entry.types.insert(entry.types.end(), sampleTypes.begin(), sampleTypes.end());
+        }
+
+        // Push to unified container
+        m_unifiedIndicators->addEntry(entry);
+        return;
+    }
+    dbgTrace(D_WAAP_LEARN) << "Central logging is disabled. Using legacy filters.";
+
+    // Legacy behavior (optional): keep existing filters updates for backward compatibility
     if (!keywords.empty())
     {
-        m_ignoreSources.log(pWaapTransaction->getSourceIdentifier(), key, keywords);
+        m_ignoreSources.log(sourceId, key, keywords);
     }
+
     m_keywordsFreqFilter->registerKeywords(key, keywords, pWaapTransaction);
     if (key.rfind("url#", 0) == 0)
     {
@@ -73,7 +197,7 @@ void IndicatorsFiltersManager::registerKeywords(const std::string& key,
     }
 }
 
-bool IndicatorsFiltersManager::shouldFilterKeyword(const std::string &key, const std::string &keyword) const
+bool IndicatorsFiltersManager::shouldFilterKeyword(const string &key, const string &keyword) const
 {
     bool shouldFilter = false;
     if (m_keywordsFreqFilter != nullptr)
@@ -99,14 +223,14 @@ bool IndicatorsFiltersManager::shouldFilterKeyword(const std::string &key, const
     return shouldFilter;
 }
 
-void IndicatorsFiltersManager::serialize(std::ostream& stream)
+void IndicatorsFiltersManager::serialize(ostream& stream)
 {
     cereal::JSONOutputArchive archive(stream);
 
     archive(cereal::make_nvp("version", 1), cereal::make_nvp("trustedSrcParams", m_trustedSrcParams));
 }
 
-void IndicatorsFiltersManager::deserialize(std::istream& stream)
+void IndicatorsFiltersManager::deserialize(istream& stream)
 {
     cereal::JSONInputArchive archive(stream);
 
@@ -116,10 +240,10 @@ void IndicatorsFiltersManager::deserialize(std::istream& stream)
     {
         archive(cereal::make_nvp("version", version));
     }
-    catch (std::runtime_error & e) {
+    catch (runtime_error & e) {
         archive.setNextName(nullptr);
         version = 0;
-        dbgDebug(D_WAAP) << "Can't load file version: " << e.what();
+        dbgDebug(D_WAAP_LEARN) << "Can't load file version: " << e.what();
     }
 
     switch (version)
@@ -131,12 +255,12 @@ void IndicatorsFiltersManager::deserialize(std::istream& stream)
         archive(cereal::make_nvp("trustedSrcParams", m_trustedSrcParams));
         break;
     default:
-        dbgWarning(D_WAAP) << "unknown file format version: " << version;
+        dbgWarning(D_WAAP_LEARN) << "unknown file format version: " << version;
         break;
     }
 }
 
-std::set<std::string> IndicatorsFiltersManager::getParameterTypes(const std::string& canonicParam) const
+set<string> IndicatorsFiltersManager::getParameterTypes(const string& canonicParam) const
 {
     return m_typeFilter->getParamTypes(canonicParam);
 }
@@ -166,18 +290,18 @@ bool IndicatorsFiltersManager::loadPolicy(IWaapConfig* pConfig)
     }
     else
     {
-        dbgWarning(D_WAAP) << "Failed to get configuration";
+        dbgWarning(D_WAAP_LEARN) << "Failed to get configuration";
     }
 
     return pConfig != NULL;
 }
 
-void IndicatorsFiltersManager::filterVerbose(const std::string &param,
-    std::vector<std::string>& filteredKeywords,
-    std::map<std::string, std::vector<std::string>>& filteredKeywordsVerbose)
+void IndicatorsFiltersManager::filterVerbose(const string &param,
+    vector<string>& filteredKeywords,
+    map<string, vector<string>>& filteredKeywordsVerbose)
 {
-    static std::string typeFilterName = "type indicators filter";
-    static std::string keywordsFilterName = "keywords frequency indicators filter";
+    static string typeFilterName = "type indicators filter";
+    static string keywordsFilterName = "keywords frequency indicators filter";
     filteredKeywordsVerbose[typeFilterName];
     filteredKeywordsVerbose[keywordsFilterName];
     auto types = getParameterTypes(param);
@@ -209,12 +333,12 @@ void IndicatorsFiltersManager::reset()
 }
 
 
-std::string IndicatorsFiltersManager::extractUri(const std::string& referer, const IWaf2Transaction* pTransaction)
+string IndicatorsFiltersManager::extractUri(const string& referer, const IWaf2Transaction* pTransaction)
 {
-    std::string url;
+    string url;
 
     size_t pos = referer.find("://");
-    if (pos == std::string::npos || (pos + 3) > referer.size())
+    if (pos == string::npos || (pos + 3) > referer.size())
     {
         url = referer;
     }
@@ -223,11 +347,11 @@ std::string IndicatorsFiltersManager::extractUri(const std::string& referer, con
         url = referer.substr(pos + 3);
     }
     pos = url.find('/');
-    if (pos == std::string::npos)
+    if (pos == string::npos)
     {
         return url;
     }
-    std::string host = url.substr(0, pos);
+    string host = url.substr(0, pos);
     if (host == pTransaction->getHdrContent("host"))
     {
         return url.substr(pos);
@@ -235,13 +359,13 @@ std::string IndicatorsFiltersManager::extractUri(const std::string& referer, con
     return url;
 }
 
-std::string IndicatorsFiltersManager::generateKey(const std::string& location,
-    const std::string& param_name,
+string IndicatorsFiltersManager::generateKey(const string& location,
+    const string& param_name,
     const IWaf2Transaction* pTransaction)
 {
-    std::string key = location;
-    static const std::string delim = "#";
-    std::string param = normalize_param(param_name);
+    string key = location;
+    static const string delim = "#";
+    string param = normalize_param(param_name);
 
     if (location == "header" || location == "cookie" || location == "url_param")
     {
@@ -268,8 +392,8 @@ std::string IndicatorsFiltersManager::generateKey(const std::string& location,
     }
     else if (location == "referer")
     {
-        std::string referer = pTransaction->getHdrContent("referer");
-        std::string uri = extractUri(referer, pTransaction);
+        string referer = pTransaction->getHdrContent("referer");
+        string uri = extractUri(referer, pTransaction);
         key = "url" + delim + normalize_uri(uri);
     }
     else
@@ -279,10 +403,10 @@ std::string IndicatorsFiltersManager::generateKey(const std::string& location,
     return key;
 }
 
-std::string IndicatorsFiltersManager::getLocationFromKey(const std::string& canonicKey, IWaf2Transaction* pTransaction)
+string IndicatorsFiltersManager::getLocationFromKey(const string& canonicKey, IWaf2Transaction* pTransaction)
 {
-    std::vector<std::string> known_locations = { "header", "cookie", "url", "body", "referer", "url_param" };
-    std::string delim = "#";
+    vector<string> known_locations = { "header", "cookie", "url", "body", "referer", "url_param" };
+    string delim = "#";
     for (auto location : known_locations)
     {
         if (canonicKey.find(location + delim) == 0)
@@ -294,9 +418,9 @@ std::string IndicatorsFiltersManager::getLocationFromKey(const std::string& cano
 }
 
 void IndicatorsFiltersManager::filterKeywords(
-    const std::string &key,
+    const string &key,
     Waap::Keywords::KeywordsSet& keywords,
-    std::vector<std::string>& filteredKeywords)
+    vector<string>& filteredKeywords)
 {
     for (auto keyword = keywords.begin(); keyword != keywords.end(); )
     {
@@ -313,10 +437,15 @@ void IndicatorsFiltersManager::filterKeywords(
 }
 
 void IndicatorsFiltersManager::pushSample(
-    const std::string& key,
-    const std::string& sample,
+    const string& key,
+    const string& sample,
     IWaf2Transaction* pTransaction)
 {
+    // Check learning leader flag - if false, do not collect data
+    if (!m_isLeading) {
+        return;
+    }
+
     if (key.rfind("url#", 0) == 0)
     {
         return;
@@ -324,7 +453,75 @@ void IndicatorsFiltersManager::pushSample(
     m_typeFilter->registerKeywords(key, sample, pTransaction);
 }
 
-std::set<std::string> & IndicatorsFiltersManager::getMatchedOverrideKeywords(void)
+set<string> & IndicatorsFiltersManager::getMatchedOverrideKeywords(void)
 {
     return m_matchedOverrideKeywords;
+}
+
+void IndicatorsFiltersManager::updateLearningLeaderFlag() {
+    m_isLeading = getSettingWithDefault<bool>(true, "features", "learningLeader");
+    dbgDebug(D_WAAP_LEARN) << "Updating learning leader flag from configuration: " << (m_isLeading ? "true" : "false");
+}
+
+void IndicatorsFiltersManager::updateSourcesLimit()
+{
+    int new_limit = getProfileAgentSettingWithDefault<int>(DEFAULT_SOURCES_LIMIT, "agent.learning.sourcesLimit");
+    if (new_limit != m_sources_limit) {
+        m_sources_limit = new_limit;
+        m_uniqueSources.reserve(m_sources_limit);
+    }
+}
+
+bool IndicatorsFiltersManager::postData()
+{
+    dbgDebug(D_WAAP_LEARN) << "Posting indicators data";
+    // Example: post unified indicators data if present
+    if (m_unifiedIndicators->getKeyCount() == 0) {
+        dbgDebug(D_WAAP_LEARN) << "No unified indicators to post, skipping";
+        return true; // Nothing to post
+    }
+
+    // Post unified indicators using REST client with C2S_PARAM
+    UnifiedIndicatorsLogPost logPost(m_unifiedIndicators);
+    string postUrl = getPostDataUrl();
+    dbgTrace(D_WAAP_LEARN) << "Posting unified indicators to: " << postUrl;
+    bool ok = sendNoReplyObjectWithRetry(logPost, HTTPMethod::PUT, postUrl);
+    if (!ok) {
+        dbgError(D_WAAP_LEARN) << "Failed to post unified indicators to: " << postUrl;
+    }
+    m_unifiedIndicators = make_shared<UnifiedIndicatorsContainer>();
+    m_uniqueSources.clear();
+    return ok;
+}
+
+
+void IndicatorsFiltersManager::pullData(const vector<string>& files)
+{
+    // Phase 2 : backup sync flow
+    // Add logic for pulling data from a remote service
+}
+
+void IndicatorsFiltersManager::processData()
+{
+    // Phase 2 : backup sync flow
+    // Add logic for processing pulled data
+    // call filters with ptr to unified data to process data from m_unifiedIndicators
+}
+
+void IndicatorsFiltersManager::postProcessedData()
+{
+    // Add logic for posting processed data to a remote service
+}
+
+void IndicatorsFiltersManager::pullProcessedData(const vector<string>& files)
+{
+    // Add logic for pulling processed data from a remote service
+}
+
+// TODO: Phase 3 implement getRemoteStateFilePath to return the base dir
+
+void IndicatorsFiltersManager::updateState(const vector<string>& files)
+{
+    // files is a list of single file base dir
+    // TODO phase 3: call each filter to update internal states
 }

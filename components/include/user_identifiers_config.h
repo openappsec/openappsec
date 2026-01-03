@@ -31,7 +31,6 @@ public:
     std::vector<std::string> getHeaderValuesFromConfig(const std::string &header_key) const;
     void setXFFValuesToOpaqueCtx(const HttpHeader &header, ExtractType type) const;
     void setWafTagValuesToOpaqueCtx(const HttpHeader &header) const;
-
 private:
     class UsersIdentifiersConfig
     {

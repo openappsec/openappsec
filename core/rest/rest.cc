@@ -29,8 +29,11 @@ RestHelper::reportError(std::string const &err)
 }
 
 Maybe<string>
-ServerRest::performRestCall(istream &in)
+ServerRest::performRestCall(istream &in, const map<string, string> &headers)
 {
+    if (wantsHeaders()) {
+        request_headers = headers;
+    }
     try {
         try {
             int firstChar = in.peek();
