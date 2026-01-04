@@ -32,6 +32,7 @@ target_link_libraries(
     curl
     external_sdk_server
 	service_health_status
+    ${Brotli_LIBRARIES}
     -Wl,--end-group
 )
 

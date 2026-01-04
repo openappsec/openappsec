@@ -41,6 +41,7 @@ target_link_libraries(cp-nano-http-transaction-handler
 	l7_access_control
 	geo_location
 	http_geo_filter
+        ${Brotli_LIBRARIES}
 	-Wl,--end-group
 )
 

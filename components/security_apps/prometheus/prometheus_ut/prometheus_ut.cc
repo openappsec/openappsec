@@ -53,7 +53,7 @@ public:
 
 };
 
-TEST_F(PrometheusCompTest, checkAddingMetric)
+TEST_F(PrometheusCompTest, checkAddingMetricWithEmptyUniqueName)
 {
     registered_services_file_path = cptestFnameInSrcDir(string("registered_services.json"));
     setConfiguration(registered_services_file_path, "orchestration", "Orchestration registered services");
@@ -61,6 +61,7 @@ TEST_F(PrometheusCompTest, checkAddingMetric)
         "   \"metrics\": [\n"
         "       {\n"
         "           \"metric_name\": \"watchdogProcessStartupEventsSum\",\n"
+        "           \"unique_name\": \"\",\n"
         "           \"metric_type\": \"counter\",\n"
         "           \"metric_description\": \"\",\n"
         "           \"labels\": \"{method=\\\"post\\\",code=\\\"200\\\"}\",\n"
@@ -77,3 +78,56 @@ TEST_F(PrometheusCompTest, checkAddingMetric)
         "nano_service_restarts_counter{method=\"post\",code=\"200\"} 1534\n\n";
     EXPECT_EQ(metric_str,  get_metrics_func());
 }
+
+TEST_F(PrometheusCompTest, checkAddingMetricWithoutUniqueName)
+{
+    registered_services_file_path = cptestFnameInSrcDir(string("registered_services.json"));
+    setConfiguration(registered_services_file_path, "orchestration", "Orchestration registered services");
+    string metric_body = "{\n"
+        "   \"metrics\": [\n"
+        "       {\n"
+        "           \"metric_name\": \"watchdogProcessStartupEventsSum\",\n"
+        "           \"unique_name\": \"watchdogProcessStartupEventsSum_Bla bla\",\n"
+        "           \"metric_type\": \"counter\",\n"
+        "           \"metric_description\": \"\",\n"
+        "           \"labels\": \"{method=\\\"post\\\",code=\\\"200\\\"}\",\n"
+        "           \"value\": \"1534\"\n"
+        "       }\n"
+        "   ]\n"
+        "}";
+
+    string message_body;
+    EXPECT_CALL(mock_messaging, sendSyncMessage(_, "/service-metrics", _, _, _))
+        .Times(2).WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, metric_body)));
+
+    string metric_str = "# TYPE nano_service_restarts_counter counter\n"
+        "nano_service_restarts_counter{method=\"post\",code=\"200\"} 1534\n\n";
+    EXPECT_EQ(metric_str,  get_metrics_func());
+}
+
+TEST_F(PrometheusCompTest, checkAddingMetricWithUniqueName)
+{
+    registered_services_file_path = cptestFnameInSrcDir(string("registered_services.json"));
+    setConfiguration(registered_services_file_path, "orchestration", "Orchestration registered services");
+    string metric_body = "{\n"
+        "   \"metrics\": [\n"
+        "       {\n"
+        "           \"metric_name\": \"reservedNgenA\",\n"
+        "           \"unique_name\": \"reservedNgenA_WAAP telemetry\",\n"
+        "           \"metric_type\": \"counter\",\n"
+        "           \"metric_description\": \"\",\n"
+        "           \"labels\": \"{method=\\\"post\\\",code=\\\"200\\\"}\",\n"
+        "           \"value\": \"1534\"\n"
+        "       }\n"
+        "   ]\n"
+        "}";
+
+    string message_body;
+    EXPECT_CALL(mock_messaging, sendSyncMessage(_, "/service-metrics", _, _, _))
+        .Times(2).WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, metric_body)));
+
+    string metric_str = "# TYPE total_requests_counter counter\n"
+        "total_requests_counter{method=\"post\",code=\"200\"} 1534\n\n";
+    EXPECT_EQ(metric_str,  get_metrics_func());
+}
+

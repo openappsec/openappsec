@@ -8,9 +8,21 @@ if(NOT IS_ALPINE EQUAL "0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dalpine")
 endif()
 
+list(APPEND CMAKE_MODULE_PATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+)
+
 find_package(Boost REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(GTest REQUIRED)
+find_package(PkgConfig REQUIRED)
+find_package(Brotli REQUIRED MODULE)
+
+message(STATUS "Brotli_INCLUDE_DIR='${Brotli_INCLUDE_DIR}'")
+message(STATUS "Brotli_LIBRARY='${Brotli_LIBRARY}'")
+message(STATUS "Brotli_LIBRARIES='${Brotli_LIBRARIES}'")
+message(STATUS "Brotli_FOUND='${Brotli_FOUND}'")
+message(STATUS "Brotli root='${BROTLI_ROOT_DIR}'")
 
 include(cppcheck.cmake)
 

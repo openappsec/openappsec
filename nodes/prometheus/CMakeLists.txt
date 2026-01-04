@@ -5,7 +5,6 @@ add_executable(prometheus main.cc)
 target_link_libraries(prometheus
     -Wl,--start-group
     ${COMMON_LIBRARIES}
-
     generic_rulebase
     generic_rulebase_evaluators
     ip_utilities
@@ -15,6 +14,9 @@ target_link_libraries(prometheus
 	prometheus_comp
 	http_transaction_data
     -Wl,--end-group
+    -Wl,--no-as-needed
+    ${Brotli_LIBRARIES}
+    -Wl,--as-needed
 )
 
 add_dependencies(prometheus ngen_core)

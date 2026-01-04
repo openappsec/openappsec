@@ -32,6 +32,7 @@ target_link_libraries(${EXECUTABLE_NAME}
         boost_context
         boost_regex
         pthread
+        ${Brotli_LIBRARIES}
 )
 
 install(TARGETS ${EXECUTABLE_NAME} DESTINATION bin)
