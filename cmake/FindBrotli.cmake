@@ -178,14 +178,15 @@ foreach(_listvar "common;common" "decoder;dec" "encoder;enc")
 endforeach()
 
 # ------------------------------------------------------------
-# Link decoder/encoder → common (but never on ALIAS targets)
+# Link decoder/encoder → common (but never on ALIAS targets or IMPORTED targets)
 # ------------------------------------------------------------
 if(_brotli_common_real_target)
   foreach(_comp decoder encoder)
     if(_brotli_${_comp}_real_target)
-      # Only link if the target is NOT an ALIAS
+      # Only link if the target is NOT an ALIAS and NOT an IMPORTED target
       get_target_property(_aliased ${_brotli_${_comp}_real_target} ALIASED_TARGET)
-      if(NOT _aliased)
+      get_target_property(_imported ${_brotli_${_comp}_real_target} IMPORTED)
+      if(NOT _aliased AND NOT _imported)
         target_link_libraries(${_brotli_${_comp}_real_target} INTERFACE ${_brotli_common_real_target})
       endif()
     endif()
@@ -221,4 +222,5 @@ find_package_handle_standard_args(Brotli
 if(BROTLI_USE_STATIC_LIBS)
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${_brotli_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 endif()
+
 
