@@ -32,6 +32,7 @@
 #include <sstream>
 #include <iomanip>
 #include <sys/types.h>
+#include <chrono>
 
 namespace std
 {
@@ -117,6 +118,14 @@ template <typename T>
 struct IsPrintable<T, decltype(static_cast<void>(declval<ostream &>() << declval<T>()))> : true_type
 {
 };
+
+template <typename Rep, typename Period>
+std::ostream&
+operator<<(std::ostream& os, const std::chrono::duration<Rep, Period>& d)
+{
+    os << d.count();
+    return os;
+}
 
 template <typename CanPrint>
 ostream &

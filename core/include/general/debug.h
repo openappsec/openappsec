@@ -36,13 +36,6 @@ class I_SignalHandler;
 namespace Config { enum class Errors; }
 std::ostream & operator<<(std::ostream &, const Config::Errors &);
 
-template <typename Rep, typename Period>
-std::ostream& operator<<(std::ostream& os, const std::chrono::duration<Rep, Period>& d)
-{
-    os << d.count();
-    return os;
-}
-
 enum class AlertTeam { CORE, WAAP, SDWAN, IOT };
 
 class AlertInfo
