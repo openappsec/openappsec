@@ -35,7 +35,7 @@ public:
     void notifyCPU() const { cpu_event.notify(); }
 
 private:
-    uint64_t successfull_inspection_counter = 0;
+    uint64_t successful_inspection_counter = 0;
     uint64_t open_failure_inspection_counter = 0;
     uint64_t close_failure_inspection_counter = 0;
     uint64_t transparent_mode_counter = 0;
@@ -98,7 +98,7 @@ private:
     using Counter = MetricCalculations::Counter;
     using LastValue = MetricCalculations::LastReportedValue<uint64_t>;
 
-    Counter successfull_inspection_counter{this, "successfullInspectionTransactionsSum"};
+    Counter successful_inspection_counter{this, "successfulInspectionTransactionsSum"};
     Counter open_failure_inspection_counter{this, "failopenTransactionsSum"};
     Counter close_failure_inspection_counter{this, "failcloseTransactionsSum"};
     Counter transparent_mode_counter{this, "transparentModeTransactionsSum"};

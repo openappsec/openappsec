@@ -50,7 +50,7 @@ public:
     uint64_t getResponseInspectionCounter() const;
 
 private:
-    uint64_t successfull_registrations_counter = 0;
+    uint64_t successful_registrations_counter = 0;
     uint64_t failed_registrations_counter = 0;
     uint64_t failed_connections_counter = 0;
     uint64_t accept_verdict_counter = 0;
@@ -72,7 +72,7 @@ public:
     void upon(const nginxAttachmentEvent &event) override;
 
 private:
-    MetricCalculations::Counter successfull_registrations{this, "successfullRegistrationsSum"};
+    MetricCalculations::Counter successful_registrations{this, "successfullRegistrationsSum"};
     MetricCalculations::Counter failed_registrations{this, "failedRegistrationsSum"};
     MetricCalculations::Counter failed_connections{this, "failedConnectionsSum"};
     MetricCalculations::Counter inspect_verdict{this, "inspectVerdictSum"};
