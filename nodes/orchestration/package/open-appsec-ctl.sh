@@ -281,7 +281,7 @@ usage()
     uninstall_option="-u,  --uninstall"
     load_config_option="-lc, --load-config <$(get_installed_services '|')>"
     display_config_option="-dc, --display-config [$(get_installed_services '|')]"
-    cp_agent_info_option="--info [-wd|--with_dump|-u|--upload|-fms|--file_max_size|-an|--additional_name]"
+    cp_agent_info_option="--info [-wd|--with_dump|-fms|--file_max_size|-an|--additional_name]"
     display_policy_option="-dp, --display-policy"
     set_gradual_policy_option="-gp, --set-gradual-policy [access-control|http-manager] <ip-ranges>"
     delete_gradual_policy_option="-dg, --delete-gradual-policy [access-control|http-manager]"
@@ -1318,7 +1318,6 @@ run_ai() # Initials - ra
 
     for arg; do
         if [ "$arg" = "--upload" ] || [ "$arg" = "-u" ]; then
-            ra_upload_to_fog=true
             shift
             continue
         elif [ "$arg" = "--verbose" ] || [ "$arg" = "-v" ]; then
@@ -1329,14 +1328,6 @@ run_ai() # Initials - ra
         set -- "$@" "$arg"
         shift
     done
-
-    if [ "$ra_upload_to_fog" = "false" ]; then
-        printf "Would you like to upload the file to be inspected by the product support team? [y/n] " && read -r ra_should_upload
-        case $ra_should_upload in
-        [Yy] | [Yy][Ee][Ss]) ra_upload_to_fog=true ;;
-        *) ;;
-        esac
-    fi
 
     ra_https_prefix="https://"
     ra_agent_details=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/agent_details.json)
