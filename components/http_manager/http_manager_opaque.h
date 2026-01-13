@@ -18,7 +18,8 @@
 
 #include "buffer.h"
 #include "table_opaque.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
+#include "http_inspection_events.h"
 
 static const std::string HTTP_MANAGER_NAME = "HTTP Manager";
 
@@ -27,17 +28,19 @@ class HttpManagerOpaque : public TableOpaqueSerialize<HttpManagerOpaque>
 public:
     HttpManagerOpaque();
 
-    void setApplicationVerdict(const std::string &app_name, ngx_http_cp_verdict_e verdict);
+    void setApplicationVerdict(const std::string &app_name, ServiceVerdict verdict);
     void setApplicationWebResponse(const std::string &app_name, std::string web_user_response_id);
-    ngx_http_cp_verdict_e getApplicationsVerdict(const std::string &app_name) const;
-    void setManagerVerdict(ngx_http_cp_verdict_e verdict) { manager_verdict = verdict; }
-    ngx_http_cp_verdict_e getManagerVerdict() const { return manager_verdict; }
-    ngx_http_cp_verdict_e getCurrVerdict() const;
+    void setCustomResponse(const std::string &app_name, const CustomResponse &custom_response);
+    ServiceVerdict getApplicationsVerdict(const std::string &app_name) const;
+    void setManagerVerdict(ServiceVerdict verdict) { manager_verdict = verdict; }
+    ServiceVerdict getManagerVerdict() const { return manager_verdict; }
+    ServiceVerdict getCurrVerdict() const;
     const std::string & getCurrWebUserResponse() const { return current_web_user_response; };
     std::set<std::string> getCurrentDropVerdictCausers() const;
     void saveCurrentDataToCache(const Buffer &full_data);
     void setUserDefinedValue(const std::string &value) { user_defined_value = value; }
     Maybe<std::string> getUserDefinedValue() const { return user_defined_value; }
+    Maybe<CustomResponse> getCurrentCustomResponse() const { return current_custom_response; }
     const Buffer & getPreviousDataCache() const { return prev_data_cache; }
     uint getAggeregatedPayloadSize() const { return aggregated_payload_size; }
     void updatePayloadSize(const uint curr_payload);
@@ -53,12 +56,13 @@ public:
     static uint minVer() { return 0; }
 
 private:
-    std::unordered_map<std::string, ngx_http_cp_verdict_e> applications_verdicts;
+    std::unordered_map<std::string, ServiceVerdict> applications_verdicts;
     std::unordered_map<std::string, std::string> applications_web_user_response;
     mutable std::string current_web_user_response;
-    ngx_http_cp_verdict_e manager_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    ServiceVerdict manager_verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
     Buffer prev_data_cache;
     uint aggregated_payload_size = 0;
+    Maybe<CustomResponse> current_custom_response = genError("uninitialized");
     Maybe<std::string> user_defined_value = genError("uninitialized");
 };
 

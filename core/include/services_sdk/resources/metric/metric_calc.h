@@ -41,6 +41,7 @@ struct PrometheusData
     {
         try {
             ar(cereal::make_nvp("metric_name", name));
+            ar(cereal::make_nvp("unique_name", unique_name));
             ar(cereal::make_nvp("metric_type", type));
             ar(cereal::make_nvp("metric_description", description));
             ar(cereal::make_nvp("labels", label));
@@ -51,6 +52,7 @@ struct PrometheusData
     }
 
     std::string name;
+    std::string unique_name;
     std::string type;
     std::string description;
     std::string label;

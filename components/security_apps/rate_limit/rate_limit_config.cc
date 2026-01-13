@@ -120,6 +120,17 @@ RateLimitConfig::load(cereal::JSONInputArchive &ar)
         dbgWarning(D_RATE_LIMIT) << "Failed to load single Rate Limit JSON config. Error: " << e.what();
         ar.setNextName(nullptr);
     }
+
+    try {
+        string rate_limit_response;
+        ar(cereal::make_nvp("webUserResponseId", rate_limit_response));
+        setWebUserResponse(rate_limit_response);
+    } catch(const std::exception& e) {
+        dbgDebug(D_RATE_LIMIT)
+            << "No webUserResponseId defined for Rate Limit config. Using default. Error: "
+            << e.what();
+        ar.setNextName(nullptr);
+    }
 }
 
 RateLimitRule

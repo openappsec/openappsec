@@ -43,6 +43,14 @@ copyFile(
     mode_t permission = (S_IWUSR | S_IRUSR)
 );
 
+bool
+createFileWithContent(
+    const std::string &dest,
+    const std::string &content,
+    bool overide_if_exists,
+    mode_t permission = (S_IWUSR | S_IRUSR)
+);
+
 bool deleteFile(const std::string &path);
 std::string convertToHumanReadable(uint64_t size_in_bytes);
 std::string getFileName(const std::string &path);
@@ -86,6 +94,7 @@ std::string removeTrailingWhitespaces(std::string str);
 std::string removeLeadingWhitespaces(std::string str);
 std::string trim(std::string str);
 std::string toLower(std::string str);
+bool startsWith(const std::string &str, const std::string &prefix);
 
 } // namespace Strings
 

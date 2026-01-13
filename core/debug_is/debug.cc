@@ -84,6 +84,15 @@ static map<Debug::DebugFlags, string> flags_to_setting_name = {
 #undef DEFINE_FLAG
 };
 
+// Reverse mapping: flag name string to enum (using the same source as flags_to_setting_name)
+static map<string, Debug::DebugFlags> string_to_flag_map = {
+    {"D_ALL", Debug::DebugFlags::D_ALL},
+#define DEFINE_FLAG(flag_name, parent_name) \
+    {#flag_name, Debug::DebugFlags::flag_name},
+#include "debug_flags.h"
+#undef DEFINE_FLAG
+};
+
 static map<string, shared_ptr<Debug::DebugStream>> preparing_streams;
 
 static FlagsArray global_flags_levels(FlagsArray::Fill(), default_level);
@@ -510,7 +519,7 @@ Debug::~Debug()
 void
 Debug::preload()
 {
-    registerExpectedConfiguration<DebugConfiguration>("Debug");
+    registerExpectedConfigurationWithCache<DebugConfiguration>("assetId", "Debug");
     registerExpectedConfiguration<string>("Debug I/S", "Fog Debug URI");
     registerExpectedConfiguration<string>("Debug I/S", "Debug conf file path");
     registerExpectedConfiguration<bool>("Debug I/S", "Enable bulk of debugs");
@@ -751,6 +760,25 @@ Debug::isFlagAtleastLevel(Debug::DebugFlags flag, Debug::DebugLevel level)
 }
 
 void
+Debug::setDebugFlag(Debug::DebugFlags flag, Debug::DebugLevel level)
+{
+    global_flags_levels[flag] = level;
+    default_config.streams_in_context[0].flag_values[flag] = level;
+    
+    //if the new level is lower than the current lowest, update it
+    if (lowest_global_level >= level) {
+        lowest_global_level = level;
+        return;
+    }
+
+    // if the new level is higher, recalculate lowest_global_level by scanning all flag levels
+    lowest_global_level = global_flags_levels[Debug::DebugFlags::D_ALL];
+    for (const auto &current_level : global_flags_levels) {
+        if (current_level < lowest_global_level) lowest_global_level = current_level;
+    }
+}
+
+void
 Debug::setUnitTestFlag(Debug::DebugFlags flag, Debug::DebugLevel level)
 {
     if (lowest_global_level > level) lowest_global_level = level;
@@ -781,6 +809,17 @@ Debug::getExecutableName()
 {
     auto executable = env->get<string>("Base Executable Name");
     return executable.ok() ? *executable : "";
+}
+
+bool
+Debug::getDebugFlagFromString(const string &flag_name, DebugFlags &flag)
+{
+    auto flag_it = string_to_flag_map.find(flag_name);
+    if (flag_it != string_to_flag_map.end()) {
+        flag = flag_it->second;
+        return true;
+    }
+    return false;
 }
 
 void

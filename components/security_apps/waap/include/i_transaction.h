@@ -89,7 +89,7 @@ public:
     virtual double getOtherModelScore() const = 0;
     virtual const std::vector<double> getScoreArray() const = 0;
     virtual Waap::CSRF::State& getCsrfState() = 0;
-    virtual ngx_http_cp_verdict_e getUserLimitVerdict() = 0;
+    virtual ServiceVerdict getUserLimitVerdict() = 0;
     virtual const std::string getUserLimitVerdictStr() const = 0;
     virtual const std::string getViolatedUserLimitTypeStr() const = 0;
     virtual void checkShouldInject() = 0;

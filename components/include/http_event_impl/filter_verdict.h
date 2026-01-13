@@ -22,13 +22,13 @@
 class FilterVerdict
 {
 public:
-    FilterVerdict(ngx_http_cp_verdict_e _verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT)
+    FilterVerdict(ServiceVerdict _verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT)
             :
         verdict(_verdict)
     {}
 
     FilterVerdict(
-        ngx_http_cp_verdict_e _verdict,
+        ServiceVerdict _verdict,
         const std::string &_web_reponse_id)
             :
         verdict(_verdict),
@@ -40,15 +40,21 @@ public:
         verdict(_verdict.getVerdict()),
         web_user_response_id(_verdict.getWebUserResponseByPractice())
     {
-        if (verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT) {
+        if (verdict == ServiceVerdict::TRAFFIC_VERDICT_INJECT) {
             addModifications(_verdict.getModifications(), _event_idx);
         }
     }
 
+    FilterVerdict(ServiceVerdict _verdict, const CustomResponse &_custom_response)
+            :
+        verdict(_verdict),
+        custom_response(_custom_response)
+    {}
+
     void
     addModifications(const FilterVerdict &other)
     {
-        if (other.verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT) return;
+        if (other.verdict != ServiceVerdict::TRAFFIC_VERDICT_INJECT) return;
 
         modifications.insert(modifications.end(), other.modifications.begin(), other.modifications.end());
         total_modifications += other.total_modifications;
@@ -58,22 +64,24 @@ public:
     addModifications(
         const ModificationList &mods,
         ModifiedChunkIndex _event_idx,
-        ngx_http_cp_verdict_e alt_verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT)
+        ServiceVerdict alt_verdict = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT)
     {
         total_modifications += mods.size();
         modifications.push_back(EventModifications(_event_idx, mods));
-        if (alt_verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT) verdict = alt_verdict;
+        if (alt_verdict != ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT) verdict = alt_verdict;
     }
 
     uint getModificationsAmount() const { return total_modifications; }
-    ngx_http_cp_verdict_e getVerdict() const { return verdict; }
+    ServiceVerdict getVerdict() const { return verdict; }
     const std::vector<EventModifications> & getModifications() const { return modifications; }
     const std::string getWebUserResponseID() const { return web_user_response_id; }
+    Maybe<CustomResponse> getCustomResponse() const { return custom_response; }
 
 private:
-    ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
     std::vector<EventModifications> modifications;
     std::string web_user_response_id;
+    Maybe<CustomResponse> custom_response = genError("uninitialized");
     uint total_modifications = 0;
 };
 

@@ -105,19 +105,22 @@ ParameterException::load(cereal::JSONInputArchive &archive_in)
     for (const MatchBehaviorPair &match_query : match_queries) {
         if (isGeoLocationExists(match_query.match)) return;
     }
+
+    is_containing_kv_pair = checkKVPair();
 }
 
 set<ParameterBehavior>
 ParameterException::getBehavior(
-        const unordered_map<string, set<string>> &key_value_pairs,
-        set<string> &matched_override_keywords) const
+    const unordered_map<string, set<string>> &key_value_pairs,
+    set<string> &matched_override_keywords,
+    bool skip_irrelevant_key) const
 {
     set<ParameterBehavior> matched_behaviors;
 
     matched_override_keywords.clear();
     dbgTrace(D_RULEBASE_CONFIG) << "Matching exception";
     for (const MatchBehaviorPair &match_behavior_pair: match_queries) {
-        MatchQuery::MatchResult match_res = match_behavior_pair.match.getMatch(key_value_pairs);
+        MatchQuery::MatchResult match_res = match_behavior_pair.match.getMatch(key_value_pairs, skip_irrelevant_key);
         if (match_res.is_match) {
             dbgTrace(D_RULEBASE_CONFIG)
                 << "Successfully matched an exception from a list of matches, behavior: "
@@ -136,7 +139,7 @@ ParameterException::getBehavior(
     }
 
     if (match_queries.empty()) {
-        MatchQuery::MatchResult match_res = match.getMatch(key_value_pairs);
+        MatchQuery::MatchResult match_res = match.getMatch(key_value_pairs, skip_irrelevant_key);
         if (match_res.is_match) {
             dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched an exception.";
             // When matching indicators with action=ignore, we expect no behavior override.
@@ -156,8 +159,70 @@ ParameterException::getBehavior(
 }
 
 set<ParameterBehavior>
-ParameterException::getBehavior(const unordered_map<string, set<string>> &key_value_pairs) const
+ParameterException::getBehavior(
+    const unordered_map<string, set<string>> &key_value_pairs,
+    bool skip_irrelevant_key) const
 {
     set<string> keywords; // placeholder only, this function will be used where there's no need for ignored keywords
-    return getBehavior(key_value_pairs, keywords);
+    return getBehavior(key_value_pairs, keywords, skip_irrelevant_key);
+}
+
+static bool
+checkMatchQueryForKVPair(const MatchQuery &query)
+{
+    if (query.getType() == MatchQuery::MatchType::Condition) {
+        return false;
+    }
+
+    if (query.getType() == MatchQuery::MatchType::Operator) {
+        if (query.getOperatorType() == MatchQuery::Operators::And) {
+            set<string> found_keys;
+
+            for (const MatchQuery &item : query.getItems()) {
+                if (item.getType() == MatchQuery::MatchType::Condition) {
+                    found_keys.insert(item.getKey());
+                }
+            }
+
+            bool hasParamName = found_keys.find("paramName") != found_keys.end();
+            bool hasParamValue = found_keys.find("paramValue") != found_keys.end();
+
+            if (hasParamName && hasParamValue) {
+                return true;
+            }
+
+            bool hasHeaderName = found_keys.find("headerName") != found_keys.end();
+            bool hasHeaderValue = found_keys.find("headerValue") != found_keys.end();
+
+            if (hasHeaderName && hasHeaderValue) {
+                return true;
+            }
+        }
+
+        for (const MatchQuery &item : query.getItems()) {
+            if (item.getType() == MatchQuery::MatchType::Operator) {
+                if (checkMatchQueryForKVPair(item)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+bool
+ParameterException::checkKVPair() const
+{
+    if (checkMatchQueryForKVPair(match)) {
+        return true;
+    }
+
+    for (const MatchBehaviorPair &match_behavior_pair : match_queries) {
+        if (checkMatchQueryForKVPair(match_behavior_pair.match)) {
+            return true;
+        }
+    }
+
+    return false;
 }

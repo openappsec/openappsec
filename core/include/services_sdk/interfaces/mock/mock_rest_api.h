@@ -9,7 +9,12 @@ class MockRestApi : public Singleton::Provide<I_RestApi>::From<MockProvider<I_Re
 {
 public:
     MOCK_CONST_METHOD0(getListeningPort, uint16_t());
+    MOCK_CONST_METHOD0(getStartingPortRange, uint16_t());
     MOCK_METHOD2(addGetCall, bool(const std::string &, const std::function<std::string()> &));
+    MOCK_METHOD2(
+        addPostCall,
+        bool(const std::string &, const std::function<Maybe<std::string>(const std::string &)> &)
+    );
     MOCK_METHOD2(
         addWildcardGetCall,
         bool(const std::string &, const std::function<std::string(const std::string &)> &)

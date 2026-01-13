@@ -414,3 +414,222 @@ TEST_F(RestConfigTest, not_loopback_flow)
             "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: 0\r\n\r\n"
     );
 }
+
+TEST_F(RestConfigTest, getStartingPortRange)
+{
+    // Use a configuration with port range instead of primary/alternative ports
+    string config_json_with_range =
+        "{\n"
+        "    \"connection\": {\n"
+        "        \"Nano service API Port Range start\": [\n"
+        "            {\n"
+        "                \"value\": 8000\n"
+        "            }\n"
+        "        ],\n"
+        "        \"Nano service API Port Range end\": [\n"
+        "            {\n"
+        "                \"value\": 8010\n"
+        "            }\n"
+        "        ]\n"
+        "    }\n"
+        "}\n";
+
+    istringstream ss(config_json_with_range);
+    Singleton::Consume<Config::I_Config>::from(config)->loadConfiguration(ss);
+
+    rest_server.init();
+
+    auto i_rest = Singleton::Consume<I_RestApi>::from(rest_server);
+    EXPECT_EQ(i_rest->getStartingPortRange(), 8000);
+
+    auto mainloop = Singleton::Consume<I_MainLoop>::from(mainloop_comp);
+    I_MainLoop::Routine stop_routine = [mainloop] () { mainloop->stopAll(); };
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        stop_routine,
+        "RestConfigTest-getStartingPortRange stop routine",
+        false
+    );
+    mainloop->run();
+}
+
+TEST_F(RestConfigTest, addPostCall)
+{
+    rest_server.init();
+    time_proxy.init();
+    mainloop_comp.init();
+
+    auto i_rest = Singleton::Consume<I_RestApi>::from(rest_server);
+    
+    // Test addPostCall
+    ASSERT_TRUE(i_rest->addPostCall("test-post", [](const string &body) {
+        return "Received: " + body;
+    }));
+    
+    // Test that adding the same POST call twice fails
+    ASSERT_FALSE(i_rest->addPostCall("test-post", [](const string &) -> Maybe<string> {
+        return string("Different handler");
+    }));
+    
+    // Test that adding POST call with existing GET call fails
+    ASSERT_TRUE(i_rest->addGetCall("test-get", []() { return "get response"; }));
+    ASSERT_FALSE(i_rest->addPostCall("test-get", [](const string &) -> Maybe<string> {
+        return string("post response");
+    }));
+
+    auto mainloop = Singleton::Consume<I_MainLoop>::from(mainloop_comp);
+    I_MainLoop::Routine stop_routine = [mainloop] () { mainloop->stopAll(); };
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        stop_routine,
+        "RestConfigTest-addPostCall stop routine",
+        false
+    );
+    mainloop->run();
+}
+
+TEST_F(RestConfigTest, post_call_integration_test)
+{
+    env.preload();
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "tmp_test_file");
+
+    config.preload();
+    config.init();
+
+    rest_server.init();
+    time_proxy.init();
+    mainloop_comp.init();
+
+    auto i_rest = Singleton::Consume<I_RestApi>::from(rest_server);
+    
+    // Add a POST endpoint that echoes back the request body with prefix
+    ASSERT_TRUE(i_rest->addPostCall("echo", [](const string &body) -> Maybe<string> {
+        return string("Echo: ") + body;
+    }));
+
+    int file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+    EXPECT_NE(file_descriptor, -1);
+
+    auto primary_port = getConfiguration<uint>("connection", "Nano service API Port Alternative");
+    struct sockaddr_in sa;
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(primary_port.unpack());
+    sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+    int socket_enable = 1;
+    EXPECT_EQ(setsockopt(file_descriptor, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
+
+    EXPECT_CALL(messaging, sendSyncMessage(_, _, _, _, _))
+        .WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
+
+    auto mainloop = Singleton::Consume<I_MainLoop>::from(mainloop_comp);
+    I_MainLoop::Routine stop_routine = [&] () {
+        EXPECT_EQ(connect(file_descriptor, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0)
+            << "file_descriptor Error: " << strerror(errno);
+
+        string test_body = "Hello World";
+        string msg = "POST /echo HTTP/1.1\r\nContent-Length: " +
+            to_string(test_body.length())
+            + "\r\n\r\n" + test_body;
+        EXPECT_EQ(write(file_descriptor, msg.data(), msg.size()), static_cast<int>(msg.size()));
+
+        struct pollfd s_poll;
+        s_poll.fd = file_descriptor;
+        s_poll.events = POLLIN;
+        s_poll.revents = 0;
+        while(poll(&s_poll, 1, 0) <= 0) {
+            mainloop->yield(true);
+        }
+
+        mainloop->stopAll();
+    };
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        stop_routine,
+        "RestConfigTest-post_call_integration_test stop routine",
+        true
+    );
+    mainloop->run();
+
+    char response[1000];
+    int bytes_read = read(file_descriptor, response, 1000);
+    EXPECT_GT(bytes_read, 0);
+    
+    string response_str(response, bytes_read);
+    EXPECT_THAT(response_str, HasSubstr("HTTP/1.1 200 OK"));
+    EXPECT_THAT(response_str, HasSubstr("Echo: Hello World"));
+
+    close(file_descriptor);
+}
+
+TEST_F(RestConfigTest, post_call_generic_error_test)
+{
+    env.preload();
+    Singleton::Consume<I_Environment>::from(env)->registerValue<string>("Base Executable Name", "tmp_test_file");
+
+    config.preload();
+    config.init();
+
+    rest_server.init();
+    time_proxy.init();
+    mainloop_comp.init();
+
+    auto i_rest = Singleton::Consume<I_RestApi>::from(rest_server);
+    
+    // Add a POST endpoint that returns a generic error
+    ASSERT_TRUE(i_rest->addPostCall("error-test", [](const string &) -> Maybe<string> {
+        return genError("Test error message");
+    }));
+
+    int file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+    EXPECT_NE(file_descriptor, -1);
+
+    auto primary_port = getConfiguration<uint>("connection", "Nano service API Port Alternative");
+    struct sockaddr_in sa;
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(primary_port.unpack());
+    sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+    int socket_enable = 1;
+    EXPECT_EQ(setsockopt(file_descriptor, SOL_SOCKET, SO_REUSEADDR, &socket_enable, sizeof(int)), 0);
+
+    EXPECT_CALL(messaging, sendSyncMessage(_, _, _, _, _))
+        .WillRepeatedly(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, "")));
+
+    auto mainloop = Singleton::Consume<I_MainLoop>::from(mainloop_comp);
+    I_MainLoop::Routine stop_routine = [&] () {
+        EXPECT_EQ(connect(file_descriptor, (struct sockaddr*)&sa, sizeof(struct sockaddr)), 0)
+            << "file_descriptor Error: " << strerror(errno);
+
+        string test_body = "Test request body";
+        string msg = "POST /error-test HTTP/1.1\r\nContent-Length: " +
+            to_string(test_body.length())
+            + "\r\n\r\n" + test_body;
+        EXPECT_EQ(write(file_descriptor, msg.data(), msg.size()), static_cast<int>(msg.size()));
+
+        struct pollfd s_poll;
+        s_poll.fd = file_descriptor;
+        s_poll.events = POLLIN;
+        s_poll.revents = 0;
+        while(poll(&s_poll, 1, 0) <= 0) {
+            mainloop->yield(true);
+        }
+
+        mainloop->stopAll();
+    };
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        stop_routine,
+        "RestConfigTest-post_call_generic_error_test stop routine",
+        true
+    );
+    mainloop->run();
+
+    char response[1000];
+    int bytes_read = read(file_descriptor, response, 1000);
+    EXPECT_GT(bytes_read, 0);
+    
+    string response_str(response, bytes_read);
+    EXPECT_THAT(response_str, HasSubstr("HTTP/1.1 500 Internal Server Error"));
+    EXPECT_THAT(response_str, HasSubstr("Test error message"));
+
+    close(file_descriptor);
+}

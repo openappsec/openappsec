@@ -97,6 +97,12 @@ public:
         return messaging_comp.setFogConnection(category);
     }
 
+    void
+    clearConnections() override
+    {
+        messaging_comp.clearConnections();
+    }
+
 private:
     MessagingComp messaging_comp;
     ConnectionComponent connection_comp;
@@ -119,7 +125,7 @@ void
 Messaging::preload()
 {
     registerExpectedConfiguration<int>("message", "Cache timeout");
-    registerExpectedConfiguration<uint>("message", "Connection timeout");
+    registerExpectedConfigurationWithCache<uint>("assetId", "message", "Connection timeout");
     registerExpectedConfiguration<uint>("message", "Connection handshake timeout");
     registerExpectedConfiguration<bool>("message", "Verify SSL pinning");
     registerExpectedConfiguration<bool>("message", "Buffer Failed Requests");

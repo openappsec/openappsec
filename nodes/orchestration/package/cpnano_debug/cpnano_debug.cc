@@ -98,6 +98,7 @@ enum class Service {
     IDA_IDN_BG,
     IOT_ACCESS_CONTROL,
     HORIZON_TELEMETRY,
+    ERM,
 
     COUNT
 };
@@ -177,6 +178,7 @@ getServiceString(const Service service)
         case (Service::IDA_IDN_BG): return "ida-idn-bg";
         case (Service::IOT_ACCESS_CONTROL): return "iot-access-control";
         case (Service::HORIZON_TELEMETRY): return "horizon-telemetry";
+        case (Service::ERM): return "erm";
         default:
             cerr
                 << "Internal Error: the provided service ("
@@ -379,6 +381,11 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-horizon-telemetry-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-horizon-telemetry.dbg"
+            );
+        case (Service::ERM):
+            return ServiceConfig(
+                filesystem_path + "/conf/cp-nano-erm-conf.json",
+                log_files_path + "/nano_agent/cp-nano-erm.dbg"
             );
         default:
             cerr

@@ -13,12 +13,14 @@
 
 #include "mainloop.h"
 
+#include <cstddef>
 #include <memory>
 #include <system_error>
 #include <map>
 #include <sstream>
 #include <poll.h>
 #include <unistd.h>
+#include <functional>
 
 #include "config.h"
 #include "coroutine.h"
@@ -59,6 +61,16 @@ public:
         chrono::microseconds time,
         Routine func,
         const string &routine_name,
+        bool is_primary
+    ) override;
+
+    RoutineID
+    addBalancedIntervalRoutine(
+        RoutineType priority,
+        std::chrono::microseconds interval,
+        Routine func,
+        const std::string &routine_name,
+        chrono::microseconds offset,
         bool is_primary
     ) override;
 
@@ -427,6 +439,48 @@ MainloopComponent::Impl::addRecurringRoutine(
             yield(time);
         }
     };
+    return addOneTimeRoutine(priority, func_wrapper, routine_name, is_primary);
+}
+
+I_MainLoop::RoutineID
+MainloopComponent::Impl::addBalancedIntervalRoutine(
+    RoutineType priority,
+    chrono::microseconds interval,
+    Routine func,
+    const string &routine_name,
+    chrono::microseconds offset,
+    bool is_primary
+)
+{
+    Routine func_wrapper = [this, interval, offset, func, routine_name]()
+    {
+        using namespace std::chrono;
+        I_TimeGet *timer = Singleton::Consume<I_TimeGet>::by<MainloopComponent>();
+        typedef duration<size_t, ratio<86400>> days;
+        static const microseconds one_day_in_microseconds = duration_cast<microseconds>(days(1));
+
+        while (true) {
+            microseconds now = timer->getWalltime();
+
+            size_t whole_days = now.count() / one_day_in_microseconds.count();
+            microseconds time_since_midnight = now - microseconds(whole_days * one_day_in_microseconds.count());
+            // Calculate next aligned execution time from midnight
+            size_t intervals_from_midnight = time_since_midnight / interval;
+            microseconds next_aligned_time = (intervals_from_midnight + 1) * interval;
+            // Calculate wait time until next execution
+            microseconds target_time = next_aligned_time + offset;
+            microseconds wait_time = target_time - time_since_midnight;
+
+            if (wait_time > interval) {
+                wait_time -= interval;
+            }
+            dbgTrace(D_MAINLOOP) << "Balanced interval routine waiting " << wait_time << " microseconds";
+            yield(wait_time);
+
+            func();
+        }
+    };
+
     return addOneTimeRoutine(priority, func_wrapper, routine_name, is_primary);
 }
 

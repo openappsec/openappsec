@@ -52,6 +52,6 @@ TriggerMatcher::evalVariable() const
         << makeSeparatedStr(bc_trigger_id_ctx.ok() ? *bc_trigger_id_ctx : set<GenericConfigId>(), ", ");
     if (bc_trigger_id_ctx.ok()) return bc_trigger_id_ctx.unpack().count(trigger_id) > 0;
 
-    auto rule = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+    auto rule = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
     return rule.ok() && rule.unpack().isTriggerActive(trigger_id);
 }

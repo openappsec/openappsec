@@ -80,6 +80,15 @@ I_Messaging::sendSyncMessage(
     );
     if (!response_data.ok()) return response_data.passErr();
 
+    if (response_data.unpack().getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+        return genError(
+            HTTPResponse(
+                response_data.unpack().getHTTPStatusCode(),
+                response_data.unpack().getBody()
+            )
+        );
+    }
+
     auto res_obj = req_obj.loadJson(response_data.unpack().getBody());
     if (!res_obj) {
         return genError(
@@ -114,6 +123,7 @@ I_Messaging::sendSyncMessageWithoutResponse(
         category,
         message_metadata
     );
+
     if (!response_data.ok()) {
         dbgWarning(D_MESSAGING)
             << "Received error from server. Status code: "
@@ -122,6 +132,16 @@ I_Messaging::sendSyncMessageWithoutResponse(
             << response_data.getErr().getBody();
         return false;
     }
+
+    if (response_data.unpack().getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
+        dbgWarning(D_MESSAGING)
+            << "Unexpected status code from server. Status code: "
+            << int(response_data.unpack().getHTTPStatusCode())
+            << ", response body: "
+            << response_data.unpack().getBody();
+        return false;
+    }
+
     return true;
 }
 

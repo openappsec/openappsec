@@ -69,6 +69,15 @@ checkSAMLPortal(const string &command_output)
 }
 
 Maybe<string>
+checkIdaPDP(const string &command_output)
+{
+    if (command_output.find("is_collecting_identities (true)") != string::npos) {
+        return string("true");
+    }
+    return string("false");
+}
+
+Maybe<string>
 checkInfinityIdentityEnabled(const string &command_output)
 {
     if (command_output.find("get_identities_from_infinity_identity (true)") != string::npos) {
@@ -140,11 +149,142 @@ checkIsInstallHorizonTelemetrySucceeded(const string &command_output)
 }
 
 Maybe<string>
+checkIsCME(const string &command_output)
+{
+    if (command_output == "" ) return string("false");
+
+    return command_output;
+}
+
+Maybe<string>
 getOtlpAgentGaiaOsRole(const string &command_output)
 {
     if (command_output == "" ) return string("-1");
 
     return command_output;
+}
+
+
+// Helper function for case-insensitive substring search
+inline bool
+containsIgnoreCase(const string& text, const string& pattern) {
+    string lowerText = text;
+    string lowerPattern = pattern;
+    transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+    transform(lowerPattern.begin(), lowerPattern.end(), lowerPattern.begin(), ::tolower);
+    return lowerText.find(lowerPattern) != string::npos;
+}
+
+inline Maybe<string>
+extractValue(const string& line, const string& field) {
+    size_t colonPos = line.find(':');
+    if (colonPos == string::npos) {
+        return Maybe<string>(Error<string>("no match"));
+    }
+    string key = line.substr(0, colonPos);
+    string value = line.substr(colonPos + 1);
+    key.erase(0, key.find_first_not_of(" \t"));
+    key.erase(key.find_last_not_of(" \t") + 1);
+    value.erase(0, value.find_first_not_of(" \t"));
+    value.erase(value.find_last_not_of(" \t") + 1);
+    if (containsIgnoreCase(key, field)) {
+        return Maybe<string>(value);
+    }
+    return Maybe<string>(Error<string>("no match"));
+}
+
+inline std::pair<std::string, std::string>
+parseDmidecodeOutput(const std::string& dmidecodeOutput) {
+    string manufacturer;
+    string product;
+    istringstream stream(dmidecodeOutput);
+    string line;
+    while (getline(stream, line)) {
+        if (manufacturer.empty()) {
+            auto extractedManufacturer = extractValue(line, "Manufacturer");
+            if (extractedManufacturer.ok() && !extractedManufacturer->empty()) {
+                manufacturer = *extractedManufacturer;
+            }
+        }
+        if (product.empty()) {
+            auto extractedProduct = extractValue(line, "Product Name");
+            if (extractedProduct.ok() && !extractedProduct->empty()) {
+                product = *extractedProduct;
+            }
+        }
+        if (!manufacturer.empty() && !product.empty()) {
+            break;
+        }
+    }
+
+    return make_pair(manufacturer, product);
+}
+
+Maybe<string>
+getAiopCgnsHardwareType(const string &command_output)
+{
+    if (command_output == "" ) return string("NA");
+
+    auto pair = parseDmidecodeOutput(command_output);
+
+    if (containsIgnoreCase(pair.first, "Amazon")) {
+        return string("AWS");
+    }
+    if (containsIgnoreCase(pair.first, "Microsoft")) {
+        return string("Azure");
+    }
+    if (containsIgnoreCase(pair.first, "Google")) {
+        return string("Google Cloud");
+    }
+    if (containsIgnoreCase(pair.first, "Oracle")) {
+        return string("OCI");
+    }
+    if (containsIgnoreCase(pair.first, "Alibaba")) {
+        return string("Alibaba");
+    }
+    if (containsIgnoreCase(pair.second, "VMware")) {
+        return string("VMware");
+    }
+    if (containsIgnoreCase(pair.first, "OpenStack")) {
+        return string("OpenStack");
+    }
+
+    // Check for KVM (manufacturer OR product)
+    if (containsIgnoreCase(pair.first, "QEMU") || containsIgnoreCase(pair.second, "KVM")) {
+        return string("KVM");
+    }
+
+    if (containsIgnoreCase(pair.first, "Xen")) {
+        return string("Xen");
+    }
+    if (containsIgnoreCase(pair.first, "Nutanix")) {
+        return string("Nutanix");
+    }
+
+    return string("NA");
+}
+
+Maybe<string>
+getAiopsCgnsCloudVendor(const string &command_output)
+{
+    if (command_output == "" ) return string("NA");
+
+    string platform = "NA";
+    istringstream stream(command_output);
+    string line;
+    while (getline(stream, line)) {
+        if (line.find("platform") != string::npos) {
+            size_t colonPos = line.find(' ');
+            if (colonPos != string::npos) {
+                platform = line.substr(colonPos + 1);
+                platform.erase(0, platform.find_first_not_of(" \t"));
+                platform.erase(platform.find_last_not_of(" \t") + 1);
+                break;
+            }
+        }
+    }
+
+    return platform;
 }
 
 Maybe<string>
@@ -158,11 +298,24 @@ getQUID(const string &command_output)
     return command_output;
 }
 
+// Handler for a comma-separated list of QUIDs
 Maybe<string>
-getIsAiopsRunning(const string &command_output)
+getQUIDList(const string &command_output)
 {
-    if (command_output == "" ) return string("false");
-    
+    if (command_output.empty()) {
+        return string("false");
+    }
+
+    std::istringstream ss(command_output);
+    std::string quid;
+
+    while (std::getline(ss, quid, ',')) {
+        const auto res = getQUID(quid);
+        if (!res.ok()) {
+            return res; // Return the error directly with context from getQUID
+        }
+    }
+
     return command_output;
 }
 
@@ -350,6 +503,15 @@ getGWIPAddress(const string &command_output)
 }
 
 Maybe<string>
+getGWIPv6Address(const string &command_output)
+{
+    if (command_output.empty() || command_output == "null") {
+        return genError("IPv6 Address was not found");
+    }
+    return string(command_output);
+}
+
+Maybe<string>
 getGWVersion(const string &command_output)
 {
     return getAttr(command_output, "GW Version was not found");
@@ -366,7 +528,7 @@ checkIfSdwanRunning(const string &command_output)
 Maybe<string>
 getClusterObjectIP(const string &command_output)
 {
-    return getAttr(command_output, "Cluster object IP was not found");
+    return command_output;
 }
 
 Maybe<string>

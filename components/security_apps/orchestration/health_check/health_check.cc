@@ -154,7 +154,8 @@ private:
         static const map<string, pair<string, int>> ip_port_defaults_map = {
             {"Azure", make_pair(getenv("DOCKER_RPM_ENABLED") ? "" : "168.63.129.16", 8117)},
             {"Aws", make_pair("", 8117)},
-            {"Local", make_pair("", 8117)}
+            {"Local", make_pair("", 8117)},
+            {"VMware", make_pair("", 8117)}
         };
 
         auto cloud_vendor_maybe = getSetting<string>("reverseProxy", "cloudVendorName");
@@ -271,6 +272,12 @@ private:
             return HealthCheckStatus::UNHEALTHY;
         }
 
+        if (checkReadinessFilesExist()) {
+            dbgTrace(D_HEALTH_CHECK)
+                << "Readiness file exists, instance not ready for traffic, returning unhealthy status";
+            return HealthCheckStatus::UNHEALTHY;
+        }
+
         if (NGEN::Filesystem::exists(rpm_full_load_path)) {
             dbgTrace(D_HEALTH_CHECK) << "RPM is fully loaded";
             return i_service_controller->getServicesPolicyStatus()
@@ -290,6 +297,24 @@ private:
     }
 
     bool
+    checkReadinessFilesExist()
+    {
+        string readiness_dir = readiness_file_path.substr(0, readiness_file_path.find_last_of('/'));
+        string readiness_filename = NGEN::Filesystem::getFileName(readiness_file_path);
+
+        auto directory_files = NGEN::Filesystem::getDirectoryFiles(readiness_dir);
+        if (!directory_files.ok()) return false;
+
+        for (const string& filename : directory_files.unpack()) {
+            if (NGEN::Strings::startsWith(filename, readiness_filename)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool
     nginxContainerIsRunning()
     {
         static const string nginx_container_name = "cp_nginx_gaia";
@@ -304,7 +329,19 @@ private:
             return false;
         }
 
-        return (*maybe_result).find(nginx_container_name) != string::npos;
+        bool container_running = (*maybe_result).find(nginx_container_name) != string::npos;
+        if (!container_running) {
+            dbgTrace(D_HEALTH_CHECK) << "Nginx container is not running";
+            return false;
+        }
+
+        if (checkReadinessFilesExist()) {
+            dbgTrace(D_HEALTH_CHECK) << "Readiness file exists on host machine, not ready for traffic";
+            return false;
+        }
+
+        dbgTrace(D_HEALTH_CHECK) << "Nginx container is running and no readiness files found - ready for traffic";
+        return true;
     }
 
     void

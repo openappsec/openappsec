@@ -19,6 +19,7 @@
 #include "TrustedSourcesConfidence.h"
 #include "ConfidenceCalculator.h"
 #include "TuningDecisions.h"
+#include "maybe_res.h"
 
 class IndicatorFilterBase : public I_IndicatorsFilter
 {
@@ -39,8 +40,8 @@ public:
 
     bool setTrustedSrcParameter(std::shared_ptr<Waap::TrustedSources::TrustedSourcesParameter> policy);
     void reset();
+    Maybe<std::string> getTrustedSource(IWaf2Transaction* pTransaction);
 protected:
-    std::string getTrustedSource(IWaf2Transaction* pTransaction);
     void registerKeyword(const std::string& key,
         const std::string& keyword,
         const std::string& source,

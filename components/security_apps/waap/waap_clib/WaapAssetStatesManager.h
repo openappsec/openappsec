@@ -15,6 +15,7 @@
 
 #include "singleton.h"
 #include "Signatures.h"
+#include "WaapHyperscanEngine.h"
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -65,6 +66,7 @@ private:
             const std::string& instanceId);
 
     std::shared_ptr<Signatures> m_signatures;
+    std::shared_ptr<WaapHyperscanEngine> m_hyperscanEngine;
     std::shared_ptr<WaapAssetState> m_basicWaapSigs;
     std::unordered_map<std::string, std::shared_ptr<WaapAssetState>> m_AssetBasedWaapSigs;
     std::string m_assetDirectoryPath;

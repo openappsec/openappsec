@@ -75,17 +75,52 @@ RestConn::parseConn() const
     dbgDebug(D_API) << "Call identifier: " << identifier;
 
     uint len = 0;
+    map<string, string> headers;
+    bool should_capture_headers = invoke->shouldCaptureHeaders(identifier);
+
     while (true) {
         line = readLine();
         if (line.size() < 3) break;
 
-        os.str(line);
-        string head, data;
-        os >> head >> data;
-        if (compareStringCaseInsensitive(head, "Content-Length:")) {
-            try {
-                len = stoi(data, nullptr);
-            } catch (...) {
+        if (should_capture_headers) {
+            size_t colon_pos = line.find(':');
+            if (colon_pos == string::npos) continue;
+
+            string head = line.substr(0, colon_pos);
+            string data = line.substr(colon_pos + 1);
+
+            size_t data_start = data.find_first_not_of(" \t\r\n");
+            if (data_start != string::npos) {
+                data = data.substr(data_start);
+            } else {
+                data = "";
+            }
+
+            size_t data_end = data.find_last_not_of(" \t\r\n");
+            if (data_end != string::npos) {
+                data = data.substr(0, data_end + 1);
+            }
+
+            if (!head.empty()) {
+                headers[head] = data;
+                dbgTrace(D_API) << "Captured header: " << head << " = " << data;
+            }
+
+            if (compareStringCaseInsensitive(head, "Content-Length")) {
+                try {
+                    len = stoi(data, nullptr);
+                } catch (...) {
+                }
+            }
+        } else {
+            os.str(line);
+            string head, data;
+            os >> head >> data;
+            if (compareStringCaseInsensitive(head, "Content-Length:")) {
+                try {
+                    len = stoi(data, nullptr);
+                } catch (...) {
+                }
             }
         }
     }
@@ -113,7 +148,19 @@ RestConn::parseConn() const
 
     dbgTrace(D_API) << "Message content: " << body.str();
 
-    Maybe<string> res = (method == "POST") ? invoke->invokeRest(identifier, body) : invoke->getSchema(identifier);
+    if (method == "POST" && invoke->isPostCall(identifier)) {
+        Maybe<string> result = invoke->invokePost(identifier, body.str());
+        if (!result.ok()) {
+            dbgWarning(D_API) << "Failed to invoke POST call: " << result.getErr();
+            sendResponse("500 Internal Server Error", result.getErr());
+            return;
+        }
+        sendResponse("200 OK", result.unpack());
+        return;
+    }
+
+    Maybe<string> res = (method == "POST") ?
+        invoke->invokeRest(identifier, body, headers) : invoke->getSchema(identifier);
 
     if (res.ok()) {
         sendResponse("200 OK", res.unpack());

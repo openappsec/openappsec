@@ -45,6 +45,6 @@ PracticeMatcher::evalVariable() const
         return bc_practice_id_ctx.unpack().count(practice_id) > 0;
     }
 
-    auto rule = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+    auto rule = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
     return rule.ok() && rule.unpack().isPracticeActive(practice_id);
 }

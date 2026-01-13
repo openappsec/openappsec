@@ -112,7 +112,7 @@ public:
     static void
     preload()
     {
-        registerExpectedConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+        registerExpectedConfigurationWithCache<BasicRuleConfig>("assetId", "rulebase", "rulesConfig");
         registerExpectedSetting<std::vector<BasicRuleConfig>>("rulebase", "rulesConfig");
         registerConfigLoadCb(BasicRuleConfig::updateCountMetric);
         registerConfigPrepareCb([](){ BasicRuleConfig::assets_ids_aggregation.clear(); });

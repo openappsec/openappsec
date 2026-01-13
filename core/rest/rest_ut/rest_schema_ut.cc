@@ -444,6 +444,7 @@ TEST(RestSchema, server_schema)
     EXPECT_CALL(mock_agent_details, getAccessToken()).WillRepeatedly(testing::Return(string("accesstoken")));
     EXPECT_CALL(mock_agent_details, getFogDomain()).WillRepeatedly(testing::Return(string("127.0.0.1")));
     EXPECT_CALL(mock_agent_details, getFogPort()).WillRepeatedly(testing::Return(9777));
+    EXPECT_CALL(mock_agent_details, getProxy()).WillRepeatedly(testing::Return(string("")));
 
     string config_json =
         "{"

@@ -26,21 +26,24 @@ namespace Waap {
         // Register empty string work under known index
         registerWord("");
 
+        std::string pm_list_name = "preconditions";
+        std::string pm_keys_name = "precondition_keys";
+
         // The key should always be there unless data file is corrupted (but there's a unit test that tests exactly
         // that!)
-        if (jsObj.find("preconditions") == jsObj.end()) {
+        if (jsObj.find(pm_list_name) == jsObj.end()) {
             dbgError(D_WAAP_REGEX) << "Error loading regex preconditions (signatures data file corrupt?)...";
             error = true;
             return;
         }
 
-        if (jsObj.find("precondition_keys") == jsObj.end()) {
+        if (jsObj.find(pm_keys_name) == jsObj.end()) {
             dbgError(D_WAAP_REGEX) << "Error loading regex precondition sets (signatures data file corrupt?)...";
             error = true;
             return;
         }
 
-        auto preconditions = jsObj.at("preconditions").get<picojson::value::object>();
+        auto preconditions = jsObj.at(pm_list_name).get<picojson::value::object>();
 
         // Loop over pre-conditions (rules) and load them
         dbgTrace(D_WAAP_REGEX) << "Loading regex preconditions...";
@@ -142,7 +145,7 @@ namespace Waap {
         // Build full list of words to load into aho-corasick pattern matcher
         dbgTrace(D_WAAP_REGEX) << "Loading regex precondition_keys into Aho-Corasick pattern matcher...";
 
-        auto preconditionKeys = jsObj.at("precondition_keys").get<picojson::value::array>();
+        auto preconditionKeys = jsObj.at(pm_keys_name).get<picojson::value::array>();
         std::set<PMPattern> pmPatterns;
 
         for (const auto &preconditionKey : preconditionKeys) {
@@ -167,16 +170,17 @@ namespace Waap {
 
         // Initialize the aho-corasick pattern matcher with the patterns
         Maybe<void> pmHookStatus = m_pmHook.prepare(pmPatterns);
-
         if (!pmHookStatus.ok()) {
             dbgError(D_WAAP_REGEX) << "Aho-Corasick engine failed to load!";
             error = true;
             return;
         }
-
         dbgTrace(D_WAAP_REGEX) << "Aho-Corasick engine loaded.";
-
         dbgTrace(D_WAAP_REGEX) << "Aho-corasick pattern matching engine initialized!";
+    }
+
+    RegexPreconditions::~RegexPreconditions() {
+        // No Hyperscan resource management here; handled by HyperscanHook
     }
 
     bool Waap::RegexPreconditions::isNoRegexPattern(const std::string &pattern) const

@@ -85,8 +85,8 @@ public:
     ) = 0;
 
     virtual Maybe<void, HTTPResponse> uploadFile(
-        const std::string & uri,
-        const std::string & upload_file_path,
+        const std::string &uri,
+        const std::string &upload_file_path,
         const MessageCategory category = MessageCategory::GENERIC,
         MessageMetadata message_metadata = MessageMetadata()
     ) = 0;
@@ -99,6 +99,8 @@ public:
     ) = 0;
 
     virtual bool setFogConnection(MessageCategory category = MessageCategory::GENERIC) = 0;
+
+    virtual void clearConnections() = 0;
 
 protected:
     virtual ~I_Messaging() {}

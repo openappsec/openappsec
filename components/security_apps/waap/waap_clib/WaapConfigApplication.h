@@ -39,6 +39,7 @@ public:
     static bool getWaapSiteConfig(WaapConfigApplication& ngenSiteConfig);
     static void notifyAssetsCount();
     static void clearAssetsCount();
+    virtual WaapConfigType getType() const override { return WaapConfigType::Application; }
 
 private:
     static const std::string s_PracticeSubType;

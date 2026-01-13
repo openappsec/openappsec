@@ -117,11 +117,14 @@ SingleRegex::~SingleRegex() {
     }
 }
 
-bool SingleRegex::hasMatch(const std::string& s) const {
+bool SingleRegex::hasMatch(const std::string& s, size_t start, size_t end) const {
+    PCRE2_SIZE startOffset = static_cast<PCRE2_SIZE>(start);
+    size_t data_size = std::min(s.size(), end);
+
     int rc = pcre2_match(
         m_re, // code
-        reinterpret_cast<PCRE2_SPTR>(s.data()), s.size(), // subject/subject length
-        0, // start offset
+        reinterpret_cast<PCRE2_SPTR>(s.data()), data_size, // subject/subject length
+        startOffset, // start offset
         0, // options
         m_matchData,
         NULL // match_context
@@ -244,13 +247,23 @@ const std::string &SingleRegex::getName() const
     return m_regexName;
 }
 
-size_t SingleRegex::findMatchRanges(const std::string& s, std::vector<RegexMatchRange>& matchRanges) const {
-    PCRE2_SIZE startOffset = 0;
+size_t
+SingleRegex::findMatchRanges(
+    const std::string &s,
+    std::vector<RegexMatchRange> &matchRanges,
+    size_t maxMatches,
+    size_t start,
+    size_t end
+) const
+{
+    PCRE2_SIZE startOffset = static_cast<PCRE2_SIZE>(start);
+    size_t matchCount = 0;
+    size_t data_size = std::min(s.size(), end);
 
     do {
         int rc = pcre2_match(
             m_re, // code
-            reinterpret_cast<PCRE2_SPTR>(s.data()), s.size(), // subject/subject length
+            reinterpret_cast<PCRE2_SPTR>(s.data()), data_size, // subject/subject length
             startOffset, // start offset
             0, // options
             m_matchData,
@@ -277,6 +290,12 @@ size_t SingleRegex::findMatchRanges(const std::string& s, std::vector<RegexMatch
         startOffset = ov[1];
 
         matchRanges.push_back(RegexMatchRange(ov[0], ov[1]));
+        matchCount++;
+
+        // Check if we've reached the maximum number of matches (if maxMatches is not 0)
+        if (maxMatches > 0 && matchCount >= maxMatches) {
+            break;
+        }
     } while (true);
 
     return matchRanges.size();

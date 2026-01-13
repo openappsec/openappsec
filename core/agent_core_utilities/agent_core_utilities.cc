@@ -151,6 +151,42 @@ makeDirRecursive(const string &path, mode_t permission)
 }
 
 bool
+createFileWithContent(const string &dest, const string &content, bool overide_if_exists, mode_t permission)
+{
+    dbgFlow(D_INFRA_UTILS)
+        << "Trying to create file with content. Destination: "
+        << dest
+        << ", Content size: "
+        << content.size()
+        << ", Should override: "
+        << (overide_if_exists? "true" : "false")
+        << ", permission: "
+        << to_string(permission);
+
+    if (exists(dest) && !overide_if_exists) {
+        dbgDebug(D_INFRA_UTILS) << "Failed to create file. Error: destination file already exists";
+        return false;
+    }
+
+    ofstream file(dest, ios::out | ios::trunc);
+    if (!file.is_open()) {
+        dbgDebug(D_INFRA_UTILS) << "Failed to create file. Error: could not open destination file";
+        return false;
+    }
+
+    file << content;
+    file.close();
+
+    if (chmod(dest.c_str(), permission) != 0) {
+        dbgWarning(D_INFRA_UTILS) << "Failed to set file permissions. Path: " << dest;
+        // Don't return false here as the file was created successfully
+    }
+
+    dbgTrace(D_INFRA_UTILS) << "Successfully created file with content. Path: " << dest;
+    return true;
+}
+
+bool
 copyFile(const string &src, const string &dest, bool overide_if_exists, mode_t permission)
 {
     dbgFlow(D_INFRA_UTILS)
@@ -544,6 +580,13 @@ toLower(string str)
 {
     transform(str.begin(), str.end(), str.begin(), ::tolower);
     return str;
+}
+
+bool startsWith(const std::string& str, const std::string& prefix) {
+    if (prefix.size() > str.size()) {
+        return false;
+    }
+    return std::equal(prefix.begin(), prefix.end(), str.begin());
 }
 
 

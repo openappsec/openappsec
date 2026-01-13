@@ -36,6 +36,7 @@ public:
 
     virtual void closeSocket(socketFd &socket) = 0;
     virtual bool writeData(socketFd socket, const std::vector<char> &data) = 0;
+    virtual bool writeDataAsync(socketFd socket, const std::vector<char> &data) = 0;
     virtual Maybe<std::vector<char>> receiveData(socketFd socket, uint data_size, bool is_blocking = true) = 0;
     virtual bool isDataAvailable(socketFd socket) = 0;
 

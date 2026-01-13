@@ -92,7 +92,7 @@ ParserUrlEncode::push(const char *buf, size_t len)
         is_last = (i == (len - 1));
 
         // Checking valid char urlencode
-        if (c < 32) {
+        if (static_cast<unsigned char>(c) < 32u || static_cast<unsigned char>(c) > 126u) {
             dbgDebug(D_WAAP_PARSER_URLENCODE) << "invalid URL encoding character: " << c;
             m_state = s_error;
             return i;

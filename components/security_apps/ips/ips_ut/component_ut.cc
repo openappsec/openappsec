@@ -109,11 +109,11 @@ operator ==(const EventVerdict &first, const EventVerdict &second)
     return first.getVerdict() == second.getVerdict();
 }
 
-const EventVerdict ComponentTest::inspect(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT);
+const EventVerdict ComponentTest::inspect(ServiceVerdict::TRAFFIC_VERDICT_INSPECT);
 
-const EventVerdict ComponentTest::accept(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT);
+const EventVerdict ComponentTest::accept(ServiceVerdict::TRAFFIC_VERDICT_ACCEPT);
 
-const EventVerdict ComponentTest::drop(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
+const EventVerdict ComponentTest::drop(ServiceVerdict::TRAFFIC_VERDICT_DROP);
 
 TEST_F(ComponentTest, check_init_fini_do_not_crush)
 {

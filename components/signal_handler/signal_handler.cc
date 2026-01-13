@@ -339,7 +339,7 @@ private:
         char signal_num[3];
         snprintf(signal_num, sizeof(signal_num), "%d", _signal);
 
-        if (out_trace_file_fd == -1) exit(_signal);
+        if (out_trace_file_fd == -1) _exit(_signal);
 
         reset_signal_handler = true;
 
@@ -383,7 +383,7 @@ private:
         close(out_trace_file_fd);
         out_trace_file_fd = -1;
 
-        exit(_signal);
+        _exit(_signal);
     }
 
     static void

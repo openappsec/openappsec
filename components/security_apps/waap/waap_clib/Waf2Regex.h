@@ -54,10 +54,16 @@ public:
     SingleRegex(const std::string &pattern, bool &error, const std::string &regexName, bool bNoRegex=false,
         const std::string &regexMatchName="", const std::string &regexMatchValue="");
     ~SingleRegex();
-    bool hasMatch(const std::string &s) const;
+    bool hasMatch(const std::string &s, size_t start = 0, size_t end = SIZE_MAX) const;
     size_t findAllMatches(const std::string &s, std::vector<RegexMatch> &matches,
             size_t max_matches = std::string::npos) const;
-    size_t findMatchRanges(const std::string &s, std::vector<RegexMatchRange> &matchRanges) const;
+    size_t findMatchRanges(
+        const std::string &s,
+        std::vector<RegexMatchRange> &matchRanges,
+        size_t maxMatches = 0,
+        size_t start = 0,
+        size_t end = SIZE_MAX
+    ) const;
     const std::string &getName() const;
 private:
     pcre2_code *m_re;

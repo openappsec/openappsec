@@ -287,8 +287,11 @@ int Waap::Scanner::onKv(const char* k, size_t k_len, const char* v, size_t v_len
 
     m_transaction->getAssetState()->logParamHit(res, m_transaction);
 
-    std::set<std::string> paramTypes = m_transaction->getAssetState()->m_filtersMngr->getParameterTypes(
-        IndicatorsFiltersManager::generateKey(res.location, res.param_name, m_transaction));
+    std::set<std::string> paramTypes;
+    if (m_transaction->getAssetState()->m_filtersMngr != nullptr) {
+        paramTypes = m_transaction->getAssetState()->m_filtersMngr->getParameterTypes(
+            IndicatorsFiltersManager::generateKey(res.location, res.param_name, m_transaction));
+    }
 
     if (paramTypes.size() == 1 && paramTypes.find("local_file_path") != paramTypes.end())
     {

@@ -204,12 +204,15 @@ MessagingBufferComponent::Impl::pushNewBufferedMessage(
 Maybe<BufferedMessage>
 MessagingBufferComponent::Impl::peekMessage()
 {
-    auto move_cmd =
-        "if [ -s " + buffer_input + " ] && [ ! -s " + buffer_output + " ];"
-        "then mv " + buffer_input + " " + buffer_output + ";"
-        "fi";
-
-    shell_cmd->getExecOutput(move_cmd);
+    // Native replacement for shell mv command
+    struct stat stat_input, stat_output;
+    bool input_exists = (stat(buffer_input.c_str(), &stat_input) == 0 && stat_input.st_size > 0);
+    bool output_exists = (stat(buffer_output.c_str(), &stat_output) == 0 && stat_output.st_size > 0);
+    if (input_exists && !output_exists) {
+        if (rename(buffer_input.c_str(), buffer_output.c_str()) != 0) {
+            dbgWarning(D_MESSAGING_BUFFER) << "Failed to move buffer input to output: " << strerror(errno);
+        }
+    }
 
     if (!checkExistence(buffer_output)) return genError(buffer_output + " does not exist");
 

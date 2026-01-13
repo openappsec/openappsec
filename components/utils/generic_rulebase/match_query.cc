@@ -244,7 +244,8 @@ MatchQuery::getAllKeys() const
 bool
 MatchQuery::matchAttributes(
         const unordered_map<string, set<string>> &key_value_pairs,
-        set<string> &matched_override_keywords) const
+        set<string> &matched_override_keywords,
+        bool skip_irrelevant_key) const
 {
 
     dbgTrace(D_RULEBASE_CONFIG) << "Start matching attributes";
@@ -256,11 +257,22 @@ MatchQuery::matchAttributes(
         }
         return matchAttributes(key_value_pair->second, matched_override_keywords);
     } else if (type == MatchType::Operator && operator_type == Operators::And) {
-        for (const MatchQuery &inner_match: items) {
-            if (!inner_match.matchAttributes(key_value_pairs, matched_override_keywords)) {
+        bool has_relevant_keys = false;
+        for (const MatchQuery &inner_match : items) {
+            // Skip irrelevant keys when skip_irrelevant_key is false
+            if (skip_irrelevant_key && key_value_pairs.find(inner_match.getKey()) == key_value_pairs.end()) {
+                dbgTrace(D_RULEBASE_CONFIG) << "Skipping irrelevant key in AND operator";
+                continue;
+            }
+            has_relevant_keys = true;
+            if (!inner_match.matchAttributes(key_value_pairs, matched_override_keywords, skip_irrelevant_key)) {
                 dbgTrace(D_RULEBASE_CONFIG) << "Failed to match attributes for AND operator";
                 return false;
             }
+        }
+        if (!has_relevant_keys) {
+            dbgTrace(D_RULEBASE_CONFIG) << "No relevant keys found for AND operator";
+            return false;
         }
         dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched all inner matches for AND operator";
         return true;
@@ -268,12 +280,23 @@ MatchQuery::matchAttributes(
         // With 'or' condition, evaluate matched override keywords first and add the ones that were fully matched
         set<string> inner_override_keywords;
         bool res = false;
+        bool has_relevant_keys = false;
         for (const MatchQuery &inner_match: items) {
+            // Skip irrelevant keys when skip_irrelevant_key is false
+            if (skip_irrelevant_key && key_value_pairs.find(inner_match.getKey()) == key_value_pairs.end()) {
+                dbgTrace(D_RULEBASE_CONFIG) << "Skipping irrelevant key in OR operator";
+                continue;
+            }
+            has_relevant_keys = true;
             inner_override_keywords.clear();
-            if (inner_match.matchAttributes(key_value_pairs, inner_override_keywords)) {
+            if (inner_match.matchAttributes(key_value_pairs, inner_override_keywords, skip_irrelevant_key)) {
                 matched_override_keywords.insert(inner_override_keywords.begin(), inner_override_keywords.end());
                 res = true;
             }
+        }
+        if (!has_relevant_keys) {
+            dbgTrace(D_RULEBASE_CONFIG) << "No relevant keys found for OR operator";
+            return false;
         }
         dbgTrace(D_RULEBASE_CONFIG) << "Match result for OR operator is: " << res;
         return res;
@@ -284,20 +307,23 @@ MatchQuery::matchAttributes(
 }
 
 MatchQuery::MatchResult
-MatchQuery::getMatch( const unordered_map<string, set<string>> &key_value_pairs) const
+MatchQuery::getMatch(
+    const unordered_map<string, set<string>> &key_value_pairs,
+    bool skip_irrelevant_key) const
 {
     MatchQuery::MatchResult matches;
     matches.matched_keywords = make_shared<set<string>>();
-    matches.is_match = matchAttributes(key_value_pairs, *matches.matched_keywords);
+    matches.is_match = matchAttributes(key_value_pairs, *matches.matched_keywords, skip_irrelevant_key);
     dbgTrace(D_RULEBASE_CONFIG) << "Match result: " << matches.is_match;
     return matches;
 }
 
 bool
 MatchQuery::matchAttributes(
-        const unordered_map<string, set<string>> &key_value_pairs) const
+        const unordered_map<string, set<string>> &key_value_pairs,
+        bool skip_irrelevant_key) const
 {
-    return getMatch(key_value_pairs).is_match;
+    return getMatch(key_value_pairs, skip_irrelevant_key).is_match;
 }
 
 bool

@@ -14,7 +14,7 @@
 #ifndef __NGINX_INTAKER_METRIC_H__
 #define __NGINX_INTAKER_METRIC_H__
 
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 #include "generic_metric.h"
 #include "cpu/cpu_metric.h"
 
@@ -26,11 +26,11 @@ public:
 
     void resetAllCounters();
 
-    ngx_http_plugin_metric_type_e EnumOfIndex(int i);
+    AttachmentMetricType EnumOfIndex(int i);
 
-    void addPluginMetricCounter(const ngx_http_cp_metric_data_t *recieved_metric_data);
+    void addPluginMetricCounter(const NanoHttpMetricData *recieved_metric_data);
 
-    uint64_t getPluginMetricCounter(ngx_http_plugin_metric_type_e _verdict) const;
+    uint64_t getPluginMetricCounter(AttachmentMetricType _verdict) const;
 
     void notifyCPU() const { cpu_event.notify(); }
 

@@ -106,6 +106,18 @@ public:
 
     virtual void clearOldTenants() = 0;
 
+    virtual bool isConfigCacheEnabled() const = 0;
+    virtual void resetConfigCache() = 0;
+    virtual const std::string & getPolicyLoadId() const = 0;
+    
+    // Cache statistics access functions
+    virtual uint64_t getCacheHits() const = 0;
+    virtual uint64_t getCacheMisses() const = 0;
+    virtual void resetCacheStats() = 0;
+    virtual void enableCacheTracking() = 0;
+    virtual void disableCacheTracking() = 0;
+    virtual bool isCacheTrackingEnabled() const = 0;
+
 protected:
     virtual ~I_Config() {}
 };

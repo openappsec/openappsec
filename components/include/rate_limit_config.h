@@ -120,6 +120,7 @@ public:
 
     const std::vector<RateLimitRule> & getRateLimitRules() const { return rate_limit_rules; }
     const RateLimitAction & getRateLimitMode() const { return mode; }
+    const std::string & getWebUserResponse() const { return web_user_response; }
 
     RateLimitRule generateSiblingRateLimitRule(const RateLimitRule &rule);
 
@@ -150,6 +151,8 @@ public:
 
     static bool isActive() { return is_active; }
 
+    void setWebUserResponse(const std::string& response_id) { web_user_response = response_id; }
+
     static const std::map<RateLimitAction, std::string> rate_limit_action_to_string;
     static const std::map<std::string, RateLimitAction> rate_limit_string_to_action;
 
@@ -160,6 +163,7 @@ private:
     static bool is_active;
     RateLimitAction mode;
     std::vector<RateLimitRule> rate_limit_rules;
+    std::string web_user_response;
 };
 
 #endif // __RATE_LIMIT_CONFIG_H__

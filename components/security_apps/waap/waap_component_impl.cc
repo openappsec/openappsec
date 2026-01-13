@@ -24,6 +24,7 @@
 #include <libxml/parser.h>
 
 #include "debug.h"
+#include "user_identifiers_config.h"
 #include "waap_clib/WaapAssetStatesManager.h"
 #include "waap_clib/Waf2Engine.h"
 #include "waap_clib/WaapConfigApi.h"
@@ -45,10 +46,10 @@ USE_DEBUG_FLAG(D_OA_SCHEMA_UPDATER);
 USE_DEBUG_FLAG(D_NGINX_EVENTS);
 
 WaapComponent::Impl::Impl() :
-    pending_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT),
-    accept_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT),
-    drop_response(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP),
-    limit_response_headers(ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS),
+    pending_response(ServiceVerdict::TRAFFIC_VERDICT_INSPECT),
+    accept_response(ServiceVerdict::TRAFFIC_VERDICT_ACCEPT),
+    drop_response(ServiceVerdict::TRAFFIC_VERDICT_DROP),
+    limit_response_headers(ServiceVerdict::LIMIT_RESPONSE_HEADERS),
     waapStateTable(NULL),
     transactionsCount(0),
     deepAnalyzer()
@@ -221,17 +222,47 @@ WaapComponent::Impl::respond(const HttpRequestHeaderEvent &event)
     IWaf2Transaction& waf2Transaction = waapStateTable->getState<Waf2Transaction>();
 
     // Tell waf2 API that another request header arrived
-    waf2Transaction.add_request_hdr(
-        reinterpret_cast<const char *>(header_name.data()),  //const char * name //
-        header_name.size(),  //int name_len //
-        reinterpret_cast<const char *>(header_value.data()), //const char * value //
-        header_value.size()  //int value_len //
-    );
+    if (event.shouldLog()) {
+        waf2Transaction.add_request_hdr(
+            reinterpret_cast<const char *>(header_name.data()),  //const char * name //
+            header_name.size(),  //int name_len //
+            reinterpret_cast<const char *>(header_value.data()), //const char * value //
+            header_value.size()  //int value_len //
+        );
+    } else {
+        dbgTrace(D_WAAP)
+            << "Header '"
+            << std::dumpHex(header_name)
+            << "' marked as should not log, skipping adding to WAF2";
+    }
 
     EventVerdict verdict = pending_response;
 
     // Last header handled
     if (event.isLastHeader()) {
+
+        // NEXUS env should take real client ip from X-Forwarded-For header
+        if (getProfileAgentSettingWithDefault<bool>(false, "agent.saasProfile.ignoreSourceIP")) {
+
+            auto env = Singleton::Consume<I_Environment>::by<WaapComponent>();
+            auto maybe_xff = env->get<std::string>(HttpTransactionData::xff_vals_ctx);
+            if (!maybe_xff.ok()) {
+                dbgTrace(D_WAAP) << "failed to get xff vals from env";
+            } else {
+                // Extract the last IP from XFF header (actual client IP)
+                std::string xff_header = maybe_xff.unpack();
+                size_t last_comma_pos = xff_header.find_last_of(',');
+                std::string sourceIpStr = (last_comma_pos != std::string::npos) ?
+                    xff_header.substr(last_comma_pos + 1) : xff_header;
+                // Trim whitespace
+                sourceIpStr.erase(0, sourceIpStr.find_first_not_of(" \t"));
+                sourceIpStr.erase(sourceIpStr.find_last_not_of(" \t") + 1);
+
+                dbgTrace(D_WAAP) << "taking source IP for nexus from last xff header: " << sourceIpStr;
+                waf2Transaction.set_transaction_remote(sourceIpStr.c_str(), NEXUS_PORT);
+            }
+        }
+
         waf2Transaction.end_request_hdrs();
 
         verdict = waf2Transaction.getUserLimitVerdict();
@@ -283,9 +314,9 @@ WaapComponent::Impl::respond(const HttpRequestBodyEvent &event)
 
     waf2Transaction.add_request_body_chunk(dataBuf, dataBufLen);
 
-    ngx_http_cp_verdict_e verdict = waf2Transaction.getUserLimitVerdict();
+    ServiceVerdict verdict = waf2Transaction.getUserLimitVerdict();
     EventVerdict eventVedict(verdict);
-    if (verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT) {
+    if (verdict != ServiceVerdict::TRAFFIC_VERDICT_INSPECT) {
         finishTransaction(waf2Transaction, eventVedict);
     }
 
@@ -324,8 +355,8 @@ WaapComponent::Impl::respond(const EndRequestEvent &)
     EventVerdict verdict = waapDecision(waf2Transaction);
 
     // Delete state before returning any verdict which is not pending
-    if (verdict.getVerdict() != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
-        verdict.getVerdict() != ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS &&
+    if (verdict.getVerdict() != ServiceVerdict::TRAFFIC_VERDICT_INSPECT &&
+        verdict.getVerdict() != ServiceVerdict::LIMIT_RESPONSE_HEADERS &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
         finishTransaction(waf2Transaction, verdict);
@@ -373,8 +404,8 @@ WaapComponent::Impl::respond(const ResponseCodeEvent &event)
     }
 
     // Delete state before returning any verdict which is not pending
-    if (verdict.getVerdict() != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
-        verdict.getVerdict() != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT &&
+    if (verdict.getVerdict() != ServiceVerdict::TRAFFIC_VERDICT_INSPECT &&
+        verdict.getVerdict() != ServiceVerdict::TRAFFIC_VERDICT_INJECT &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
         finishTransaction(waf2Transaction, verdict);
@@ -413,7 +444,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
         header_value.size()
     );
 
-    ngx_http_cp_verdict_e verdict = pending_response.getVerdict();
+    ServiceVerdict verdict = pending_response.getVerdict();
     HttpHeaderModification modifications;
     std::string webUserResponseByPractice;
     bool isSecurityHeadersInjected = false;
@@ -441,7 +472,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
                 }
             }
             isSecurityHeadersInjected = true;
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
+            verdict = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
         }
     }
 
@@ -461,7 +492,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
                     << ". Error: "
                     << result.getErr();
             }
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
+            verdict = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
         }
     }
 
@@ -476,15 +507,15 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
     }
 
     if (waf2Transaction.shouldInjectSecurityHeaders() && isSecurityHeadersInjected &&
-        verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT
+        verdict == ServiceVerdict::TRAFFIC_VERDICT_INJECT
     ) {
         // disable should inject security headers after injection to avoid response body scanning when it's unnecessary
         waf2Transaction.disableShouldInjectSecurityHeaders();
     }
     EventVerdict eventVedict(move(modifications.getModificationList()), verdict);
     // Delete state before returning any verdict which is not pending
-    if (verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
-        verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT &&
+    if (verdict != ServiceVerdict::TRAFFIC_VERDICT_INSPECT &&
+        verdict != ServiceVerdict::TRAFFIC_VERDICT_INJECT &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
         finishTransaction(waf2Transaction, eventVedict);
@@ -530,7 +561,7 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
 
     waf2Transaction.add_response_body_chunk(dataBuf, dataBufLen);
 
-    ngx_http_cp_verdict_e verdict = pending_response.getVerdict();
+    ServiceVerdict verdict = pending_response.getVerdict();
     HttpBodyModification modifications;
     std::string webUserResponseByPractice;
 
@@ -571,7 +602,7 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
             if(!result.ok()) {
                 dbgWarning(D_WAAP) << "HttpBodyResponse(): Scripts injection failed!";
             }
-            verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
+            verdict = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
         } else {
             // This response body is not considered "HTML" - disable injection
             dbgTrace(D_WAAP) << "HttpBodyResponse(): the response body is not HTML - disabling injection";
@@ -589,8 +620,8 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
     }
     EventVerdict eventVedict(modifications.getModificationList(), verdict);
     // Delete state before returning any verdict which is not pending or inject
-    if (verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT &&
-        verdict != ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT &&
+    if (verdict != ServiceVerdict::TRAFFIC_VERDICT_INSPECT &&
+        verdict != ServiceVerdict::TRAFFIC_VERDICT_INJECT &&
         waapStateTable->hasState<Waf2Transaction>()
     ) {
         finishTransaction(waf2Transaction, eventVedict);

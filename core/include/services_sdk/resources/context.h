@@ -76,14 +76,26 @@ public:
     template <typename T, typename ... Attr>
     void registerValue(const std::string &name, const T &value, Attr ... attr);
 
+    template <typename T, typename ... Attr>
+    void registerQuickAccessValue(const std::string &name, const T &value, Attr ... attr);
+
     template <typename ... Params>
     void registerValue(MetaDataType name, Params ... params);
+
+    template <typename ... Params>
+    void registerQuickAccessValue(MetaDataType name, Params ... params);
 
     template <typename T, typename ... Attr>
     void registerFunc(const std::string &name, std::function<T()> &&func, Attr ... attr);
 
     template <typename T, typename ... Attr>
+    void registerQuickAccessFunc(const std::string &name, std::function<T()> &&func, Attr ... attr);
+
+    template <typename T, typename ... Attr>
     void registerFunc(const std::string &name, std::function<Return<T>()> &&func, Attr ... attr);
+
+    template <typename T, typename ... Attr>
+    void registerQuickAccessFunc(const std::string &name, std::function<Return<T>()> &&func, Attr ... attr);
 
     template <typename T>
     void unregisterKey(const std::string &name);
@@ -105,6 +117,7 @@ public:
 
 private:
     std::map<Key, std::unique_ptr<AbstractValue>> values;
+    std::map<Key, std::unique_ptr<AbstractValue>> quick_access_values; // Common values for all contexts
 };
 
 class ScopedContext;

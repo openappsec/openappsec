@@ -46,27 +46,33 @@ SHELL_CMD_HANDLER("prerequisitesForHorizonTelemetry",
     "FS_PATH=<FILESYSTEM-PREFIX>; [ -f ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log ] "
     "&& head -1 ${FS_PATH}/cp-nano-horizon-telemetry-prerequisites.log || echo ''",
     checkIsInstallHorizonTelemetrySucceeded)
-SHELL_CMD_HANDLER(
-    "IS_AIOPS_RUNNING",
-    "FS_PATH=<FILESYSTEM-PREFIX>; "
-    "PID=$(ps auxf | grep -v grep | grep -E ${FS_PATH}.*cp-nano-horizon-telemetry | awk -F' ' '{printf $2}'); "
-    "[ -z \"${PID}\" ] && echo 'false' || echo 'true'",
-    getIsAiopsRunning)
+SHELL_CMD_HANDLER("isCME", "[ -d /opt/CPcme ] && echo 'true' || echo 'false'", checkIsCME)
 #endif
 #if defined(gaia)
 SHELL_CMD_HANDLER("GLOBAL_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo ''",
     getQUID)
 SHELL_CMD_HANDLER("QUID", "FS_PATH=<FILESYSTEM-PREFIX>;"
-    "VS_ID=$(echo \"${FS_PATH}\" | grep -o -E \"vs[0-9]+\" | grep -o -E \"[0-9]+\");"
-    "[ -z \"${VS_ID}\" ] && "
-    "(python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo '');"
-    "[ -n \"${VS_ID}\" ] && "
-    "(sed \"s|###VS_ID###|${VS_ID}|g\" /opt/CPotelcol/quid_api/get_vs_quid.json"
-    " > /opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID}); "
-    "[ -n \"${VS_ID}\" ] && [ -f /opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} ] && "
-    "(python3 /opt/CPquid/Quid_Api.py -i "
-    "/opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} | jq -r .message[0].QUID || echo '');",
+    "IS_MDS=$(cpprod_util CPPROD_IsConfigured PROVIDER-1 2>/dev/null | tr -d ' ');"
+    "if [ \"${IS_MDS}\" = \"1\" ]; then "
+        "DOMAIN_NAME=$(echo \"${FS_PATH}\" | grep -o -E \"domain-[^/]+\" | sed 's|domain-||');"
+        "[ -z \"${DOMAIN_NAME}\" ] && echo '' && exit 0;"
+        "sed \"s|###DOMAIN_NAME###|${DOMAIN_NAME}|g\" /opt/CPotelcol/quid_api/get_mds_quid.json"
+        " > /opt/CPotelcol/quid_api/get_mds_quid.json.${DOMAIN_NAME};"
+        "[ -f /opt/CPotelcol/quid_api/get_mds_quid.json.${DOMAIN_NAME} ] && "
+        "python3 /opt/CPquid/Quid_Api.py -i "
+        "/opt/CPotelcol/quid_api/get_mds_quid.json.${DOMAIN_NAME} 2>/dev/null | jq -r .message[0].MDS_QUID || echo '';"
+    "else "
+        "VS_ID=$(echo \"${FS_PATH}\" | grep -o -E \"vs[0-9]+\" | grep -o -E \"[0-9]+\");"
+        "[ -z \"${VS_ID}\" ] && "
+        "(python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_global_id.json | jq -r .message || echo '');"
+        "[ -n \"${VS_ID}\" ] && "
+        "(sed \"s|###VS_ID###|${VS_ID}|g\" /opt/CPotelcol/quid_api/get_vs_quid.json"
+        " > /opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID}); "
+        "[ -n \"${VS_ID}\" ] && [ -f /opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} ] && "
+        "(python3 /opt/CPquid/Quid_Api.py -i "
+        "/opt/CPotelcol/quid_api/get_vs_quid.json.${VS_ID} | jq -r .message[0].QUID || echo '');"
+    "fi",
     getQUID)
 SHELL_CMD_HANDLER("SMO_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i "
@@ -76,9 +82,21 @@ SHELL_CMD_HANDLER("MGMT_QUID", "[ -d /opt/CPquid ] "
     "&& python3 /opt/CPquid/Quid_Api.py -i "
     "/opt/CPotelcol/quid_api/get_mgmt_quid.json | jq -r .message[0].MGMT_QUID || echo ''",
     getQUID)
+SHELL_CMD_HANDLER("MHO_QUID",
+    "[ -d /opt/CPquid ] && "
+    "python3 /opt/CPquid/Quid_Api.py -i /opt/CPotelcol/quid_api/get_mho_quid.json 2>/dev/null | "
+    "jq -r '[.message[]? | select(.MHO_QUID != \"\") | .MHO_QUID] | join(\",\")' 2>/dev/null || "
+    "echo ''",
+    getQUIDList)
 SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "[ -d /opt/CPOtlpAgent/custom_scripts ] "
     "&& ENV_NO_FORMAT=1 /opt/CPOtlpAgent/custom_scripts/agent_role.sh",
     getOtlpAgentGaiaOsRole)
+SHELL_CMD_HANDLER("AIOPS_CGNS_HW_TYPE", ""
+    "command -v dmidecode &>/dev/null && dmidecode -t 1 2>/dev/null",
+    getAiopCgnsHardwareType)
+SHELL_CMD_HANDLER("AIOPS_CGNS_CLOUD_VENDOR",
+    "cat /etc/cloud-version 2>/dev/null",
+    getAiopsCgnsCloudVendor)
 SHELL_CMD_HANDLER("ETH_MGMT_IP",
     "FS_PATH=<FILESYSTEM-PREFIX>;"
     "VS_ID=$(echo \"${FS_PATH}\" | grep -o -E \"vs[0-9]+\" | grep -o -E \"[0-9]+\");"
@@ -104,7 +122,12 @@ SHELL_CMD_HANDLER("MGMT_QUID", "echo ''", getQUID)
 SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "echo 'SMB'", getOtlpAgentGaiaOsRole)
 #endif
 #if defined(gaia) || defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
-SHELL_CMD_HANDLER("hasSDWan", "[ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0'", checkHasSDWan)
+SHELL_CMD_HANDLER(
+    "hasSDWan",
+    "[ $(cpprod_util CPPROD_IsMgmtMachine) -eq 1 ] && echo '0' ||"
+    "([ -f $FWDIR/bin/sdwan_steering ] && echo '1' || echo '0')",
+    checkHasSDWan
+)
 SHELL_CMD_HANDLER(
     "canUpdateSDWanData",
     "jq -r .can_update_sdwan_data /tmp/cpsdwan_getdata_orch.json",
@@ -131,10 +154,11 @@ SHELL_CMD_HANDLER(
 )
 SHELL_CMD_HANDLER(
     "cpProductIntegrationMgmtParentObjectIP",
-    "obj=\"$(jq -r .cluster_name /tmp/cpsdwan_getdata_orch.json)\";"
+    "[ $(cpprod_util FwIsHighAvail) -eq 1 ] && "
+    "(obj=\"$(jq -r .cluster_name /tmp/cpsdwan_getdata_orch.json)\";"
     " awk -v obj=\"$obj\" '$1 == \":\" && $2 == \"(\" obj, $1 == \":ip_address\" { if ($1 == \":ip_address\")"
     " { gsub(/[()]/, \"\", $2); print $2; exit; } }'"
-    " $FWDIR/state/local/FW1/local.gateway_cluster",
+    " $FWDIR/state/local/FW1/local.gateway_cluster) || echo \"\"",
     getClusterObjectIP
 )
 SHELL_CMD_HANDLER(
@@ -146,7 +170,16 @@ SHELL_CMD_HANDLER("is_legacy_qos_blade_enabled",
     "cpprod_util CPPROD_GetValue FG1 ProdActive 1 | grep -q '^1$' "
     "&& (cpprod_util CPPROD_GetValue FG1 FgSDWAN 1 | grep -q '^1$' && echo false || echo true) || "
     "echo false",
-    checkQosLegacyBlade)
+    checkQosLegacyBlade
+)
+SHELL_CMD_HANDLER(
+    "IPv6 Address",
+    "( [ $(cpprod_util FwIsHighAvail) -eq 1 ] && [ $(cpprod_util FwIsVSX) -eq 1 ]"
+    "&& (jq -r .cluster_main_ipv6 /tmp/cpsdwan_getdata_orch.json) )"
+    "|| ( [ $(cpprod_util FWisDAG) -eq 1 ] && echo \"Dynamic Address\" )"
+    "|| (jq -r .main_ipv6 /tmp/cpsdwan_getdata_orch.json)",
+    getGWIPv6Address
+)
 #endif //gaia || smb
 
 #if defined(gaia)
@@ -154,6 +187,10 @@ SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedB
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
 SHELL_CMD_HANDLER("hasVPNBlade", "enabled_blades", checkVPNBlade)
 SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
+SHELL_CMD_HANDLER("hasIdaPdpEnabled",
+    "cat $FWDIR/database/myself_objects.C | grep is_collecting_identities",
+    checkIdaPDP
+)
 SHELL_CMD_HANDLER("hasInfinityIdentityEnabled",
     "cat $FWDIR/database/myself_objects.C | grep get_identities_from_infinity_identity",
     checkInfinityIdentityEnabled

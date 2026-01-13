@@ -47,6 +47,16 @@ public:
         const std::string &routine_name,
         bool is_primary = false
     ) = 0;
+    
+    virtual RoutineID
+    addBalancedIntervalRoutine(
+        RoutineType priority,
+        std::chrono::microseconds interval,
+        Routine func,
+        const std::string &routine_name,
+        std::chrono::microseconds offset = std::chrono::microseconds(0),
+        bool is_primary = false
+    ) = 0;
 
     virtual RoutineID
     addFileRoutine(

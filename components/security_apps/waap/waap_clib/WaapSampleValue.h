@@ -21,16 +21,18 @@
 #include "WaapRegexPreconditions.h"
 #include "buffer.h"
 
+class Signatures;
+
 class SampleValue
 {
 public:
-    SampleValue(const std::string &sample, const std::shared_ptr<Waap::RegexPreconditions> &regexPreconditions);
+    SampleValue(const std::string &sample, const Signatures* signatures);
     const std::string &getSampleString() const;
     void findMatches(const Regex &pattern, std::vector<RegexMatch> &matches) const;
 
 private:
     std::string m_sample;
-    const std::shared_ptr<Waap::RegexPreconditions> m_regexPreconditions;
+    const Signatures* m_signatures;
     Waap::RegexPreconditions::PmWordSet m_pmWordSet;
 };
 

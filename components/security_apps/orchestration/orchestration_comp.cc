@@ -1535,6 +1535,11 @@ private:
         if (i_details_resolver->compareCheckpointVersion(8200, greater_equal<int>())) {
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER82", "true");
         }
+        if (i_details_resolver->compareCheckpointVersion(8200, equal_to<int>())) {
+            agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionR82", "true");
+        } else {
+            agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionR82", "false");
+        }
 #endif // gaia || smb
 
         if (agent_data_report == curr_agent_data_report) {

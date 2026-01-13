@@ -29,8 +29,8 @@ USE_DEBUG_FLAG(D_WAAP);
 #define TYPES_FILTER_TRUST_PATH(dirPath) dirPath + "/9.data"
 
 TypeIndicatorFilter::TypeIndicatorFilter(I_WaapAssetState* pWaapAssetState,
-    const std::string& remotePath,
-    const std::string& assetId,
+    const std::string &remotePath,
+    const std::string &assetId,
     TuningDecision* tuning,
     size_t minSources,
     size_t minIntervals,
@@ -78,7 +78,7 @@ bool TypeIndicatorFilter::shouldFilterKeyword(const std::string &key, const std:
     return false;
 }
 
-void TypeIndicatorFilter::registerKeywords(const std::string& key, Waap::Keywords::KeywordsSet& keywords,
+void TypeIndicatorFilter::registerKeywords(const std::string &key, Waap::Keywords::KeywordsSet &keywords,
     IWaf2Transaction* pTransaction)
 {
     (void)keywords;
@@ -86,15 +86,21 @@ void TypeIndicatorFilter::registerKeywords(const std::string& key, Waap::Keyword
     registerKeywords(key, sample, pTransaction);
 }
 
-void TypeIndicatorFilter::registerKeywords(const std::string& key, const std::string& sample,
+void TypeIndicatorFilter::registerKeywords(const std::string &key, const std::string &sample,
     IWaf2Transaction* pTransaction)
 {
     std::set<std::string> types = m_pWaapAssetState->getSampleType(sample);
     std::string source = pTransaction->getSourceIdentifier();
-    std::string trusted_source = getTrustedSource(pTransaction);
+    auto trusted_source_maybe = getTrustedSource(pTransaction);
+    std::string trusted_source = trusted_source_maybe.ok() ? trusted_source_maybe.unpack() : "";
 
     for (const std::string &type : types)
     {
+        if (type == "long_random_text")
+        {
+            // Skip long random text types, as they are not useful for filtering
+            continue;
+        }
         if (type == "local_file_path")
         {
             std::string location = IndicatorsFiltersManager::getLocationFromKey(key, pTransaction);
@@ -142,7 +148,7 @@ void TypeIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapParam
     m_confidence_calc.reset(params);
 }
 
-std::set<std::string> TypeIndicatorFilter::getParamTypes(const std::string& canonicParam) const
+std::set<std::string> TypeIndicatorFilter::getParamTypes(const std::string &canonicParam) const
 {
     std::set<std::string> types = m_confidence_calc.getConfidenceValues(canonicParam);
     if (m_policy != nullptr)
@@ -152,4 +158,21 @@ std::set<std::string> TypeIndicatorFilter::getParamTypes(const std::string& cano
         types.insert(types_trusted.begin(), types_trusted.end());
     }
     return types;
+}
+
+bool TypeIndicatorFilter::shouldTrack(const std::string& key, const IWaf2Transaction* pTransaction) {
+    // Retrieve the sample from the transaction
+    std::string sample = pTransaction->getLastScanSample();
+
+    // Get the types associated with the sample
+    std::set<std::string> sampleTypes = m_pWaapAssetState->getSampleType(sample);
+
+    // Check if any of the sample types should be tracked
+    for (const auto& type : sampleTypes) {
+        if (m_confidence_calc.shouldTrackParameter(key, type)) {
+            return true;
+        }
+    }
+
+    return false;
 }

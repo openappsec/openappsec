@@ -66,6 +66,8 @@ struct ConfidenceCalculatorParams
     friend std::ostream & operator<<(std::ostream &os, const ConfidenceCalculatorParams &ccp);
 };
 
+// TODO PHASE3: remove inheritance from SerializeToLocalAndRemoteSyncBase
+
 class ConfidenceCalculator : public SerializeToLocalAndRemoteSyncBase
 {
 public:
@@ -106,16 +108,15 @@ public:
     bool reset(ConfidenceCalculatorParams &params);
 
     virtual bool postData();
-    virtual void pullData(const std::vector<std::string>& files);
+    virtual void pullData(const std::vector<std::string> &files);
     virtual void processData();
     virtual void postProcessedData();
-    virtual void pullProcessedData(const std::vector<std::string>& files);
-    virtual void updateState(const std::vector<std::string>& files);
+    virtual void pullProcessedData(const std::vector<std::string> &files);
+    virtual void updateState(const std::vector<std::string> &files);
+    virtual Maybe<std::string> getRemoteStateFilePath() const override;
 
     virtual void serialize(std::ostream &stream);
     virtual void deserialize(std::istream &stream);
-
-    Maybe<void> writeToFile(const std::string& path, const std::vector<unsigned char>& data);
 
     void mergeFromRemote(const ConfidenceSet &remote_confidence_set, bool is_first_pull);
 
@@ -135,6 +136,13 @@ public:
     static void mergeConfidenceSets(ConfidenceSet &confidence_set,
                                     const ConfidenceSet &confidence_set_to_merge,
                                     size_t &last_indicators_update);
+
+    // Methods for conditional parameter tracking (INXT-46771)
+    void setIndicatorTrackingKeys(const std::vector<std::string>& keys);
+    void markKeyAsConfident(const Key &key);
+    bool shouldTrackParameter(const Key &key, const Val &value);
+    void extractLowConfidenceKeys(const ConfidenceLevels& confidence_levels);
+
 private:
     void loadVer0(cereal::JSONInputArchive &archive);
     void loadVer1(cereal::JSONInputArchive &archive);
@@ -178,4 +186,8 @@ private:
     I_MainLoop *m_mainLoop;
     I_MainLoop::RoutineID m_routineId;
     std::vector<std::string> m_filesToRemove;
+
+    // Additional member variables for conditional tracking (INXT-46771)
+    std::unordered_set<std::string> m_indicator_tracking_keys;
+    bool m_tracking_keys_received;
 };

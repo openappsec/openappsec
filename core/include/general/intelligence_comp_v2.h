@@ -32,7 +32,8 @@ class IntelligenceComponentV2
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_AgentDetails>,
     Singleton::Consume<I_RestApi>,
-    Singleton::Consume<I_TimeGet>
+    Singleton::Consume<I_TimeGet>,
+    Singleton::Consume<I_Environment>
 {
 public:
     IntelligenceComponentV2();

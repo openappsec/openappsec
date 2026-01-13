@@ -27,6 +27,7 @@ var_default_us_fog_address="inext-agents-us.cloud.ngen.checkpoint.com"
 var_default_au_fog_address="inext-agents-aus1.cloud.ngen.checkpoint.com"
 var_default_in_fog_address="inext-agents-ind1.cloud.ngen.checkpoint.com"
 var_default_ae_fog_address="inext-agents-ae.cloud.ngen.checkpoint.com"
+var_default_ca_fog_address="inext-agents-ca.cloud.ngen.checkpoint.com"
 
 #NOTE: open-appsec-ctl only supports nano services with name of the format cp-nano-<service>
 cp_nano_service_name_prefix="cp-nano"
@@ -280,7 +281,7 @@ usage()
     uninstall_option="-u,  --uninstall"
     load_config_option="-lc, --load-config <$(get_installed_services '|')>"
     display_config_option="-dc, --display-config [$(get_installed_services '|')]"
-    cp_agent_info_option="--info [-wd|--with_dump|-u|--upload|-fms|--file_max_size|-an|--additional_name]"
+    cp_agent_info_option="--info [-wd|--with_dump|-fms|--file_max_size|-an|--additional_name]"
     display_policy_option="-dp, --display-policy"
     set_gradual_policy_option="-gp, --set-gradual-policy [access-control|http-manager] <ip-ranges>"
     delete_gradual_policy_option="-dg, --delete-gradual-policy [access-control|http-manager]"
@@ -1110,6 +1111,11 @@ set_proxy() # Initials - sp
         echo "Failed to set proxy. Error: ${sp_curl_output}"
         exit 1
     fi
+
+    for service in $(get_installed_services); do
+        run_load_settings "$service"
+    done
+
     echo "Proxy successfully changed to $sp_proxy"
 }
 
@@ -1312,7 +1318,6 @@ run_ai() # Initials - ra
 
     for arg; do
         if [ "$arg" = "--upload" ] || [ "$arg" = "-u" ]; then
-            ra_upload_to_fog=true
             shift
             continue
         elif [ "$arg" = "--verbose" ] || [ "$arg" = "-v" ]; then
@@ -1323,14 +1328,6 @@ run_ai() # Initials - ra
         set -- "$@" "$arg"
         shift
     done
-
-    if [ "$ra_upload_to_fog" = "false" ]; then
-        printf "Would you like to upload the file to be inspected by the product support team? [y/n] " && read -r ra_should_upload
-        case $ra_should_upload in
-        [Yy] | [Yy][Ee][Ss]) ra_upload_to_fog=true ;;
-        *) ;;
-        esac
-    fi
 
     ra_https_prefix="https://"
     ra_agent_details=$(cat ${FILESYSTEM_PATH}/$cp_nano_conf_location/agent_details.json)
@@ -1563,11 +1560,15 @@ set_mode()
             in_prefix_uppercase="CP-IN-"
             ae_prefix="cp-ae-"
             ae_prefix_uppercase="CP-AE-"
+            ca_prefix="cp-ca-"
+            ca_prefix_uppercase="CP-CA-"
 
             if [ "${var_token#"$us_prefix"}" != "${var_token}" ] || [ "${var_token#"$us_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_us_fog_address"
             elif [ "${var_token#"$ae_prefix"}" != "${var_token}" ] || [ "${var_token#"$ae_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_ae_fog_address"
+            elif [ "${var_token#"$ca_prefix"}" != "${var_token}" ] || [ "${var_token#"$ca_prefix_uppercase"}" != "${var_token}" ]; then
+                var_fog_address="$var_default_ca_fog_address"
             elif [ "${var_token#$au_prefix}" != "${var_token}" ] || [ "${var_token#"$au_prefix_uppercase"}" != "${var_token}" ]; then
                 var_fog_address="$var_default_au_fog_address"
             elif [ "${var_token#$in_prefix}" != "${var_token}" ] || [ "${var_token#"$in_prefix_uppercase"}" != "${var_token}" ]; then

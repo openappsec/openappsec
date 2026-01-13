@@ -50,6 +50,7 @@ CurlHttpClient::~CurlHttpClient()
     curl_global_cleanup();
 }
 
+// LCOV_EXCL_START
 void
 CurlHttpClient::setProxy(const string& hosts)
 {
@@ -68,7 +69,15 @@ CurlHttpClient::authEnabled(bool enabled)
 {
     auth_enabled = enabled;
 }
+// LCOV_EXCL_STOP
 
+void
+CurlHttpClient::setConfigs(const CurlHttpClientConfig& config)
+{
+    this->config = config;
+}
+
+// LCOV_EXCL_START
 HTTPResponse
 CurlHttpClient::get(const string& url, const map<string, string>& headers)
 {
@@ -106,6 +115,7 @@ CurlHttpClient::WriteCallback(void *contents, size_t size, size_t nmemb, string 
     userp->append(static_cast<char *>(contents), totalSize);
     return totalSize;
 }
+// LCOV_EXCL_STOP
 
 HTTPResponse
 CurlHttpClient::perform_request(
@@ -127,6 +137,24 @@ CurlHttpClient::perform_request(
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
+
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, config.timeout_seconds);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config.connect_timeout_seconds);
+
+    if (config.verbose_enabled) {
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    }
+
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, config.ssl_verify_peer ? 1L : 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, config.ssl_verify_host ? 2L : 0L);
+
+    if (config.http_version != CURL_HTTP_VERSION_NONE) {
+        curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, config.http_version);
+    }
+
+    if (!config.user_agent.empty()) {
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, config.user_agent.c_str());
+    }
 
     if (!no_proxy_hosts.empty()) {
         dbgTrace(D_NGINX_MANAGER) << "Using proxy url: " << no_proxy_hosts;

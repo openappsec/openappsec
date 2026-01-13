@@ -233,9 +233,11 @@ public:
 
     static void setNewDefaultStdout(std::ostream *new_stream);
     static void setUnitTestFlag(DebugFlags flag, DebugLevel level);
+    static void setDebugFlag(DebugFlags flag, DebugLevel level);
 
     static std::string findDebugFilePrefix(const std::string &file_name);
     static std::string getExecutableName();
+    static bool getDebugFlagFromString(const std::string &flag_name, DebugFlags &flag);
 
 private:
     template <typename T, typename... Args>

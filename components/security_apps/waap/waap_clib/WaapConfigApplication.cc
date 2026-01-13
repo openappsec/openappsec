@@ -23,16 +23,19 @@ set<string> WaapConfigApplication::assets_ids{};
 set<string> WaapConfigApplication::assets_ids_aggregation{};
 
 bool WaapConfigApplication::getWaapSiteConfig(WaapConfigApplication& ngenSiteConfig) {
-    auto maybe_tenant_id = Singleton::Consume<I_Environment>::by<WaapConfigApplication>()->get<string>(
-        "ActiveTenantId"
-    );
-    auto maybe_profile_id = Singleton::Consume<I_Environment>::by<WaapConfigApplication>()->get<string>(
-        "ActiveProfileId"
-    );
-    string tenant_id = (maybe_tenant_id.ok() ? *maybe_tenant_id : "not found");
-    string profile_id = (maybe_profile_id.ok() ? *maybe_profile_id : "not found");
-    dbgTrace(D_WAAP) << "Tenant ID: " << tenant_id << ", Profile ID: " << profile_id;
-    auto &maybe_ngen_config = getConfiguration<WaapConfigApplication>(
+    // Only get tenant/profile id if debug is active
+    if (isDebugRequired(TRACE, D_WAAP)) {
+        auto maybe_tenant_id = Singleton::Consume<I_Environment>::by<WaapConfigApplication>()->get<string>(
+            "ActiveTenantId"
+        );
+        auto maybe_profile_id = Singleton::Consume<I_Environment>::by<WaapConfigApplication>()->get<string>(
+            "ActiveProfileId"
+        );
+        string tenant_id = (maybe_tenant_id.ok() ? *maybe_tenant_id : "not found");
+        string profile_id = (maybe_profile_id.ok() ? *maybe_profile_id : "not found");
+        dbgTrace(D_WAAP) << "Tenant ID: " << tenant_id << ", Profile ID: " << profile_id;
+    }
+    auto &maybe_ngen_config = getConfigurationWithCache<WaapConfigApplication>(
         "WAAP",
         "WebApplicationSecurity"
         );

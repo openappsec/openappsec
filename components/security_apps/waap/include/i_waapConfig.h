@@ -40,6 +40,13 @@ enum class AttackMitigationMode
     PREVENT,
     UNKNOWN
 };
+
+enum class WaapConfigType {
+    Unknown = 0,
+    Application,
+    API
+};
+
 class IWaapConfig {
 public:
     virtual const std::string&   get_AssetId() const = 0;
@@ -65,6 +72,7 @@ public:
     virtual const std::shared_ptr<Waap::RateLimiting::Policy>& get_ErrorLimitingPolicy() const = 0;
     virtual const std::shared_ptr<Waap::SecurityHeaders::Policy>& get_SecurityHeadersPolicy() const = 0;
     virtual const std::shared_ptr<Waap::UserLimits::Policy>& get_UserLimitsPolicy() const = 0;
+    virtual WaapConfigType getType() const = 0;
 
     virtual void printMe(std::ostream& os) const = 0;
 };

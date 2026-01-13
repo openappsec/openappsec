@@ -2,13 +2,13 @@
 #define __IPS_COMP_H__
 
 #include "singleton.h"
+#include "i_generic_rulebase.h"
 #include "i_keywords_rule.h"
 #include "i_table.h"
 #include "i_mainloop.h"
 #include "i_http_manager.h"
 #include "i_environment.h"
 #include "http_inspection_events.h"
-#include "i_generic_rulebase.h"
 #include "component.h"
 
 class IPSComp

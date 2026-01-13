@@ -14,6 +14,7 @@ target_link_libraries(attachment_registration_manager
 
 	attachment_registrator
 	http_transaction_data
+        ${Brotli_LIBRARIES}
         -Wl,--end-group
 )
 

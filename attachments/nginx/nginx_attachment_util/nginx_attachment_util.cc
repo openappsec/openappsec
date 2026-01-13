@@ -28,10 +28,10 @@ initAttachmentConfig(c_str conf_file)
     return conf_data.init(conf_file);
 }
 
-ngx_http_inspection_mode_e
+NanoHttpInspectionMode
 getInspectionMode()
 {
-    return static_cast<ngx_http_inspection_mode_e>(conf_data.getNumericalValue("nginx_inspection_mode"));
+    return static_cast<NanoHttpInspectionMode>(conf_data.getNumericalValue("nginx_inspection_mode"));
 }
 
 unsigned int
@@ -191,6 +191,24 @@ getRemoveResServerHeader()
     return conf_data.getNumericalValue("remove_server_header");
 }
 
+unsigned int
+getDecompressionPoolSize()
+{
+    return conf_data.getNumericalValue("decompression_pool_size");
+}
+
+unsigned int
+getRecompressionPoolSize()
+{
+    return conf_data.getNumericalValue("recompression_pool_size");
+}
+
+unsigned int
+getIsBrotliInspectionEnabled()
+{
+    return conf_data.getNumericalValue("is_brotli_inspection_enabled");
+}
+
 int
 isIPAddress(c_str ip_str)
 {
@@ -284,4 +302,16 @@ isSkipSource(c_str ip_str)
     }
 
     return 0;
+}
+
+unsigned int
+isPairedAffinityEnabled()
+{
+    return conf_data.getNumericalValue("is_paired_affinity_enabled") != 0;
+}
+
+unsigned int
+isAsyncModeEnabled()
+{
+    return conf_data.getNumericalValue("is_async_mode_enabled") != 0;
 }

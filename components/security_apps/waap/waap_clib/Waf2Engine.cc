@@ -371,6 +371,7 @@ Waf2Transaction::Waf2Transaction(std::shared_ptr<WaapAssetState> pWaapAssetState
     m_entry_time = chrono::duration_cast<chrono::milliseconds>(timeGet->getMonotonicTime());
 }
 
+
 Waf2Transaction::~Waf2Transaction() {
     dbgTrace(D_WAAP) << "Waf2Transaction::~Waf2Transaction: deleting m_requestBodyParser";
     delete m_requestBodyParser;
@@ -606,6 +607,7 @@ void Waf2Transaction::set_method(const char* method) {
 bool Waf2Transaction::checkIsScanningRequired()
 {
     bool result = false;
+
     if (WaapConfigAPI::getWaapAPIConfig(m_ngenAPIConfig)) {
         m_siteConfig = &m_ngenAPIConfig;
         auto rateLimitingPolicy = m_siteConfig ? m_siteConfig->get_RateLimitingPolicy() : NULL;
@@ -639,7 +641,6 @@ bool Waf2Transaction::checkIsScanningRequired()
             result = true;
         }
     }
-
     return result;
 }
 
@@ -652,7 +653,7 @@ bool Waf2Transaction::setCurrentAssetContext()
     result |= checkIsScanningRequired();
 
     if (!m_siteConfig) {
-        dbgWarning(D_WAAP) << "[transaction:" << this << "] "
+        dbgDebug(D_WAAP) << "[transaction:" << this << "] "
             "Failed to set sitePolicy for asset... using the original signatures";
         return result;
     }
@@ -1572,8 +1573,7 @@ Waf2Transaction::decideFinal(
             poolName;
 
     // decision of (either) API or Application module
-    bool shouldBlock = false;
-
+     bool shouldBlock = false;
     // TODO:: base class for both, with common inteface
     WaapConfigAPI ngenAPIConfig;
     WaapConfigApplication ngenSiteConfig;
@@ -1586,7 +1586,7 @@ Waf2Transaction::decideFinal(
         m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION] = getOverrideState(sitePolicy);
 
         // User limits
-        shouldBlock = (getUserLimitVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
+        shouldBlock = (getUserLimitVerdict() == ServiceVerdict::TRAFFIC_VERDICT_DROP);
     }
     else if (WaapConfigApplication::getWaapSiteConfig(ngenSiteConfig)) {
         dbgTrace(D_WAAP) << "Waf2Transaction::decideFinal(): got relevant Application configuration from the I/S";
@@ -1608,7 +1608,7 @@ Waf2Transaction::decideFinal(
             shouldBlock |= m_csrfState.decide(m_methodStr, m_waapDecision, csrfPolicy);
         }
         // User limits
-        shouldBlock |= (getUserLimitVerdict() == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP);
+        shouldBlock |= (getUserLimitVerdict() == ServiceVerdict::TRAFFIC_VERDICT_DROP);
     }
 
     if (mode == 2) {
@@ -1641,7 +1641,11 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     }
     waapLog << LogField("sourceIP", m_remote_addr);
     waapLog << LogField("httpSourceId", m_source_identifier);
-    waapLog << LogField("sourcePort", m_remote_port);
+    if (getProfileAgentSettingWithDefault<bool>(false, "agent.saasProfile.ignoreSourceIP")){
+        dbgTrace(D_WAAP) << "ignoring remote port in nexus log";
+    } else {
+        waapLog << LogField("sourcePort", m_remote_port);
+    }
     waapLog << LogField("httpHostName", m_hostStr);
     waapLog << LogField("httpMethod", m_methodStr);
     if (!m_siteConfig->get_AssetId().empty()) waapLog << LogField("assetId", m_siteConfig->get_AssetId());
@@ -1757,7 +1761,9 @@ Waf2Transaction::sendLog()
     dbgTrace(D_WAAP) << "send log got decision type: " << decision_type;
     auto final_decision = m_waapDecision.getDecision(decision_type);
     if (!final_decision) {
+        dbgTrace(D_WAAP) << "send log no decision found, using AUTONOMOUS_SECURITY_DECISION";
         final_decision = m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION);
+        decision_type = AUTONOMOUS_SECURITY_DECISION;
     }
 
     std::string attackTypes = buildAttackTypes();
@@ -1853,6 +1859,14 @@ Waf2Transaction::sendLog()
         return;
     }
     auto triggerLog = maybeTriggerLog.unpack();
+
+    if(final_decision->shouldForceLog() &&
+        triggerLog.shouldIgnoreExceptionLog(LogTriggerConf::SecurityType::ThreatPrevention)) {
+        // If we should ignore exception log, we need to handle it
+        dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: ignoring exception log";
+        return;
+    }
+
     bool send_extended_log = shouldSendExtendedLog(triggerLog, decision_type);
     shouldBlock |= m_waapDecision.getShouldBlockFromHighestPriorityDecision();
     // Do not send Detect log if trigger disallows it
@@ -1898,6 +1912,16 @@ Waf2Transaction::sendLog()
         return;
     }
 
+    ReportIS::Severity severity =
+        decision_type == USER_LIMITS_DECISION ? ReportIS::Severity::HIGH : ReportIS::Severity::CRITICAL;
+    if (final_decision->shouldForceLog()) {
+        if (logOverride == OVERRIDE_DROP) {
+            severity = ReportIS::Severity::MEDIUM;
+        } else if (logOverride == OVERRIDE_ACCEPT) {
+            severity = ReportIS::Severity::INFO;
+        }
+    }
+
     switch (decision_type)
     {
     case USER_LIMITS_DECISION: {
@@ -1923,7 +1947,7 @@ Waf2Transaction::sendLog()
                                 "Web Request",
                                 ReportIS::Audience::SECURITY,
                                 LogTriggerConf::SecurityType::ThreatPrevention,
-                                Severity::HIGH,
+                                severity,
                                 Priority::HIGH,
                                 shouldBlock);
 
@@ -1942,7 +1966,7 @@ Waf2Transaction::sendLog()
                                 "API Request",
                                 ReportIS::Audience::SECURITY,
                                 LogTriggerConf::SecurityType::ThreatPrevention,
-                                Severity::CRITICAL,
+                                severity,
                                 Priority::HIGH,
                                 shouldBlock);
 
@@ -1972,7 +1996,7 @@ Waf2Transaction::sendLog()
                                 "CSRF Protection",
                                 ReportIS::Audience::SECURITY,
                                 LogTriggerConf::SecurityType::ThreatPrevention,
-                                Severity::CRITICAL,
+                                severity,
                                 Priority::HIGH,
                                 shouldBlock);
 
@@ -2277,18 +2301,27 @@ bool Waf2Transaction::decideResponse()
         }
         auto triggerLog = maybeTriggerLog.unpack();
         auto env = Singleton::Consume<I_Environment>::by<Waf2Transaction>();
-        auto http_chunk_type = env->get<ngx_http_chunk_type_e>("HTTP Chunk type");
+        auto http_chunk_type = env->get<AttachmentDataType>("HTTP Chunk type");
         bool should_send_extended_log = shouldSendExtendedLog(triggerLog) && http_chunk_type.ok();
         if (should_send_extended_log &&
-            *http_chunk_type == ngx_http_chunk_type_e::RESPONSE_CODE &&
+            *http_chunk_type == AttachmentDataType::RESPONSE_CODE &&
             !triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseBody)
         ) {
+            dbgTrace(D_WAAP) << "response body is not active. Disabling extended logging";
             should_send_extended_log = false;
         } else if (should_send_extended_log &&
-            *http_chunk_type == ngx_http_chunk_type_e::REQUEST_END &&
+            *http_chunk_type == AttachmentDataType::REQUEST_END &&
             !triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseCode) &&
             !triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseBody)
         ) {
+            dbgTrace(D_WAAP) << "response code is not active. Disabling extended logging";
+            should_send_extended_log = false;
+        } else if (should_send_extended_log &&
+            *http_chunk_type == AttachmentDataType::RESPONSE_BODY &&
+            triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::responseBody) &&
+            m_response_body.length() >= MAX_RESPONSE_BODY_SIZE)
+        {
+            dbgTrace(D_WAAP) << "response body collected (" << m_response_body.length() << " bytes). Disabling extended logging";
             should_send_extended_log = false;
         }
 
@@ -2347,7 +2380,7 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     // collect sourceip, sourceIdentifier, url
     exceptions_dict["sourceIP"].insert(m_remote_addr);
     exceptions_dict["sourceIdentifier"].insert(m_source_identifier);
-    exceptions_dict["url"].insert(getUriStr());
+    exceptions_dict["url"].insert(m_uriPath);
     exceptions_dict["hostName"].insert(m_hostStr);
     exceptions_dict["method"].insert(m_methodStr);
 
@@ -2359,15 +2392,21 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     }
 
     bool isConfigExist = false;
-    if (WaapConfigAPI::getWaapAPIConfig(m_ngenAPIConfig)) {
-        dbgTrace(D_WAAP_OVERRIDE) << "waap api config found";
-        m_siteConfig = &m_ngenAPIConfig;
+    if (m_siteConfig &&
+        (m_siteConfig->getType() == WaapConfigType::API || m_siteConfig->getType() == WaapConfigType::Application)) {
+        dbgTrace(D_WAAP_OVERRIDE) << "waap config already exists";
         isConfigExist = true;
     } else if (WaapConfigApplication::getWaapSiteConfig(m_ngenSiteConfig)) {
         dbgTrace(D_WAAP_OVERRIDE) << "waap web application config found";
         m_siteConfig = &m_ngenSiteConfig;
         isConfigExist = true;
     }
+    else if (WaapConfigAPI::getWaapAPIConfig(m_ngenAPIConfig)) {
+        dbgTrace(D_WAAP_OVERRIDE) << "waap api config found";
+        m_siteConfig = &m_ngenAPIConfig;
+        isConfigExist = true;
+    }
+
     std::vector<std::string> site_exceptions;
     if (isConfigExist) {
         dbgTrace(D_WAAP_OVERRIDE) << "config exists, get override policy";
@@ -2387,7 +2426,7 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
             behaviors.insert(params.begin(), params.end());
         }
     } else {
-        auto exceptions = getConfiguration<ParameterException>("rulebase", "exception");
+        auto exceptions = getConfigurationWithCache<ParameterException>("rulebase", "exception");
         if (!exceptions.ok()) {
             dbgTrace(D_WAAP_OVERRIDE) << "matching exceptions error: " << exceptions.getErr();
             return false;

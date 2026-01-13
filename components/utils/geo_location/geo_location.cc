@@ -78,7 +78,7 @@ public:
 
         MMDB_lookup_result_s result = MMDB_lookup_sockaddr(&max_mind_db_obj, &sockaddr_to_search, &maxminddb_error);
         if (maxminddb_error != MMDB_SUCCESS) {
-            dbgWarning(D_GEO_DB) << "maxMindDB error: " << MMDB_strerror(maxminddb_error);
+            dbgDebug(D_GEO_DB) << "maxMindDB error: " << MMDB_strerror(maxminddb_error);
             return genError("maxMindDB error: " + string(MMDB_strerror(maxminddb_error)));
         }
         if (result.found_entry) {
@@ -153,9 +153,9 @@ private:
             }
         }
         if (status != MMDB_SUCCESS) {
-            dbgWarning(D_GEO_DB) << "maxMindDB error: " << MMDB_strerror(status);
+            dbgDebug(D_GEO_DB) << "maxMindDB error: " << MMDB_strerror(status);
         } else if (!entry_data.has_data) {
-            dbgWarning(D_GEO_DB) << "maxMindDB Entry has no data";
+            dbgDebug(D_GEO_DB) << "maxMindDB Entry has no data";
         } else {
             string search_result(entry_data.utf8_string, entry_data.data_size);
             return search_result;

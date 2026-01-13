@@ -32,6 +32,7 @@ target_link_libraries(
     curl
     external_sdk_server
 	service_health_status
+    ${Brotli_LIBRARIES}
     -Wl,--end-group
 )
 
@@ -41,6 +42,7 @@ install(TARGETS orchestration_comp DESTINATION bin)
 install(TARGETS orchestration_comp DESTINATION orchestration/bin)
 
 install(FILES package/certificate/ngen.body.crt DESTINATION orchestration/certificate/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
+install(FILES package/certificate/inext-ca-bundle.crt DESTINATION orchestration/certificate/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
 install(FILES package/certificate/public-keys/cloud-ngen.pem DESTINATION orchestration/certificate/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
 install(FILES package/certificate/public-keys/dev-i2.pem DESTINATION orchestration/certificate/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)
 install(FILES package/certificate/public-keys/i2.pem DESTINATION orchestration/certificate/ PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ)

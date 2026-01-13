@@ -17,7 +17,7 @@
 
 #include <stdio.h>
 
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,7 +29,7 @@ typedef const char * c_str;
 
 int initAttachmentConfig(c_str conf_file);
 
-ngx_http_inspection_mode_e getInspectionMode();
+NanoHttpInspectionMode getInspectionMode();
 unsigned int getNumOfNginxIpcElements();
 unsigned int getKeepAliveIntervalMsec();
 unsigned int getDbgLevel();
@@ -61,11 +61,16 @@ unsigned int getMinRetriesForVerdict();
 unsigned int getMaxRetriesForVerdict();
 unsigned int getReqBodySizeTrigger();
 unsigned int getRemoveResServerHeader();
+unsigned int getDecompressionPoolSize();
+unsigned int getRecompressionPoolSize();
+unsigned int getIsBrotliInspectionEnabled();
 
 unsigned int getWaitingForVerdictThreadTimeout();
 
 int isIPAddress(c_str ip_str);
 int isSkipSource(c_str ip_str);
+unsigned int isPairedAffinityEnabled();
+unsigned int isAsyncModeEnabled();
 
 #ifdef __cplusplus
 }

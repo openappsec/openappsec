@@ -24,7 +24,7 @@ USE_DEBUG_FLAG(D_MAINLOOP);
 class EndTest
 {
 };
-
+typedef std::chrono::duration<size_t, std::ratio<86400>> days;
 class MainloopTest : public Test
 {
 public:
@@ -72,6 +72,45 @@ public:
                 )
             )
         );
+    }
+
+    void
+    setupBalancedIntervalTest(
+        chrono::microseconds start_time,
+        chrono::microseconds interval,
+        const string &routine_name,
+        chrono::microseconds offset = chrono::microseconds(0),
+        chrono::microseconds time_advance = chrono::hours(24)
+    )
+    {
+        chrono::microseconds time = start_time;
+        EXPECT_CALL(mock_time, getWalltime()).WillRepeatedly(InvokeWithoutArgs([&]() { return time; }));
+
+        EXPECT_CALL(mock_time, getMonotonicTime())
+            .WillRepeatedly(InvokeWithoutArgs(
+                [&]()
+                {
+                    auto old_time = time;
+                    time += time_advance;
+                    return old_time;
+                }
+            ));
+        auto callback = [this]() { mainloop->stop(); };
+
+        mainloop->addBalancedIntervalRoutine(
+            I_MainLoop::RoutineType::RealTime, interval, callback, routine_name, offset, true
+        );
+
+        // Run the mainloop
+        mainloop->run();
+    }
+
+    void
+    expectWaitTimeInDebug(chrono::microseconds expected_wait_time)
+    {
+        string expected_debug =
+            "Balanced interval routine waiting " + to_string(expected_wait_time.count()) + " microseconds";
+        EXPECT_THAT(capture_debug.str(), HasSubstr(expected_debug));
     }
 
     I_Environment::ActiveContexts active_context;
@@ -531,4 +570,101 @@ TEST_F(MainloopTest, check_routine_name)
         capture_debug.str(),
         HasSubstr("Starting execution of corutine. Routine named: check routine name test")
     );
+}
+
+TEST_F(MainloopTest, balanced_interval_empty_routine_name_hour_start)
+{
+    Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::TRACE);
+
+    // Start on day 1 at 4:00 (at the start of the hour)
+    // Interval is 2 hours
+    // Because routine_name is empty, no shifting will be done so remaining time will be exactly equal to interval
+    const std::string routine_name = "";
+    const std::chrono::milliseconds time(days(1) + std::chrono::hours(4));
+    const std::chrono::minutes interval(std::chrono::hours(2));
+
+    setupBalancedIntervalTest(time, interval, routine_name);
+    expectWaitTimeInDebug(interval);
+}
+
+TEST_F(MainloopTest, balanced_interval_empty_routine_name_middle_of_the_hour)
+{
+    Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::TRACE);
+    // Start 1 day and 5:54 (in the middle of the second hour)
+    // Interval is 2 hours
+    // Because routine_name is empty, no shifting will be done so remaining time will be 6 minutes
+    const std::string routine_name = "";
+    const std::chrono::milliseconds time(days(1) + std::chrono::hours(5) + std::chrono::minutes(54));
+    const std::chrono::minutes interval(std::chrono::hours(2));
+
+    setupBalancedIntervalTest(time, interval, routine_name);
+    expectWaitTimeInDebug(std::chrono::minutes(6));
+}
+
+TEST_F(MainloopTest, balanced_interval_non_empty_routine_name_hour_start)
+{
+    Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::TRACE);
+    // Start on day 1 at 4:00 (at the start of the hour)
+    // Interval is 2 hours
+    // The routine_name is chosen so that it results in hashed slot #2 which shifts the remaining time by 2 * 10
+    // minutes So, the remaining time to wait would be original interval + 20 minutes
+    const std::string routine_name = "5e9dac5d204a8f35b264a932";
+    const std::chrono::milliseconds time(days(1) + std::chrono::hours(4));
+    const std::chrono::minutes interval(std::chrono::hours(2));
+    const std::chrono::microseconds offset = std::chrono::minutes(2*10);
+
+    setupBalancedIntervalTest(time, interval, routine_name, offset);
+
+    expectWaitTimeInDebug(offset);
+}
+
+TEST_F(MainloopTest, balanced_interval_non_empty_routine_name_hour_start_post_offset)
+{
+    Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::TRACE);
+    // Start on day 1 at 4:40 (at the start of the hour)
+    // Interval is 2 hours
+    // The routine_name is chosen so that it results in hashed slot #2 which shifts the remaining time by 2 * 10
+    // minutes So, the remaining time to wait would be original interval - 20 minutes
+    const std::string routine_name = "5e9dac5d204a8f35b264a932";
+    const std::chrono::milliseconds time(days(1) + std::chrono::hours(4) + std::chrono::minutes(40));
+    const std::chrono::minutes interval(std::chrono::hours(2));
+    const std::chrono::microseconds offset = std::chrono::minutes(2*10);
+
+    setupBalancedIntervalTest(time, interval, routine_name, offset);
+
+    expectWaitTimeInDebug(interval - offset);
+}
+
+TEST_F(MainloopTest, balanced_interval_non_empty_routine_name_middle_of_the_hour)
+{
+    Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::TRACE);
+    // Start 1 day and 5:54 (in the middle of the second hour)
+    // Interval is 2 hours
+    // The routine_name is chosen so that it results in hashed slot #2 which shifts the remaining time by 2 * 10
+    // minutes So, the remaining time to wait would be 6 minutes + 20 minutes shift
+    const std::string routine_name = "5e9dac5d204a8f35b264a932";
+    const std::chrono::milliseconds time(days(1) + std::chrono::hours(5) + std::chrono::minutes(54));
+    const std::chrono::minutes interval(std::chrono::hours(2));
+    const std::chrono::microseconds offset = std::chrono::minutes(2*10);
+
+    setupBalancedIntervalTest(time, interval, routine_name, offset);
+
+    expectWaitTimeInDebug(std::chrono::minutes(6) + offset);
+}
+
+TEST_F(MainloopTest, balanced_interval_another_asset_hour_start)
+{
+    Debug::setUnitTestFlag(D_MAINLOOP, Debug::DebugLevel::TRACE);
+    // Start on day 1 at 4:00 (at the start of the hour)
+    // Interval is 2 hours
+    // The routine_name is chosen so that it results in hashed slot #7 which shifts the remaining time by 7 * 10
+    // minutes So, the remaining time to wait would be 70 minutes
+    const std::string routine_name = "5e9da89572f6f9af9bebc0da";
+    const std::chrono::milliseconds time(days(1) + std::chrono::hours(4));
+    const std::chrono::minutes interval(std::chrono::hours(2));
+    const std::chrono::microseconds offset = std::chrono::minutes(7*10);
+
+    setupBalancedIntervalTest(time, interval, routine_name, offset);
+
+    expectWaitTimeInDebug(offset);
 }

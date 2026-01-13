@@ -12,19 +12,31 @@
 // limitations under the License.
 
 #include "WaapSampleValue.h"
+#include "Signatures.h"
+#include "debug.h"
 
-SampleValue::SampleValue(const std::string &sample,
-    const std::shared_ptr<Waap::RegexPreconditions> &regexPreconditions)
+USE_DEBUG_FLAG(D_WAAP_SAMPLE_SCAN);
+
+SampleValue::SampleValue(const std::string &sample, const Signatures* signatures)
     :
         m_sample(sample),
-        m_regexPreconditions(regexPreconditions),
+        m_signatures(signatures),
         m_pmWordSet()
 {
-    if (m_regexPreconditions) {
-        // Run aho-corasick and related rules once the sample value is known.
-        // The result pmWordSet is reused later for multiple calls to findMatches on the same sample.
-        regexPreconditions->pmScan(
-            Buffer(m_sample.data(), m_sample.size(), Buffer::MemoryType::STATIC), m_pmWordSet);
+    if (m_signatures) {
+        if (m_signatures->m_regexPreconditions) {
+            if (!m_signatures->isHyperscanInitialized()) {
+                // Run aho-corasick and related rules once the sample value is known.
+                // The result pmWordSet is reused later for multiple calls to findMatches on the same sample.
+                m_signatures->m_regexPreconditions->pmScan(
+                    Buffer(m_sample.data(), m_sample.size(), Buffer::MemoryType::STATIC), m_pmWordSet);
+            } else {
+                // Add incompatible patterns from Signatures to the PmWordSet so they will be processed
+                // by traditional regex matching in Regex::findAllMatches
+                const auto& incompatiblePmWordSet = m_signatures->getIncompatiblePatternsPmWordSet();
+                m_pmWordSet.insert(incompatiblePmWordSet.begin(), incompatiblePmWordSet.end());
+            }
+        }
     }
 }
 
@@ -38,5 +50,10 @@ void
 SampleValue::findMatches(const Regex &pattern, std::vector<RegexMatch> &matches) const
 {
     static const size_t maxMatchesPerSignature = 5;
-    pattern.findAllMatches(m_sample, matches, m_regexPreconditions ? &m_pmWordSet : nullptr, maxMatchesPerSignature);
+    pattern.findAllMatches(
+        m_sample,
+        matches,
+        (m_signatures && m_signatures->m_regexPreconditions) ? &m_pmWordSet : nullptr,
+        maxMatchesPerSignature
+    );
 }

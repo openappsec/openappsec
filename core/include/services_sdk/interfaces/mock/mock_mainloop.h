@@ -15,6 +15,11 @@ public:
         uint (RoutineType, std::chrono::microseconds, Routine, const std::string &, bool)
     );
 
+    MOCK_METHOD6(
+        addBalancedIntervalRoutine,
+        uint (RoutineType, std::chrono::microseconds, Routine, const std::string &, std::chrono::microseconds, bool)
+    );
+    
     MOCK_METHOD5(
         addFileRoutine,
         uint (RoutineType, int, Routine, const std::string &, bool)

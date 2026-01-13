@@ -71,6 +71,7 @@ public:
 
     bool setFogConnection(const std::string &host, uint16_t port, bool is_secure, MessageCategory category);
     bool setFogConnection(MessageCategory category);
+    void clearConnections();
 
 private:
     Maybe<Connection> getConnection(MessageCategory category, const MessageMetadata &message_metadata);
@@ -96,6 +97,7 @@ private:
     I_MessageBuffer *i_messaging_buffer;
     I_AgentDetails *agent_details;
     bool should_buffer_failed_messages;
+    std::string proxy_addr;
     TemporaryCache<std::string, HTTPResponse> fog_get_requests_cache;
 };
 

@@ -41,6 +41,7 @@ target_link_libraries(cp-nano-http-transaction-handler
 	l7_access_control
 	geo_location
 	http_geo_filter
+        ${Brotli_LIBRARIES}
 	-Wl,--end-group
 )
 
@@ -78,6 +79,12 @@ execute_process (
         OUTPUT_VARIABLE maxminddb
 )
 install(FILES ${maxminddb} DESTINATION http_transaction_handler_service/lib)
+
+execute_process (
+        COMMAND sh -c "find /usr/lib* -name \"libbrotli*.so*\" | awk '{printf \$0\";\"}'"
+        OUTPUT_VARIABLE brotli
+)
+install(FILES ${brotli} DESTINATION http_transaction_handler_service/lib)
 
 gen_help(
 	"--certs-dir <trusted ca directory>" "Path to the hosts trusted ca directory"

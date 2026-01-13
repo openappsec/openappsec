@@ -27,7 +27,7 @@ HttpManagerOpaque::HttpManagerOpaque()
 }
 
 void
-HttpManagerOpaque::setApplicationVerdict(const string &app_name, ngx_http_cp_verdict_e verdict)
+HttpManagerOpaque::setApplicationVerdict(const string &app_name, ServiceVerdict verdict)
 {
     applications_verdicts[app_name] = verdict;
 }
@@ -39,49 +39,61 @@ HttpManagerOpaque::setApplicationWebResponse(const string &app_name, string web_
     applications_web_user_response[app_name] = web_user_response_id;
 }
 
-ngx_http_cp_verdict_e
+void
+HttpManagerOpaque::setCustomResponse(const std::string &app_name, const CustomResponse &custom_response)
+{
+    dbgTrace(D_HTTP_MANAGER) << "Security app: " << app_name
+        << ", has custom response: " << custom_response.getBody()
+        << ", with code: " << custom_response.getStatusCode();
+    current_custom_response = custom_response;
+}
+
+ServiceVerdict
 HttpManagerOpaque::getApplicationsVerdict(const string &app_name) const
 {
     auto verdict = applications_verdicts.find(app_name);
-    return verdict == applications_verdicts.end() ? ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT : verdict->second;
+    return verdict == applications_verdicts.end() ? ServiceVerdict::TRAFFIC_VERDICT_INSPECT : verdict->second;
 }
 
-ngx_http_cp_verdict_e
+ServiceVerdict
 HttpManagerOpaque::getCurrVerdict() const
 {
-    if (manager_verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+    if (manager_verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
         return manager_verdict;
     }
 
     uint accepted_apps = 0;
-    ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
     for (const auto &app_verdic_pair : applications_verdicts) {
         switch (app_verdic_pair.second) {
-            case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP:
+            case ServiceVerdict::TRAFFIC_VERDICT_DROP:
                 dbgTrace(D_HTTP_MANAGER) << "Verdict DROP for app: " << app_verdic_pair.first;
                 current_web_user_response = applications_web_user_response.at(app_verdic_pair.first);
                 dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
                 return app_verdic_pair.second;
-            case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT:
+            case ServiceVerdict::TRAFFIC_VERDICT_INJECT:
                 // Sent in ResponseHeaders and ResponseBody.
-                verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INJECT;
+                verdict = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
                 break;
-            case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT:
+            case ServiceVerdict::TRAFFIC_VERDICT_ACCEPT:
                 accepted_apps++;
                 break;
-            case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT:
+            case ServiceVerdict::TRAFFIC_VERDICT_INSPECT:
                 break;
-            case ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS:
+            case ServiceVerdict::LIMIT_RESPONSE_HEADERS:
                 // Sent in End Request.
-                verdict = ngx_http_cp_verdict_e::LIMIT_RESPONSE_HEADERS;
+                verdict = ServiceVerdict::LIMIT_RESPONSE_HEADERS;
                 break;
-            case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT:
+            case ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT:
                 dbgTrace(D_HTTP_MANAGER) << "Verdict 'Irrelevant' is not yet supported. Returning Accept";
                 accepted_apps++;
                 break;
-            case ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT:
+            case ServiceVerdict::TRAFFIC_VERDICT_DELAYED:
                 // Sent in Request Headers and Request Body.
-                verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_WAIT;
+                verdict = ServiceVerdict::TRAFFIC_VERDICT_DELAYED;
+                break;
+            case ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE:
+                verdict = ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE;
                 break;
             default:
                 dbgAssert(false)
@@ -91,18 +103,18 @@ HttpManagerOpaque::getCurrVerdict() const
         }
     }
 
-    return accepted_apps == applications_verdicts.size() ? ngx_http_cp_verdict_e::TRAFFIC_VERDICT_ACCEPT : verdict;
+    return accepted_apps == applications_verdicts.size() ? ServiceVerdict::TRAFFIC_VERDICT_ACCEPT : verdict;
 }
 
 std::set<std::string>
 HttpManagerOpaque::getCurrentDropVerdictCausers() const
 {
     std::set<std::string> causers;
-    if (manager_verdict == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP) {
+    if (manager_verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
         causers.insert(HTTP_MANAGER_NAME);
     }
     for (const auto &app_verdic_pair : applications_verdicts) {
-        bool was_dropped = app_verdic_pair.second == ngx_http_cp_verdict_e::TRAFFIC_VERDICT_DROP;
+        bool was_dropped = app_verdic_pair.second == ServiceVerdict::TRAFFIC_VERDICT_DROP;
         dbgTrace(D_HTTP_MANAGER)
             << "The verdict from: " << app_verdic_pair.first
             << (was_dropped ? " is \"drop\"" : " is not \"drop\" ");

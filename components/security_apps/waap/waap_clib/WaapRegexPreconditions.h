@@ -22,9 +22,13 @@
 #include <stdint.h>
 #include <string>
 
+// Forward declaration for test friend class
+class TestableRegexPreconditions;
+
 namespace Waap {
     class RegexPreconditions
     {
+        friend class TestableRegexPreconditions;  // Allow test access to private methods
     public:
         typedef size_t WordIndex;
         static const WordIndex emptyWordIndex; // special word index used to index the "impossible" empty word
@@ -37,8 +41,29 @@ namespace Waap {
     public:
         typedef std::unordered_set<WordIndex> PmWordSet;
 
+        struct WordInfo {
+            WordIndex napostNapreWordIndex;
+            WordIndex napostWordIndex;
+            WordIndex napreWordIndex;
+            WordIndex baseWordIndex;
+            std::string wordStr;
+            bool      noRegex;
+
+            WordInfo()
+            :
+            napostNapreWordIndex(emptyWordIndex),
+            napostWordIndex(emptyWordIndex),
+            napreWordIndex(emptyWordIndex),
+            baseWordIndex(0),
+            wordStr(),
+            noRegex(false)
+            {
+            }
+        };
+
         // The constructor builds internal data from Json object. Once built - the object becomes read-only.
         RegexPreconditions(const picojson::value::object &jsObj, bool &error);
+        ~RegexPreconditions();
         bool isNoRegexPattern(const std::string &pattern) const;
         const std::string &getWordStrByWordIndex(WordIndex wordIndex) const;
         Waap::RegexPreconditions::WordIndex getWordByRegex(const std::string &pattern) const;
@@ -60,26 +85,6 @@ namespace Waap {
         WordToPrefixGroup m_wordToPrefixGroup;
         // Aho-Corasick pattern matcher object
         PMHook m_pmHook;
-
-        struct WordInfo {
-            WordIndex napostNapreWordIndex;
-            WordIndex napostWordIndex;
-            WordIndex napreWordIndex;
-            WordIndex baseWordIndex;
-            std::string wordStr;
-            bool      noRegex;
-
-            WordInfo()
-            :
-            napostNapreWordIndex(emptyWordIndex),
-            napostWordIndex(emptyWordIndex),
-            napreWordIndex(emptyWordIndex),
-            baseWordIndex(0),
-            wordStr(),
-            noRegex(false)
-            {
-            }
-        };
 
         WordIndex registerWord(const std::string &wordStr);
         std::vector<WordInfo> m_pmWordInfo;

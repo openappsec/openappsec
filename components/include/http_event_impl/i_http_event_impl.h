@@ -25,12 +25,12 @@
 #include "debug.h"
 #include "buffer.h"
 #include "http_transaction_data.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 
 USE_DEBUG_FLAG(D_HTTP_MANAGER);
 
-using ModificationType = ngx_http_modification_type_e;
-using ModificationPosition = ngx_http_cp_inject_pos_t;
+using ModificationType = HttpModificationType;
+using ModificationPosition = NanoHttpCpInjectPos;
 
 static const ModificationPosition injection_pos_irrelevant = INJECT_POS_IRRELEVANT;
 
@@ -185,12 +185,18 @@ class HttpHeader
 {
 public:
     HttpHeader() = default;
-    HttpHeader(const Buffer &_key, const Buffer &_value, uint8_t _header_index, bool _is_last_header = false)
+    HttpHeader(
+        const Buffer &_key,
+        const Buffer &_value,
+        uint8_t _header_index,
+        bool _is_last_header = false,
+        bool _should_log = true)
             :
         key(_key),
         value(_value),
         is_last_header(_is_last_header),
-        header_index(_header_index)
+        header_index(_header_index),
+        should_log(_should_log)
     {
     }
 
@@ -203,7 +209,8 @@ public:
             key,
             value,
             is_last_header,
-            header_index
+            header_index,
+            should_log
         );
     }
 
@@ -215,7 +222,8 @@ public:
             key,
             value,
             is_last_header,
-            header_index
+            header_index,
+            should_log
         );
     }
 // LCOV_EXCL_STOP
@@ -232,6 +240,8 @@ public:
             << std::to_string(header_index)
             << ", Is last header: "
             << (is_last_header ? "True" : "False")
+            << ", Should log: "
+            << (should_log ? "True" : "False")
             << ")";
     }
 
@@ -241,12 +251,18 @@ public:
     bool isLastHeader() const { return is_last_header; }
     void setIsLastHeader() { is_last_header = true; }
     uint8_t getHeaderIndex() const { return header_index; }
+    bool shouldLog() const { return should_log; }
+    void setShouldNotLog() {
+        dbgTrace(D_HTTP_MANAGER) << "Header '" << std::dumpHex(key) << "' marked as should not log";
+        should_log = false;
+    }
 
 private:
     Buffer key;
     Buffer value;
     bool is_last_header = false;
     uint8_t header_index = 0;
+    bool should_log = true;
 };
 
 using BodyModification = Buffer;
@@ -362,23 +378,54 @@ private:
     uint8_t body_chunk_index;
 };
 
+class CustomResponse
+{
+public:
+    CustomResponse(
+        const std::string& body,
+        uint16_t status_code,
+        const std::string& content_type = "application/json"
+    ) :
+        body(body),
+        status_code(status_code),
+        content_type(content_type)
+    {}
+
+    std::string getBody() const { return body; }
+    uint16_t getStatusCode() const { return status_code; }
+    std::string getContentType() const { return content_type; }
+
+private:
+    std::string body;
+    uint16_t status_code;
+    std::string content_type;
+};
+
 class EventVerdict
 {
 public:
     EventVerdict() = default;
 
-    EventVerdict(ngx_http_cp_verdict_e event_verdict) : modifications(), verdict(event_verdict) {}
+    EventVerdict(ServiceVerdict event_verdict) : modifications(), verdict(event_verdict) {}
 
     EventVerdict(const ModificationList &mods) : modifications(mods) {}
 
-    EventVerdict(const ModificationList &mods, ngx_http_cp_verdict_e event_verdict) :
+    EventVerdict(const ModificationList &mods, ServiceVerdict event_verdict) :
         modifications(mods),
         verdict(event_verdict)
+    {}
+    
+    EventVerdict(
+        const CustomResponse &custom_response
+    ) :
+        modifications(),
+        verdict(ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE),
+        custom_response(custom_response)
     {}
 
     EventVerdict(
         const ModificationList &mods,
-        ngx_http_cp_verdict_e event_verdict,
+        ServiceVerdict event_verdict,
         std::string response_id) :
         modifications(mods),
         verdict(event_verdict),
@@ -390,17 +437,20 @@ public:
 // LCOV_EXCL_STOP
 
     const ModificationList & getModifications() const { return modifications; }
-    ngx_http_cp_verdict_e getVerdict() const { return verdict; }
+    ServiceVerdict getVerdict() const { return verdict; }
     const std::string getWebUserResponseByPractice() const { return webUserResponseByPractice; }
     void setWebUserResponseByPractice(const std::string id) {
         dbgTrace(D_HTTP_MANAGER) << "current verdict web user response set to: " << id;
         webUserResponseByPractice = id;
     }
 
+    Maybe<CustomResponse> getCustomResponse() const { return custom_response; }
+
 private:
     ModificationList modifications;
-    ngx_http_cp_verdict_e verdict = ngx_http_cp_verdict_e::TRAFFIC_VERDICT_INSPECT;
+    ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
     std::string webUserResponseByPractice;
+    Maybe<CustomResponse> custom_response = genError("uninitialized");
 };
 
 #endif // __I_HTTP_EVENT_IMPL_H__

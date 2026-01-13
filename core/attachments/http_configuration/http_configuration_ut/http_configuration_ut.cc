@@ -64,7 +64,12 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"req_header_thread_timeout_msec\": 10,\n"
             "\"ip_ranges\": " + createIPRangesString(ip_ranges) + ",\n"
             "\"static_resources_path\": \"" + static_resources_path + "\",\n"
-            "\"remove_server_header\": 0"
+            "\"remove_server_header\": 0,\n"
+            "\"decompression_pool_size\": 524288,\n"
+            "\"recompression_pool_size\": 32768,\n"
+            "\"is_paired_affinity_enabled\": 0,\n"
+            "\"is_async_mode_enabled\": 0,\n"
+            "\"is_brotli_inspection_enabled\": 1\n"
         "}\n";
     ofstream valid_configuration_file(attachment_configuration_file_name);
     valid_configuration_file << valid_configuration;
@@ -91,6 +96,11 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(conf_data_out.getNumericalValue("waiting_for_verdict_thread_timeout_msec"), 60u);
     EXPECT_EQ(conf_data_out.getNumericalValue("nginx_inspection_mode"), 1u);
     EXPECT_EQ(conf_data_out.getNumericalValue("remove_server_header"), 0u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("decompression_pool_size"), 524288u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("recompression_pool_size"), 32768u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("is_paired_affinity_enabled"), 0u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("is_async_mode_enabled"), 0u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("is_brotli_inspection_enabled"), 1u);
 }
 
 TEST_F(HttpAttachmentUtilTest, GetMalformedAttachmentConfiguration)

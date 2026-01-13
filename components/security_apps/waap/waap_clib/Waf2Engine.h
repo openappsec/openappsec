@@ -63,6 +63,8 @@ typedef void(*subtransaction_cb_t)(Waf2Transaction* subTransaction, void *ctx);
 #define OVERRIDE_ACCEPT "Accept"
 #define OVERRIDE_DROP "Drop"
 
+#define NEXUS_PORT 99999
+
 class Waf2Transaction :
     public  IWaf2Transaction,
     public  TableOpaqueSerialize<Waf2Transaction>,
@@ -134,7 +136,7 @@ public:
     virtual std::shared_ptr<WaapAssetState> getAssetState();
     virtual const std::string getLocation() const;
 
-    ngx_http_cp_verdict_e getUserLimitVerdict();
+    ServiceVerdict getUserLimitVerdict();
     const std::string getUserLimitVerdictStr() const;
     const std::string getViolatedUserLimitTypeStr() const;
     const std::string getCurrentWebUserResponse();

@@ -30,7 +30,7 @@ template <typename EventType>
 class DefaultListener : public Listener<EventType>
 {
 public:
-    DefaultListener(EventVerdict defaultVerdict = EventVerdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT))
+    DefaultListener(EventVerdict defaultVerdict = EventVerdict(ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT))
             :
         m_default_verdict(defaultVerdict)
     {}
@@ -58,7 +58,7 @@ class ReputationFeaturesAgg::Impl
 public:
     Impl()
             :
-        DefaultListener<ResponseCodeEvent>(EventVerdict(ngx_http_cp_verdict_e::TRAFFIC_VERDICT_IRRELEVANT)),
+        DefaultListener<ResponseCodeEvent>(EventVerdict(ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT)),
         m_agg_entries()
         {
         }

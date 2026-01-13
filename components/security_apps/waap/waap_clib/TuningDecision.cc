@@ -26,7 +26,7 @@ USE_DEBUG_FLAG(D_WAAP);
 
 TuningDecision::TuningDecision(const string& remotePath)
         :
-    m_remotePath(replaceAllCopy(remotePath + "/tuning", "//", "/")),
+    m_remotePath(replaceAllCopy(remotePath + "/tuning/decisions.data", "//", "/")),
     m_baseUri()
 {
     if (remotePath == "")
@@ -35,7 +35,7 @@ TuningDecision::TuningDecision(const string& remotePath)
     }
     Singleton::Consume<I_MainLoop>::by<WaapComponent>()->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
-        chrono::minutes(10),
+        chrono::minutes(30),
         [&]() { updateDecisions(); },
         "Get tuning updates"
     );
@@ -118,27 +118,16 @@ TuningDecisionType TuningDecision::convertDecisionType(string decisionTypeStr)
 void TuningDecision::updateDecisions()
 {
     TuningEvents tuningEvents;
-    RemoteFilesList tuningDecisionFiles;
     I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
     if (agentDetails->getOrchestrationMode() != OrchestrationMode::ONLINE) {
         m_baseUri = "/api/";
     } else {
         m_baseUri = "/storage/waap/";
     }
-    dbgTrace(D_WAAP) << "URI prefix: " << m_baseUri;
-    bool isSuccessful = sendObject(tuningDecisionFiles,
-        HTTPMethod::GET,
-        m_baseUri + "?list-type=2&prefix=" + m_remotePath);
-
-    if (!isSuccessful || tuningDecisionFiles.getFilesList().empty())
-    {
-        dbgDebug(D_WAAP) << "Failed to get the list of files";
-        return;
-    }
 
     if (!sendObject(tuningEvents,
         HTTPMethod::GET,
-        m_baseUri + tuningDecisionFiles.getFilesList()[0]))
+        m_baseUri + m_remotePath))
     {
         return;
     }
@@ -181,7 +170,7 @@ TuningDecision::getSharedStorageHost()
     char* sharedStorageHost = getenv(SHARED_STORAGE_HOST_ENV_NAME);
     if (sharedStorageHost != NULL) {
         shared_storage_host = string(sharedStorageHost);
-        dbgInfo(D_WAAP) << "shared storage host is set to " << shared_storage_host;
+        dbgDebug(D_WAAP) << "shared storage host is set to " << shared_storage_host;
         return shared_storage_host;
     }
     dbgWarning(D_WAAP) << "shared storage host is not set. using default: " << defaultSharedStorageHost;

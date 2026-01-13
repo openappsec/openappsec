@@ -52,7 +52,7 @@ public:
     static void
     preload()
     {
-        registerExpectedConfiguration<WebTriggerConf>("rulebase", "webUserResponse");
+        registerExpectedConfigurationWithCache<WebTriggerConf>("triggerId", "rulebase", "webUserResponse");
     }
 
     /// \brief Load function to deserialize configuration from JSONInputArchive.
@@ -104,6 +104,14 @@ public:
         return redirect_url;
     }
 
+    /// \brief Get the content type for the trigger.
+    /// \return The content type for the trigger.
+    const std::string &
+    getContentType() const
+    {
+        return content_type;
+    }
+
     /// \brief Check if the trigger should add an event ID to the header.
     /// \return True if the trigger should add an event ID, otherwise false.
     bool
@@ -120,6 +128,7 @@ private:
     std::string details_level;
     std::string response_body;
     std::string redirect_url;
+    std::string content_type;
     uint response_code;
     bool add_event_id_to_header = false;
 };
@@ -175,7 +184,8 @@ public:
     static void
     preload()
     {
-        registerExpectedConfiguration<LogTriggerConf>("rulebase", "log");
+        //registerExpectedConfiguration<LogTriggerConf>("rulebase", "log");
+        registerExpectedConfigurationWithCache<LogTriggerConf>("triggerId", "rulebase", "log");
     }
 
     /// \brief LogGen operator for LogTriggerConf.
@@ -260,6 +270,15 @@ public:
         return should_log_on_prevent.isSet(security_type);
     }
 
+    /// \brief Check if should ignore exception log for the given security type.
+    /// \param security_type The security type to check.
+    /// \return True if should ignore exception, otherwise false.
+    bool
+    shouldIgnoreExceptionLog(SecurityType security_type) const
+    {
+        return should_log_exception.isSet(security_type);
+    }
+
     /// \brief Check if the log is active on detect for the given security type.
     /// \param security_type The security type to check.
     /// \return True if the log is active on detect, otherwise false.
@@ -333,6 +352,7 @@ private:
     Flags<ReportIS::StreamType> active_streams;
     Flags<SecurityType> should_log_on_detect;
     Flags<SecurityType> should_log_on_prevent;
+    Flags<SecurityType> should_log_exception;
     Flags<SecurityType> log_geo_location;
     Flags<WebLogFields> log_web_fields;
     extendLoggingSeverity extend_logging_severity = extendLoggingSeverity::None;
@@ -349,7 +369,7 @@ public:
     static void
     preload()
     {
-        registerExpectedConfiguration<ReportTriggerConf>("rulebase", "report");
+        registerExpectedConfigurationWithCache<ReportTriggerConf>("triggerId", "rulebase", "report");
     }
 
     /// \brief Load function to deserialize configuration from JSONInputArchive.

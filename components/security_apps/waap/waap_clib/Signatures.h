@@ -16,19 +16,40 @@
 
 #include "Waf2Regex.h"
 #include "picojson.h"
+#include "flags.h"
 #include <boost/regex.hpp>
 
 class Signatures {
-private:
-    // json parsed sources (not really needed once data is loaded)
-    picojson::value::object sigsSource;
-    bool error;
 public:
+    // Enum for zero-length assertion flags
+    enum class AssertionFlag {
+        START_WORD_BEHIND = 0,    // (?<=\w)
+        START_NON_WORD_BEHIND,    // (?<!\w)
+        END_WORD_AHEAD,           // (?=\w)
+        END_NON_WORD_AHEAD,       // (?!\w)
+        END_NON_WORD_SPECIAL,     // (?=[^\w?<>:=]|$)
+        PATH_TRAVERSAL_START,     // (?<![\.,:])
+        PATH_TRAVERSAL_END,       // (?![\.,:])
+        WILDCARD_EVASION,         // (slashes and question mark must be present)
+        COUNT                     // Must be last for Flags template
+    };
+
+    // Use the Flags template from utilities/flags.h for assertion flags
+    using AssertionFlags = Flags<AssertionFlag>;
+
+    static std::string extractGroupName(const std::string &pattern);
+
+    static std::string processAssertions(const std::string &groupName,
+        const std::string &pattern,
+        AssertionFlags &flags);
+
     Signatures(const std::string& filepath);
     ~Signatures();
 
     bool fail();
 
+    picojson::value::object sigsSource;
+    bool error;
     std::shared_ptr<Waap::RegexPreconditions> m_regexPreconditions;
 
     // Regexes loaded from compiled signatures
@@ -81,8 +102,113 @@ public:
     const boost::regex binary_data_kw_filter;
     const boost::regex wbxml_data_kw_filter;
 
+    // Pre-compiled Hyperscan patterns and metadata for performance optimization
+    struct HyperscanPattern {
+        std::string originalPattern;
+        std::string hyperscanPattern;
+        std::string groupName;
+        std::string category;
+        std::string regexSource;
+        bool isFastReg;
+        bool isEvasion;
+
+        HyperscanPattern() : isFastReg(false), isEvasion(false) {}
+    };
+
+    // Pre-processed hyperscan patterns for each regex category
+    std::vector<HyperscanPattern> m_keywordHyperscanPatterns;
+    std::vector<HyperscanPattern> m_patternHyperscanPatterns;
+
+    // Assertion flags corresponding to each pattern (same indices as above vectors)
+    std::vector<AssertionFlags> m_keywordAssertionFlags;
+    std::vector<AssertionFlags> m_patternAssertionFlags;
+
+    // Getter methods for precompiled patterns
+    const std::vector<HyperscanPattern>& getKeywordHyperscanPatterns() const;
+    const std::vector<HyperscanPattern>& getPatternHyperscanPatterns() const;
+
+    // Getter methods for assertion flags
+    const std::vector<AssertionFlags>& getKeywordAssertionFlags() const;
+    const std::vector<AssertionFlags>& getPatternAssertionFlags() const;
+
+    // PmWordSet for incompatible patterns that need to use traditional regex scanning
+    Waap::RegexPreconditions::PmWordSet m_incompatiblePatternsPmWordSet;
+
+    // Getter method for incompatible patterns PmWordSet
+    const Waap::RegexPreconditions::PmWordSet& getIncompatiblePatternsPmWordSet() const;
+
+    // Hyperscan initialization state management
+    bool isHyperscanInitialized() const;
+    void setHyperscanInitialized(bool initialized);
+
+    // Check if Hyperscan should be used (based on configuration)
+    static bool shouldUseHyperscan(bool force = false);
+
+    void processRegexMatch(
+        const std::string &groupName,
+        const std::string &groupValue,
+        std::string &word,
+        std::vector<std::string> &keyword_matches,
+        Waap::Util::map_of_stringlists_t &found_patterns,
+        bool longTextFound,
+        bool binaryDataFound
+    ) const;
+
 private:
     picojson::value::object loadSource(const std::string& waapDataFileName);
+    void preprocessHyperscanPatterns();
+    bool m_hyperscanInitialized;
 };
+
+inline std::string repr_uniq(const std::string & value) {
+    std::string result;
+    char hist[256];
+    memset(&hist, 0, sizeof(hist));
+
+    for (std::string::const_iterator pC = value.begin(); pC != value.end(); ++pC) {
+        unsigned char ch = (unsigned char)(*pC);
+
+        // Only take ASCII characters that are not alphanumeric, and each character only once
+        if (ch <= 127 && !isalnum(ch) && hist[ch] == 0) {
+            // Convert low ASCII characters to their C/C++ printable equivalent
+            // (used for easier viewing. Also, binary data causes issues with ElasticSearch)
+            switch (ch) {
+                case 0x07: result += "\\a"; break;
+                case 0x08: result += "\\b"; break;
+                case 0x09: result += "\\t"; break;
+                case 0x0A: result += "\\n"; break;
+                case 0x0B: result += "\\v"; break;
+                case 0x0C: result += "\\f"; break;
+                case 0x0D: result += "\\r"; break;
+                case 0x5C: result += "\\\\"; break;
+                case 0x27: result += "\\\'"; break;
+                case 0x22: result += "\\\""; break;
+                case 0x3F: result += "\\\?"; break;
+                default: {
+                    if (ch >= 32) {
+                        result += (char)ch;
+                    }
+                    else {
+                        char buf[16];
+                        sprintf(buf, "\\" "x%02X", ch);
+                        result += buf;
+                    }
+                }
+            }
+
+            hist[ch] = 1;
+        }
+    }
+
+    return result;
+}
+
+inline bool isShortWord(const std::string& word) {
+    return word.size() <= 2;
+}
+
+inline bool isShortHtmlTag(const std::string& word) {
+    return !word.empty() && word.size() <= 4 && word[0] == '<' && word[word.size() - 1] == '>';
+}
 
 #endif

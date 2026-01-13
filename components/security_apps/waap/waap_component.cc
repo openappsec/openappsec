@@ -50,10 +50,16 @@ void
 WaapComponent::preload()
 {
     // TODO:: call stuff like registerExpectedCofiguration here..
-    registerExpectedConfiguration<WaapConfigApplication>("WAAP", "WebApplicationSecurity");
-    registerExpectedConfiguration<WaapConfigAPI>("WAAP", "WebAPISecurity");
+    // registerExpectedConfiguration<WaapConfigApplication>("WAAP", "WebApplicationSecurity");
+    // registerExpectedConfiguration<WaapConfigAPI>("WAAP", "WebAPISecurity");
+
+    registerExpectedConfigurationWithCache<WaapConfigApplication>(
+        "assetId", "WAAP", "WebApplicationSecurity");
+    registerExpectedConfigurationWithCache<WaapConfigAPI>("assetId", "WAAP", "WebAPISecurity");
+
     registerExpectedConfiguration<std::string>("WAAP", "Sigs file path");
     registerExpectedConfigFile("waap", Config::ConfigFileType::Policy);
+    registerExpectedSetting<bool>("features", "learningLeader");
     registerConfigLoadCb(
         [this]()
         {

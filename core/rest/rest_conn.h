@@ -15,6 +15,7 @@
 #define __REST_CONN_H__
 
 #include <string>
+#include <map>
 #include "i_mainloop.h"
 #include "i_rest_invoke.h"
 

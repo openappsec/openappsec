@@ -31,6 +31,7 @@ public:
     const Buffer & getValue() const { return req_header.getValue(); }
     bool isLastHeader() const { return req_header.isLastHeader(); }
     uint8_t getHeaderIndex() const { return req_header.getHeaderIndex(); }
+    bool shouldLog() const { return req_header.shouldLog(); }
 
     template <class Archive>
     void

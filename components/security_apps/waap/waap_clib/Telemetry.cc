@@ -225,7 +225,7 @@ void
 WaapAttackTypesMetrics::updateMetrics(const string &asset_id, const DecisionTelemetryData &data)
 {
     if (data.blockType == FORCE_EXCEPTION) {
-        dbgInfo(D_WAAP) << "Data block type is FORCE_EXCEPTION, no update needed";
+        dbgDebug(D_WAAP) << "Data block type is FORCE_EXCEPTION, no update needed";
         return;
     }
 

@@ -17,9 +17,11 @@
 
 #include "cache.h"
 #include "config.h"
+#include "i_environment.h"
 #include "intelligence_invalidation.h"
 #include "intelligence_is_v2/intelligence_response.h"
 #include "intelligence_request.h"
+#include "intell_registration_event.h"
 
 using namespace std;
 using namespace chrono;
@@ -37,6 +39,8 @@ static const string queries_uri = "/api/v2/intelligence/assets/queries";
 static const string fog_health_uri = "/access-manager/health/live";
 static const string intelligence_health_uri = "/show-health";
 static const string time_range_invalidation_uri = "/api/v2/intelligence/invalidation/get";
+static const uint default_registration_interval_seconds = 720; // 12 minutes
+static const uint min_registration_interval_seconds = 30;
 
 class I_InvalidationCallBack
 {
@@ -100,7 +104,7 @@ public:
         res << "\"name\": \"" << (agent_id.empty() ? details->getAgentId() : agent_id) << "\", ";
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
         res << "\"url\": \"http://127.0.0.1:" << rest->getListeningPort() <<"/set-new-invalidation\", ";
-        res << "\"capabilities\": { \"getBulkCallback\": " << "true" << " }, ";
+        res << "\"capabilities\": { \"getBulkCallback\": true, \"returnRegistrationTTL\": true }, ";
         res << "\"dataMap\": [";
         res << stream.str();
         res << " ] }";
@@ -200,10 +204,16 @@ private:
 class SingleReceivedInvalidation : public ServerRest
 {
 public:
+
     void
     doCall() override
     {
         Invalidation invalidation(class_name);
+
+        for (const auto& header : request_headers) {
+            dbgTrace(D_INTELLIGENCE) << "Adding header: " << header.first << " = " << header.second;
+            invalidation.addHeader(header.first, header.second);
+        }
 
         if (category.isActive()) invalidation.setClassifier(ClassifierType::CATEGORY, category.get());
         if (family.isActive()) invalidation.setClassifier(ClassifierType::FAMILY, family.get());
@@ -268,10 +278,10 @@ private:
     C2S_OPTIONAL_PARAM(string, invalidationType);
 };
 
-
 class ReceiveInvalidation : public ServerRest
 {
 public:
+    bool wantsHeaders() const override { return true; }
 
     void
     doCall() override
@@ -282,6 +292,8 @@ public:
             : "error in format, expected bulk invalidations, not single");
 
         for (SingleReceivedInvalidation &r : bulkArray.get()) {
+            // Copy headers from the bulk request to each individual invalidation
+            r.setRequestHeaders(request_headers);
             r.doCall();
         }
         return;
@@ -360,7 +372,7 @@ public:
 
         mainloop->addRecurringRoutine(
             I_MainLoop::RoutineType::System,
-            chrono::minutes(12),
+            chrono::seconds(getRegistrationIntervalSec()),
             [this] () { sendRecurringInvalidationRegistration(); },
             "Sending intelligence invalidation"
         );
@@ -467,6 +479,27 @@ public:
     }
 
 private:
+    uint
+    getRegistrationIntervalSec() const
+    {
+        uint interval_in_seconds = getConfigurationWithDefault(
+            default_registration_interval_seconds,
+            "intelligence",
+            "registration interval seconds"
+        );
+        if (interval_in_seconds < min_registration_interval_seconds) {
+            dbgWarning(D_INTELLIGENCE)
+                << "Registration interval is too low, setting to minimum: "
+                << min_registration_interval_seconds;
+            interval_in_seconds = min_registration_interval_seconds;
+        }
+        dbgInfo(D_INTELLIGENCE)
+            << "Using registration interval: "
+            << interval_in_seconds
+            << " seconds";
+        return interval_in_seconds;
+    }
+
     bool
     hasLocalIntelligenceSupport() const
     {
@@ -585,6 +618,7 @@ private:
     sendIntelligenceRequestImpl(const Invalidation &invalidation, const MessageMetadata &local_req_md) const
     {
         dbgFlow(D_INTELLIGENCE) << "Sending intelligence invalidation";
+
         auto res = message->sendSyncMessageWithoutResponse(
             HTTPMethod::POST,
             invalidation_uri,
@@ -634,15 +668,29 @@ private:
     ) const
     {
         dbgFlow(D_INTELLIGENCE) << "Sending intelligence invalidation registration";
-        auto res = message->sendSyncMessageWithoutResponse(
+        Maybe<string> registration_body = registration.genJson();
+        if (!registration_body.ok()) {
+            return genError("Could not generate intelligence invalidation registration body. Error: "
+                + registration_body.getErr());
+        }
+
+        auto res = message->sendSyncMessage(
             HTTPMethod::POST,
             registration_uri,
-            registration,
+            registration_body.unpack(),
             MessageCategory::INTELLIGENCE,
             registration_req_md
         );
-        if (res) return Response();
-        dbgWarning(D_INTELLIGENCE) << "Could not send intelligence invalidation registration.";
+        if (res.ok()){
+            string registration_response = res.unpack().getBody();
+            dbgInfo(D_INTELLIGENCE)
+                << "Intelligence invalidation registration sent successfully";
+            IntelligenceRegistrationEvent(true, registration_response).notify();
+            return Response();
+        }
+        IntelligenceRegistrationEvent(false).notify();
+        dbgWarning(D_INTELLIGENCE) << "Could not send intelligence invalidation registration. Error: "
+            << res.getErr().toString();
         return genError("Could not send intelligence invalidation registration");
     }
 
@@ -719,6 +767,13 @@ private:
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
         auto agent = (agent_id.empty() ? details->getAgentId() : agent_id) + ":" + to_string(rest->getListeningPort());
         headers["X-Source-Id"] = agent;
+        auto env = Singleton::Consume<I_Environment>::by<IntelligenceComponentV2>();
+        auto exec_name = env->get<string>("Base Executable Name");
+        if (exec_name.ok() && *exec_name != "") {
+            headers["X-Calling-Service"] = *exec_name;
+        } else {
+            dbgTrace(D_INTELLIGENCE) << "getHTTPHeaders: X-Calling-Service NOT added - exec_name not available";
+        }
 
         return headers;
     }
@@ -762,6 +817,7 @@ IntelligenceComponentV2::preload()
 {
     registerExpectedConfiguration<uint>("intelligence", "maximum request overall time");
     registerExpectedConfiguration<uint>("intelligence", "maximum request lap time");
+    registerExpectedConfiguration<uint>("intelligence", "registration interval seconds");
     registerExpectedConfiguration<bool>("intelligence", "support Invalidation");
     registerExpectedSetting<string>("intelligence", "local intelligence server ip");
     registerExpectedSetting<uint>("intelligence", primary_port_setting);

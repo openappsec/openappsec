@@ -34,7 +34,8 @@ bool is_keep_alive_ctx = getenv("SAAS_KEEP_ALIVE_HDR_NAME") != nullptr;
 map<Buffer, CompressionType> NginxParser::content_encodings = {
     {Buffer("identity"), CompressionType::NO_COMPRESSION},
     {Buffer("gzip"), CompressionType::GZIP},
-    {Buffer("deflate"), CompressionType::ZLIB}
+    {Buffer("deflate"), CompressionType::ZLIB},
+    {Buffer("br"), CompressionType::BROTLI}
 };
 
 Maybe<HttpTransactionData>
@@ -180,6 +181,7 @@ getActivetenantAndProfile(const string &str, const string &deli = ",")
 Maybe<vector<HttpHeader>>
 NginxParser::parseRequestHeaders(const Buffer &data, const unordered_set<string> &ignored_headers)
 {
+    dbgFlow(D_NGINX_ATTACHMENT_PARSER) << "Parsing request headers";
     auto maybe_parsed_headers = genHeaders(data);
     if (!maybe_parsed_headers.ok()) return maybe_parsed_headers.passErr();
 
@@ -188,44 +190,72 @@ NginxParser::parseRequestHeaders(const Buffer &data, const unordered_set<string>
     NginxAttachmentOpaque &opaque = i_transaction_table->getState<NginxAttachmentOpaque>();
 
     if (is_keep_alive_ctx || !ignored_headers.empty()) {
-        bool is_last_header_removed = false;
-        parsed_headers.erase(
-            remove_if(
-                parsed_headers.begin(),
-                parsed_headers.end(),
-                [&opaque, &is_last_header_removed, &ignored_headers](const HttpHeader &header)
-                {
-                    string hdr_key = static_cast<string>(header.getKey());
-                    string hdr_val = static_cast<string>(header.getValue());
-                    if (
-                        opaque.setKeepAliveCtx(hdr_key, hdr_val)
-                        || ignored_headers.find(hdr_key) != ignored_headers.end()
-                    ) {
-                        dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Header was removed from headers list: " << hdr_key;
-                        if (header.isLastHeader()) {
-                            dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Last header was removed from headers list";
-                            is_last_header_removed = true;
-                        }
-                        return true;
-                    }
-                    return false;
+        dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+            << "is_keep_alive_ctx: " << is_keep_alive_ctx
+            << ", ignored_headers size: " << ignored_headers.size()
+            << ", headers count before removal: " << parsed_headers.size();
+
+        // First, determine which headers would be removed
+        std::vector<size_t> remove_indices;
+        for (size_t i = 0; i < parsed_headers.size(); ++i) {
+            const auto &header = parsed_headers[i];
+            string hdr_key = static_cast<string>(header.getKey());
+            string hdr_val = static_cast<string>(header.getValue());
+            bool should_remove =
+                opaque.setKeepAliveCtx(hdr_key, hdr_val) ||
+                ignored_headers.find(hdr_key) != ignored_headers.end();
+            if (should_remove) {
+                dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+                    << "Header should be removed from headers list: "
+                    << dumpHex(header.getKey());
+                remove_indices.push_back(i);
+            }
+        }
+        if (remove_indices.size() == parsed_headers.size() && !parsed_headers.empty()) {
+            // All headers would be removed: keep the last, mark as shouldNotLog
+            parsed_headers.back().setShouldNotLog();
+            // Remove all except the last
+            parsed_headers.erase(parsed_headers.begin(), parsed_headers.end() - 1);
+            // Ensure the last header is marked as last
+            parsed_headers.back().setIsLastHeader();
+            dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+                    << "All headers were marked for removal. Keeping last header and marking it as shouldNotLog: "
+                    << dumpHex(parsed_headers.back().getKey());
+        } else {
+            // Remove the marked headers as usual
+            // (remove from end to start to keep indices valid)
+            bool is_last_header_removed = false;
+            for (auto it = remove_indices.rbegin(); it != remove_indices.rend(); ++it) {
+                if (parsed_headers[*it].isLastHeader()) {
+                    is_last_header_removed = true;
                 }
-            ),
-            parsed_headers.end()
-        );
-        if (is_last_header_removed) {
-            dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Adjusting last header flag";
-            if (!parsed_headers.empty()) parsed_headers.back().setIsLastHeader();
+                parsed_headers.erase(parsed_headers.begin() + *it);
+            }
+            dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+                << "Headers removal completed. Remaining headers count: "
+                << parsed_headers.size();
+            if (is_last_header_removed) {
+                dbgTrace(D_NGINX_ATTACHMENT_PARSER) << "Adjusting last header flag";
+                if (!parsed_headers.empty()) {
+                    parsed_headers.back().setIsLastHeader();
+                    dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+                        << "New last header after removal: "
+                        << dumpHex(parsed_headers.back().getKey());
+                }
+            }
         }
     }
 
+    static auto default_identifiers = UsersAllIdentifiersConfig();
+    auto maybe_source_identifiers =
+        getConfigurationWithCache<UsersAllIdentifiersConfig>("rulebase", "usersIdentifiers");
+    auto source_identifiers = maybe_source_identifiers.ok() ? maybe_source_identifiers.unpack() : default_identifiers;
+
     for (const HttpHeader &header : parsed_headers) {
-        auto source_identifiers = getConfigurationWithDefault<UsersAllIdentifiersConfig>(
-            UsersAllIdentifiersConfig(),
-            "rulebase",
-            "usersIdentifiers"
-        );
         source_identifiers.parseRequestHeaders(header);
+        if (!header.shouldLog()) {
+            continue;
+        }
         opaque.addToSavedData(
             HttpTransactionData::req_headers,
             static_cast<string>(header.getKey()) + ": " + static_cast<string>(header.getValue()) + "\r\n"
@@ -419,11 +449,38 @@ NginxParser::convertToContentEncoding(const Buffer &content_encoding_header_valu
         return genError("Multiple content encodings for a specific HTTP request/response body are not supported");
     }
 
-    if (content_encodings.find(content_encoding_header_value) == content_encodings.end()) {
+    auto it = find_if(
+        content_encodings.begin(),
+        content_encodings.end(),
+        [&content_encoding_header_value](const pair<Buffer, CompressionType> &encoding_pair) {
+            bool is_equal = content_encoding_header_value.isEqualLowerCase(encoding_pair.first);
+            
+            dbgTrace(D_NGINX_ATTACHMENT_PARSER)
+                << "Comparing '"
+                << static_cast<string>(content_encoding_header_value)
+                << "' with '"
+                << static_cast<string>(encoding_pair.first)
+                << ". Comparison result: "
+                << (is_equal ? "MATCH" : "NO MATCH");
+            return is_equal;
+        }
+    );
+
+    if (it == content_encodings.end()) {
+        dbgDebug(D_NGINX_ATTACHMENT_PARSER)
+            << "No matching compression type found for: '"
+            << static_cast<string>(content_encoding_header_value)
+            << "'";
         return genError(
             "Unsupported or undefined \"Content-Encoding\" value: " +
             static_cast<string>(content_encoding_header_value)
         );
     }
-    return content_encodings[content_encoding_header_value];
+    
+    dbgDebug(D_NGINX_ATTACHMENT_PARSER)
+        << "Successfully matched '"
+        << static_cast<string>(content_encoding_header_value)
+        << "' to compression type";
+
+    return it->second;
 }

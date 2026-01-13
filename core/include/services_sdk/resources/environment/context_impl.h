@@ -109,11 +109,26 @@ Context::registerValue(const std::string &name, const T &value, Attr ... attr)
     registerFunc(name, std::move(new_func), attr ...);
 }
 
+template <typename T, typename ... Attr>
+void
+Context::registerQuickAccessValue(const std::string &name, const T &value, Attr ... attr)
+{
+    std::function<Return<T>()> new_func = [value] () { return Return<T>(value); };
+    registerQuickAccessFunc(name, std::move(new_func), attr ...);
+}
+
 template <typename ... Params>
 void
 Context::registerValue(MetaDataType name, Params ... params)
 {
     return registerValue(convertToString(name), params ...);
+}
+
+template <typename ... Params>
+void
+Context::registerQuickAccessValue(MetaDataType name, Params ... params)
+{
+    return registerQuickAccessValue(convertToString(name), params ...);
 }
 
 template <typename T, typename ... Attr>
@@ -126,11 +141,28 @@ Context::registerFunc(const std::string &name, std::function<T()> &&func, Attr .
 
 template <typename T, typename ... Attr>
 void
+Context::registerQuickAccessFunc(const std::string &name, std::function<T()> &&func, Attr ... attr)
+{
+    std::function<Return<T>()> new_func = [func] () { return Return<T>(func()); };
+    registerQuickAccessFunc(name, std::move(new_func), attr ...);
+}
+
+template <typename T, typename ... Attr>
+void
 Context::registerFunc(const std::string &name, std::function<Return<T>()> &&func, Attr ... attr)
 {
     dbgTrace(D_ENVIRONMENT) << "Registering key : " << name;
     Key key(name, typeid(T), EnvKeyAttr::ParamAttr(attr ...));
     values[key] = std::make_unique<Value<T>>(std::move(func));
+}
+
+template <typename T, typename ... Attr>
+void
+Context::registerQuickAccessFunc(const std::string &name, std::function<Return<T>()> &&func, Attr ... attr)
+{
+    dbgTrace(D_ENVIRONMENT) << "Registering key : " << name;
+    Key key(name, typeid(T), EnvKeyAttr::ParamAttr(attr ...));
+    quick_access_values[key] = std::make_unique<Value<T>>(std::move(func));
 }
 
 template <typename T>
@@ -140,6 +172,7 @@ Context::unregisterKey(const std::string &name)
     dbgTrace(D_ENVIRONMENT) << "Unregistering key : " << name;
     Key key(name, typeid(T));
     values.erase(key);
+    quick_access_values.erase(key);
 }
 
 template <typename T>
@@ -154,8 +187,12 @@ Context::Return<T>
 Context::get(const std::string &name) const
 {
     Key key(name, typeid(T));
-    auto iter = values.find(key);
-    if (iter == values.end()) return genError(Error::NO_VALUE);
+    auto iter = quick_access_values.find(key);
+    if (iter == quick_access_values.end()) {
+        // If not found in quick access, search in the main values map
+        iter = values.find(key);
+        if (iter == values.end()) return genError(Error::NO_VALUE);
+    }
     Value<T> *val = dynamic_cast<Value<T> *>(iter->second.get());
     return val->get();
 }

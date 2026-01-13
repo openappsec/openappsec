@@ -33,7 +33,7 @@
 #include "i_mainloop.h"
 #include "buffer.h"
 #include "enum_array.h"
-#include "nginx_attachment_common.h"
+#include "nano_attachment_common.h"
 
 USE_DEBUG_FLAG(D_ATTACHMENT_REGISTRATION);
 

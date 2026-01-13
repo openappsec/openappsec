@@ -46,6 +46,6 @@ ParameterMatcher::evalVariable() const
     dbgTrace(D_RULEBASE_CONFIG)
         << "Did not find current parameter in context."
         << " Match parameter from current rule";
-    auto rule = getConfiguration<BasicRuleConfig>("rulebase", "rulesConfig");
+    auto rule = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
     return rule.ok() && rule.unpack().isParameterActive(parameter_id);
 }

@@ -62,6 +62,7 @@ public:
     {
         EXPECT_CALL(mock_agent_details, getFogDomain()).WillRepeatedly(Return(string(fog_addr)));
         EXPECT_CALL(mock_agent_details, getFogPort()).WillRepeatedly(Return(fog_port));
+        EXPECT_CALL(mock_agent_details, getProxy()).WillRepeatedly(Return(string("")));
         EXPECT_CALL(mock_agent_details, getOpenSSLDir()).WillRepeatedly(Return(string("/usr/lib/ssl/certs/")));
         EXPECT_CALL(mock_agent_details, getAccessToken()).WillRepeatedly(Return(string("accesstoken")));
         EXPECT_CALL(mock_agent_details, readAgentDetails()).WillRepeatedly(Return(true));
@@ -261,6 +262,28 @@ operator==(const MessageMetadata &one, const MessageMetadata &two)
         one.isProxySet() == two.isProxySet() &&
         one.isDualAuth() == two.isDualAuth();
 }
+
+TEST_F(TestMessagingComp, testClearConnections)
+{
+    setAgentDetails();
+
+    MessageCategory category = MessageCategory::GENERIC;
+    MessageConnectionKey conn_key(fog_addr, fog_port, category);
+    MessageMetadata metadata(fog_addr, fog_port, true);
+    MessageProxySettings proxy_settings("7.7.7.7", "cred", 8080);
+    metadata.setProxySettings(proxy_settings);
+    Connection conn(conn_key, metadata);
+
+    EXPECT_CALL(mock_messaging_connection, establishConnection(metadata, category)).WillOnce(Return(conn));
+    EXPECT_TRUE(messaging_comp.setFogConnection(category));
+
+    EXPECT_CALL(mock_messaging_connection, clearConnections()).Times(1);
+    messaging_comp.clearConnections();
+
+    EXPECT_CALL(mock_messaging_connection, establishConnection(metadata, category)).WillOnce(Return(conn));
+    EXPECT_TRUE(messaging_comp.setFogConnection(category));
+}
+
 
 TEST_F(TestMessagingComp, testSetFogConnection)
 {
