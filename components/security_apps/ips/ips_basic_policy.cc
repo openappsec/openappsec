@@ -238,7 +238,7 @@ RuleSelector::Rule::readProtectionsFromYear(cereal::JSONInputArchive &ar)
     try {
         int year;
         ar(cereal::make_nvp("protectionsFromYear", year));
-        if (year < 1999 || year > 2021) {
+        if (year < 1999 || year > 2121) {
             reportConfigurationError("invalid protectionsFromYear value " + to_string(year));
         }
         else {

@@ -24,6 +24,7 @@ class HTTPSClient
 {
 public:
     Maybe<void> getFile(const URLParser &url, const std::string &out_file, bool auth_required);
+    Maybe<void> getFileSSLWithBody(const std::string &uri, const std::string &body, const std::string &out_file);
 
 private:
     std::string loadCAChainDir();

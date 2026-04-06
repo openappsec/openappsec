@@ -88,8 +88,8 @@ SHELL_CMD_HANDLER("MHO_QUID",
     "jq -r '[.message[]? | select(.MHO_QUID != \"\") | .MHO_QUID] | join(\",\")' 2>/dev/null || "
     "echo ''",
     getQUIDList)
-SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "[ -d /opt/CPOtlpAgent/custom_scripts ] "
-    "&& ENV_NO_FORMAT=1 /opt/CPOtlpAgent/custom_scripts/agent_role.sh",
+SHELL_CMD_HANDLER("AIOPS_AGENT_ROLE", "[ -d /opt/CPotlpAgent/custom_scripts ] "
+    "&& ENV_NO_FORMAT=1 /opt/CPotlpAgent/custom_scripts/agent_role.sh",
     getOtlpAgentGaiaOsRole)
 SHELL_CMD_HANDLER("AIOPS_CGNS_HW_TYPE", ""
     "command -v dmidecode &>/dev/null && dmidecode -t 1 2>/dev/null",
@@ -103,7 +103,8 @@ SHELL_CMD_HANDLER("ETH_MGMT_IP",
     "[ -z \"${VS_ID}\" ] && "
     "(eth=\"$(grep 'management:interface' /config/active | awk '{print $2}')\" &&"
     " ip addr show \"${eth}\" | grep inet | awk '{print $2}' | cut -d '/' -f1) || "
-    "(ip a | grep UP | grep -v lo | head -n 1 | cut -d ':' -f2 | tr -d ' ')",
+    "(eth=\"$(ip a | grep UP | grep -v lo | head -n 1 | cut -d ':' -f2 | tr -d ' ')\" &&"
+    " ip addr show \"${eth}\" | grep inet | awk '{print $2}' | cut -d '/' -f1)",
     getInterfaceMgmtIp)
 #endif
 #if defined(smb) || defined(smb_thx_v3) || defined(smb_sve_v2) || defined(smb_mrv_v1)
@@ -186,7 +187,6 @@ SHELL_CMD_HANDLER(
 SHELL_CMD_HANDLER("hasSAMLSupportedBlade", "enabled_blades", checkSAMLSupportedBlade)
 SHELL_CMD_HANDLER("hasIDABlade", "enabled_blades", checkIDABlade)
 SHELL_CMD_HANDLER("hasVPNBlade", "enabled_blades", checkVPNBlade)
-SHELL_CMD_HANDLER("hasSAMLPortal", "mpclient status nac", checkSAMLPortal)
 SHELL_CMD_HANDLER("hasIdaPdpEnabled",
     "cat $FWDIR/database/myself_objects.C | grep is_collecting_identities",
     checkIdaPDP

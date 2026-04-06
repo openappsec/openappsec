@@ -46,6 +46,11 @@ NginxAttachmentOpaque::NginxAttachmentOpaque(HttpTransactionData _transaction_da
     dbgTrace(D_HTTP_MANAGER) << "Creating nginx opaque environment from: " << transaction_data;
 
     response_compression_stream = initCompressionStream();
+    if (response_compression_stream == nullptr) {
+        dbgWarning(D_HTTP_MANAGER)
+            << "Failed to initialize compression stream for nginx attachment opaque. "
+            << "Compressed response bodies will not be decompressed.";
+    }
 
     auto client_ip = transaction_data.getSourceIP();
     std::stringstream client_ip_str;

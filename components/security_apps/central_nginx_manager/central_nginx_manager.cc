@@ -13,10 +13,16 @@
 
 #include "central_nginx_manager.h"
 #include "lets_encrypt_listener.h"
+#include "zone_servers_policy.h"
 
 #include <string>
 #include <vector>
+#include <map>
 #include <cereal/external/base64.hpp>
+#include <cereal/archives/json.hpp>
+#include <cereal/types/map.hpp>
+#include <cereal/types/string.hpp>
+#include <sstream>
 
 #include "debug.h"
 #include "config.h"
@@ -129,14 +135,6 @@ private:
         new_shared_config << directive << "\n";
         new_shared_config.close();
 
-        auto validation = NginxUtils::validateNginxConf(central_nginx_conf_path);
-        if (!validation.ok()) {
-            if (!NGEN::Filesystem::copyFile(shared_config_path + ".bak", shared_config_path, true)) {
-                return genError("Could not restore the shared NGINX configuration file");
-            }
-            return genError("Could not validate shared NGINX configuration file. Error: " + validation.getErr());
-        }
-
         return {};
     }
 
@@ -167,11 +165,6 @@ private:
         }
         nginx_conf_file << nginx_conf_content;
         nginx_conf_file.close();
-
-        auto validation = NginxUtils::validateNginxConf(central_nginx_conf_path);
-        if (!validation.ok()) {
-            return genError("Could not validate central NGINX configuration file. Error: " + validation.getErr());
-        }
 
         return {};
     }
@@ -312,6 +305,12 @@ public:
         central_nginx_conf_file << config.getFileContent();
         central_nginx_conf_file.close();
 
+        auto extract_result = extractCertificates();
+        if (!extract_result.ok()) {
+            logError(extract_result.getErr());
+            return;
+        }
+
         auto validation_result = NginxUtils::validateNginxConf(central_nginx_conf_path);
         if (!validation_result.ok()) {
             dbgWarning(D_NGINX_MANAGER)
@@ -388,6 +387,147 @@ private:
 
     I_MainLoop *i_mainloop = nullptr;
     LetsEncryptListener lets_encrypt_listener;
+    CentralNginxConfig central_nginx_config;
+
+private:
+    map<string, CertificateParams>
+    mapCertificateParamsById(const vector<CertificatePolicy> &policies)
+    {
+        map<string, CertificateParams> cert_map;
+        for (const auto &policy : policies) {
+            const auto &params = policy.getCertificate();
+            cert_map[params.getCertificateId()] = params;
+            dbgDebug(D_NGINX_MANAGER)
+                << "Mapped certificate ID "
+                << params.getCertificateId()
+                << " to its parameters.";
+        }
+        return cert_map;
+    }
+
+    Maybe<bool>
+    extractCertificates()
+    {
+        vector<CNMCertificate> downloaded_certs;
+
+        string certificates_data_path = getPolicyConfigPath("certificates", Config::ConfigFileType::Data);
+        dbgDebug(D_NGINX_MANAGER) << "Path to certificates data file: " << certificates_data_path;
+
+        if (certificates_data_path.empty()) {
+            dbgInfo(D_NGINX_MANAGER) << "No certificates data file specified";
+            return true;
+        }
+
+        ifstream cert_file(certificates_data_path);
+        if (!cert_file.is_open()){
+            dbgInfo(D_NGINX_MANAGER)
+                << "Could not open "
+                << certificates_data_path
+                << " (file may not exist yet)";
+            return true;
+        }
+
+        stringstream buffer;
+        buffer << cert_file.rdbuf();
+        cert_file.close();
+        dbgTrace(D_NGINX_MANAGER) << "Certificates file content: " << buffer.str();
+
+        try {
+            cereal::JSONInputArchive archive_in(buffer);
+            archive_in(cereal::make_nvp("certificates", downloaded_certs));
+            dbgInfo(D_NGINX_MANAGER)
+                << "Successfully loaded "
+                << downloaded_certs.size()
+                << " certificates from "
+                << certificates_data_path;
+        } catch (const exception &e) {
+            return genError(string("Failed to parse certificates from " + certificates_data_path + ": ") + e.what());
+        }
+
+        if (downloaded_certs.empty()) {
+            dbgInfo(D_NGINX_MANAGER) << "No certificates found in " << certificates_data_path;
+            return true;
+        }
+
+        auto maybe_servers_config = getSetting<Servers>("rulebase", "servers");
+        if (!maybe_servers_config.ok()) {
+            ostringstream err_stream;
+            err_stream << maybe_servers_config.getErr();
+            return genError(
+                string("Failed to get certificate configuration. Skipping certificate extraction. Error: ") +
+                err_stream.str()
+            );
+        }
+
+        const vector<CertificatePolicy> &servers_config = maybe_servers_config.unpack().getCertificates();
+        dbgInfo(D_NGINX_MANAGER)
+            << "Loaded "
+            << servers_config.size()
+            << " certificate policies from configuration";
+
+        auto certificate_map = mapCertificateParamsById(servers_config);
+
+        for (const auto &downloaded_cert : downloaded_certs) {
+            const string &cert_id = downloaded_cert.getCertificateId();
+            auto it = certificate_map.find(cert_id);
+            if (it == certificate_map.end()) {
+                return genError("Certificate " + cert_id + " not found in configuration.");
+            }
+
+            const CertificateParams &params = it->second;
+
+            if (downloaded_cert.getPublicKey().empty() ||
+                downloaded_cert.getPrivateKey().empty() ||
+                downloaded_cert.getChain().empty()
+            ) {
+                return genError("Incomplete certificate data for certificate ID: " + cert_id);
+            }
+
+            //maybe should save to default locations if not provided in params
+            // Write full chain (publicKey + chain) to public key location if provided
+            if (!params.getPublicKeyLocation().empty()) {
+                string full_chain_content = downloaded_cert.getPublicKey();
+                full_chain_content += "\n" + downloaded_cert.getChain();
+
+                if (!NGEN::Filesystem::createFileWithContent(
+                    params.getPublicKeyLocation(),
+                    full_chain_content,
+                    true,
+                    S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH
+                )) {
+                    return genError(
+                        "Failed to write publicKey for " + cert_id + " to " + params.getPublicKeyLocation()
+                    );
+                } else {
+                    dbgInfo(D_NGINX_MANAGER)
+                        << "Saved publicKey for "
+                        << cert_id << " to "
+                        << params.getPublicKeyLocation();
+                }
+            }
+
+            // Write private key to private key location if provided
+            if (!params.getPrivateKeyLocation().empty()) {
+                if (!NGEN::Filesystem::createFileWithContent(
+                    params.getPrivateKeyLocation(),
+                    downloaded_cert.getPrivateKey(),
+                    true,
+                    S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH
+                )) {
+                    return genError(
+                        "Failed to write privateKey for " + cert_id + " to " + params.getPrivateKeyLocation()
+                    );
+                } else {
+                    dbgInfo(D_NGINX_MANAGER)
+                        << "Saved privateKey for "
+                        << cert_id << " to "
+                        << params.getPrivateKeyLocation();
+                }
+            }
+        }
+
+        return true;
+    }
 };
 
 CentralNginxManager::CentralNginxManager()
@@ -414,5 +554,8 @@ CentralNginxManager::preload()
 {
     registerExpectedSetting<vector<CentralNginxConfig>>("centralNginxManagement");
     registerExpectedConfiguration<string>("Config Component", "configuration path");
+    registerExpectedSetting<Servers>("rulebase", "servers");
+    registerExpectedConfigFile("certificates", Config::ConfigFileType::Data);
+
     registerConfigLoadCb([this]() { pimpl->loadPolicy(); });
 }

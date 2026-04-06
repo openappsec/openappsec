@@ -97,6 +97,7 @@ HttpAttachmentConfiguration::save(cereal::JSONOutputArchive &archive) const
         cereal::make_nvp("max_sessions_per_minute", getNumericalValue("max_sessions_per_minute")),
         cereal::make_nvp("res_proccessing_timeout_msec", getNumericalValue("res_proccessing_timeout_msec")),
         cereal::make_nvp("req_proccessing_timeout_msec", getNumericalValue("req_proccessing_timeout_msec")),
+        cereal::make_nvp("transaction_entry_timeout_minutes", getNumericalValue("transaction_entry_timeout_minutes")),
         cereal::make_nvp("registration_thread_timeout_msec", getNumericalValue("registration_thread_timeout_msec")),
         cereal::make_nvp("req_header_thread_timeout_msec", getNumericalValue("req_header_thread_timeout_msec")),
         cereal::make_nvp("req_body_thread_timeout_msec", getNumericalValue("req_body_thread_timeout_msec")),
@@ -163,6 +164,7 @@ HttpAttachmentConfiguration::load(cereal::JSONInputArchive &archive)
     loadNumericalValue(archive, "max_sessions_per_minute", 0);
     loadNumericalValue(archive, "res_proccessing_timeout_msec", 3000);
     loadNumericalValue(archive, "req_proccessing_timeout_msec", 3000);
+    loadNumericalValue(archive, "transaction_entry_timeout_minutes", 1);
     loadNumericalValue(archive, "registration_thread_timeout_msec", 100);
     loadNumericalValue(archive, "req_header_thread_timeout_msec", 100);
     loadNumericalValue(archive, "req_body_thread_timeout_msec", 150);
@@ -183,15 +185,13 @@ HttpAttachmentConfiguration::load(cereal::JSONInputArchive &archive)
     loadNumericalValue(archive, "is_paired_affinity_enabled", 0);
     loadNumericalValue(archive, "is_brotli_inspection_enabled", 0);
 
-    int g_env_async_mode = 1;
-    char *env_async_mode = getenv("CP_ASYNC_MODE");
-    if (env_async_mode != NULL) {
-        if (strcmp(env_async_mode, "true") == 0 || strcmp(env_async_mode, "1") == 0) {
-            g_env_async_mode = 1;
-        } else {
-            g_env_async_mode = 0;
-        }
+    int g_env_async_mode = 0;
+
+    const char *env = getenv("CP_ASYNC_MODE");
+    if (env && (!strcmp(env, "true") || !strcmp(env, "1"))) {
+        g_env_async_mode = 1;
     }
+
     loadNumericalValue(archive, "is_async_mode_enabled", g_env_async_mode);
 }
 

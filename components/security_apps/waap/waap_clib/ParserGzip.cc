@@ -58,8 +58,9 @@ size_t ParserGzip::push(const char *buf, size_t len) {
         CP_FALL_THROUGH;
     case s_forward:
         dbgTrace(D_WAAP_PARSER_GZIP) << "s_forward";
-        res = decompressData(
+        res = decompressDataSafe(
             m_stream,
+            CompressionType::GZIP,
             len,
             reinterpret_cast<const unsigned char *>(buf));
         dbgTrace(D_WAAP_PARSER_GZIP) << "res: " << res.ok

@@ -56,6 +56,11 @@ public:
         std::string(const std::string &)
     );
 
+    MOCK_CONST_METHOD1(
+        downloadCertificatesFromFog,
+        Maybe<std::string>(const std::vector<std::string> &)
+    );
+
 };
 
 #endif // __MOCK_DOWNLOADER_H__

@@ -272,11 +272,12 @@ private:
             return HealthCheckStatus::UNHEALTHY;
         }
 
-        if (checkReadinessFilesExist()) {
-            dbgTrace(D_HEALTH_CHECK)
-                << "Readiness file exists, instance not ready for traffic, returning unhealthy status";
-            return HealthCheckStatus::UNHEALTHY;
-        }
+        // Commented out: Load balancer readiness mechanism removed per client request
+        // if (checkReadinessFilesExist()) {
+        //     dbgTrace(D_HEALTH_CHECK)
+        //         << "Readiness file exists, instance not ready for traffic, returning unhealthy status";
+        //     return HealthCheckStatus::UNHEALTHY;
+        // }
 
         if (NGEN::Filesystem::exists(rpm_full_load_path)) {
             dbgTrace(D_HEALTH_CHECK) << "RPM is fully loaded";
@@ -296,23 +297,24 @@ private:
         return HealthCheckStatus::UNHEALTHY;
     }
 
-    bool
-    checkReadinessFilesExist()
-    {
-        string readiness_dir = readiness_file_path.substr(0, readiness_file_path.find_last_of('/'));
-        string readiness_filename = NGEN::Filesystem::getFileName(readiness_file_path);
+    // Commented out: Load balancer readiness mechanism removed per client request
+    // bool
+    // checkReadinessFilesExist()
+    // {
+    //     string readiness_dir = readiness_file_path.substr(0, readiness_file_path.find_last_of('/'));
+    //     string readiness_filename = NGEN::Filesystem::getFileName(readiness_file_path);
 
-        auto directory_files = NGEN::Filesystem::getDirectoryFiles(readiness_dir);
-        if (!directory_files.ok()) return false;
+    //     auto directory_files = NGEN::Filesystem::getDirectoryFiles(readiness_dir);
+    //     if (!directory_files.ok()) return false;
 
-        for (const string& filename : directory_files.unpack()) {
-            if (NGEN::Strings::startsWith(filename, readiness_filename)) {
-                return true;
-            }
-        }
+    //     for (const string& filename : directory_files.unpack()) {
+    //         if (NGEN::Strings::startsWith(filename, readiness_filename)) {
+    //             return true;
+    //         }
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
 
     bool
     nginxContainerIsRunning()
@@ -335,12 +337,13 @@ private:
             return false;
         }
 
-        if (checkReadinessFilesExist()) {
-            dbgTrace(D_HEALTH_CHECK) << "Readiness file exists on host machine, not ready for traffic";
-            return false;
-        }
+        // Commented out: Load balancer readiness mechanism removed per client request
+        // if (checkReadinessFilesExist()) {
+        //     dbgTrace(D_HEALTH_CHECK) << "Readiness file exists on host machine, not ready for traffic";
+        //     return false;
+        // }
 
-        dbgTrace(D_HEALTH_CHECK) << "Nginx container is running and no readiness files found - ready for traffic";
+        dbgTrace(D_HEALTH_CHECK) << "Nginx container is running - ready for traffic";
         return true;
     }
 

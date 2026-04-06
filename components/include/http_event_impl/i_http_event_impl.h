@@ -387,18 +387,35 @@ public:
         const std::string& content_type = "application/json"
     ) :
         body(body),
+        status_code(status_code)
+    {
+        headers["Content-Type"] = content_type;
+    }
+
+    CustomResponse(
+        const std::string& body,
+        uint16_t status_code,
+        const std::map<std::string, std::string>& headers
+    ) :
+        body(body),
         status_code(status_code),
-        content_type(content_type)
+        headers(headers)
     {}
 
     std::string getBody() const { return body; }
     uint16_t getStatusCode() const { return status_code; }
-    std::string getContentType() const { return content_type; }
+    const std::map<std::string, std::string>& getHeaders() const { return headers; }
+    
+    std::string getContentType() const
+    {
+        auto it = headers.find("Content-Type");
+        return it != headers.end() ? it->second : "application/json";
+    }
 
 private:
     std::string body;
     uint16_t status_code;
-    std::string content_type;
+    std::map<std::string, std::string> headers;
 };
 
 class EventVerdict
