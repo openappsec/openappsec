@@ -60,7 +60,7 @@ get_nginx_conf_path()
         return
     fi
 
-    NGINX_CONF_PATH=$(nginx -V 2>&1 | grep -o '\--conf-path=[^ ]*' | cut -d= -f2)
+    NGINX_CONF_PATH=$(LD_LIBRARY_PATH= nginx -V 2>&1 | grep -o '\--conf-path=[^ ]*' | cut -d= -f2)
     if [ -z "${NGINX_CONF_PATH}" ]; then
         NGINX_CONF_PATH="/etc/nginx/nginx.conf"
     fi
@@ -71,6 +71,7 @@ run_installation()
     cp_print "Starting installation of Check Point Central NGINX Manager [${INSTALLATION_TIME}]\n" ${FORCE_STDOUT}
     cp_exec "${WATCHDOG_PATH} --un-register ${SERVICE_PATH}/cp-nano-central-nginx-manager"
     cp_exec "mkdir -p ${SERVICE_PATH}"
+    cp_exec "mkdir -p ${SERVICE_PATH}/certs"
     cp_exec "mkdir -p ${CONF_PATH}/centralNginxManager/shared"
 
     cp_exec "touch ${CONF_PATH}/centralNginxManager/shared/central_nginx_shared.conf"
@@ -111,8 +112,8 @@ run_uninstall()
         cp_print "Restoring central NGINX configuration file" ${FORCE_STDOUT}
         cp_exec "${INSTALL_COMMAND} ${CENTRAL_NGINX_CONF_PATH}.base ${NGINX_CONF_PATH}"
         if is_nginx_installed; then
-            if nginx -t > /dev/null 2>&1; then
-                cp_exec "nginx -s reload"
+            if LD_LIBRARY_PATH= nginx -t > /dev/null 2>&1; then
+                LD_LIBRARY_PATH= nginx -s reload
             else
                 cp_print "Could not reload central NGINX configuration, run 'nginx -t' for more details." ${FORCE_STDOUT}
             fi
