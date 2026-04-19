@@ -116,7 +116,7 @@ HTTPResponse::getHeaderVal(const string &header_key)
 }
 
 Maybe<HTTPResponse>
-HTTPResponseParser::parseData(const string &data, bool is_connect)
+HTTPResponseParser::parseData(const string &data, HTTPMethod method, bool is_connect)
 {
     if (data.empty()) return genError("Data is empty");
     raw_response += data;
@@ -129,7 +129,7 @@ HTTPResponseParser::parseData(const string &data, bool is_connect)
         if (!handleHeaders()) return genError("Failed to parse the headers. Error: " + headers.getErr());
     }
 
-    if (!handleBody(is_connect)) return genError("Response not ready!");
+    if (!handleBody(method, is_connect)) return genError("Response not ready!");
 
     return HTTPResponse(status_code.unpack(), body, headers.unpack());
 }
@@ -192,8 +192,10 @@ HTTPResponseParser::getHeaderVal(const string &header_key)
 }
 
 bool
-HTTPResponseParser::handleBody(bool is_connect)
+HTTPResponseParser::handleBody(HTTPMethod method, bool is_connect)
 {
+    if (method == HTTPMethod::HEAD) return true;
+    
     if (*status_code == HTTPStatusCode::HTTP_OK && is_connect) return true;
 
     if (*status_code == HTTPStatusCode::HTTP_NO_CONTENT) return raw_response.empty();

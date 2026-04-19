@@ -54,6 +54,7 @@ public:
 
     void log(Key key, Val value, Source source);
     void reset();
+    void reset(std::chrono::seconds intervalDuration);
     
     // Helper method for testing - merges incremental data to persistent state without network operations
     void mergeIncrementalToPersistent();

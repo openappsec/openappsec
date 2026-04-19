@@ -64,13 +64,23 @@ HttpManagerOpaque::getCurrVerdict() const
 
     uint accepted_apps = 0;
     ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
+    bool is_drop_app_exist = false;
+    string drop_app_with_response;
+
     for (const auto &app_verdic_pair : applications_verdicts) {
         switch (app_verdic_pair.second) {
             case ServiceVerdict::TRAFFIC_VERDICT_DROP:
+            {
+                is_drop_app_exist = true;
                 dbgTrace(D_HTTP_MANAGER) << "Verdict DROP for app: " << app_verdic_pair.first;
-                current_web_user_response = applications_web_user_response.at(app_verdic_pair.first);
-                dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
-                return app_verdic_pair.second;
+                auto it = applications_web_user_response.find(app_verdic_pair.first);
+                if (it != applications_web_user_response.end() && !it->second.empty()) {
+                    current_web_user_response = applications_web_user_response.at(app_verdic_pair.first);
+                    dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
+                    return app_verdic_pair.second;
+                }
+                break;
+            }
             case ServiceVerdict::TRAFFIC_VERDICT_INJECT:
                 // Sent in ResponseHeaders and ResponseBody.
                 verdict = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
@@ -101,6 +111,12 @@ HttpManagerOpaque::getCurrVerdict() const
                     << "Received unknown verdict "
                     << static_cast<int>(app_verdic_pair.second);
         }
+    }
+
+    if (is_drop_app_exist) {
+        current_web_user_response = "";
+        dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
+        return ServiceVerdict::TRAFFIC_VERDICT_DROP;
     }
 
     return accepted_apps == applications_verdicts.size() ? ServiceVerdict::TRAFFIC_VERDICT_ACCEPT : verdict;

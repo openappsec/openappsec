@@ -327,3 +327,9 @@ isCorruptedShmem(SharedMemoryIPC *ipc, int is_owner)
 
     return 0;
 }
+
+uint16_t
+getSegmentEntrySize()
+{
+    return SHARED_MEMORY_SEGMENT_ENTRY_SIZE;
+}

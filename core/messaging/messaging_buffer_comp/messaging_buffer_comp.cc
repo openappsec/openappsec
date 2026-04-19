@@ -531,6 +531,8 @@ MessagingBufferComponent::Impl::convertStringToHTTPMethod(const string &method_s
         return HTTPMethod::CONNECT;
     } else if (method_string == "PUT") {
         return HTTPMethod::PUT;
+    } else if (method_string == "HEAD") {
+        return HTTPMethod::HEAD;
     } else {
         return genError("Unknown HTTP method");
     }

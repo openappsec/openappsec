@@ -229,7 +229,26 @@ public:
         s_poll.fd = socket_int;
         s_poll.events = POLLIN;
         s_poll.revents = 0;
-        return poll(&s_poll, 1, 0) > 0 && (s_poll.revents & POLLIN) != 0;
+        
+        int poll_result = poll(&s_poll, 1, 0);
+        
+        if (poll_result < 0) {
+            dbgTrace(D_SOCKET) << "poll() failed: " << strerror(errno);
+            is_error = true;
+            return false;
+        }
+        
+        if (poll_result == 0) {
+            return false;
+        }
+
+        if (s_poll.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            dbgTrace(D_SOCKET) << "Socket error detected in poll: " << s_poll.revents;
+            is_error = true;
+            return false;
+        }
+        
+        return (s_poll.revents & POLLIN) != 0;
     }
 
     virtual Maybe<vector<char>>
@@ -329,11 +348,14 @@ public:
         socket_int(_socket)
     {}
 
+    bool isError() const { return is_error; }
+
 protected:
     bool is_blocking = false;
     bool is_server_socket = true;
     int socket_int = -1;
     I_MainLoop *i_mainloop = nullptr;
+    bool is_error = false;
 
 private:
     Maybe<string>
@@ -832,6 +854,7 @@ public:
     bool writeDataAsync(socketFd socket_fd, const vector<char> &data) override;
     Maybe<vector<char>> receiveData(socketFd socket_fd, uint data_size, bool is_blocking = true) override;
     bool isDataAvailable(socketFd socket) override;
+    bool isError(socketFd socket) override;
 
 private:
     map<socketFd, unique_ptr<SocketInternal>> active_sockets;
@@ -968,6 +991,18 @@ SocketIS::Impl::isDataAvailable(socketFd socket)
     }
 
     return sock->second->isDataAvailable();
+}
+
+bool
+SocketIS::Impl::isError(socketFd socket)
+{
+    auto sock = active_sockets.find(socket);
+    if (sock == active_sockets.end()) {
+        dbgWarning(D_SOCKET) << "The provided socket file descriptor does not exist. Socket FD: " << socket;
+        return true;
+    }
+
+    return sock->second->isError();
 }
 
 void

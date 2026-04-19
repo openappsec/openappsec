@@ -68,10 +68,11 @@ public:
         const std::string &uri,
         const std::string &download_file_path,
         const MessageCategory category,
-        MessageMetadata message_metadata
+        MessageMetadata message_metadata,
+        const std::string &body
     ) override
     {
-        return messaging_comp.downloadFile(method, uri, download_file_path, category, message_metadata);
+        return messaging_comp.downloadFile(method, uri, download_file_path, category, message_metadata, body);
     }
 
     Maybe<void, HTTPResponse>

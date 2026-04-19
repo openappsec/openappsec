@@ -18,6 +18,9 @@
 #include "i_update_communication.h"
 
 #include <string>
+#include <vector>
+
+class CNMCertificate;
 
 class I_Downloader
 {
@@ -45,6 +48,10 @@ public:
     virtual void removeDownloadFile(const std::string &file_name) const = 0;
 
     virtual std::string getProfileFromMap(const std::string &tenant_id) const = 0;
+
+    virtual Maybe<std::string> downloadCertificatesFromFog(
+        const std::vector<std::string> &certificate_ids
+    ) const = 0;
 };
 
 #endif // __I_DOWNLOADER_H__

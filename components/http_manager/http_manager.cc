@@ -367,6 +367,13 @@ private:
         map<string, uint> app_sec_logs_by_key;
 
         for (const auto &log : bulk) {
+            auto protection_name = log.getStringData("protectionName");
+            if (protection_name.ok() &&
+                    protection_name->find("client side") != string::npos) {
+                dbgTrace(D_HTTP_MANAGER) << "Skipping Browser Agent log from compression";
+                continue;
+            }
+            
             auto &markers = log.getMarkers();
             auto appsec_marker = markers.find(app_sec_marker_key);
             if (appsec_marker != markers.end()) app_sec_logs_by_key[appsec_marker->second]++;

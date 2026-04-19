@@ -1,4 +1,6 @@
 #include <sstream>
+#include <fstream>
+#include <cstdio>
 class Package;
 std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
 
@@ -32,6 +34,8 @@ std::ostream & operator<<(std::ostream &os, const Package &) { return os; }
 
 using namespace testing;
 using namespace std;
+USE_DEBUG_FLAG(D_ORCHESTRATOR);
+
 
 string host_address = "1.2.3.5";
 string host_url = "https://" + host_address + "/";
@@ -1695,6 +1699,16 @@ TEST_F(OrchestrationTest, dataUpdate)
             "}\n"
         )
     );
+    std::map<std::string, std::string> expected_data_map = {
+        { "ips",
+            string(
+                "{ \"version\": \"c\","
+                " \"downloadPath\": \"https://a/data.json\", "
+                "\"checksumType\": \"sha1sum\", "
+                "\"checksum\": \"8d4a5709673a05b380ba7d6567e28910019118f5\" }"
+            )
+        }
+    };
 
     vector<string> expected_empty_data_types = {};
     ExpectationSet expectation_set = EXPECT_CALL(
@@ -1808,6 +1822,539 @@ TEST_F(OrchestrationTest, dataUpdate)
         mock_orchestration_tools,
         copyFile("/path/ips", "/etc/cp/conf/data/ips.data")
     );
+    EXPECT_CALL(
+        mock_shell_cmd,
+        getExecOutput(_, _, _)
+    ).WillRepeatedly(Return(string("daniel\n1\n")));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/conf/data/certificates.data")
+    ).WillRepeatedly(Return(false));
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument& e) {}
+}
+
+TEST_F(OrchestrationTest, dataUpdate_with_certificates_array)
+{
+    EXPECT_CALL(
+        rest,
+        mockRestCall(RestAction::ADD, "proxy", _)
+    ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    waitForRestCall();
+    preload();
+
+    string config_json =
+        "{\n"
+        "\"agentSettings\": [{\n"
+                "\"key\": \"agent.config.orchestration.reportAgentDetail\",\n"
+                "\"id\": \"id1\",\n"
+                "\"value\": \"true\"\n"
+            "},\n"
+            "{\n"
+                "\"key\": \"agent.centralNginxManagement.enabled\",\n"
+                "\"id\": \"id2\",\n"
+                "\"value\": \"true\"\n"
+            "}"
+        "],\n"
+        "  \"centralNginxManagement\": [\n"
+        "    {\n"
+        "      \"data\": \"d29ya2VyX3Byb2Nlc3NlcyAgMTsKCmV2ZW50cyB7CiAgICB3b3JrZXJfY29ubmVjdGlvbnMgIDEwMjQ7Cn0KCgp"
+        "odHRwIHsKICAgIGluY2x1ZGUgICAgICAgbWltZS50eXBlczsKICAgIGRlZmF1bHRfdHlwZSAgYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt"
+        "OwoKICAgIHNlbmRmaWxlICAgICAgICBvbjsKICAgIGtlZXBhbGl2ZV90aW1lb3V0ICA2NTsKCiAgICBzZXJ2ZXIgewogICAgICAgIGxpc"
+        "3RlbiAgICAgICA4MDsKICAgICAgICBzZXJ2ZXJfbmFtZSAgbG9jYWxob3N0OwoKICAgICAgICBsb2NhdGlvbiAvIHsKICAgICAgICAgIC"
+        "AgcHJveHlfcGFzcyBodHRwOi8vZ29vZ2xlLmNvbTsKICAgICAgICB9CgogICAgICAgIGVycm9yX3BhZ2UgICA1MDAgNTAyIDUwMyA1MDQ"
+        "gIC81MHguaHRtbDsKICAgICAgICBsb2NhdGlvbiA9IC81MHguaHRtbCB7CiAgICAgICAgICAgIHJvb3QgICBodG1sOwogICAgICAgIH0K"
+        "ICAgIH0KfQo=\",\n"
+        "      \"id\": \"42c96e7a-e76d-1748-c9d0-deb5eacf2788\",\n"
+        "      \"name\": \"dcc96e78-881b-aa4d-023e-9ae895275639-nginx-conf.conf\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
+
+    init();
+
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string data_file_path = "/etc/cp/conf/data.json";
+
+    string geo_db_download_path = "<JWT>mgmt-dany.dev.i2.checkpoint.com/download/resources/geo-db/latest/geo_db.mmdb";
+    string geo_db_checksum = "3c05e3e06d1814f5a0b32f233baab198946d1c8a2d7c2e6a5b611f989f743f35";
+    string geo_db_checksum_type = "sha256sum";
+    string geo_db_version = "20251202";
+    string geo_db_size = "9705065B";
+
+    string cert_download_path = "/certificates/440fd612cb8272541227ec227bb0c02141df26e8491c46cad730ce63c92a48/bundle";
+    string cert_version = "3df5fc51-cdd9-47f8-8da9-92a20615ae9e";
+    string cert_checksum = "f3e2c2e1b772dcd7cbb47d9821ee31a9ea55ba120cdfec400ec24d80b6d6e413";
+    string cert_checksum_type = "sha256sum";
+    string cert_certificateId = "440fd612cb8272541227ec227bb0c02141df26e8491c46cad730ce63c92a48";
+    string cert_fingerprint = "29426f6ec0e621056ba9da5387c7297f9da4cefb9364d47ead9a225843439335";
+
+    // Simulate the data.json response
+    Maybe<string> data_response(
+        string(
+            "{\n"
+            "  \"agentGeoDb\": {\n"
+            "    \"downloadPath\": \"" + geo_db_download_path + "\",\n"
+            "    \"checksum\": \"" + geo_db_checksum + "\",\n"
+            "    \"checksumType\": \"" + geo_db_checksum_type + "\",\n"
+            "    \"version\": \"" + geo_db_version + "\",\n"
+            "    \"size\": \"" + geo_db_size + "\"\n"
+            "  },\n"
+            "  \"certificates\": [\n"
+            "    {\n"
+            "      \"downloadPath\": \"" + cert_download_path + "\",\n"
+            "      \"version\": \"" + cert_version + "\",\n"
+            "      \"checksum\": \"" + cert_checksum + "\",\n"
+            "      \"checksumType\": \"" + cert_checksum_type + "\",\n"
+            "      \"size\": \"\",\n"
+            "      \"certificateId\": \"" + cert_certificateId + "\",\n"
+            "      \"fingerprint\": \"" + cert_fingerprint + "\"\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+        )
+    );
+
+    // Mock jsonObjectSplitter to return both an object and an array
+    std::map<std::string, std::string> expected_data_map = {
+        { "agentGeoDb",
+            "{ \"downloadPath\": \"" +
+            geo_db_download_path +
+            "\", \"checksum\": \"" +
+            geo_db_checksum +
+            "\", \"checksumType\": \"" +
+            geo_db_checksum_type +
+            "\", \"version\": \"" +
+            geo_db_version +
+            "\", \"size\": \"" +
+            geo_db_size +
+            "\" }"
+        },
+        { "certificates",
+            "[ { \"downloadPath\": \"" +
+            cert_download_path +
+            "\", \"version\": \"" +
+            cert_version +
+            "\", \"checksum\": \"" +
+            cert_checksum +
+            "\", \"checksumType\": \"" +
+            cert_checksum_type +
+            "\", \"size\": \"\", \"certificateId\": \"" +
+            cert_certificateId +
+            "\", \"fingerprint\": \"" +
+            cert_fingerprint + "\" } ]"
+        }
+    };
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(_, _, _))
+        .WillOnce(Return(expected_data_map));
+
+    vector<string> expected_empty_data_types = {};
+    ExpectationSet expectation_set = EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "", _)
+    ).WillOnce(Return(Maybe<void>()));
+
+    vector<string> expected_geo_db_and_cert_data_types = { "certificates", "agentGeoDb" };
+    EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration("", "", expected_geo_db_and_cert_data_types, "", "", _)
+    ).After(expectation_set).WillOnce(Return(Maybe<void>()));
+
+    EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, readFile(data_file_path + ".download")).WillOnce(Return(data_response));
+
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(string("manifest")));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(string("settings")));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(string("policy")));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(string("data")));
+
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
+        Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                EXPECT_THAT(req.getPolicy(), IsValue("policy"));
+                EXPECT_THAT(req.getSettings(), IsValue("settings"));
+                EXPECT_THAT(req.getManifest(), IsValue("manifest"));
+                EXPECT_THAT(req.getData(), IsValue("data"));
+                req = CheckUpdateRequest("", "", "", "new data", "", "");
+                return Maybe<void>();
+            }
+        )
+    );
+
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
+    ).WillOnce(
+        Invoke(
+            [](EnumArray<OrchestrationStatusConfigType, bool> arr)
+            {
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::MANIFEST], false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::POLICY],   false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::SETTINGS], false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::DATA],     true);
+            }
+        )
+    );
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(
+            Invoke(
+                [] (chrono::microseconds microseconds)
+                {
+                    EXPECT_EQ(1000000, microseconds.count());
+                }
+            )
+        )
+        .WillOnce(
+            Invoke(
+                [] (chrono::microseconds microseconds)
+                {
+                    EXPECT_EQ(25000000, microseconds.count());
+                    throw invalid_argument("stop while loop");
+                }
+            )
+        );
+
+    string new_data_file_path = data_file_path + ".download";
+    GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/conf/data/certificates.data")
+    ).WillRepeatedly(Return(false));
+
+    EXPECT_CALL(mock_downloader,
+        downloadFile(
+            string("new data"),
+            Package::ChecksumTypes::SHA256,
+            data_file
+        )
+    ).WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
+
+    // Mock the batch certificate download - write actual file for test
+    string cert_batch_path = "/tmp/cert_batch_test.json";
+
+    // Create the certificate batch response file for the test
+    {
+        std::ofstream cert_file(cert_batch_path);
+        cert_file
+            << "{\n"
+            << "  \"certificates\": [\n"
+            << "    {\n"
+            << "      \"id\": \"" << cert_certificateId << "\",\n"
+            << "      \"publicKey\": \"-----BEGIN CERTIFICATE-----\\nMIIC...\\n-----END CERTIFICATE-----\",\n"
+            << "      \"privateKey\": \"-----BEGIN PRIVATE KEY-----\\nMIIE...\\n-----END PRIVATE KEY-----\",\n"
+            << "      \"chain\": \"-----BEGIN CERTIFICATE-----\\nMIID...\\n-----END CERTIFICATE-----\"\n"
+            << "    }\n"
+            << "  ]\n"
+            << "}";
+        cert_file.close();
+    }
+
+    vector<string> expected_cert_ids = { cert_certificateId };
+    EXPECT_CALL(mock_downloader,
+        downloadCertificatesFromFog(expected_cert_ids)
+    ).WillOnce(Return(Maybe<std::string>(cert_batch_path)));
+
+    // Mock the geo database download
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/path/agentGeoDb"))
+        .WillOnce(Return(string(geo_db_checksum)));
+
+    EXPECT_CALL(mock_downloader,
+        downloadFileFromURL(
+            geo_db_download_path,
+            geo_db_checksum,
+            Package::ChecksumTypes::SHA256,
+            _
+        )
+    ).WillOnce(Return(Maybe<std::string>(string("/path/agentGeoDb"))));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        copyFile(new_data_file_path, data_file_path)
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        copyFile("/path/agentGeoDb", "/etc/cp/conf/data/agentGeoDb.data")
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        copyFile(cert_batch_path, "/etc/cp/conf/data/certificates.data")
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_shell_cmd,
+        getExecOutput(_, _, _)
+    ).WillRepeatedly(Return(string("daniel\n1\n")));
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument& e) {}
+
+    // Clean up test file
+    std::remove(cert_batch_path.c_str());
+}
+
+TEST_F(OrchestrationTest, dataUpdate_with_certificates_array_corrupted)
+{
+    Debug::setUnitTestFlag(D_CONFIG, Debug::DebugLevel::TRACE);
+    Debug::setUnitTestFlag(D_ORCHESTRATOR, Debug::DebugLevel::TRACE);
+
+    waitForRestCall();
+    preload();
+
+    EXPECT_CALL(
+        rest,
+        mockRestCall(RestAction::ADD, "proxy", _)
+    ).WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+
+    // env.init();
+
+    string config_json =
+        "{\n"
+        "\"agentSettings\": [{\n"
+                "\"key\": \"agent.config.orchestration.reportAgentDetail\",\n"
+                "\"id\": \"id1\",\n"
+                "\"value\": \"true\"\n"
+            "},\n"
+            "{\n"
+                "\"key\": \"agent.centralNginxManagement.enabled\",\n"
+                "\"id\": \"id2\",\n"
+                "\"value\": \"true\"\n"
+            "}"
+        "],\n"
+        "  \"centralNginxManagement\": [\n"
+        "    {\n"
+        "      \"data\": \"d29ya2VyX3Byb2Nlc3NlcyAgMTsKCmV2ZW50cyB7CiAgICB3b3JrZXJfY29ubmVjdGlvbnMgIDEwMjQ7Cn0KCgp"
+        "odHRwIHsKICAgIGluY2x1ZGUgICAgICAgbWltZS50eXBlczsKICAgIGRlZmF1bHRfdHlwZSAgYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFt"
+        "OwoKICAgIHNlbmRmaWxlICAgICAgICBvbjsKICAgIGtlZXBhbGl2ZV90aW1lb3V0ICA2NTsKCiAgICBzZXJ2ZXIgewogICAgICAgIGxpc"
+        "3RlbiAgICAgICA4MDsKICAgICAgICBzZXJ2ZXJfbmFtZSAgbG9jYWxob3N0OwoKICAgICAgICBsb2NhdGlvbiAvIHsKICAgICAgICAgIC"
+        "AgcHJveHlfcGFzcyBodHRwOi8vZ29vZ2xlLmNvbTsKICAgICAgICB9CgogICAgICAgIGVycm9yX3BhZ2UgICA1MDAgNTAyIDUwMyA1MDQ"
+        "gIC81MHguaHRtbDsKICAgICAgICBsb2NhdGlvbiA9IC81MHguaHRtbCB7CiAgICAgICAgICAgIHJvb3QgICBodG1sOwogICAgICAgIH0K"
+        "ICAgIH0KfQo=\",\n"
+        "      \"id\": \"42c96e7a-e76d-1748-c9d0-deb5eacf2788\",\n"
+        "      \"name\": \"dcc96e78-881b-aa4d-023e-9ae895275639-nginx-conf.conf\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n";
+
+    istringstream ss(config_json);
+    Singleton::Consume<Config::I_Config>::from(config_comp)->loadConfiguration(ss);
+
+    init();
+
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string data_file_path = "/etc/cp/conf/data.json";
+
+    string geo_db_download_path = "<JWT>mgmt-dany.dev.i2.checkpoint.com/download/resources/geo-db/latest/geo_db.mmdb";
+    string geo_db_checksum = "3c05e3e06d1814f5a0b32f233baab198946d1c8a2d7c2e6a5b611f989f743f35";
+    string geo_db_checksum_type = "sha256sum";
+    string geo_db_version = "20251202";
+    string geo_db_size = "9705065B";
+
+    string cert_download_path = "/certificates/440fd612cb8272541227ec227bb0c02141df26e8491c46cad730ce63c92a48/bundle";
+    string cert_version = "3df5fc51-cdd9-47f8-8da9-92a20615ae9e";
+    string cert_checksum = "f3e2c2e1b772dcd7cbb47d9821ee31a9ea55ba120cdfec400ec24d80b6d6e413";
+    string cert_checksum_type = "sha256sum";
+    string cert_certificateId = "440fd612cb8272541227ec227bb0c02141df26e8491c46cad730ce63c92a48";
+    string cert_fingerprint = "29426f6ec0e621056ba9da5387c7297f9da4cefb9364d47ead9a225843439335";
+    // Simulate the data.json response
+    Maybe<string> data_response_corrupted(
+        string(
+            "{\n"
+            "  \"agentGeoDb\": {\n"
+            "    \"downloadPath\": \"" + geo_db_download_path + "\",\n"
+            "    \"checksum\": \"" + geo_db_checksum + "\",\n"
+            "    \"checksumType\": \"" + geo_db_checksum_type + "\",\n"
+            "    \"version\": \"" + geo_db_version + "\",\n"
+            "    \"size\": \"" + geo_db_size + "\"\n"
+            "  },\n"
+            "  \"certificates\": [\n"
+            "    {\n"
+            "      \"downloadPath\": \"" + cert_download_path + "\",\n"
+            "      \"version\": \"" + cert_version + "\",\n"
+            "      \"checksum\": \"" + cert_checksum + "\",\n"
+            "      \"checksumType\": \"" + cert_checksum_type + "\",\n"
+            "      \"size\": \"\",\n"
+            "      \"fingerprint\": \"" + cert_fingerprint + "\"\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+        )
+    );
+
+    // Mock jsonObjectSplitter to return both an object and an array
+    std::map<std::string, std::string> expected_data_map_corrupted = {
+        { "agentGeoDb",
+            "{ \"downloadPath\": \"" +
+            geo_db_download_path +
+            "\", \"checksum\": \"" +
+            geo_db_checksum +
+            "\", \"checksumType\": \"" +
+            geo_db_checksum_type +
+            "\", \"version\": \"" +
+            geo_db_version +
+            "\", \"size\": \"" +
+            geo_db_size +
+            "\" }"
+        },
+        { "certificates",
+            "[ { \"downloadPath\": \"" +
+            cert_download_path +
+            "\", \"version\": \"" +
+            cert_version +
+            "\", \"checksum\": \"" +
+            cert_checksum +
+            "\", \"checksumType\": \"" +
+            cert_checksum_type +
+            "\", \"size\": \"\"" +
+            "\", \"fingerprint\": \"" +
+            cert_fingerprint + "\" } ]"
+        }
+    };
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(_, _, _))
+        .WillOnce(Return(expected_data_map_corrupted));
+
+    vector<string> expected_empty_data_types = {};
+    ExpectationSet expectation_set = EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "", _)
+    ).WillOnce(Return(Maybe<void>()));
+
+    vector<string> expected_geo_db_and_cert_data_types = { "agentGeoDb" };
+    EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration("", "", expected_geo_db_and_cert_data_types, "", "", _)
+    ).After(expectation_set).WillOnce(Return(Maybe<void>()));
+
+    EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, readFile(data_file_path + ".download"))
+        .WillOnce(Return(data_response_corrupted));
+
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(string("manifest")));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(string("settings")));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(string("policy")));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(string("data")));
+
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_)).WillOnce(
+        Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                EXPECT_THAT(req.getPolicy(), IsValue("policy"));
+                EXPECT_THAT(req.getSettings(), IsValue("settings"));
+                EXPECT_THAT(req.getManifest(), IsValue("manifest"));
+                EXPECT_THAT(req.getData(), IsValue("data"));
+                req = CheckUpdateRequest("", "", "", "new data", "", "");
+                return Maybe<void>();
+            }
+        )
+    );
+
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>())
+    ).WillOnce(
+        Invoke(
+            [](EnumArray<OrchestrationStatusConfigType, bool> arr)
+            {
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::MANIFEST], false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::POLICY],   false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::SETTINGS], false);
+                EXPECT_EQ(arr[OrchestrationStatusConfigType::DATA],     true);
+            }
+        )
+    );
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(
+            Invoke(
+                [] (chrono::microseconds microseconds)
+                {
+                    EXPECT_EQ(1000000, microseconds.count());
+                }
+            )
+        )
+        .WillOnce(
+            Invoke(
+                [] (chrono::microseconds microseconds)
+                {
+                    EXPECT_EQ(25000000, microseconds.count());
+                    throw invalid_argument("stop while loop");
+                }
+            )
+        );
+
+    string new_data_file_path = data_file_path + ".download";
+    GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/conf/data/certificates.data")
+    ).WillRepeatedly(Return(false));
+
+    EXPECT_CALL(mock_downloader,
+        downloadFile(
+            string("new data"),
+            Package::ChecksumTypes::SHA256,
+            data_file
+        )
+    ).WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
+
+
+    // Mock the geo database download
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/path/agentGeoDb"))
+        .WillOnce(Return(string(geo_db_checksum)));
+
+    EXPECT_CALL(mock_downloader,
+        downloadFileFromURL(
+            geo_db_download_path,
+            geo_db_checksum,
+            Package::ChecksumTypes::SHA256,
+            _
+        )
+    ).WillOnce(Return(Maybe<std::string>(string("/path/agentGeoDb"))));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        copyFile(new_data_file_path, data_file_path)
+    ).WillOnce(Return(true));
+
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        copyFile("/path/agentGeoDb", "/etc/cp/conf/data/agentGeoDb.data")
+    ).WillOnce(Return(true));
+
     EXPECT_CALL(
         mock_shell_cmd,
         getExecOutput(_, _, _)

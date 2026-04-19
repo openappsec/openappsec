@@ -16,6 +16,7 @@ struct CurlHttpClientConfig {
     bool ssl_verify_host = true;
     long http_version = CURL_HTTP_VERSION_NONE;
     std::string user_agent = "";
+    std::string resolve_host = "";
 };
 
 class CurlHttpClient : public I_HttpClient

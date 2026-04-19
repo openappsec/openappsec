@@ -271,6 +271,7 @@ bool ConfidenceCalculator::postData()
     if (m_time_window_logger->empty())
     {
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "No data to post, skipping";
+        m_dataWasSent = false; // No data was sent
         return true; // Nothing to post
     }
     saveTimeWindowLogger();
@@ -288,6 +289,9 @@ bool ConfidenceCalculator::postData()
         url);
     if (!ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
+        m_dataWasSent = false; // Failed to send data
+    } else {
+        m_dataWasSent = true; // Successfully sent data
     }
     return ok;
 }

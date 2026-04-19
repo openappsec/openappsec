@@ -347,7 +347,8 @@ void Waf2Transaction::sendAutonomousSecurityLog(
     const LogTriggerConf& triggerLog,
     bool shouldBlock,
     const std::string& logOverride,
-    const std::string& attackTypes) const
+    const std::string& attackTypes,
+    bool skipSecurityAction) const
 {
     auto autonomousSecurityDecision = std::dynamic_pointer_cast<AutonomousSecurityDecision>(
         m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION));
@@ -382,7 +383,14 @@ void Waf2Transaction::sendAutonomousSecurityLog(
         waap_log << LogField("eventConfidence", confidence);
     }
 
-    appendCommonLogFields(waap_log, triggerLog, shouldBlock, logOverride, attackTypes, AUTONOMOUS_SECURITY_DECISION);
+    appendCommonLogFields(
+        waap_log,
+        triggerLog,
+        shouldBlock,
+        logOverride,
+        attackTypes,
+        AUTONOMOUS_SECURITY_DECISION,
+        !skipSecurityAction);
 
     std::string sampleString = getSample();
     if (sampleString.length() > MAX_LOG_FIELD_SIZE) {
@@ -670,16 +678,35 @@ Waf2Transaction::getBehaviors(
         auto params = paramException.getBehavior(exceptions_dict);
         bool hasKVPair = paramException.isContainingKVPair();
 
-        // If isContainingKVPair() is false, continue as usual
-        if (!hasKVPair) {
-            dbgTrace(D_WAAP_OVERRIDE) << "Using traditional matching for exception " << id << " (no KV pairs)";
+        // Pass 1: Handle non-KV behaviors (traditional logic).
+        // If hasKVPair is true, we collect/apply behaviors from non-KV match_queries (e.g. sourceIdentifier-only).
+        // If hasKVPair is false, we allow normal behavior using existing 'params'.
+        std::set<ParameterBehavior> nonKvParams;
+        if (hasKVPair) {
+            // These are match_queries that don't contain paramName+paramValue or headerName+headerValue
+            // pairs, e.g. sourceIdentifier-only or url-only exceptions. They must be evaluated with
+            // the full dict (traditional matching), not through the per-keyword KV path.
+            nonKvParams = paramException.getBehaviorForNonKVPairs(exceptions_dict);
+        }
+
+        if (!hasKVPair || !nonKvParams.empty()) {
+            if (!hasKVPair) {
+                dbgTrace(D_WAAP_OVERRIDE) << "Using traditional matching for exception " << id << " (no KV pairs)";
+            } else {
+                dbgTrace(D_WAAP_OVERRIDE) << "got " << nonKvParams.size()
+                    << " behaviors from non-KV match_queries in mixed exception " << id;
+            }
+
             if (checkResponse && !getResponseBody().empty()) {
                 std::unordered_map<std::string, std::set<std::string>> response_dict = {
                     {"responseBody", {getResponseBody()}}
                 };
-                auto responseParams = paramException.getBehavior(response_dict);
+                auto responseParams = hasKVPair ? paramException.getBehaviorForNonKVPairs(response_dict)
+                                                : paramException.getBehavior(response_dict);
                 if (responseParams.size() > 0) {
-                dbgTrace(D_WAAP_OVERRIDE) << "got responseBody behavior, setApplyOverride(true)";
+                    dbgTrace(D_WAAP_OVERRIDE)
+                        << (hasKVPair ? "got responseBody behavior for non-KV, setApplyOverride(true)"
+                                        : "got responseBody behavior, setApplyOverride(true)");
                     m_responseInspectReasons.setApplyOverride(true);
                     all_params.insert(responseParams.begin(), responseParams.end());
                     // once found, no need to check again
@@ -687,9 +714,17 @@ Waf2Transaction::getBehaviors(
                 }
             }
 
-            dbgTrace(D_WAAP_OVERRIDE) << "got "<< params.size() << " behaviors (non-KV pair)";
-            all_params.insert(params.begin(), params.end());
-        } else {
+            if (!hasKVPair) {
+                dbgTrace(D_WAAP_OVERRIDE) << "got " << params.size() << " behaviors (non-KV pair)";
+                all_params.insert(params.begin(), params.end());
+            } else {
+                all_params.insert(nonKvParams.begin(), nonKvParams.end());
+            }
+        }
+
+        if (hasKVPair) {
+
+            // Pass 2: For KV-pair match_queries, do per-keyword matching (existing logic)
             if (params.size() > 0) {
                 bool anyKVMatched = false;
                 std::set<ParameterBehavior> kvParams;
@@ -748,6 +783,7 @@ bool Waf2Transaction::shouldEnforceByPracticeExceptions(DecisionType practiceTyp
     auto decision = m_waapDecision.getDecision(practiceType);
     bool shouldEnforce = false;
     std::shared_ptr<Waap::Override::Policy> overridePolicy = m_siteConfig->get_OverridePolicy();
+
     if (overridePolicy) {
         auto exceptions = overridePolicy->getExceptionsByPractice().getExceptionsOfPractice(practiceType);
 
@@ -780,6 +816,7 @@ bool Waf2Transaction::shouldEnforceByPracticeExceptions(DecisionType practiceTyp
             }
         }
     }
+
     if (shouldEnforce) {
         decision->setLog(true);
         if(!m_overrideStateByPractice[practiceType].bSupressLog) {
@@ -822,6 +859,8 @@ void Waf2Transaction::setOverrideState(const std::set<ParameterBehavior>& behavi
 Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
 {
     Waap::Override::State overrideState;
+
+
     std::shared_ptr<Waap::Override::Policy> overridePolicy = sitePolicy->get_OverridePolicy();
     if (overridePolicy) { // at first we will run request overrides (in order to set the source)
         auto exceptions = overridePolicy->getExceptionsByPractice().

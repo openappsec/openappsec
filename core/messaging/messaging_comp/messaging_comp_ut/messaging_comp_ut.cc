@@ -179,7 +179,7 @@ TEST_F(TestMessagingComp, testSendSyncMessageOnSuspendedConn)
     EXPECT_CALL(mock_time_get, getMonotonicTime())
         .WillRepeatedly(Invoke([] () { static int j = 0; return chrono::microseconds(++j * 1000 * 1000); }));
     for (int i = 0; i < 20; i++) {
-        conn.sendRequest(".");
+        conn.sendRequest(".", HTTPMethod::POST);
     }
     EXPECT_CALL(mock_messaging_connection, getFogConnectionByCategory(MessageCategory::GENERIC))
         .WillOnce(Return(conn));

@@ -55,6 +55,7 @@ unsigned int getReqHeaderThreadTimeout();
 unsigned int getReqBodyThreadTimeout();
 
 unsigned int getResProccessingTimeout();
+unsigned int getTransactionEntryTimeoutMinutes();
 unsigned int getResHeaderThreadTimeout();
 unsigned int getResBodyThreadTimeout();
 unsigned int getMinRetriesForVerdict();

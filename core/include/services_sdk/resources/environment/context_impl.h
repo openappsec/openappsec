@@ -29,6 +29,7 @@ public:
     virtual Return<uint64_t>    getUint()   const = 0;
     virtual Return<bool>        getBool()   const = 0;
     virtual Return<std::string> getString() const = 0;
+    virtual bool extractTo(void* out, std::type_index type) const = 0;
 };
 
 template <typename T>
@@ -44,6 +45,15 @@ public:
     Return<std::string> getString() const override { return getString(MatchCond<isString()>()); }
     Return<bool>        getBool()   const override { return getBool(MatchCond<isBool()>()); }
     Return<uint64_t>    getUint()   const override { return getUint(MatchCond<isUint()>()); }
+    bool extractTo(void* out, std::type_index type) const override {
+        if (type == typeid(T)) {
+            auto result = get();
+            if (!result.ok()) return false;
+            *static_cast<T*>(out) = result.unpack();
+            return true;
+        }
+        return false;
+    }
 
 private:
     static constexpr bool isUint()   { return std::numeric_limits<T>::is_integer && !std::is_same<T, bool>::value; }

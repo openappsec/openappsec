@@ -1,12 +1,23 @@
 #include "../shared_ring_queue.h"
 
 #include "cptest.h"
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace std;
 using namespace testing;
 
+// Extern the static variables from shared_ring_queue.c so we can reset them for testing
+extern "C" {
+    extern int g_effective_size_initialized;
+    extern int g_docker_env_initialized;
+    extern uint16_t g_effective_segment_size;
+    extern uint16_t g_effective_entry_size;
+}
+
 const static string bad_shmem_path = "/root/sadsadsadad/444";
-const static string valid_shmem_path = "shmem_ut";
+const static string valid_shmem_path = "shmem_ut2";
 const uint16_t max_num_of_data_segments = sizeof(DataSegment)/sizeof(uint16_t);
 const static uint16_t num_of_shmem_elem = 11;
 
@@ -15,6 +26,10 @@ class SharedRingQueueTest : public Test
 public:
     SharedRingQueueTest()
     {
+        string effective_size_str = to_string(SHARED_MEMORY_SEGMENT_ENTRY_SIZE);
+        setenv("EFFECTIVE_SHM_SEGMENT_SIZE", effective_size_str.c_str(), 1);
+        setenv("INFINITY_NEXT_NANO_AGENT", "TRUE", 1);
+        
         owners_queue = createSharedRingQueue(valid_shmem_path.c_str(), num_of_shmem_elem, 1, 1);
         users_queue = createSharedRingQueue(valid_shmem_path.c_str(), num_of_shmem_elem, 0, 0);
     }
@@ -330,4 +345,134 @@ TEST_F(SharedRingQueueTest, ilegal_queue)
 
     owners_queue = createSharedRingQueue(valid_shmem_path.c_str(), max_num_of_data_segments, 1, 1);
     EXPECT_NE(owners_queue, nullptr);
+}
+
+class EffectiveSegmentSizeTest : public Test
+{
+public:
+    EffectiveSegmentSizeTest()
+    {
+        g_effective_size_initialized = 0;
+        g_docker_env_initialized = 0;
+        g_effective_segment_size = 0;
+        g_effective_entry_size = 0;
+    }
+
+    ~EffectiveSegmentSizeTest()
+    {
+        unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+        unsetenv("INFINITY_NEXT_NANO_AGENT");
+        unlink("/dev/shm/attachment-metadata");
+    }
+};
+
+TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_metadata_file)
+{
+    g_effective_size_initialized = 0;
+    g_docker_env_initialized = 0;
+    g_effective_segment_size = 0;
+    g_effective_entry_size = 0;
+    
+    const string metadata_file_path = "/dev/shm/attachment-metadata";
+    const string test_effective_size = "1024";
+    const string test_queue_name = "metadata_file_test_queue";
+    
+    unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    setenv("INFINITY_NEXT_NANO_AGENT", "TRUE", 1);
+    unlink(metadata_file_path.c_str());
+    
+    {
+        ofstream metadata_file(metadata_file_path);
+        ASSERT_TRUE(metadata_file.is_open()) << "Failed to create metadata file at " << metadata_file_path;
+        metadata_file << "EFFECTIVE_SHM_SEGMENT_SIZE=" << test_effective_size << endl;
+        metadata_file << "# This is a test metadata file" << endl;
+        metadata_file.close();
+    }
+    
+    struct stat file_stat;
+    ASSERT_EQ(stat(metadata_file_path.c_str(), &file_stat), 0) << "Metadata file was not created successfully";
+    
+    {
+        ifstream metadata_file(metadata_file_path);
+        ASSERT_TRUE(metadata_file.is_open());
+        string line;
+        getline(metadata_file, line);
+        EXPECT_EQ(line, "EFFECTIVE_SHM_SEGMENT_SIZE=" + test_effective_size) << "Metadata file content is incorrect";
+        metadata_file.close();
+    }
+    
+    SharedRingQueue *test_owners_queue = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    SharedRingQueue *test_users_queue = createSharedRingQueue(test_queue_name.c_str(), 5, 0, 0);
+    
+    ASSERT_NE(test_owners_queue, nullptr) << "Failed to create owner queue";
+    ASSERT_NE(test_users_queue, nullptr) << "Failed to create user queue";
+    
+    const char* env_effective_size = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    ASSERT_NE(env_effective_size, nullptr)
+        << "EFFECTIVE_SHM_SEGMENT_SIZE environment variable was not set from metadata file";
+    EXPECT_STREQ(env_effective_size, test_effective_size.c_str())
+        << "Environment variable value does not match expected value";
+
+    EXPECT_EQ(g_effective_segment_size, 1024) << "Effective segment size should be 1024";
+    
+    const char test_data[] = "Metadata file test data";
+    const char *read_data;
+    uint16_t read_bytes = 0;
+    
+    EXPECT_EQ(pushToQueue(test_users_queue, test_data, sizeof(test_data)), 0);
+    EXPECT_FALSE(isQueueEmpty(test_owners_queue));
+    EXPECT_EQ(peekToQueue(test_owners_queue, &read_data, &read_bytes), 0);
+    EXPECT_EQ(read_bytes, sizeof(test_data));
+    EXPECT_STREQ(read_data, test_data);
+    EXPECT_EQ(popFromQueue(test_owners_queue), 0);
+    EXPECT_TRUE(isQueueEmpty(test_owners_queue));
+    
+    destroySharedRingQueue(test_owners_queue, 1, 1);
+    destroySharedRingQueue(test_users_queue, 0, 0);
+    unlink(metadata_file_path.c_str());
+}
+
+TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_environment_variable)
+{
+    g_effective_size_initialized = 0;
+    g_docker_env_initialized = 0;
+    g_effective_segment_size = 0;
+    g_effective_entry_size = 0;
+    
+    const string test_effective_size = "2048";
+    const string test_queue_name = "env_effective_size_test_queue";
+    
+    setenv("EFFECTIVE_SHM_SEGMENT_SIZE", test_effective_size.c_str(), 1);
+    setenv("INFINITY_NEXT_NANO_AGENT", "TRUE", 1);
+    
+    SharedRingQueue *test_owners_queue = createSharedRingQueue(test_queue_name.c_str(), 8, 1, 1);
+    SharedRingQueue *test_users_queue = createSharedRingQueue(test_queue_name.c_str(), 8, 0, 0);
+    
+    ASSERT_NE(test_owners_queue, nullptr) << "Failed to create owner queue for environment variable test";
+    ASSERT_NE(test_users_queue, nullptr) << "Failed to create user queue for environment variable test";
+    
+    const char* env_effective_size = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    ASSERT_NE(env_effective_size, nullptr) << "EFFECTIVE_SHM_SEGMENT_SIZE environment variable was not set";
+    EXPECT_STREQ(env_effective_size, test_effective_size.c_str())
+        << "Environment variable value does not match expected value";
+
+    EXPECT_EQ(g_effective_segment_size, 2048) << "Effective segment size should be 2048";
+    
+    string large_test_data(1500, 'X');
+    const char *read_data;
+    uint16_t read_bytes = 0;
+    
+    EXPECT_EQ(pushToQueue(test_users_queue, large_test_data.c_str(), large_test_data.size() + 1), 0);
+    EXPECT_FALSE(isQueueEmpty(test_owners_queue));
+    EXPECT_EQ(peekToQueue(test_owners_queue, &read_data, &read_bytes), 0);
+    EXPECT_EQ(read_bytes, large_test_data.size() + 1);
+    EXPECT_EQ(strncmp(read_data, large_test_data.c_str(), large_test_data.size()), 0);
+    EXPECT_EQ(popFromQueue(test_owners_queue), 0);
+    EXPECT_TRUE(isQueueEmpty(test_owners_queue));
+    
+    destroySharedRingQueue(test_owners_queue, 1, 1);
+    destroySharedRingQueue(test_users_queue, 0, 0);
+    
+    unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    unsetenv("INFINITY_NEXT_NANO_AGENT");
 }
