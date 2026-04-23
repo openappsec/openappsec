@@ -346,9 +346,6 @@ EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation 
     "Agent Intelligence",
     "cpviewMonitoring",
     "Signature Developers",
-    "File Upload",
     "Identity Awareness",
-    "unifiedMonitoring",
-    "Threat Prevention",
-    ""
+    "unifiedMonitoring"
 };

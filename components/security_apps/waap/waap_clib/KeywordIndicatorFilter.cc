@@ -80,11 +80,10 @@ bool KeywordIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapPa
     params.minIntervals = std::stoul(
         pParams->getParamVal("learnIndicators.minIntervals", std::to_string(CONFIDENCE_MIN_INTERVALS)));
     params.intervalDuration = std::chrono::minutes(std::stoul(
-        pParams->getParamVal("learning.intervalDuration",
+        pParams->getParamVal("learnIndicators.intervalDuration",
             std::to_string(CONFIDENCE_WINDOW_INTERVAL.count()))));
-    params.ratioThreshold = std::stod(
-        pParams->getParamVal("learnIndicators.ratio",
-            std::to_string(CONFIDENCE_THRESHOLD)));
+    params.ratioThreshold = std::stod(pParams->getParamVal("learnIndicators.ratio",
+        std::to_string(CONFIDENCE_THRESHOLD)));
     std::string learnPermanentlyStr = pParams->getParamVal("learnIndicators.learnPermanently", "true");
     params.learnPermanently = !boost::iequals(learnPermanentlyStr.c_str(), "false");
     params.maxMemoryUsage = std::stoul(pParams->getParamVal("learnIndicators.maxMemoryUsage",
@@ -96,8 +95,6 @@ bool KeywordIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapPa
 
     m_confidence_calc.setRemoteSyncEnabled(syncEnabled);
     m_trusted_confidence_calc.setRemoteSyncEnabled(syncEnabled);
-    m_trusted_confidence_calc.reset(params.intervalDuration);
-
     return m_confidence_calc.reset(params);
 }
 

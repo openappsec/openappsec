@@ -208,14 +208,6 @@ public:
         std::set<std::string> &matched_override_keywords,
         bool skip_irrelevant_key = false) const;
 
-    // Returns behaviors only from match_queries that do NOT contain KV pairs
-    // (paramName+paramValue or headerName+headerValue). Used when a merged exception
-    // contains both KV-pair and non-KV match_queries, to evaluate them through
-    // separate matching paths.
-    std::set<ParameterBehavior>
-    getBehaviorForNonKVPairs(
-        const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
-
     static bool isGeoLocationExceptionExists() { return is_geo_location_exception_exists; }
     const MatchQuery& getMatch() const { return match; }
     bool isContainingKVPair() const { return is_containing_kv_pair; }

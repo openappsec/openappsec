@@ -17,7 +17,6 @@ public:
     MOCK_METHOD2(writeData, bool (socketFd, const std::vector<char> &));
     MOCK_METHOD2(writeDataAsync, bool (socketFd, const std::vector<char> &));
     MOCK_METHOD3(receiveData, Maybe<std::vector<char>> (socketFd, uint, bool is_blocking));
-    MOCK_METHOD1(isError, bool (socketFd));
 };
 
 #endif // __MOCK_SOCKET_IS_H__

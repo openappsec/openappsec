@@ -15,9 +15,6 @@
 
 #include <stdlib.h>
 #include <algorithm>
-#include <thread>
-#include <sys/statvfs.h>
-#include <unistd.h>
 
 #include "nginx_attachment.h"
 #include "config.h"
@@ -158,13 +155,6 @@ HttpAttachmentConfig::setFailOpenTimeout()
         "agent.resProccessingTimeout.nginxModule",
         "HTTP manager",
         "NGINX response processing timeout msec"
-    ));
-
-    conf_data.setNumericalValue("transaction_entry_timeout_minutes", getAttachmentConf<uint>(
-        1,
-        "agent.transactionEntryTimeoutMinutes.nginxModule",
-        "HTTP manager",
-        "NGINX transaction entry timeout minutes"
     ));
 
     conf_data.setNumericalValue("req_proccessing_timeout_msec", getAttachmentConf<uint>(
@@ -439,119 +429,6 @@ HttpAttachmentConfig::setPairedAffinityEnabled() {
     conf_data.setNumericalValue("is_paired_affinity_enabled", is_paired_affinity_enabled);
 }
 
-// LCOV_EXCL_START Reason: System-dependent code
-static uint
-calculateAsyncIpcElements(uint configured_elements)
-{
-    static unsigned long g_dev_shm_usable_bytes = 0;
-    static uint cached_ipc_elements = 0;
-    
-    auto maybe_configured = getProfileAgentSetting<uint>("nginxAttachment.numOfNginxIpcElements");
-    if (maybe_configured.ok() && maybe_configured.unpack() > 0) {
-        cached_ipc_elements = maybe_configured.unpack();
-        if (cached_ipc_elements > configured_elements) {
-            cached_ipc_elements = configured_elements;
-        }
-        dbgInfo(D_NGINX_ATTACHMENT) << "Using explicitly configured IPC elements: " << cached_ipc_elements;
-        return cached_ipc_elements;
-    }
-
-    if (cached_ipc_elements > 0) {
-        dbgInfo(D_NGINX_ATTACHMENT) << "Using cached IPC elements: " << cached_ipc_elements;
-        return cached_ipc_elements;
-    }
-
-    uint calculated_max_elements = configured_elements;
-
-    // Only calculate g_dev_shm_usable_bytes once
-    if (g_dev_shm_usable_bytes == 0) {
-        struct statvfs stat;
-        
-        if (statvfs("/dev/shm", &stat) != 0) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Failed to get /dev/shm statistics, using default max: "
-                << calculated_max_elements;
-            return calculated_max_elements;
-        }
-
-        // Get total size and reduce by 5% for safety margin
-        unsigned long total_bytes_raw = stat.f_blocks * stat.f_frsize;
-        g_dev_shm_usable_bytes = static_cast<unsigned long>(total_bytes_raw * 0.95);
-        
-        dbgInfo(D_NGINX_ATTACHMENT)
-            << "Calculated /dev/shm usable bytes (95% of total): "
-            << g_dev_shm_usable_bytes;
-    }
-    
-    // Get number of processors (workers) - try profile settings first
-    long num_processors = 0;
-    auto maybe_num_processors = getProfileAgentSetting<uint>("nginxAttachment.numOfProcessors");
-    if (maybe_num_processors.ok()) {
-        num_processors = maybe_num_processors.unpack();
-    }
-    
-    if (num_processors <= 0) {
-        num_processors = sysconf(_SC_NPROCESSORS_ONLN);
-        if (num_processors <= 0) {
-            num_processors = std::thread::hardware_concurrency();
-        }
-        if (num_processors <= 0) {
-            num_processors = 4;
-        }
-    }
-    
-    // Account for fixed-size sync queues: 2 queues per worker with 200 elements each
-    const unsigned long fixed_queue_size = 200 * 4096 * 2 * num_processors;
-    
-    if (g_dev_shm_usable_bytes < fixed_queue_size) {
-        dbgWarning(D_NGINX_ATTACHMENT)
-            << "Insufficient /dev/shm memory. Required for sync queues: "
-            << fixed_queue_size
-            << " bytes, usable total (95%): "
-            << g_dev_shm_usable_bytes
-            << " bytes. Using default IPC elements.";
-        return configured_elements;
-    }
-    
-    unsigned long available_bytes = g_dev_shm_usable_bytes - fixed_queue_size;
-    
-    // Formula: num_processors * 2 (we have rx/tx queues) * num_of_nginx_ipc_elements * 4096 < available_bytes
-    // Solve for num_of_nginx_ipc_elements:
-    // num_of_nginx_ipc_elements <= available_bytes / (num_processors * 2 * 4096)
-    unsigned long divisor = num_processors * 2 * 4096;
-    if (divisor > 0) {
-        calculated_max_elements = static_cast<uint>(available_bytes / divisor);
-        if (calculated_max_elements > configured_elements) {
-            calculated_max_elements = configured_elements;
-        }
-    }
-    
-    dbgInfo(D_NGINX_ATTACHMENT)
-        << "Usable /dev/shm memory (95% of total): "
-        << g_dev_shm_usable_bytes
-        << " bytes, fixed sync queues: "
-        << fixed_queue_size
-        << " bytes, remaining: "
-        << available_bytes
-        << " bytes, "
-        << "num_processors: "
-        << num_processors << ", "
-        << "calculated max elements: "
-        << calculated_max_elements;
-
-    // Use the minimum of configured and calculated maximum
-    uint result = (configured_elements < calculated_max_elements) ? configured_elements : calculated_max_elements;
-    
-    if (result > configured_elements) {
-        result = configured_elements;
-    }
-    
-    cached_ipc_elements = result;
-    
-    return result;
-}
-// LCOV_EXCL_STOP
-
 void
 HttpAttachmentConfig::setAsyncMode() {
     bool is_async_mode_enabled = getAttachmentConf<bool>(
@@ -565,11 +442,4 @@ HttpAttachmentConfig::setAsyncMode() {
         << "Attachment async mode is: "
         << (is_async_mode_enabled ? "Enabled" : "Disabled");
     conf_data.setNumericalValue("is_async_mode_enabled", is_async_mode_enabled);
-
-    if (is_async_mode_enabled) {
-        uint num_of_nginx_ipc_elements = calculateAsyncIpcElements(NUM_OF_NGINX_IPC_ELEMENTS_ASYNC);
-        
-        dbgInfo(D_NGINX_ATTACHMENT) << "Number of Async NGINX IPC elements: " << num_of_nginx_ipc_elements;
-        conf_data.setNumericalValue("num_of_nginx_ipc_elements", num_of_nginx_ipc_elements);
-    }
 }

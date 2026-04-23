@@ -24,7 +24,6 @@
 #include <cereal/archives/json.hpp>
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/string.hpp>
-#include <cereal/types/vector.hpp>
 #include "WaapDefines.h"
 
 USE_DEBUG_FLAG(D_WAAP_SCORE_BUILDER);
@@ -51,8 +50,7 @@ struct ScoreBuilderData {
 enum KeywordType {
     KEYWORD_TYPE_UNKNOWN,
     KEYWORD_TYPE_KEYWORD,
-    KEYWORD_TYPE_COMBINATION,
-    KEYWORD_TYPE_SPECIAL_COMBINATION
+    KEYWORD_TYPE_COMBINATION
 };
 
 struct KeywordData {
@@ -66,7 +64,6 @@ struct KeywordData {
     double coef;
     double new_score;
     KeywordType type;
-    std::vector<std::string> special_links;
 
     template <class Archive>
     void serialize(Archive& ar) {
@@ -81,11 +78,6 @@ struct KeywordData {
             ar.setNextName(nullptr);
             coef = 0;
             new_score = 0;
-        }
-        try {
-            ar(cereal::make_nvp("special_links", special_links));
-        } catch (const cereal::Exception &e) {
-            ar.setNextName(nullptr);
         }
     }
 };
@@ -185,25 +177,8 @@ public:
     void calcScore(const std::string &poolName);
 
     void snap();
-    double getSnapshotKeywordScore(
-        const std::string &keyword,
-        double defaultScore,
-        const std::string &poolName
-    ) const;
-    double getSnapshotKeywordCoef(
-        const std::string &keyword,
-        double defaultCoef,
-        const std::string &poolName
-    ) const;
-    KeywordType getSnapshotKeywordType(
-        const std::string &keyword,
-        const std::string &poolName
-    ) const;
-    const std::vector<std::string>& getSnapshotSpecialLinks(
-        const std::string &keyword,
-        const std::string &poolName
-    ) const;
-
+    double getSnapshotKeywordScore(const std::string &keyword, double defaultScore, const std::string &poolName) const;
+    double getSnapshotKeywordCoef(const std::string &keyword, double defaultCoef, const std::string &poolName) const;
     KeywordsStats getSnapshotStats(const std::string &poolName) const;
 
     keywords_set getIpItemKeywordsSet(std::string ip);
@@ -215,8 +190,6 @@ public:
     void mergeScores(const ScoreBuilder& baseScores);
 protected:
     typedef std::map<std::string, double> KeywordScoreMap;
-    typedef std::map<std::string, std::vector<std::string>> KeywordSpecialLinksMap;
-    typedef std::map<std::string, KeywordType> KeywordTypeMap;
 
     struct SerializedData {
         template <class Archive>
@@ -257,12 +230,10 @@ protected:
     unsigned int m_scoreTrigger;
     FalsePoisitiveStore m_fpStore;
     SerializedData m_serializedData;
-    std::map<std::string, KeywordsScorePool> &m_keywordsScorePools;
-    std::map<std::string, KeywordScoreMap> m_snapshotKwScoreMap;
-    std::map<std::string, KeywordScoreMap> m_snapshotKwCoefMap;
-    std::map<std::string, KeywordSpecialLinksMap> m_snapshotSpecialLinksMap;
-    std::map<std::string, KeywordTypeMap> m_snapshotKwTypeMap;
-    std::map<std::string, KeywordsStats> m_snapshotStatsMap;
+    std::map<std::string, KeywordsScorePool> &m_keywordsScorePools; // live data continuously updated during traffic
+    std::map<std::string, KeywordScoreMap> m_snapshotKwScoreMap; // the snapshot is updated only by a call to snap()
+    std::map<std::string, KeywordScoreMap> m_snapshotKwCoefMap; // the snapshot is updated only by a call to snap()
+    std::map<std::string, KeywordsStats> m_snapshotStatsMap; // the snapshot is updated only by a call to snap()
     std::list<std::string> m_falsePositivesSetsIntersection;
     I_WaapAssetState* m_pWaapAssetState;
 };

@@ -428,7 +428,7 @@ WaapComponent::Impl::respond(const HttpResponseHeaderEvent &event)
         << "\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgDebug(D_NGINX_EVENTS)
+        dbgWarning(D_NGINX_EVENTS)
             << " * \e[31mNGEN_EVENT: HttpHeaderResponse - "
             << "failed to get waf2 transaction, state does not exist\e[0m";
         return drop_response;
@@ -530,7 +530,7 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
     dbgTrace(D_NGINX_EVENTS) << " * \e[32mNGEN_EVENT: HttpBodyResponse data buffer event\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgDebug(D_NGINX_EVENTS) <<
+        dbgWarning(D_NGINX_EVENTS) <<
             " * \e[31mNGEN_EVENT: HttpBodyResponse - failed to get waf2 transaction, state does not exist\e[0m";
         return drop_response;
     }
@@ -593,7 +593,7 @@ WaapComponent::Impl::respond(const HttpResponseBodyEvent &event)
                 pos
             );
 
-            pos = htmlTagFound ? pos : 0;
+            pos = htmlTagFound ? pos + 1 : 0;
 
             waf2Transaction.completeInjectionResponseBody(injectionStr);
             dbgTrace(D_WAAP) << "HttpBodyResponse(): injectionStr: " << injectionStr << " pos: " << pos

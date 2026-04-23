@@ -133,7 +133,6 @@ CurlHttpClient::perform_request(
     }
 
     struct curl_slist *header_list = nullptr;
-    struct curl_slist *resolve_list = nullptr;
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
@@ -155,11 +154,6 @@ CurlHttpClient::perform_request(
 
     if (!config.user_agent.empty()) {
         curl_easy_setopt(curl, CURLOPT_USERAGENT, config.user_agent.c_str());
-    }
-
-    if (!config.resolve_host.empty()) {
-        resolve_list = curl_slist_append(resolve_list, config.resolve_host.c_str());
-        curl_easy_setopt(curl, CURLOPT_RESOLVE, resolve_list);
     }
 
     if (!no_proxy_hosts.empty()) {
@@ -211,11 +205,6 @@ CurlHttpClient::perform_request(
     if (header_list) {
         curl_slist_free_all(header_list);
     }
-
-    if (resolve_list) {
-        curl_slist_free_all(resolve_list);
-    }
-
     curl_easy_cleanup(curl);
 
     return HTTPResponse(convertStatusCode(status_code), response_body);

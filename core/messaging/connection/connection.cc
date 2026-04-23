@@ -204,7 +204,7 @@ public:
 
         if (flags.isSet(ConnectionFlags::PROXY)) {
             dbgDebug(D_CONNECTION) << "Sending a CONNECT request: " << connect_message;
-            auto res = sendAndReceiveData(connect_message, HTTPMethod::CONNECT, true);
+            auto res = sendAndReceiveData(connect_message, true);
             if (!res.ok()) {
                 string connect_error = res.getErr().getBody();
                 dbgWarning(D_CONNECTION) << "Failed to connect to proxy: " << connect_error;
@@ -231,7 +231,7 @@ public:
     }
 
     Maybe<HTTPResponse, HTTPResponse>
-    sendRequest(const string &request, HTTPMethod method)
+    sendRequest(const string &request)
     {
         dbgFlow(D_CONNECTION)
             << "Send request to "
@@ -241,16 +241,10 @@ public:
             << ":\n"
             << printOut(request);
 
-        auto result = sendAndReceiveData(request, method, false);
+        auto result = sendAndReceiveData(request, false);
         if (!result.ok()) {
-            if (isHttpTransactionHandler()) {
-                is_trying_to_connect = true;
-                establishConnection();
-                is_trying_to_connect = false;
-            } else {
-                establishConnection();
-            }
-            result = sendAndReceiveData(request, method, false);
+            establishConnection();
+            result = sendAndReceiveData(request, false);
         }
 
         if (!result.ok()) {
@@ -503,17 +497,6 @@ private:
     }
 // LCOV_EXCL_STOP
 
-    string
-    formatHostPort(const string &host, uint port)
-    {
-        if (host.find(':') != string::npos && host[0] != '[') {
-            string result = "[" + host + "]:" + to_string(port);
-            dbgTrace(D_CONNECTION) << "Detected IPv6 address, formatted as: " << result;
-            return result;
-        }
-        return host + ":" + to_string(port);
-    }
-
     BioConnectionStatus
     tryToBioConnect(const string &full_address)
     {
@@ -538,9 +521,9 @@ private:
     {
         string full_address;
         if (isOverProxy()) {
-            full_address = formatHostPort(settings.getProxyHost(), settings.getProxyPort());
+            full_address = settings.getProxyHost() + ":" + to_string(settings.getProxyPort());
         } else {
-            full_address = formatHostPort(key.getHostName(), key.getPort());
+            full_address = key.getHostName() + ":" + to_string(key.getPort());
         }
 
         dbgFlow(D_CONNECTION) << "Connecting to " << full_address;
@@ -567,13 +550,11 @@ private:
                 bio_connect = tryToBioConnect(full_address);
             }
 
-            ++attempts_count;
-
             dbgTrace(D_CONNECTION)
                 << "Connection to: "
                 << full_address
                 << " should retry. number of made attempts: "
-                << attempts_count;
+                << ++attempts_count;
 
             i_mainloop->yield(true);
         }
@@ -679,11 +660,11 @@ private:
 // LCOV_EXCL_STOP
 
     Maybe<HTTPResponse, HTTPResponse>
-    sendAndReceiveData(const string &request, HTTPMethod method, bool is_connect)
+    sendAndReceiveData(const string &request, bool is_connect)
     {
         dbgFlow(D_CONNECTION) << "Sending and receiving data";
         I_MainLoop *i_mainloop = Singleton::Consume<I_MainLoop>::by<Messaging>();
-        while (lock || (is_trying_to_connect && !is_connect)) {
+        while (lock) {
             i_mainloop->yield(true);
         }
         lock = true;
@@ -799,7 +780,7 @@ private:
             if (!receieved.unpack().empty()) {
                 receiving_end_time = i_time->getMonotonicTime() + base_timeout;
             }
-            auto response = http_parser.parseData(*receieved, method, is_connect);
+            auto response = http_parser.parseData(*receieved, is_connect);
 
             i_mainloop->yield(receieved.unpack().empty());
             if (response.ok()) {
@@ -826,7 +807,6 @@ private:
         return chopped_str;
     }
 
-    bool is_trying_to_connect = false;
     MessageConnectionKey key;
     Flags<ConnectionFlags> flags;
 
@@ -933,7 +913,7 @@ Connection::establishConnection()
 }
 
 Maybe<HTTPResponse, HTTPResponse>
-Connection::sendRequest(const string &request, HTTPMethod method)
+Connection::sendRequest(const string &request)
 {
-    return pimpl->sendRequest(request, method);
+    return pimpl->sendRequest(request);
 }

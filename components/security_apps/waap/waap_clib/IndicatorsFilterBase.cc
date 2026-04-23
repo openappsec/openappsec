@@ -114,7 +114,7 @@ bool IndicatorFilterBase::isTrustedSourceOfType(const std::string& source,
 }
 
 
-Maybe<std::string> IndicatorFilterBase::getTrustedSource(const IWaf2Transaction* pTransaction)
+Maybe<std::string> IndicatorFilterBase::getTrustedSource(IWaf2Transaction* pTransaction)
 {
     if (m_policy == nullptr)
     {

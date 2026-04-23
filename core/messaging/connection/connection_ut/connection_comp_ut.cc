@@ -25,7 +25,6 @@
 #include "rest_server.h"
 #include "dummy_socket.h"
 #include <atomic>
-#include <chrono>
 
 using namespace std;
 using namespace testing;
@@ -43,6 +42,7 @@ class TestConnectionComp : public testing::Test
 public:
     TestConnectionComp()
     {
+        Debug::setUnitTestFlag(D_CONNECTION, Debug::DebugLevel::TRACE);
         connection_comp.init();
         i_conn = Singleton::Consume<I_MessagingConnection>::from(connection_comp);
         setAgentDetails();
@@ -287,7 +287,6 @@ TEST_F(TestConnectionComp, testSendRequestWithOneTimeFogConnection)
 
     // Ensure we accept+respond exactly once regardless of yield overload order
     std::atomic<bool> responded{false};
-
     EXPECT_CALL(mock_mainloop, yield(A<std::chrono::microseconds>()))
         .WillRepeatedly(InvokeWithoutArgs([&]() {
             if (!responded.exchange(true)) {
@@ -295,9 +294,6 @@ TEST_F(TestConnectionComp, testSendRequestWithOneTimeFogConnection)
                 dummy_socket.acceptSocket();
                 dummy_socket.writeToSocket("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmy-test");
             }
-            // Sleep briefly to give async task CPU time - prevents thread starvation
-            // when mock yield returns immediately without actually yielding
-            this_thread::sleep_for(chrono::microseconds(100));
         }));
     EXPECT_CALL(mock_mainloop, yield(A<bool>()))
         .WillRepeatedly(InvokeWithoutArgs([&]() {
@@ -306,21 +302,14 @@ TEST_F(TestConnectionComp, testSendRequestWithOneTimeFogConnection)
                 dummy_socket.acceptSocket();
                 dummy_socket.writeToSocket("HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nmy-test");
             }
-            // Sleep briefly to give async task CPU time - prevents thread starvation
-            this_thread::sleep_for(chrono::microseconds(100));
         }));
 
-    // Don't use static - it accumulates across test runs in same process
-    int timer_call_count = 0;
     EXPECT_CALL(mock_timer, getMonotonicTime())
-        .WillRepeatedly(Invoke([&]() {
-            timer_call_count++;
-            return chrono::microseconds(timer_call_count * 1000 * 1000);
-        }));
+        .WillRepeatedly(Invoke([]() { static int j = 0; return chrono::microseconds(++j * 1000 * 1000); }));
 
     auto maybe_response = i_conn->sendRequest(conn, *req);
     if (!maybe_response.ok()) {
-        cerr << "Error: " << maybe_response.getErr().toString() << endl;
+        cout << "Error: " << maybe_response.getErr().toString() << endl;
     }
     ASSERT_TRUE(maybe_response.ok());
     EXPECT_EQ((*maybe_response).getBody(), "my-test");
@@ -336,23 +325,4 @@ TEST_F(TestConnectionComp, testSendRequestWithOneTimeFogConnection)
         "\r\n"
         "test-body";
     EXPECT_EQ(dummy_socket.readFromSocket(), expected_msg);
-}
-
-TEST_F(TestConnectionComp, testIPv6AddressBracketing)
-{
-    stringstream dbg_stream;
-    Debug::setNewDefaultStdout(&dbg_stream);
-    Debug::setUnitTestFlag(D_CONNECTION, Debug::DebugLevel::TRACE);
-
-    Flags<MessageConnectionConfig> conn_flags;
-    conn_flags.setFlag(MessageConnectionConfig::UNSECURE_CONN);
-    MessageMetadata conn_metadata("2620:0:2a03:51:0:8000:0:217", 8080, conn_flags);
-    
-    auto maybe_connection = i_conn->establishConnection(conn_metadata, MessageCategory::GENERIC);
-    
-    // Verify IPv6 address is bracketed in debug output
-    string debug_str = dbg_stream.str();
-    EXPECT_THAT(debug_str, HasSubstr("Detected IPv6 address, formatted as: [2620:0:2a03:51:0:8000:0:217]:8080"));
-
-    Debug::setNewDefaultStdout(&cout);
 }

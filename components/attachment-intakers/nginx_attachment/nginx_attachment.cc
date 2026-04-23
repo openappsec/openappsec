@@ -365,29 +365,9 @@ public:
             attachment_sock = -1;
         }
 
-        if (secondary_server_sock > 0) {
-            i_socket->closeSocket(secondary_server_sock);
-            secondary_server_sock = -1;
-        }
-
-        if (secondary_attachment_routine_id > 0 && mainloop->doesRoutineExist(secondary_attachment_routine_id)) {
-            mainloop->stop(secondary_attachment_routine_id);
-            secondary_attachment_routine_id = 0;
-        }
-
-        if (secondary_attachment_sock > 0) {
-            i_socket->closeSocket(secondary_attachment_sock);
-            secondary_attachment_sock = -1;
-        }
-
-        if (primary_attachment_ipc != nullptr) {
-            destroyIpc(primary_attachment_ipc, 1);
-            primary_attachment_ipc = nullptr;
-        }
-
-        if (secondary_attachment_sync_ipc != nullptr) {
-            destroyIpc(secondary_attachment_sync_ipc, 1);
-            secondary_attachment_sync_ipc = nullptr;
+        if (attachment_ipc != nullptr) {
+            destroyIpc(attachment_ipc, 1);
+            attachment_ipc = nullptr;
         }
     }
 
@@ -502,26 +482,23 @@ private:
             attachment_routine_id = 0;
         }
 
+        if (async_attachment_routine_id > 0 && mainloop->doesRoutineExist(async_attachment_routine_id)) {
+            mainloop->stop(async_attachment_routine_id);
+            async_attachment_routine_id = 0;
+        }
+
         string curr_instance_unique_id = inst_awareness->getUniqueID().unpack();
-        if (primary_attachment_ipc != nullptr) {
+        if (attachment_ipc != nullptr) {
             if (nginx_worker_user_id != nginx_user_id || nginx_worker_group_id != nginx_group_id) {
-                destroyIpc(primary_attachment_ipc, 1);
-                primary_attachment_ipc = nullptr;
-                if (secondary_attachment_sync_ipc != nullptr) {
-                    destroyIpc(secondary_attachment_sync_ipc, 1);
-                    secondary_attachment_sync_ipc = nullptr;
-                }
-            } else if (isCorruptedShmem(primary_attachment_ipc, 1)) {
+                destroyIpc(attachment_ipc, 1);
+                attachment_ipc = nullptr;
+            } else if (isCorruptedShmem(attachment_ipc, 1)) {
                 dbgWarning(D_NGINX_ATTACHMENT)
                     << "Destroying shmem IPC for Attachment with corrupted shared memory. Attachment id: "
                     << curr_instance_unique_id;
 
-                destroyIpc(primary_attachment_ipc, 1);
-                primary_attachment_ipc = nullptr;
-                if (secondary_attachment_sync_ipc != nullptr) {
-                    destroyIpc(secondary_attachment_sync_ipc, 1);
-                    secondary_attachment_sync_ipc = nullptr;
-                }
+                destroyIpc(attachment_ipc, 1);
+                attachment_ipc = nullptr;
             } else {
                 dbgInfo(D_NGINX_ATTACHMENT) << "Re-registering attachment with id: " << curr_instance_unique_id;
                 uint max_registrations = getProfileAgentSettingWithDefault<uint>(
@@ -538,12 +515,8 @@ private:
                 );
                 if (curr_times_diff < chrono::milliseconds(duration_of_registrations)) {
                     if (++curr_attachment_registrations_counter > max_registrations) {
-                        destroyIpc(primary_attachment_ipc, 1);
-                        primary_attachment_ipc = nullptr;
-                        if (secondary_attachment_sync_ipc != nullptr) {
-                            destroyIpc(secondary_attachment_sync_ipc, 1);
-                            secondary_attachment_sync_ipc = nullptr;
-                        }
+                        destroyIpc(attachment_ipc, 1);
+                        attachment_ipc = nullptr;
 
                         dbgWarning(D_NGINX_ATTACHMENT)
                             << "Attachment with id: "
@@ -560,8 +533,8 @@ private:
             }
         }
 
-        if (primary_attachment_ipc == nullptr) {
-            primary_attachment_ipc = initIpc(
+        if (attachment_ipc == nullptr) {
+            attachment_ipc = initIpc(
                 curr_instance_unique_id.c_str(),
                 nginx_user_id,
                 nginx_group_id,
@@ -571,30 +544,11 @@ private:
             );
 
             if (SHOULD_FAIL(
-                primary_attachment_ipc != nullptr,
+                attachment_ipc != nullptr,
                 IntentionalFailureHandler::FailureType::InitializeConnectionChannel,
                 &did_fail_on_purpose
             )) {
                 dbgWarning(D_NGINX_ATTACHMENT) << "Failed to initialize communication channel with attachment";
-                return false;
-            }
-        }
-
-        // Initialize secondary sync IPC if not already initialized
-        if (secondary_attachment_sync_ipc == nullptr) {
-            string secondary_unique_id = curr_instance_unique_id + "_sync";
-            secondary_attachment_sync_ipc = initIpc(
-                secondary_unique_id.c_str(),
-                nginx_user_id,
-                nginx_group_id,
-                1,
-                200,
-                IpcDebug
-            );
-
-            if (secondary_attachment_sync_ipc == nullptr) {
-                dbgWarning(D_NGINX_ATTACHMENT)
-                    << "Failed to initialize secondary sync communication channel with attachment";
                 return false;
             }
         }
@@ -637,11 +591,11 @@ private:
                     }
                 );
 
-                while (isSignalPending(attachment_sock)) {
+                while (isSignalPending()) {
                     if (attachment_config.isAsyncModeEnabled()) {
                         if (!handleInspectionAsync()) break;
                     } else {
-                        if (!handleInspection(attachment_sock, primary_attachment_ipc)) break;
+                        if (!handleInspection()) break;
                     }
                 }
             },
@@ -660,20 +614,20 @@ private:
 
 private:
     bool
-    handleInspection(I_Socket::socketFd sock, SharedMemoryIPC *ipc)
+    handleInspection()
     {
         Maybe<vector<char>> comm_trigger = genError("comm trigger uninitialized");;
 
         static map<I_Socket::socketFd, bool> comm_status;
-        if (comm_status.find(sock) == comm_status.end()) {
-            comm_status[sock] = true;
+        if (comm_status.find(attachment_sock) == comm_status.end()) {
+            comm_status[attachment_sock] = true;
         }
 
         DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::ReceiveDataFromSocket);
 
         uint32_t signaled_session_id = 0;
         for (int retry = 0; retry < 3; retry++) {
-            comm_trigger = i_socket->receiveData(sock, sizeof(signaled_session_id));
+            comm_trigger = i_socket->receiveData(attachment_sock, sizeof(signaled_session_id));
             if (comm_trigger.ok()) break;
         }
 
@@ -683,25 +637,25 @@ private:
             IntentionalFailureHandler::FailureType::ReceiveDataFromSocket,
             &did_fail_on_purpose
         )) {
-            if (comm_status[sock] == true) {
+            if (comm_status[attachment_sock] == true) {
                 dbgDebug(D_NGINX_ATTACHMENT)
                     << "Failed to get signal from attachment socket "
                     << ", Socket: "
-                    << sock
+                    << attachment_sock
                     << ", Error: "
                     << (did_fail_on_purpose ? "Intentional Failure" : comm_trigger.getErr());
-                comm_status[sock] = false;
+                comm_status[attachment_sock] = false;
             }
             return false;
         }
 
         signaled_session_id = *reinterpret_cast<const uint32_t *>(comm_trigger.unpack().data());
-        comm_status.erase(sock);
+        comm_status.erase(attachment_sock);
         traffic_indicator = true;
 
-        while (isDataAvailable(ipc)) {
+        while (isDataAvailable(attachment_ipc)) {
             traffic_indicator = true;
-            Maybe<pair<uint32_t, bool>> session_verdict = handleRequestFromQueue(ipc, signaled_session_id);
+            Maybe<pair<uint32_t, bool>> session_verdict = handleRequestFromQueue(attachment_ipc, signaled_session_id);
             if (!session_verdict.ok()) return true;
 
             uint32_t handled_session_id = session_verdict.unpack().first;
@@ -722,9 +676,9 @@ private:
                     &did_fail_on_purpose
                 )) {
                     for (int retry = 0; retry < 3; retry++) {
-                        if (i_socket->writeData(sock, session_id_data)) {
+                        if (i_socket->writeData(attachment_sock, session_id_data)) {
                             dbgTrace(D_NGINX_ATTACHMENT)
-                                << "Successfully sent signal to attachment to read verdict (sock: ." << sock << ")";
+                                << "Successfully sent signal to attachment to read verdict.";
                             res = true;
                             return true;
                         }
@@ -742,14 +696,14 @@ private:
             }
         }
 
-        return false;
+        return true;
     }
 
     bool
-    isSignalPending(I_Socket::socketFd sock)
+    isSignalPending()
     {
-        if (sock < 0) return false;
-        return i_socket->isDataAvailable(sock);
+        if (attachment_sock < 0) return false;
+        return i_socket->isDataAvailable(attachment_sock);
     }
 
     void
@@ -830,13 +784,13 @@ private:
         auto on_exit = make_scope_exit(
             [this]()
             {
-                if (primary_attachment_ipc == nullptr) return;
+                if (attachment_ipc == nullptr) return;
 
-                handleVerdictResponse(FilterVerdict(RECONF), primary_attachment_ipc, 0, false);
+                handleVerdictResponse(FilterVerdict(RECONF), attachment_ipc, 0, false);
 
                 dbgDebug(D_NGINX_ATTACHMENT)
                     << "Sending verdict RECONF for NGINX attachment with UID: "
-                    << primary_attachment_ipc;
+                    << attachment_ipc;
             }
         );
 
@@ -1116,16 +1070,7 @@ private:
         CompressionStream *compression_stream = content_encoding == CompressionType::NO_COMPRESSION ?
             nullptr :
             opaque.getResponseCompressionStream();
-
-        if (content_encoding != CompressionType::NO_COMPRESSION && compression_stream == nullptr) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Response Content-Encoding indicates compression but compression stream is null. "
-                << "Cannot decompress response body. Returning default verdict to avoid crash. Content-Encoding: "
-                << static_cast<int>(content_encoding);
-            return default_verdict;
-        }
-
-        auto http_response_body_maybe = NginxParser::parseResponseBody(data, compression_stream, content_encoding);
+        auto http_response_body_maybe = NginxParser::parseResponseBody(data, compression_stream);
 
         return handleModifiableChunk(http_response_body_maybe, "response body", false);
     }
@@ -1388,86 +1333,33 @@ private:
         vector<uint16_t> &verdict_data_sizes,
         const CustomResponse &custom_response_data)
     {
-        string response_body = custom_response_data.getBody();
-        const auto& headers_map = custom_response_data.getHeaders();
-        
-        size_t total_headers_size = 0;
-        vector<string> header_keys;
-        vector<string> header_values;
-        
-        for (const auto& header_pair : headers_map) {
-            header_keys.push_back(header_pair.first);
-            header_values.push_back(header_pair.second);
-            total_headers_size += sizeof(HttpHeaderPackedData) + header_pair.first.size() + header_pair.second.size();
-        }
-        
-        size_t custom_response_size =
-            sizeof(HttpCustomResponseData) +
-            total_headers_size +
-            response_body.size();
+        HttpJsonResponseData json_response_data;
 
-        static vector<char> custom_response_buffer;
-        custom_response_buffer.resize(custom_response_size);
-        char* buffer_ptr = custom_response_buffer.data();
-        
-        HttpCustomResponseData* custom_response_header =
-            reinterpret_cast<HttpCustomResponseData*>(buffer_ptr);
-        custom_response_header->response_code = custom_response_data.getStatusCode();
-        
-        if (response_body.size() > UINT16_MAX) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Response body size (" << response_body.size()
-                << ") exceeds uint16_t maximum (" << UINT16_MAX
-                << "). Body will be truncated.";
-            custom_response_header->body_size = UINT16_MAX;
+        json_response_data.response_code = custom_response_data.getStatusCode();
+        string response_body = custom_response_data.getBody();
+        string content_type = custom_response_data.getContentType();
+        json_response_data.body_size = response_body.size();
+
+        if (content_type == "application/json") {
+            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_APPLICATION_JSON;
+        } else if (content_type == "text/html") {
+            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_TEXT_HTML;
         } else {
-            custom_response_header->body_size = static_cast<uint16_t>(response_body.size());
+            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_OTHER;
         }
-        
-        if (headers_map.size() > UINT8_MAX) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Headers count (" << headers_map.size()
-                << ") exceeds uint8_t maximum (" << UINT8_MAX
-                << "). Only first " << UINT8_MAX << " headers will be sent.";
-            custom_response_header->headers_count = UINT8_MAX;
-        } else {
-            custom_response_header->headers_count = static_cast<uint8_t>(headers_map.size());
-        }
-        
-        buffer_ptr += sizeof(HttpCustomResponseData);
-        
-        for (size_t i = 0; i < header_keys.size(); ++i) {
-            HttpHeaderPackedData* header_data = reinterpret_cast<HttpHeaderPackedData*>(buffer_ptr);
-            header_data->key_size = header_keys[i].size();
-            header_data->value_size = header_values[i].size();
-            
-            buffer_ptr += sizeof(HttpHeaderPackedData);
-            
-            memcpy(buffer_ptr, header_keys[i].data(), header_keys[i].size());
-            buffer_ptr += header_keys[i].size();
-            
-            memcpy(buffer_ptr, header_values[i].data(), header_values[i].size());
-            buffer_ptr += header_values[i].size();
-            
-            dbgTrace(D_NGINX_ATTACHMENT)
-                << "Packed header: '"
-                << header_keys[i]
-                << "' = '"
-                << header_values[i]
-                << "'";
-        }
-        
-        memcpy(buffer_ptr, response_body.data(), response_body.size());
-        
-        verdict_data.push_back(custom_response_buffer.data());
-        verdict_data_sizes.push_back(custom_response_buffer.size());
+
+        verdict_data.push_back(reinterpret_cast<const char *>(&json_response_data));
+        verdict_data_sizes.push_back(sizeof(HttpJsonResponseData));
+
+        verdict_data.push_back(reinterpret_cast<const char *>(response_body.data()));
+        verdict_data_sizes.push_back(response_body.size());
 
         dbgTrace(D_NGINX_ATTACHMENT)
-            << "Added Custom Response to current session."
-            << " Response code: " << custom_response_data.getStatusCode()
-            << ", Headers count: " << headers_map.size()
-            << ", Body size: " << response_body.size()
-            << ", Total size: " << custom_response_size;
+            << "Added Custom JSON Response to current session."
+            << " Response code: "
+            << static_cast<uint>(json_response_data.response_code)
+            << ", Body size: "
+            << static_cast<uint>(json_response_data.body_size);
 
         sendChunkedData(ipc, verdict_data_sizes.data(), verdict_data.data(), verdict_data.size());
     }
@@ -1597,8 +1489,7 @@ private:
                 << "Failed to receive data from corrupted IPC Resetting the IPC"
                 << dumpIpcWrapper(attachment_ipc);
 
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return genError("Failed to receive data from corrupted IPC");
         }
@@ -1627,8 +1518,7 @@ private:
                 << (did_fail_on_purpose ? "[Intentional Failure]" : "");
 
             popData(attachment_ipc);
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return genError("Data received is smaller than expected");
         }
@@ -1663,8 +1553,7 @@ private:
                 << " to ChunkType enum. Resetting IPC"
                 << dumpIpcWrapper(attachment_ipc);
             popData(attachment_ipc);
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return make_pair(corrupted_session_id, true);
         }
@@ -1829,8 +1718,7 @@ private:
                 return false;
             }
 
-            auto timeout_minutes = attachment_config.getTransactionEntryTimeoutMinutes();
-            if (!i_transaction_table->createEntry(session_id, chrono::minutes(timeout_minutes))) {
+            if (!i_transaction_table->createEntry(session_id, chrono::minutes(1))) {
                 dbgWarning(D_NGINX_ATTACHMENT)
                     << "Failed to create table entry for transaction with session ID: " << session_id;
                 return false;
@@ -1940,24 +1828,6 @@ private:
 
         dbgAssert(sock.unpack() > 0) << alert << "The generated server socket is OK, yet negative";
         server_sock = sock.unpack();
-
-        Maybe<I_Socket::socketFd> secondary_sock = i_socket->genSocket(
-            I_Socket::SocketType::UNIX,
-            true,
-            true,
-            shared_verdict_signal_path + "_secondary"
-        );
-        if (SHOULD_FAIL(
-            secondary_sock.ok(), IntentionalFailureHandler::FailureType::CreateSocket, &did_fail_on_purpose
-        )) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Failed to open a secondary server socket. Error: "
-                << (did_fail_on_purpose ? "Intentional Failure" : secondary_sock.getErr());
-            return false;
-        }
-
-        dbgAssert(secondary_sock.unpack() > 0) << alert << "The generated secondary server socket is OK, yet negative";
-        secondary_server_sock = secondary_sock.unpack();
 
         I_MainLoop::Routine accept_attachment_routine =
             [this] ()
@@ -2078,66 +1948,6 @@ private:
             server_sock,
             accept_attachment_routine,
             "Nginx Attachment registration listener",
-            true
-        );
-
-        I_MainLoop::Routine secondary_accept_attachment_routine =
-            [this] ()
-            {
-                bool did_fail_on_purpose = false;
-                Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(secondary_server_sock, true);
-                if (SHOULD_FAIL(
-                    new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
-                )) {
-                    dbgWarning(D_NGINX_ATTACHMENT) << "Failed to accept a new socket. Error: "
-                    << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
-                    return;
-                }
-                dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
-                I_Socket::socketFd secondary_attachment_sock_tmp = new_sock.unpack();
-                if (secondary_attachment_sock > 0 && secondary_attachment_sock != secondary_attachment_sock_tmp) {
-                    i_socket->closeSocket(secondary_attachment_sock);
-                }
-                secondary_attachment_sock = secondary_attachment_sock_tmp;
-
-                if (
-                    secondary_attachment_routine_id > 0
-                    && mainloop->doesRoutineExist(secondary_attachment_routine_id)
-                ) {
-                    mainloop->stop(secondary_attachment_routine_id);
-                    secondary_attachment_routine_id = 0;
-                }
-
-                secondary_attachment_routine_id = mainloop->addFileRoutine(
-                    I_MainLoop::RoutineType::RealTime,
-                    secondary_attachment_sock,
-                    [this] () mutable
-                    {
-                        auto on_exit = make_scope_exit(
-                            [this]()
-                            {
-                                nginx_attachment_event.notify();
-                                nginx_attachment_event.resetAllCounters();
-                                nginx_intaker_event.notify();
-                                nginx_intaker_event.resetAllCounters();
-                            }
-                        );
-
-                        while (isSignalPending(secondary_attachment_sock)) {
-                            dbgTrace(D_NGINX_ATTACHMENT) << "Processing secondary attachment socket";
-                            if (!handleInspection(secondary_attachment_sock, secondary_attachment_sync_ipc)) break;
-                        }
-                    },
-                    "Secondary Nginx Attachment inspection handler",
-                    true
-                );
-            };
-
-        mainloop->addFileRoutine(
-            I_MainLoop::RoutineType::System,
-            secondary_server_sock,
-            secondary_accept_attachment_routine,
-            "Nginx Secondary Attachment registration listener",
             true
         );
 
@@ -2280,19 +2090,16 @@ private:
 
     // Attachment Details
     I_Socket::socketFd server_sock = -1;
-    I_Socket::socketFd secondary_server_sock = -1;
     I_Socket::socketFd attachment_sock = -1;
-    I_Socket::socketFd secondary_attachment_sock = -1;
 
     uint num_of_nginx_ipc_elements = NUM_OF_NGINX_IPC_ELEMENTS;
     uint32_t nginx_worker_user_id = 0;
     uint32_t nginx_worker_group_id = 0;
     string instance_unique_id;
-    SharedMemoryIPC *primary_attachment_ipc = nullptr;
-    SharedMemoryIPC *secondary_attachment_sync_ipc = nullptr;
+    SharedMemoryIPC *attachment_ipc = nullptr;
     HttpAttachmentConfig attachment_config;
     I_MainLoop::RoutineID attachment_routine_id = 0;
-    I_MainLoop::RoutineID secondary_attachment_routine_id = 0;
+    I_MainLoop::RoutineID async_attachment_routine_id = 0;
     bool traffic_indicator = false;
     unordered_set<string> ignored_headers;
 
@@ -2368,10 +2175,10 @@ private:
         comm_status.erase(attachment_sock);
         traffic_indicator = true;
 
-        while (isDataAvailable(primary_attachment_ipc)) {
+        while (isDataAvailable(attachment_ipc)) {
             traffic_indicator = true;
             
-            uint32_t handled_session_id = handleRequestFromQueueAsync(primary_attachment_ipc);
+            uint32_t handled_session_id = handleRequestFromQueueAsync(attachment_ipc);
             
             if (handled_session_id == 0 || handled_session_id == corrupted_session_id) {
                 continue;
@@ -2392,7 +2199,7 @@ private:
                 IntentionalFailureHandler::FailureType::WriteDataToSocket,
                 &did_fail_on_purpose
             )) {
-                for (int retry = 0; retry < 3; retry++) {
+            for (int retry = 0; retry < 3; retry++) {
                     if (i_socket->writeDataAsync(attachment_sock, session_id_data)) {
                         dbgTrace(D_NGINX_ATTACHMENT)
                             << "Successfully sent signal to attachment (async mode).";
@@ -2410,8 +2217,7 @@ private:
                     << (did_fail_on_purpose ? "[Intentional Failure]" : "");
                 if (!did_fail_on_purpose) {
                     dbgWarning(D_NGINX_ATTACHMENT) << "Resetting IPC and socket";
-                    resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-                    resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+                    resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
                 }
                 return false;
             }
@@ -2429,9 +2235,9 @@ private:
     ///
 // LCOV_EXCL_START Reason: Temporary INXT-49318
     uint32_t
-    handleRequestFromQueueAsync(SharedMemoryIPC *ipc)
+    handleRequestFromQueueAsync(SharedMemoryIPC *attachment_ipc)
     {
-        Maybe<pair<uint16_t, const char *>> read_data = readData(ipc);
+        Maybe<pair<uint16_t, const char *>> read_data = readData(attachment_ipc);
         if (!read_data.ok()) {
             dbgWarning(D_NGINX_ATTACHMENT) << "Failed to read data. Error: " << read_data.getErr();
             return corrupted_session_id;
@@ -2453,10 +2259,9 @@ private:
                 << "Could not convert "
                 <<  static_cast<int>(transaction_data->data_type)
                 << " to ChunkType enum. Resetting IPC"
-                << dumpIpcWrapper(ipc);
-            popData(ipc);
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+                << dumpIpcWrapper(attachment_ipc);
+            popData(attachment_ipc);
+            resetIpc(attachment_ipc, num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return corrupted_session_id;
         }
@@ -2465,7 +2270,7 @@ private:
             const NanoHttpMetricData *recieved_metric_data =
                 reinterpret_cast<const NanoHttpMetricData *>(incoming_data);
             sendMetricToKibana(recieved_metric_data);
-            popData(ipc);
+            popData(attachment_ipc);
             return 0; // No signaling needed for metrics
         }
 
@@ -2499,10 +2304,10 @@ private:
                 i_transaction_table->deleteEntry(cur_session_id);
             }
 
-            popData(ipc);
+            popData(attachment_ipc);
             handleVerdictResponse(
                 FilterVerdict(ACCEPT),
-                ipc,
+                attachment_ipc,
                 cur_session_id,
                 false
             );
@@ -2510,7 +2315,7 @@ private:
         }
 
         if (!setActiveTransactionEntry(cur_session_id, chunked_data_type.unpack())) {
-            popData(ipc);
+            popData(attachment_ipc);
             return cur_session_id;
         }
 
@@ -2527,11 +2332,11 @@ private:
 
             handleVerdictResponse(
                 default_verdict,
-                ipc,
+                attachment_ipc,
                 cur_session_id,
                 false
             );
-            popData(ipc);
+            popData(attachment_ipc);
             removeTransactionEntry(cur_session_id);
             return cur_session_id;
         }
@@ -2551,12 +2356,12 @@ private:
             *chunked_data_type == ChunkType::CONTENT_LENGTH;
 
         if (verdict.getVerdict() == LIMIT_RESPONSE_HEADERS) {
-            handleVerdictResponse(verdict, ipc, transaction_data->session_id, is_header);
-            popData(ipc);
+            handleVerdictResponse(verdict, attachment_ipc, transaction_data->session_id, is_header);
+            popData(attachment_ipc);
             verdict = FilterVerdict(INSPECT);
         }
 
-        handleVerdictResponse(verdict, ipc, transaction_data->session_id, is_header);
+        handleVerdictResponse(verdict, attachment_ipc, cur_session_id, is_header);
 
         bool is_final_verdict = verdict.getVerdict() == ACCEPT ||
                                 verdict.getVerdict() == DROP   ||
@@ -2572,7 +2377,7 @@ private:
             << " verdict_data_code="
             << static_cast<int>(verdict.getVerdict());
 
-        popData(ipc);
+        popData(attachment_ipc);
 
         opaque.deactivateContext();
         if (is_final_verdict) {
@@ -2613,7 +2418,6 @@ NginxAttachment::preload()
     registerExpectedConfiguration<uint>("HTTP manager", "Keep Alive interval in sec");
     registerExpectedConfiguration<uint>("HTTP manager", "Fail Open timeout msec");
     registerExpectedSetting<DebugConfig>("HTTP manager", "debug context");
-    registerExpectedConfiguration<uint>("HTTP manager", "NGINX transaction entry timeout minutes");
     registerExpectedConfiguration<uint>("HTTP manager", "NGINX response processing timeout msec");
     registerExpectedConfiguration<uint>("HTTP manager", "NGINX request processing timeout msec");
     registerExpectedConfiguration<uint>("HTTP manager", "NGINX registration thread timeout msec");

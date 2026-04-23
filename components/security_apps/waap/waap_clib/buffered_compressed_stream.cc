@@ -448,9 +448,9 @@ bool BufferedCompressedInputStream::DecompressedBuffer::decompressChunk(
         return true; // Nothing to decompress
     }
 
-    DecompressionResult result = decompressDataSafe(
+    // Use the streaming decompression
+    DecompressionResult result = decompressData(
         m_compression_stream,
-        CompressionType::GZIP,
         compressed_chunk.size(),
         reinterpret_cast<const unsigned char*>(compressed_chunk.data())
     );

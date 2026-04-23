@@ -20,7 +20,6 @@
 #include "config.h"
 #include "rest.h"
 #include "cereal/external/rapidjson/document.h"
-#include "downloaded_certificate.h"
 
 #include "customized_cereal_map.h"
 #include "cereal/archives/json.hpp"
@@ -86,10 +85,6 @@ public:
     void removeDownloadFile(const string &file_name) const override;
     void createTenantProfileMap();
     string getProfileFromMap(const string &tenant_id) const override;
-
-    Maybe<string> downloadCertificatesFromFog(
-        const vector<string> &certificate_ids
-    ) const override;
 
 private:
     Maybe<string> downloadAttributeFile(
@@ -279,45 +274,6 @@ Downloader::Impl::downloadVirtualFileFromFog(
         }
     }
     return res;
-}
-
-Maybe<string>
-Downloader::Impl::downloadCertificatesFromFog(const vector<string> &certificate_ids) const
-{
-    if (certificate_ids.empty()) {
-        dbgDebug(D_ORCHESTRATOR) << "No certificate IDs provided for batch download";
-        return genError("No certificate IDs provided");
-    }
-
-    dbgInfo(D_ORCHESTRATOR)
-        << "Downloading batch of "
-        << certificate_ids.size()
-        << " certificates from fog";
-
-    CertificateBatchRequest batch_request(certificate_ids);
-    Maybe<string> req_body = batch_request.genJson();
-    if (!req_body.ok()) {
-        return genError("Failed to create batch request: " + req_body.getErr());
-    }
-
-    static const string certificates_endpoint = "/certificates/bundle/bulk";
-    string file_path = dir_path + "/certificates.download";
-
-    auto download_result = HTTPSClient().getFileSSLWithBody(
-        certificates_endpoint,
-        req_body.unpack(),
-        file_path
-    );
-
-    if (!download_result.ok()) {
-        dbgWarning(D_ORCHESTRATOR)
-            << "Failed to download certificates batch from fog: "
-            << download_result.getErr();
-        return genError(download_result.getErr());
-    }
-
-    dbgInfo(D_ORCHESTRATOR) << "Successfully downloaded certificates batch to: " << file_path;
-    return file_path;
 }
 
 Maybe<string>

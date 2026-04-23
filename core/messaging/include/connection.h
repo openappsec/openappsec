@@ -66,7 +66,7 @@ public:
     bool shouldCloseConnection() const;
 
     Maybe<void> establishConnection();
-    Maybe<HTTPResponse, HTTPResponse> sendRequest(const std::string &request, HTTPMethod method);
+    Maybe<HTTPResponse, HTTPResponse> sendRequest(const std::string &request);
 
 private:
     class Impl;

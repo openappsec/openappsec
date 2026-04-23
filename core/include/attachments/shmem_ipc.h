@@ -59,8 +59,6 @@ void dumpIpcMemory(SharedMemoryIPC *ipc);
 
 int isCorruptedShmem(SharedMemoryIPC *ipc, int is_owner);
 
-uint16_t getSegmentEntrySize();
-
 #ifdef __cplusplus
 }
 #endif // __cplusplus

@@ -139,7 +139,7 @@ TEST_F(SharedIPCTest, ilegal_ipc)
 
     EXPECT_THAT(
         capture_debug.str(),
-        HasSubstr("Cannot create data segment with 2049 elements (max number of elements is 2048)")
+        HasSubstr("Cannot create data segment with 513 elements (max number of elements is 512)")
     );
 }
 
@@ -268,10 +268,4 @@ TEST_F(SharedIPCTest, ensure_right_permissions)
         EXPECT_EQ(info.st_mode & S_IWUSR, static_cast<uint>(S_IWUSR));
         EXPECT_NE(info.st_mode & S_IXUSR, static_cast<uint>(S_IXUSR));
     }
-}
-
-TEST_F(SharedIPCTest, get_main_segment_size)
-{
-    uint16_t segment_size = getSegmentEntrySize();
-    EXPECT_EQ(segment_size, SHARED_MEMORY_SEGMENT_ENTRY_SIZE);
 }

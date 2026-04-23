@@ -37,7 +37,7 @@ public:
                                                     const std::string &, const std::string &));
     MOCK_METHOD1(finishTrace,                       void(const std::string &));
     MOCK_METHOD1(finishSpan,                        void(const std::string &));
-    MOCK_METHOD0(getKeyWrapper,                     KeyWrapper &());
+
     // You can't mock a function with an R-value reference. So mock a slightly different one
     void loadEnvironment(ActiveContexts &&env) { mockLoadEnvironment(env); }
     MOCK_METHOD1      (mockLoadEnvironment,     void(const ActiveContexts &));

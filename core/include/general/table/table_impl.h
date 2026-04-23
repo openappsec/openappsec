@@ -30,7 +30,6 @@
 #include "table/table_list.h"
 #include "table/opaque_repo.h"
 #include "config.h"
-#include "key_wrapper.h"
 
 USE_DEBUG_FLAG(D_TABLE);
 
@@ -142,7 +141,6 @@ Table<Key>::Impl::removeKey(const TableHelper::KeyNodePtr<Key> &key)
     dbgTrace(D_TABLE) << "Removing the key " << key;
     entries.erase(iter);
     list.removeKey(key);
-    env->getKeyWrapper().clear();
 }
 
 template <typename Key>
@@ -249,7 +247,6 @@ Table<Key>::Impl::createEntry(const Key &key, std::chrono::microseconds expire)
     auto expire_time = curr_time + expire;
     dbgTrace(D_TABLE) << "Creating an entry with the key " << key << " for " << expire;
     entries.emplace(key, std::make_shared<Entry>(this, &expiration, key, list.addKey(key), expire_time));
-    env->getKeyWrapper().set<Key>(key);
     return true;
 }
 
@@ -284,7 +281,6 @@ Table<Key>::Impl::addLinkToEntry(const Key &key, const Key &link)
     }
     dbgTrace(D_TABLE) << "Linking the key " << link << " with the key " << key;
     iter->second->addKey(link, list.addKey(link));
-    env->getKeyWrapper().set<Key>(link);
     return true;
 }
 
@@ -317,7 +313,6 @@ Table<Key>::Impl::setActiveKey(const Key &key)
     ctx.registerValue(primary_key, key);
     ctx.activate();
     entry->second->uponEnteringContext();
-    env->getKeyWrapper().set<Key>(key);
     return true;
 }
 
@@ -332,7 +327,6 @@ Table<Key>::Impl::unsetActiveKey()
     }
     entry->uponLeavingContext();
     ctx.deactivate();
-    env->getKeyWrapper().clear();
 }
 
 template <typename Key>
@@ -346,24 +340,14 @@ template <typename Key>
 typename Table<Key>::Impl::EntryRef
 Table<Key>::Impl::getCurrEntry() const
 {
-    // Try to get the active key from the environment (type-erased)
-    Key key_value;
-    const KeyWrapper &key_wrapper = env->getKeyWrapper();
-    auto is_key = key_wrapper.get(key_value);
-
-    if (!is_key) {
-        dbgTrace(D_TABLE) << "Getting current key from env context";
-        auto fallback_key = env->get<Key>(primary_key);
-        if (!fallback_key.ok()) {
-            dbgTrace(D_TABLE) << "Key was not found";
-            return nullptr;
-        }
-        key_value = fallback_key.unpack();
+    auto key = env->get<Key>(primary_key);
+    if (!key.ok()) {
+        dbgTrace(D_TABLE) << "Key was not found";
+        return nullptr;
     }
-    dbgTrace(D_TABLE) << "Current key is " << key_value;
-    auto iter = entries.find(key_value);
+    auto iter = entries.find(key.unpack());
     if (iter == entries.end()) {
-        dbgTrace(D_TABLE) << "No entry matches the key " << key_value;
+        dbgTrace(D_TABLE) << "No entry matches the key " << key.unpack();
         return nullptr;
     }
     return iter->second;

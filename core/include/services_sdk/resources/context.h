@@ -26,7 +26,6 @@
 USE_DEBUG_FLAG(D_ENVIRONMENT);
 
 class I_Environment;
-class KeyWrapper;
 
 namespace EnvKeyAttr
 {
@@ -62,10 +61,8 @@ public:
     enum class Error { NO_VALUE, NO_EVAL, WRONG_TYPE };
     template <typename T> using Return = Maybe<T, Error>;
 
-    friend class KeyWrapper;
-
 private:
-
+    class AbstractValue;
 
     template <typename T>
     class Value;
@@ -73,7 +70,6 @@ private:
     class Key;
 
 public:
-    class AbstractValue;
     void activate();
     void deactivate();
 

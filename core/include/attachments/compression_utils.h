@@ -38,17 +38,16 @@ void setCompressionDebugFunction(const CompressionUtilsDebugLevel debug_level, v
 
 typedef struct CompressionStream CompressionStream;
 
+CompressionStream * initCompressionStream();
+void finiCompressionStream(CompressionStream *compression_stream);
+
 typedef enum CompressionType
 {
     NO_COMPRESSION,
     GZIP,
     ZLIB,
-    BROTLI,
-    UNKNOWN_COMPRESSION = NO_COMPRESSION
+    BROTLI
 } CompressionType;
-
-CompressionStream * initCompressionStream();
-void finiCompressionStream(CompressionStream *compression_stream);
 
 typedef struct CompressionResult
 {
@@ -77,14 +76,6 @@ typedef struct DecompressionResult
 DecompressionResult
 decompressData(
     CompressionStream *compression_stream,
-    const uint32_t compressed_data_size,
-    const unsigned char *compressed_data
-);
-
-DecompressionResult
-decompressDataSafe(
-    CompressionStream *compression_stream,
-    const CompressionType compression_type,
     const uint32_t compressed_data_size,
     const unsigned char *compressed_data
 );

@@ -286,19 +286,11 @@ NginxParser::parseResponseHeaders(const Buffer &data)
 }
 
 Maybe<Buffer>
-decompressBuffer(
-    CompressionStream *compression_stream,
-    CompressionType content_encoding,
-    const Buffer &compressed_buffer)
+decompressBuffer(CompressionStream *compression_stream, const Buffer &compressed_buffer)
 {
     if (compressed_buffer.size() == 0) return Buffer();
 
-    auto compression_result = decompressDataSafe(
-        compression_stream,
-        content_encoding,
-        compressed_buffer.size(),
-        compressed_buffer.data()
-    );
+    auto compression_result = decompressData(compression_stream, compressed_buffer.size(), compressed_buffer.data());
     if (!compression_result.ok) return genError("Failed to decompress data");
 
     if (compression_result.output == nullptr) return Buffer();;
@@ -314,14 +306,11 @@ decompressBuffer(
 }
 
 Maybe<Buffer>
-parseCompressedHttpBodyData(
-    CompressionStream *compression_stream,
-    CompressionType content_encoding,
-    const Buffer &body_raw_data)
+parseCompressedHttpBodyData(CompressionStream *compression_stream, const Buffer &body_raw_data)
 {
     if (compression_stream == nullptr) return genError("Cannot decompress body without compression stream");
 
-    Maybe<Buffer> decompressed_buffer_maybe = decompressBuffer(compression_stream, content_encoding, body_raw_data);
+    Maybe<Buffer> decompressed_buffer_maybe = decompressBuffer(compression_stream, body_raw_data);
     if (!decompressed_buffer_maybe.ok()) {
         return genError("Failed to decompress buffer. Error: " + decompressed_buffer_maybe.getErr());
     }
@@ -330,10 +319,7 @@ parseCompressedHttpBodyData(
 }
 
 Maybe<HttpBody>
-genBody(
-    const Buffer &raw_response_body,
-    CompressionStream *compression_stream = nullptr,
-    CompressionType content_encoding = CompressionType::NO_COMPRESSION)
+genBody(const Buffer &raw_response_body, CompressionStream *compression_stream = nullptr)
 {
     uint offset = 0;
     auto is_last_part_maybe = raw_response_body.getTypePtr<uint8_t>(offset);
@@ -361,7 +347,7 @@ genBody(
         return HttpBody(body_raw_data, is_last_part, body_chunk_index);
     }
 
-    Maybe<Buffer> body_data_maybe = parseCompressedHttpBodyData(compression_stream, content_encoding, body_raw_data);
+    Maybe<Buffer> body_data_maybe = parseCompressedHttpBodyData(compression_stream, body_raw_data);
     if (!body_data_maybe.ok()) {
         dbgWarning(D_NGINX_ATTACHMENT_PARSER)
             << "Failed to decompress body chunk. Chunk index: "
@@ -402,12 +388,9 @@ NginxParser::parseRequestBody(const Buffer &data)
 }
 
 Maybe<HttpBody>
-NginxParser::parseResponseBody(
-    const Buffer &raw_response_body,
-    CompressionStream *compression_stream,
-    CompressionType content_encoding)
+NginxParser::parseResponseBody(const Buffer &raw_response_body, CompressionStream *compression_stream)
 {
-    Maybe<HttpBody> body = genBody(raw_response_body, compression_stream, content_encoding);
+    Maybe<HttpBody> body = genBody(raw_response_body, compression_stream);
     if (!body.ok()) return genError("Failed to generate body from buffer: " + body.getErr());
 
     dbgTrace(D_NGINX_ATTACHMENT_PARSER)

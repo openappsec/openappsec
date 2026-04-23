@@ -59,6 +59,16 @@ checkVPNBlade(const string &command_output)
 }
 
 Maybe<string>
+checkSAMLPortal(const string &command_output)
+{
+    if (command_output.find("Portal is running") != string::npos) {
+        return string("true");
+    }
+
+    return string("false");
+}
+
+Maybe<string>
 checkIdaPDP(const string &command_output)
 {
     if (command_output.find("is_collecting_identities (true)") != string::npos) {
@@ -431,17 +441,6 @@ getMgmtObjUid(const string &command_output)
     }
     return getMgmtObjAttr(file_stream, "uuid ");
 }
-
-Maybe<string>
-getMgmtConnectionId(const string &command_output)
-{
-    if (!command_output.empty()) {
-        return command_output;
-    }
-    
-    return genError("Failed to retrieve management connection ID from cloud-services");
-}
-
 
 Maybe<string>
 getMgmtObjName(const string &command_output)

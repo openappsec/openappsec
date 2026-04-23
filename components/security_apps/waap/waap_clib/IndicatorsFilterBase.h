@@ -40,7 +40,7 @@ public:
 
     bool setTrustedSrcParameter(std::shared_ptr<Waap::TrustedSources::TrustedSourcesParameter> policy);
     void reset();
-    Maybe<std::string> getTrustedSource(const IWaf2Transaction* pTransaction);
+    Maybe<std::string> getTrustedSource(IWaf2Transaction* pTransaction);
 protected:
     void registerKeyword(const std::string& key,
         const std::string& keyword,

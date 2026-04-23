@@ -231,8 +231,7 @@ MessagingComp::downloadFile(
     const string &uri,
     const string &download_file_path,
     MessageCategory category,
-    const MessageMetadata &message_metadata,
-    const string &body
+    const MessageMetadata &message_metadata
 )
 {
     dbgTrace(D_MESSAGING) << "Send download file message";
@@ -245,7 +244,7 @@ MessagingComp::downloadFile(
         }
     }
 
-    auto response = sendSyncMessage(method, uri, body, category, message_metadata);
+    auto response = sendSyncMessage(method, uri, "", category, message_metadata);
     if (!response.ok()) return response.passErr();
     if (response.unpack().getHTTPStatusCode() != HTTPStatusCode::HTTP_OK) {
         return genError(HTTPResponse(response.unpack().getHTTPStatusCode(), response.unpack().getBody()));
