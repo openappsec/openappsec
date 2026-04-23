@@ -105,7 +105,7 @@ void ScannerDetector::log(
 
 void ScannerDetector::loadParams(std::shared_ptr<Waap::Parameters::WaapParameters> pParams)
 {
-    std::string interval = pParams->getParamVal("learning.intervalDuration",
+    std::string interval = pParams->getParamVal("learnIndicators.intervalDuration",
         std::to_string(INTERVAL.count()));
     setInterval(std::chrono::minutes(std::stoul(interval)));
     std::string remoteSyncStr = pParams->getParamVal("remoteSync", "true");
@@ -148,7 +148,6 @@ bool ScannerDetector::postData()
 {
     if (m_current_accumulator->empty()) {
         dbgDebug(D_WAAP) << "No data to post, skipping";
-        m_dataWasSent = false; // No data was sent
         return true;
     }
     SourcesMonitorPost postMonitor(*m_current_accumulator);
@@ -158,9 +157,6 @@ bool ScannerDetector::postData()
 
     if (ok) {
         m_current_accumulator = std::make_shared<SourceKeyValsMap>();
-        m_dataWasSent = true; // Successfully sent data
-    } else {
-        m_dataWasSent = false; // Failed to send data
     }
 
     return ok;

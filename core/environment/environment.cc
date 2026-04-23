@@ -33,7 +33,7 @@ USE_DEBUG_FLAG(D_ENVIRONMENT);
 USE_DEBUG_FLAG(D_TRACE);
 
 class Environment::Impl
-    :
+        :
     public Singleton::Provide<I_Environment>::From<Environment>
 {
 public:
@@ -67,9 +67,6 @@ public:
     void finishTrace(const string &trace) override;
     void finishSpan(const string &span) override;
 
-    // Type-erased key management
-    KeyWrapper & getKeyWrapper() override;
-
 private:
     const ActiveContexts & getActiveContexts() const override { return active_contexts; }
     void loadEnvConfig();
@@ -86,7 +83,6 @@ private:
     bool is_metric_enabled = false;
     TracingStatus tracing_status = TracingStatus::OFF;
     bool was_initialized = false;
-    KeyWrapper active_key_wrapper;
 };
 
 class DeclareBooleanVariable : public ServerRest
@@ -109,12 +105,6 @@ private:
     C2S_PARAM(string, name);
     C2S_PARAM(string, expr);
 };
-
-KeyWrapper &
-Environment::Impl::getKeyWrapper()
-{
-    return active_key_wrapper;
-}
 
 void
 Environment::Impl::loadEnvConfig()

@@ -240,7 +240,6 @@ public:
     IWaapConfig* getSiteConfig() { return m_siteConfig; }
     void addNote(const std::string &note) { m_notes.push_back(note); }
     Waap::ResponseInspectReasons &getResponseInspectReasons(void) { return m_responseInspectReasons; }
-    bool getForceNotSendingLog() const { return m_forceNotSendingLog; }
     // LCOV_EXCL_START Reason: This function is tested in system tests
     bool checkIsHeaderOverrideScanRequired();
     // LCOV_EXCL_STOP
@@ -257,15 +256,13 @@ private:
         const LogTriggerConf& triggerLog,
         bool shouldBlock,
         const std::string& logOverride,
-        const std::string& attackTypes,
-        bool skipSecurityAction = false) const;
+        const std::string& attackTypes) const;
     void appendCommonLogFields(LogGen& waapLog,
         const LogTriggerConf &triggerLog,
         bool shouldBlock,
         const std::string& logOverride,
         const std::string& incidentType,
-        DecisionType practiceType,
-        bool includeSecurityAction = true) const;
+        DecisionType practiceType) const;
     std::string getUserReputationStr(double relativeReputation) const;
     bool isTrustedSource() const;
 
@@ -388,7 +385,6 @@ private:
     uint64_t m_index;
 
     bool m_triggerReport;
-    bool m_forceNotSendingLog = false;
     bool is_schema_validation = false;
     Waf2TransactionFlags m_waf2TransactionFlags;
 

@@ -131,32 +131,22 @@ void ScoreBuilder::restore()
 {
     const std::string filePath = this->m_pWaapAssetState->getWaapDataFileName();
 
-    dbgTrace(D_WAAP_SCORE_BUILDER)
-        << "loadFromFile() file: "
-        << filePath;
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "loadFromFile() file: " << filePath;
     std::fstream filestream;
 
     filestream.open(filePath, std::fstream::in);
 
     if (filestream.is_open() == false) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "failed to open file: "
-            << filePath
-            << " Error: "
-            << errno;
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "failed to open file: " << filePath << " Error: " << errno;
         return;
     }
 
-    dbgTrace(D_WAAP_SCORE_BUILDER)
-        << "loading from file: "
-        << filePath;
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "loading from file: " << filePath;
 
     int length;
     filestream.seekg(0, std::ios::end);    // go to the end
     length = filestream.tellg();           // report location (this is the length)
-    dbgTrace(D_WAAP_SCORE_BUILDER)
-        << "file length: "
-        << length;
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "file length: " << length;
     assert(length >= 0); // length -1 really happens if filePath is a directory (!)
     char* buffer = new char[length];       // allocate memory for a buffer of appropriate dimension
     filestream.seekg(0, std::ios::beg);    // go back to the beginning
@@ -164,9 +154,7 @@ void ScoreBuilder::restore()
     {
         filestream.close();
         delete[] buffer;
-        dbgWarning(D_WAAP_SCORE_BUILDER)
-            << "Failed to read file, file: "
-            << filePath;
+        dbgWarning(D_WAAP_SCORE_BUILDER) << "Failed to read file, file: " << filePath;
         return;
     }
     filestream.close();
@@ -183,11 +171,8 @@ void ScoreBuilder::restore()
         );
     }
     catch (std::runtime_error & e) {
-        dbgWarning(D_WAAP_SCORE_BUILDER)
-            << "failed to deserialize file: "
-            << filePath
-            << ", error: "
-            << e.what();
+        dbgWarning(D_WAAP_SCORE_BUILDER) << "failed to deserialize file: " << filePath << ", error: " <<
+            e.what();
     }
 }
 
@@ -195,14 +180,12 @@ void ScoreBuilder::analyzeFalseTruePositive(ScoreBuilderData& data, const std::s
 {
     if (data.m_fpClassification == UNKNOWN_TYPE)
     {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "analyzeFalseTruePositive(): Got UNKNOWN_TYPE as false positive classification "
+        dbgTrace(D_WAAP_SCORE_BUILDER) <<
+            "analyzeFalseTruePositive(): Got UNKNOWN_TYPE as false positive classification "
             ", will not pump keywords score";
         return;
     }
-    dbgTrace(D_WAAP_SCORE_BUILDER)
-        << "ScoreBuilder::analyzeFalseTruePositive: pumping score pool="
-        << poolName;
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "ScoreBuilder::analyzeFalseTruePositive: pumping score pool=" << poolName;
     pumpKeywordScore(data, poolName, doBackup);
 }
 
@@ -275,19 +258,14 @@ void ScoreBuilder::pumpKeywordScore(ScoreBuilderData& data, const std::string &p
     std::map<std::string, KeywordsScorePool>::iterator poolIt = m_keywordsScorePools.find(poolName);
 
     if (poolIt == m_keywordsScorePools.end()) {
-        dbgDebug(D_WAAP_SCORE_BUILDER)
-            << "pumpKeywordScore() is called with unknown poolName='"
-            << poolName
-            << "'. Creating the pool.";
+        dbgDebug(D_WAAP_SCORE_BUILDER) << "pumpKeywordScore() is called with unknown poolName='" << poolName <<
+            "'. Creating the pool.";
         m_keywordsScorePools[poolName] = KeywordsScorePool();
     }
 
     poolIt = m_keywordsScorePools.find(poolName);
     if (poolIt == m_keywordsScorePools.end()) {
-        dbgWarning(D_WAAP_SCORE_BUILDER)
-            << "pumpKeywordScore() failed to create pool '"
-            << poolName
-            << "'";
+        dbgWarning(D_WAAP_SCORE_BUILDER) << "pumpKeywordScore() failed to create pool '" << poolName << "'";
         return;
     }
 
@@ -321,19 +299,14 @@ void ScoreBuilder::calcScore(const std::string &poolName)
     std::map<std::string, KeywordsScorePool>::iterator poolIt = m_keywordsScorePools.find(poolName);
 
     if (poolIt == m_keywordsScorePools.end()) {
-        dbgDebug(D_WAAP_SCORE_BUILDER)
-            << "calcScore() is called with unknown poolName='"
-            << poolName
-            << "'. Creating the pool.";
+        dbgDebug(D_WAAP_SCORE_BUILDER) << "calcScore() is called with unknown poolName='" << poolName <<
+            "'. Creating the pool.";
         m_keywordsScorePools[poolName] = KeywordsScorePool();
     }
 
     poolIt = m_keywordsScorePools.find(poolName);
     if (poolIt == m_keywordsScorePools.end()) {
-        dbgWarning(D_WAAP_SCORE_BUILDER)
-            << "calcScore() failed to create pool '"
-            << poolName
-            << "'";
+        dbgWarning(D_WAAP_SCORE_BUILDER) << "calcScore() failed to create pool '" << poolName << "'";
         return;
     }
 
@@ -384,8 +357,6 @@ void ScoreBuilder::snap()
         const KeywordsScorePool& keywordScorePool = pool.second;
         m_snapshotKwScoreMap[poolName];
         m_snapshotKwCoefMap[poolName];
-        m_snapshotSpecialLinksMap[poolName];
-        m_snapshotKwTypeMap[poolName];
         if (keywordScorePool.m_keywordsDataMap.empty()) {
             m_snapshotStatsMap[poolName] = KeywordsStats();
         } else {
@@ -401,42 +372,8 @@ void ScoreBuilder::snap()
                 m_snapshotKwScoreMap[poolName][kwName] = kwData.second.score;
             }
             m_snapshotKwCoefMap[poolName][kwName] = kwData.second.coef;
-            m_snapshotKwTypeMap[poolName][kwName] = kwData.second.type;
-
-            if (!kwData.second.special_links.empty()) {
-                dbgTrace(D_WAAP_SCORE_BUILDER)
-                    << "snap(): keyword '"
-                    << kwName
-                    << "' has "
-                    << kwData.second.special_links.size()
-                    << " special links.";
-                m_snapshotSpecialLinksMap[poolName][kwName] = kwData.second.special_links;
-            }
         }
     }
-}
-
-const std::vector<std::string>& ScoreBuilder::getSnapshotSpecialLinks(
-    const std::string &keyword,
-    const std::string &poolName
-) const
-{
-    static const std::vector<std::string> empty;
-    std::map<std::string, KeywordSpecialLinksMap>::const_iterator poolIt = m_snapshotSpecialLinksMap.find(poolName);
-    if (poolIt == m_snapshotSpecialLinksMap.end()) {
-        poolIt = m_snapshotSpecialLinksMap.find(KEYWORDS_SCORE_POOL_BASE);
-    }
-
-    if (poolIt == m_snapshotSpecialLinksMap.end()) {
-        return empty;
-    }
-
-    const KeywordSpecialLinksMap &kwLinksMap = poolIt->second;
-    KeywordSpecialLinksMap::const_iterator kwFound = kwLinksMap.find(keyword);
-    if (kwFound == kwLinksMap.end()) {
-        return empty;
-    }
-    return kwFound->second;
 }
 
 KeywordsStats
@@ -444,10 +381,7 @@ ScoreBuilder::getSnapshotStats(const std::string &poolName) const
 {
     std::map<std::string, KeywordsStats>::const_iterator poolIt = m_snapshotStatsMap.find(poolName);
     if (poolIt == m_snapshotStatsMap.end()) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "pool "
-            << poolName
-            << " does not exist. Getting stats from base pool";
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "pool " << poolName << " does not exist. Getting stats from base pool";
         poolIt = m_snapshotStatsMap.find(KEYWORDS_SCORE_POOL_BASE);
         if (poolIt == m_snapshotStatsMap.end()) {
             dbgWarning(D_WAAP_SCORE_BUILDER) <<
@@ -458,36 +392,16 @@ ScoreBuilder::getSnapshotStats(const std::string &poolName) const
     return poolIt->second;
 }
 
-KeywordType ScoreBuilder::getSnapshotKeywordType(const std::string &keyword, const std::string &poolName) const
-{
-    std::map<std::string, KeywordTypeMap>::const_iterator poolIt = m_snapshotKwTypeMap.find(poolName);
-    if (poolIt != m_snapshotKwTypeMap.end())
-    {
-        KeywordTypeMap::const_iterator kwIt = poolIt->second.find(keyword);
-        if (kwIt != poolIt->second.end())
-        {
-            return kwIt->second;
-        }
-    }
-
-    return KEYWORD_TYPE_UNKNOWN;
-}
-
 double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double defaultScore,
     const std::string &poolName) const
 {
     std::map<std::string, KeywordScoreMap>::const_iterator poolIt = m_snapshotKwScoreMap.find(poolName);
     if (poolIt == m_snapshotKwScoreMap.end()) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "pool "
-            << poolName
-            << " does not exist. Getting score from base pool";
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "pool " << poolName << " does not exist. Getting score from base pool";
         poolIt = m_snapshotKwScoreMap.find(KEYWORDS_SCORE_POOL_BASE);
         if (poolIt == m_snapshotKwScoreMap.end()) {
-            dbgDebug(D_WAAP_SCORE_BUILDER)
-                << "base pool does not exist! This is probably a bug. Returning default score "
-                << defaultScore;
-
+            dbgDebug(D_WAAP_SCORE_BUILDER) <<
+                "base pool does not exist! This is probably a bug. Returning default score " << defaultScore;
             return defaultScore;
         }
     }
@@ -496,25 +410,13 @@ double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double 
 
     KeywordScoreMap::const_iterator kwScoreFound = kwScoreMap.find(keyword);
     if (kwScoreFound == kwScoreMap.end()) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "keywordScore:'"
-            << keyword
-            << "': "
-            << defaultScore
-            << " (default, keyword not found in pool '"
-            << poolName
-            << "')";
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordScore:'" << keyword << "': " << defaultScore <<
+            " (default, keyword not found in pool '" << poolName << "')";
         return defaultScore;
     }
 
-    dbgTrace(D_WAAP_SCORE_BUILDER)
-        << "keywordScore:'"
-        << keyword
-        << "': "
-        << kwScoreFound->second
-        << " (pool '"
-        << poolName
-        << "')";
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordScore:'" << keyword << "': " << kwScoreFound->second << " (pool '" <<
+        poolName << "')";
     return kwScoreFound->second;
 }
 
@@ -523,17 +425,13 @@ ScoreBuilder::getSnapshotKeywordCoef(const std::string &keyword, double defaultC
 {
     std::map<std::string, KeywordScoreMap>::const_iterator poolIt = m_snapshotKwCoefMap.find(poolName);
     if (poolIt == m_snapshotKwCoefMap.end()) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "pool "
-            << poolName
-            << " does not exist. Getting coef from base pool";
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "pool " << poolName << " does not exist. Getting coef from base pool";
         poolIt = m_snapshotKwCoefMap.find(KEYWORDS_SCORE_POOL_BASE);
     }
 
     if (poolIt == m_snapshotKwCoefMap.end()) {
-        dbgWarning(D_WAAP_SCORE_BUILDER)
-            << "base pool does not exist! This is probably a bug. Returning default coef "
-            << defaultCoef;
+        dbgWarning(D_WAAP_SCORE_BUILDER) <<
+            "base pool does not exist! This is probably a bug. Returning default coef " << defaultCoef;
         return defaultCoef;
     }
 
@@ -541,25 +439,13 @@ ScoreBuilder::getSnapshotKeywordCoef(const std::string &keyword, double defaultC
 
     KeywordScoreMap::const_iterator kwCoefFound = kwCoefMap.find(keyword);
     if (kwCoefFound == kwCoefMap.end()) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "keywordCoef:'"
-            << keyword
-            << "': "
-            << defaultCoef
-            << " (default, keyword not found in pool '"
-            << poolName
-            << "')";
+        dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordCoef:'" << keyword << "': " << defaultCoef <<
+            " (default, keyword not found in pool '" << poolName << "')";
         return defaultCoef;
     }
 
-    dbgTrace(D_WAAP_SCORE_BUILDER)
-        << "keywordCoef:'"
-        << keyword
-        << "': "
-        << kwCoefFound->second
-        << " (pool '"
-        << poolName
-        << "')";
+    dbgTrace(D_WAAP_SCORE_BUILDER) << "keywordCoef:'" << keyword << "': " << kwCoefFound->second << " (pool '" <<
+        poolName << "')";
     return kwCoefFound->second;
 }
 
@@ -595,8 +481,8 @@ void ScoreBuilder::pumpKeywordScorePerKeyword(ScoreBuilderData& data, const std:
 {
     m_scoreTrigger++;
     if (data.m_fpClassification == UNKNOWN_TYPE) {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "pumpKeywordScorePerKeyword(): Got UNKNOWN_TYPE as false positive classifiaction "
+        dbgTrace(D_WAAP_SCORE_BUILDER) <<
+            "pumpKeywordScorePerKeyword(): Got UNKNOWN_TYPE as false positive classifiaction "
             ", will not pump keywords score";
         return;
     }
@@ -610,17 +496,15 @@ void ScoreBuilder::pumpKeywordScorePerKeyword(ScoreBuilderData& data, const std:
 
     if (data.m_fpClassification == TRUE_POSITIVE  && keyData.score < 8)
     {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "pumpKeywordScorePerKeyword(): fpClassification = TRUE_POSITIVE for keyword: "
-            << keyword;
+        dbgTrace(D_WAAP_SCORE_BUILDER) <<
+            "pumpKeywordScorePerKeyword(): fpClassification = TRUE_POSITIVE for keyword: " << keyword;
         keyData.truePositiveCtr++;
         keywordsScorePool.m_stats.truePositiveCtr++;
     }
     else if (data.m_fpClassification == FALSE_POSITIVE  && (keyData.score > 0.1 || keyData.truePositiveCtr < 10))
     {
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "pumpKeywordScorePerKeyword(): fpClassification = FALSE_POSITIVE for keyword: "
-            << keyword;
+        dbgTrace(D_WAAP_SCORE_BUILDER) <<
+            "pumpKeywordScorePerKeyword(): fpClassification = FALSE_POSITIVE for keyword: " << keyword;
         m_fpStore.putFalsePositive(data.m_sourceIdentifier, data.m_userAgent, keyword);
     }
 

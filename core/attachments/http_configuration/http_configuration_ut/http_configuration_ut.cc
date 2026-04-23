@@ -62,7 +62,6 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"res_body_thread_timeout_msec\": 80,\n"
             "\"waiting_for_verdict_thread_timeout_msec\": 60,\n"
             "\"req_header_thread_timeout_msec\": 10,\n"
-            "\"transaction_entry_timeout_minutes\": 5,\n"
             "\"ip_ranges\": " + createIPRangesString(ip_ranges) + ",\n"
             "\"static_resources_path\": \"" + static_resources_path + "\",\n"
             "\"remove_server_header\": 0,\n"
@@ -89,7 +88,6 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(conf_data_out.getNumericalValue("dbg_level"), 2u);
     EXPECT_EQ(conf_data_out.getNumericalValue("res_proccessing_timeout_msec"), 420u);
     EXPECT_EQ(conf_data_out.getNumericalValue("req_proccessing_timeout_msec"), 42u);
-    EXPECT_EQ(conf_data_out.getNumericalValue("transaction_entry_timeout_minutes"), 5u);
     EXPECT_EQ(conf_data_out.getNumericalValue("registration_thread_timeout_msec"), 101u);
     EXPECT_EQ(conf_data_out.getNumericalValue("req_header_thread_timeout_msec"), 10u);
     EXPECT_EQ(conf_data_out.getNumericalValue("req_body_thread_timeout_msec"), 155u);

@@ -14,17 +14,12 @@
 #include "IndicatorsFiltersManager.h"
 #include "WaapConfigApi.h"
 #include "WaapConfigApplication.h"
-#include <chrono>
-#include <cstddef>
 #include <vector>
 #include "Waf2Util.h"
 #include "FpMitigation.h"
 #include "Waf2Engine.h"
 #include "WaapKeywords.h"
 #include "config.h"
-#include "debug.h"
-#include "i_unified_learning.h"
-#include "hiredis/async.h"
 
 USE_DEBUG_FLAG(D_WAAP_LEARN);
 static constexpr int DEFAULT_SOURCES_LIMIT = 1000;
@@ -56,7 +51,6 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, con
     ),
     m_pWaapAssetState(pWaapAssetState),
     m_ignoreSources(pWaapAssetState->getWaapDataDir(), remotePath, assetId),
-    m_waapParams(nullptr),
     m_tuning(remotePath),
     m_matchedOverrideKeywords(),
     m_isLeading(getSettingWithDefault<bool>(true, "features", "learningLeader")),
@@ -65,23 +59,15 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, con
     m_unifiedIndicators(make_shared<UnifiedIndicatorsContainer>())
 {
     restore();
-    registerExpectedConfiguration<std::string>("connection", "Redis IP");
-    registerExpectedConfiguration<int>("connection", "Redis Port");
-    registerExpectedConfiguration<int>("connection", "Redis Routine Interval");
-
-    m_centralLogging_enabled = getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging");
-    m_unified_learning_enabled = getProfileAgentSettingWithDefault<bool>(false, "agent.learning.unifiedLearning");
-
-    initId();  // Initialize family_id first
     m_keywordsFreqFilter = make_unique<KeywordIndicatorFilter>(
         pWaapAssetState->getWaapDataDir(),
         remotePath,
         assetId,
         &m_ignoreSources,
         &m_tuning);
-    initRedis();
     m_typeFilter = make_unique<TypeIndicatorFilter>(pWaapAssetState, remotePath, assetId, &m_tuning);
     m_uniqueSources.reserve(m_sources_limit);
+
     registerConfigLoadCb([this](){
         updateSourcesLimit();
         updateLearningLeaderFlag();
@@ -90,132 +76,6 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, con
 
 IndicatorsFiltersManager::~IndicatorsFiltersManager()
 {
-    disconnectRedis();
-}
-
-void IndicatorsFiltersManager::initId(){
-    if(!m_unified_learning_enabled){
-        return;
-    }
-    auto inst_awareness = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
-    if (!inst_awareness->getFamilyID().ok()) {
-        dbgDebug(D_WAAP_LEARN) << "Family ID not available, unified learning disabled: "
-                                << inst_awareness->getFamilyID().getErr();
-        this->family_id = "";
-    } else {
-        this->family_id = inst_awareness->getFamilyID().unpack();
-    }
-
-    if (!inst_awareness->getUniqueID().ok()) {
-        dbgDebug(D_WAAP_LEARN) << "ID not available, unified learning disabled: "
-                                << inst_awareness->getUniqueID().getErr();
-        this->m_id = "";
-    } else {
-        this->m_id = inst_awareness->getUniqueID().unpack();
-    }
-    this->m_id = family_id + m_id;
-    dbgTrace(D_WAAP_LEARN) << "IndicatorsFiltersManager::ID : " <<this->m_id;
-}
-
-bool IndicatorsFiltersManager::initRedis(){
-    if(!m_unified_learning_enabled){
-        m_redis_client = nullptr;
-        return false;
-    }
-    dbgTrace(D_WAAP_LEARN) << "Start Redis async context init, m_redis_client=" << (m_redis_client ? "valid" : "null");
-    // Check if already initialized
-    if (m_redis_client != nullptr) {
-        dbgTrace(D_WAAP_LEARN) << "Redis client already exists, returning true";
-        return true;
-    }
-
-    string redis_host = getConfigurationWithDefault<std::string>("127.0.0.1", "connection", "Redis IP");
-    int redis_port = getConfigurationWithDefault<int>(6379, "connection", "Redis Port");
-    // Connect to Redis server asynchronously
-    m_redis_client = redisAsyncConnect(redis_host.c_str(), redis_port);
-    if (m_redis_client == nullptr || m_redis_client->err) {
-        if (m_redis_client) {
-            dbgWarning(D_WAAP_LEARN) << "Redis connection error: " << m_redis_client->errstr;
-            redisAsyncFree(m_redis_client);
-            m_redis_client = nullptr;
-        } else {
-            dbgWarning(D_WAAP_LEARN) << "Can't allocate redis async context";
-        }
-        return false;
-    }
-    
-    // Set up connection/disconnection callbacks
-    redisAsyncSetConnectCallback(m_redis_client, onRedisConnect);
-    redisAsyncSetDisconnectCallback(m_redis_client, onRedisDisconnect);
-    
-    // Store 'this' pointer in Redis context for callbacks
-    m_redis_client->data = this;
-    
-    // Register with main loop for async operation
-    registerRedisWithMainLoop();
-
-    dbgInfo(D_WAAP_LEARN) << "Redis async context initialized";
-    return true;
-}
-
-void IndicatorsFiltersManager::registerRedisWithMainLoop() {
-    auto mainloop = Singleton::Consume<I_MainLoop>::by<IndicatorsFiltersManager>();
-    
-    dbgTrace(D_WAAP_LEARN) << "Registering Redis event processing with main loop";
-    
-    registerExpectedConfiguration<int>("connection", "Redis Routine Interval");
-    int redis_routine_interval_ms = getConfigurationWithDefault<int>(1000, "connection", "Redis Routine Interval");
-
-    m_redis_routine_id = mainloop->addRecurringRoutine(
-        I_MainLoop::RoutineType::System,
-        std::chrono::milliseconds(redis_routine_interval_ms),
-        [this]() {
-            handleRedisEvents();
-        },
-        "Redis Events Handler"
-    );
-    dbgTrace(D_WAAP_LEARN)
-        << "Redis recurring routine registered with ID: "
-        << m_redis_routine_id
-        << ", interval: "
-        << redis_routine_interval_ms
-        << "ms";
-
-}
-
-void
-IndicatorsFiltersManager::pushEntryToRedis(UnifiedIndicatorsContainer::Entry &entry)
-{
-    dbgTrace(D_WAAP_LEARN) << "pushEntryToRedis() called, m_redis_connected=" << m_redis_connected
-                            << ", m_redis_client=" << (m_redis_client ? "valid" : "null");
-    if (!m_redis_connected || m_redis_client == nullptr) {
-        if (!initRedis()) {
-            dbgWarning(D_WAAP_LEARN) << "Failed to initialize Redis connection, cannot push entry";
-            return;
-        }
-    }
-
-    std::vector<char> serialized_data = entry.serialize();
-    size_t entry_size = serialized_data.size();
-
-    int result = redisAsyncCommand(
-        m_redis_client,
-        nullptr,
-        nullptr,
-        "RPUSH unified_learning_entries:%s %b",
-        m_id.c_str(),
-        serialized_data.data(),
-        entry_size
-    );
-    dbgDebug(D_WAAP_LEARN)
-        << "After Push to Redis list, result="
-        << result;
-
-    if (result != REDIS_OK) {
-        dbgWarning(D_WAAP_LEARN)
-            << "Failed to queue data to Redis: connection error: "
-            << result;
-    }
 }
 
 bool IndicatorsFiltersManager::shouldRegister(
@@ -239,16 +99,10 @@ bool IndicatorsFiltersManager::shouldRegister(
     }
 
     auto sourceId = pTransaction->getSourceIdentifier();
-    auto isTrustedSrc = m_keywordsFreqFilter->getTrustedSource(pTransaction);
-
-    if (isTrustedSrc.ok()) {
-        dbgDebug(D_WAAP_LEARN) << "Source ID '" << sourceId << "' is trusted.";
-        return true;
-    }
 
     // Check if the database has reached its limit and source is unknown
     if (m_uniqueSources.size() >= static_cast<size_t>(m_sources_limit) &&
-        m_uniqueSources.find(sourceId) == m_uniqueSources.end()) {
+        m_uniqueSources.find(sourceId) == m_uniqueSources.end() ) {
         dbgDebug(D_WAAP_LEARN) << "Database limit reached. Cannot insert new source ID '" << sourceId << "'.";
         return false;
     }
@@ -285,14 +139,13 @@ void IndicatorsFiltersManager::registerKeywords(
         return;
     }
 
-    // add configuration to choose central logging and return, else do legacy
-    if(m_centralLogging_enabled || m_unified_learning_enabled) {
+    // TODO: add configuration to choose central logging and return, else do legacy
+    if(getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging")) {
         dbgDebug(D_WAAP_LEARN) << "Central logging is enabled.";
         // Build unified entry
         UnifiedIndicatorsContainer::Entry entry;
         entry.key = key;
         entry.sourceId = pWaapTransaction->getSourceIdentifier();
-        entry.asset_id = m_assetId;
         
         // Use the new getTrustedSource method for proper trusted source checking
         if (m_keywordsFreqFilter) {
@@ -311,17 +164,13 @@ void IndicatorsFiltersManager::registerKeywords(
 
         // Add parameter types as TYPE indicators if applicable (skip url# keys)
         if (key.rfind("url#", 0) != 0) {
-            auto sampleTypes = m_pWaapAssetState->getSampleType(pWaapTransaction->getLastScanSample());
+            string sample = pWaapTransaction->getLastScanSample();
+            auto sampleTypes = m_pWaapAssetState->getSampleType(sample);
             entry.types.insert(entry.types.end(), sampleTypes.begin(), sampleTypes.end());
         }
-        
-        if(m_unified_learning_enabled){
-            pushEntryToRedis(entry);
-        }else{
-            // Push to unified container
-            m_unifiedIndicators->addEntry(entry);
-        }
 
+        // Push to unified container
+        m_unifiedIndicators->addEntry(entry);
         return;
     }
     dbgTrace(D_WAAP_LEARN) << "Central logging is disabled. Using legacy filters.";
@@ -421,18 +270,6 @@ bool IndicatorsFiltersManager::loadPolicy(IWaapConfig* pConfig)
     bool shouldSave = false;
     if (pConfig != NULL)
     {
-        m_centralLogging_enabled = getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging");
-        bool old_unified_learning_enabled = m_unified_learning_enabled;
-        m_unified_learning_enabled = getProfileAgentSettingWithDefault<bool>(false, "agent.learning.unifiedLearning");
-
-        if (old_unified_learning_enabled != m_unified_learning_enabled) {
-            if (m_unified_learning_enabled) {
-                initId();
-                initRedis();
-            } else {
-                disconnectRedis();
-            }
-        }
         m_trustedSrcParams = pConfig->get_TrustedSourcesPolicy();
         if (m_trustedSrcParams != nullptr)
         {
@@ -440,23 +277,8 @@ bool IndicatorsFiltersManager::loadPolicy(IWaapConfig* pConfig)
             shouldSave |= m_typeFilter->setTrustedSrcParameter(m_trustedSrcParams);
         }
         auto waapParams = pConfig->get_WaapParametersPolicy();
-        if (waapParams != nullptr && waapParams != m_waapParams) {
-            // Cache the new pointer to avoid repeated processing on every policy load
-            m_waapParams = waapParams;
-            
-            // Check and update interval duration if changed
-            std::chrono::minutes new_interval = std::chrono::minutes(std::stoul(
-                waapParams->getParamVal("learning.intervalDuration",
-                    std::to_string(std::chrono::minutes(120).count()))));
-
-            std::chrono::minutes current_interval =
-                std::chrono::duration_cast<std::chrono::minutes>(
-                    getIntervalDuration()
-                );
-
-            if (new_interval != current_interval) {
-                setInterval(new_interval);
-            }
+        if (waapParams != nullptr)
+        {
             m_keywordsFreqFilter->loadParams(waapParams);
             m_typeFilter->loadParams(waapParams);
             m_ignoreSources.loadParams(waapParams);
@@ -656,7 +478,6 @@ bool IndicatorsFiltersManager::postData()
     // Example: post unified indicators data if present
     if (m_unifiedIndicators->getKeyCount() == 0) {
         dbgDebug(D_WAAP_LEARN) << "No unified indicators to post, skipping";
-        m_dataWasSent = false; // No data was sent
         return true; // Nothing to post
     }
 
@@ -667,9 +488,6 @@ bool IndicatorsFiltersManager::postData()
     bool ok = sendNoReplyObjectWithRetry(logPost, HTTPMethod::PUT, postUrl);
     if (!ok) {
         dbgError(D_WAAP_LEARN) << "Failed to post unified indicators to: " << postUrl;
-        m_dataWasSent = false; // Failed to send data
-    } else {
-        m_dataWasSent = true; // Successfully sent data
     }
     m_unifiedIndicators = make_shared<UnifiedIndicatorsContainer>();
     m_uniqueSources.clear();
@@ -700,58 +518,10 @@ void IndicatorsFiltersManager::pullProcessedData(const vector<string>& files)
     // Add logic for pulling processed data from a remote service
 }
 
-void IndicatorsFiltersManager::updateState(const std::vector<std::string>& files)
+// TODO: Phase 3 implement getRemoteStateFilePath to return the base dir
+
+void IndicatorsFiltersManager::updateState(const vector<string>& files)
 {
-    // Add logic for updating the internal state based on the provided files
-}
-
-void IndicatorsFiltersManager::handleRedisEvents() {
-    if (m_redis_client) {
-        // redisAsyncHandleRead(m_redis_client);
-        redisAsyncHandleWrite(m_redis_client);
-        dbgTrace(D_WAAP_LEARN) << "processing Redis async writes";
-    }
-}
-
-// Static callback for connection established
-void IndicatorsFiltersManager::onRedisConnect(const redisAsyncContext* context, int status) {
-    dbgTrace(D_WAAP_LEARN) << "onRedisConnect() called with status=" << status;
-    IndicatorsFiltersManager* self = static_cast<IndicatorsFiltersManager*>(context->data);
-    
-    if (status == REDIS_OK) {
-        self->m_redis_connected = true;
-        dbgDebug(D_WAAP_LEARN) << "Redis connected successfully";
-    } else {
-        dbgWarning(D_WAAP_LEARN)
-            << "Redis connection failed with status: "
-            << status
-            << ", error: " << context->errstr;
-        self->m_redis_connected = false;
-    }
-}
-
-// Static callback for disconnection
-void IndicatorsFiltersManager::onRedisDisconnect(const redisAsyncContext* context, int status) {
-    IndicatorsFiltersManager* self = static_cast<IndicatorsFiltersManager*>(context->data);
-    
-    self->m_redis_connected = false;
-    dbgWarning(D_WAAP_LEARN) << "Redis disconnected";
-    
-    // Unregister from main loop
-    self->unregisterRedisFromMainLoop();
-}
-
-void IndicatorsFiltersManager::unregisterRedisFromMainLoop() {
-    auto mainloop = Singleton::Consume<I_MainLoop>::by<IndicatorsFiltersManager>();
-    if (mainloop->doesRoutineExist(m_redis_routine_id)) {
-        mainloop->stop(m_redis_routine_id);
-    }
-}
-
-void IndicatorsFiltersManager::disconnectRedis(){
-    if (m_redis_client) {
-        unregisterRedisFromMainLoop();
-        redisAsyncDisconnect(m_redis_client);
-        m_redis_client = nullptr;
-    }
+    // files is a list of single file base dir
+    // TODO phase 3: call each filter to update internal states
 }

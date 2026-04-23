@@ -23,18 +23,13 @@ extern "C"
 {
 #endif // __cplusplus
 
-#define SHARED_MEMORY_SEGMENT_ENTRY_SIZE 4096
-#define SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC 1024
+#define SHARED_MEMORY_SEGMENT_ENTRY_SIZE 1024
 #define MAX_ONE_WAY_QUEUE_NAME_LENGTH 64
 #define CORRUPTED_SHMEM_ERROR -2
 
 typedef struct DataSegment {
     char data[SHARED_MEMORY_SEGMENT_ENTRY_SIZE];
 } DataSegment;
-
-typedef struct DataSegmentBC {
-    char data[SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC];
-} DataSegmentBC;
 
 typedef struct __attribute__((__packed__)) SharedRingQueue {
     char shared_location_name[MAX_ONE_WAY_QUEUE_NAME_LENGTH];

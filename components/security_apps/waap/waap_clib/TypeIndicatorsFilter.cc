@@ -128,8 +128,8 @@ void TypeIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapParam
     params.minIntervals = std::stoul(
         pParams->getParamVal("typeIndicators.minIntervals", std::to_string(TYPE_FILTER_CONFIDENCE_MIN_INTERVALS)));
     params.intervalDuration = std::chrono::minutes(std::stoul(
-        pParams->getParamVal("learning.intervalDuration",
-            std::to_string(TYPE_FILTER_WINDOW_INTERVAL.count()))));
+        pParams->getParamVal("typeIndicators.intervalDuration",
+            std::to_string(TYPE_FILTER_INTERVAL_DURATION.count()))));
     params.ratioThreshold = std::stod(pParams->getParamVal("typeIndicators.ratio",
         std::to_string(TYPE_FILTER_CONFIDENCE_THRESHOLD)));
     std::string learnPermanentlyStr = pParams->getParamVal("typeIndicators.learnPermanently", "true");
@@ -144,7 +144,6 @@ void TypeIndicatorFilter::loadParams(std::shared_ptr<Waap::Parameters::WaapParam
 
     m_confidence_calc.setRemoteSyncEnabled(syncEnabled);
     m_trusted_confidence_calc.setRemoteSyncEnabled(syncEnabled);
-    m_trusted_confidence_calc.reset(params.intervalDuration);
 
     m_confidence_calc.reset(params);
 }
@@ -167,10 +166,6 @@ bool TypeIndicatorFilter::shouldTrack(const std::string& key, const IWaf2Transac
 
     // Get the types associated with the sample
     std::set<std::string> sampleTypes = m_pWaapAssetState->getSampleType(sample);
-
-    if (sampleTypes.size() == 1 && sampleTypes.find("long_random_text") != sampleTypes.end()) {
-        return false;
-    }
 
     // Check if any of the sample types should be tracked
     for (const auto& type : sampleTypes) {

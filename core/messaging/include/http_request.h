@@ -42,12 +42,6 @@ public:
         return method == HTTPMethod::CONNECT;
     }
 
-    HTTPMethod
-    getMethod() const
-    {
-        return method;
-    }
-
     std::string toString() const;
 
 private:

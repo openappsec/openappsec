@@ -1629,8 +1629,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     bool shouldBlock,
     const std::string& logOverride,
     const std::string& incidentType,
-    DecisionType practiceType,
-    bool includeSecurityAction) const
+    DecisionType practiceType) const
 {
     auto env = Singleton::Consume<I_Environment>::by<WaapComponent>();
     auto active_id = env->get<std::string>("ActiveTenantId");
@@ -1719,9 +1718,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
     }
 
     waapLog << LogField("ruleId", m_siteConfig->get_RuleId());
-    if (includeSecurityAction) {
-        waapLog << LogField("securityAction", shouldBlock ? "Prevent" : "Detect");
-    }
+    waapLog << LogField("securityAction", shouldBlock ? "Prevent" : "Detect");
     waapLog << LogField("waapOverride", logOverride);
     waapLog << LogField("practiceType", "Threat Prevention");
     waapLog << LogField("practiceSubType", m_practiceSubType);
@@ -1767,11 +1764,6 @@ Waf2Transaction::sendLog()
         dbgTrace(D_WAAP) << "send log no decision found, using AUTONOMOUS_SECURITY_DECISION";
         final_decision = m_waapDecision.getDecision(AUTONOMOUS_SECURITY_DECISION);
         decision_type = AUTONOMOUS_SECURITY_DECISION;
-    }
-
-    if (m_forceNotSendingLog) {
-        dbgTrace(D_WAAP) << "Waf2Transaction::sendLog: force not sending log is set - not sending a log";
-        return;
     }
 
     std::string attackTypes = buildAttackTypes();
@@ -2016,16 +2008,12 @@ Waf2Transaction::sendLog()
         break;
     }
     case AUTONOMOUS_SECURITY_DECISION: {
-        bool all_web_requests = triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webRequests);
-        bool send_log_due_to_action = 
+        if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webRequests) ||
             send_extended_log ||
             std::dynamic_pointer_cast<AutonomousSecurityDecision>(final_decision)
                 ->getThreatLevel() != ThreatLevel::NO_THREAT ||
-            final_decision->shouldForceLog();
-
-        if (all_web_requests || send_log_due_to_action) {
-            bool skip_security_action = !send_log_due_to_action;
-            sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes, skip_security_action);
+            final_decision->shouldForceLog()) {
+            sendAutonomousSecurityLog(triggerLog, shouldBlock, logOverride, attackTypes);
         }
         break;
     }

@@ -17,9 +17,6 @@ USE_DEBUG_FLAG(D_RULEBASE_CONFIG);
 
 using namespace std;
 
-// Forward declaration - defined below, used by getBehaviorForNonKVPairs()
-static bool checkMatchQueryForKVPair(const MatchQuery &query);
-
 bool ParameterException::is_geo_location_exception_exists(false);
 bool ParameterException::is_geo_location_exception_being_loaded(false);
 
@@ -168,38 +165,6 @@ ParameterException::getBehavior(
 {
     set<string> keywords; // placeholder only, this function will be used where there's no need for ignored keywords
     return getBehavior(key_value_pairs, keywords, skip_irrelevant_key);
-}
-
-set<ParameterBehavior>
-ParameterException::getBehaviorForNonKVPairs(
-    const unordered_map<string, set<string>> &key_value_pairs) const
-{
-    set<ParameterBehavior> matched_behaviors;
-
-    dbgTrace(D_RULEBASE_CONFIG) << "Matching non-KV pair exceptions only";
-    for (const MatchBehaviorPair &match_behavior_pair : match_queries) {
-        // Skip match_queries that contain KV pairs - those are handled by the KV-pair path
-        if (checkMatchQueryForKVPair(match_behavior_pair.match)) {
-            continue;
-        }
-        MatchQuery::MatchResult match_res = match_behavior_pair.match.getMatch(key_value_pairs);
-        if (match_res.is_match) {
-            dbgTrace(D_RULEBASE_CONFIG)
-                << "Successfully matched a non-KV exception, behavior: "
-                << match_behavior_pair.behavior.getId();
-            matched_behaviors.insert(match_behavior_pair.behavior);
-        }
-    }
-
-    if (match_queries.empty() && !checkMatchQueryForKVPair(match)) {
-        MatchQuery::MatchResult match_res = match.getMatch(key_value_pairs);
-        if (match_res.is_match) {
-            dbgTrace(D_RULEBASE_CONFIG) << "Successfully matched a non-KV exception (single match).";
-            matched_behaviors.insert(behavior);
-        }
-    }
-
-    return matched_behaviors;
 }
 
 static bool

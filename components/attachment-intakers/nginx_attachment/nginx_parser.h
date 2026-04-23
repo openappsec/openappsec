@@ -34,11 +34,7 @@ public:
     );
     static Maybe<std::vector<HttpHeader>> parseResponseHeaders(const Buffer &data);
     static Maybe<HttpBody> parseRequestBody(const Buffer &data);
-    static Maybe<HttpBody> parseResponseBody(
-        const Buffer &raw_response_body,
-        CompressionStream *compression_stream,
-        CompressionType content_encoding
-    );
+    static Maybe<HttpBody> parseResponseBody(const Buffer &raw_response_body, CompressionStream *compression_stream);
     static Maybe<CompressionType> parseContentEncoding(const std::vector<HttpHeader> &headers);
 
     static Buffer tenant_header_key;

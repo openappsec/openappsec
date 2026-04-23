@@ -42,7 +42,6 @@ enum class HTTPMethod
     PATCH,
     CONNECT,
     PUT,
-    HEAD,
 
     COUNT
 };

@@ -18,7 +18,6 @@
 #include <functional>
 
 #include "context.h"
-#include "key_wrapper.h"
 #include "environment/span.h"
 #include "scope_exit.h"
 
@@ -94,9 +93,6 @@ public:
     ) = 0;
     virtual void finishTrace(const std::string &trace = std::string()) = 0;
     virtual void finishSpan(const std::string &span = std::string()) = 0;
-
-    // Type-erased key access for Table
-    virtual KeyWrapper & getKeyWrapper() = 0;
 
 protected:
     ~I_Environment() {}

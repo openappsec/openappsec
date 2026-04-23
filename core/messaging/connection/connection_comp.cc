@@ -85,7 +85,7 @@ public:
     Maybe<HTTPResponse, HTTPResponse>
     sendRequest(Connection &connection, HTTPRequest request) override
     {
-        return connection.sendRequest(request.toString(), request.getMethod());
+        return connection.sendRequest(request.toString());
     }
 
 private:

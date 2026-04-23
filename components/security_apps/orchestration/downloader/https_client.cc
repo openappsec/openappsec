@@ -56,29 +56,6 @@ HTTPSClient::getFile(const URLParser &url, const string &out_file, bool auth_req
     return curlGetFileOverSSL(url, out_file, token);
 }
 
-Maybe<void>
-HTTPSClient::getFileSSLWithBody(const string &uri, const string &body, const string &out_file)
-{
-    dbgTrace(D_ORCHESTRATOR) << "Posting to fog and downloading response to file. URI: " << uri;
-
-    auto downlaod_file = Singleton::Consume<I_Messaging>::by<OrchestrationComp>()->downloadFile(
-        HTTPMethod::POST,
-        uri,
-        out_file,
-        MessageCategory::GENERIC,
-        MessageMetadata(),
-        body
-    );
-
-    if (!downlaod_file.ok()) {
-        dbgWarning(D_ORCHESTRATOR) << "Failed to post and download file. Error: " << downlaod_file.getErr().toString();
-        return genError(downlaod_file.getErr().toString());
-    }
-
-    dbgTrace(D_ORCHESTRATOR) << "Successfully downloaded response to: " << out_file;
-    return Maybe<void>();
-}
-
 string
 HTTPSClient::loadCAChainDir()
 {

@@ -256,13 +256,11 @@ DetailsResolver::Impl::parseNginxMetadata()
     const string &filesystem_path_config = getFilesystemPathConfig();
 
     const string srcipt_exe_cmd =
-        "LD_LIBRARY_PATH= " +
         filesystem_path_config +
         "/scripts/cp-nano-makefile-generator.sh -f -o " +
         output_path;
 
     const string script_fresh_exe_cmd =
-        "LD_LIBRARY_PATH= " +
         filesystem_path_config +
         "/scripts/cp-nano-makefile-generator-fresh.sh save --save-location " +
         output_path +

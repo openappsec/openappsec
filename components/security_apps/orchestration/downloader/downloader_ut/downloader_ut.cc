@@ -10,11 +10,9 @@ static std::ostream & operator<<(std::ostream &os, const Package &) { return os;
 #include "environment.h"
 #include "mock/mock_mainloop.h"
 #include "mock/mock_time_get.h"
-#include "downloaded_certificate.h"
 
 #include "mock/mock_update_communication.h"
 #include "mock/mock_orchestration_tools.h"
-#include "mock/mock_messaging.h"
 
 using namespace std;
 using namespace testing;
@@ -36,7 +34,6 @@ public:
     ConfigComponent config_component;
     StrictMock<MockUpdateCommunication> mock_communication;
     StrictMock<MockOrchestrationTools> mock_orchestration_tools;
-    NiceMock<MockMessaging> mock_messaging;
     Downloader downloader;
     I_Downloader *i_downloader = Singleton::Consume<I_Downloader>::from(downloader);
 };
@@ -531,63 +528,4 @@ TEST_F(DownloaderTest, download_virtual_settings)
         ),
         expected_downloaded_files
     );
-}
-
-TEST_F(DownloaderTest, downloadCertificatesFromFog_EmptyCertificateIds)
-{
-    vector<string> empty_cert_ids;
-
-    Maybe<string> result = i_downloader->downloadCertificatesFromFog(empty_cert_ids);
-
-    EXPECT_FALSE(result.ok());
-    EXPECT_THAT(result, IsError("No certificate IDs provided"));
-}
-
-TEST_F(DownloaderTest, downloadCertificatesFromFog_CertificateBatchRequest)
-{
-    vector<string> cert_ids = {"cert1", "cert2", "cert3"};
-
-    CertificateBatchRequest batch_request(cert_ids);
-
-    // Verify the batch request generates correct JSON
-    Maybe<string> json = batch_request.genJson();
-    ASSERT_TRUE(json.ok());
-
-    // Verify JSON contains certificateIds array
-    string json_str = json.unpack();
-    EXPECT_NE(json_str.find("certificateIds"), string::npos);
-    EXPECT_NE(json_str.find("cert1"), string::npos);
-    EXPECT_NE(json_str.find("cert2"), string::npos);
-    EXPECT_NE(json_str.find("cert3"), string::npos);
-}
-
-TEST_F(DownloaderTest, downloadCertificatesFromFog_Success)
-{
-    vector<string> cert_ids = {"cert1", "cert2"};
-
-    string dir_path = getConfigurationWithDefault<string>(
-        "/tmp/orchestration_downloads",
-        "orchestration",
-        "Default file download path"
-    );
-
-    string expected_file_path = dir_path + "/certificates.download";
-
-    // Mock the I_Messaging downloadFile call that HTTPSClient uses internally
-    EXPECT_CALL(
-        mock_messaging,
-        downloadFile(
-            HTTPMethod::POST,
-            "/certificates/bundle/bulk",
-            expected_file_path,
-            MessageCategory::GENERIC,
-            _,  // MessageMetadata
-            _   // body (the JSON with certificateIds)
-        )
-    ).WillOnce(Return(Maybe<void, HTTPResponse>()));
-
-    Maybe<string> result = i_downloader->downloadCertificatesFromFog(cert_ids);
-
-    EXPECT_TRUE(result.ok());
-    EXPECT_EQ(result.unpack(), expected_file_path);
 }

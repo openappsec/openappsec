@@ -17,7 +17,6 @@
 #include <unordered_map>
 #include <fstream>
 #include <map>
-#include <sstream>
 
 #include "common.h"
 #include "singleton.h"
@@ -45,8 +44,6 @@
 #include "fog_communication.h"
 #include "updates_process_event.h"
 #include "updates_process_reporter.h"
-#include "i_shell_cmd.h"
-#include "downloaded_certificate.h"
 
 using namespace std;
 using namespace chrono;
@@ -56,9 +53,6 @@ USE_DEBUG_FLAG(D_ORCHESTRATOR);
 
 #if defined(gaia) || defined(smb)
 static string fw_last_update_time = "";
-I_Socket::socketFd m_server_socket = I_Socket::INVALID_SOCKET;
-std::string g_socket_path = "";
-bool g_is_start_socket = false;
 #endif // gaia || smb
 
 static const size_t MAX_SERVER_NAME_LENGTH = 253;
@@ -779,76 +773,28 @@ private:
             return genError("Failed to read new data file, Error: " + new_data_file_input.getErr());
         }
 
-        dbgDebug(D_ORCHESTRATOR) << "Parsing data from " << new_data_files.unpack();
         map<string, Data> parsed_data;
-        vector<Certificate> certificates;
-
-        if (!getProfileAgentSettingWithDefault<bool>(false, "agent.centralNginxManagement.enabled")) {
-            dbgTrace(D_NGINX_MANAGER)
-                << "Central NGINX Management not configured, using backward-compatible parsing.";
-
-            dbgDebug(D_ORCHESTRATOR) << "Parsing data no CNM from " << new_data_files.unpack();
-            auto res = parseDataBC(new_data_file_input.unpack(), parsed_data);
-            if (!res.ok())
-            {
-                dbgDebug(D_ORCHESTRATOR)
-                    << "Failed to load data from JSON file. Error:  "
-                    << res.getErr()
-                    << ". Content: "
-                    << new_data_files.unpack();
-                UpdatesProcessEvent(
-                    UpdatesProcessResult::FAILED,
-                    UpdatesConfigType::DATA,
-                    UpdatesFailureReason::HANDLE_FILE,
-                    new_data_files.unpack(),
-                    string("Failed to load data from JSON file, Error: ") + res.getErr()
-                ).notify();
-                return res.passErr();
-            }
-        } else {
-            dbgDebug(D_ORCHESTRATOR) << "Parsing data with CNM from " << new_data_files.unpack();
-            auto res = parseDataByEntry(new_data_file_input.unpack(), parsed_data, certificates);
-            if (!res.ok())
-            {
-                dbgDebug(D_ORCHESTRATOR)
-                    << "Failed to split top-level JSON objects. Error: "
-                    << res.getErr();
-
-                dbgError(D_ORCHESTRATOR) << "No certificates found or failed to parse";
-                const string certificates_data_path =
-                    getPolicyConfigPath("certificates", Config::ConfigFileType::Data);
-                if (i_orchestration_tools->doesFileExist(certificates_data_path)) {
-                    dbgInfo(D_ORCHESTRATOR) << "Deleting existing certificates.data file";
-                    i_orchestration_tools->removeFile(certificates_data_path);
-                }
-                UpdatesProcessEvent(
-                    UpdatesProcessResult::FAILED,
-                    UpdatesConfigType::DATA,
-                    UpdatesFailureReason::HANDLE_FILE,
-                    new_data_files.unpack(),
-                    string("Failed to split top-level JSON objects, Error: ") + res.getErr()
-                ).notify();
-                return res.passErr();
-            }
-
-            auto download_result = downloadAndSaveAllCertificates(certificates, data_updates);
-            if (!download_result.ok()) {
-                return download_result.passErr();
-            }
-        }
-
-        if (parsed_data.empty()) {
+        dbgDebug(D_ORCHESTRATOR) << "Parsing data from " << new_data_files.unpack();
+        try {
+            stringstream is(new_data_file_input.unpack());
+            cereal::JSONInputArchive archive_in(is);
+            cereal::load(archive_in, parsed_data);
+        } catch (exception &e) {
             dbgDebug(D_ORCHESTRATOR)
-                << "No valid data entries found in JSON file: " << new_data_files.unpack();
+                << "Failed to load data from JSON file. Error:  "
+                << e.what()
+                << ". Content: "
+                << new_data_files.unpack();
             UpdatesProcessEvent(
                 UpdatesProcessResult::FAILED,
                 UpdatesConfigType::DATA,
                 UpdatesFailureReason::HANDLE_FILE,
                 new_data_files.unpack(),
-                "No valid data entries found in JSON file."
+                string("Failed to load data from JSON file, Error: ") + e.what()
             ).notify();
-            return genError("No valid data entries found in JSON file.");
+            return genError(e.what());
         }
+
         for (const auto &data_file : parsed_data) {
             const string data_file_save_path = getPolicyConfigPath(data_file.first, Config::ConfigFileType::Data);
             Maybe<string> new_data_file =
@@ -898,7 +844,6 @@ private:
 
             data_updates.push_back(data_file.first);
         }
-
         if (!i_orchestration_tools->copyFile(new_data_files.unpack(), data_file_path)) {
             dbgWarning(D_ORCHESTRATOR) << "Failed to copy a new agents' data file to " << data_file_path;
         }
@@ -907,118 +852,6 @@ private:
             UpdatesProcessResult::SUCCESS,
             UpdatesConfigType::DATA
         ).notify();
-        return Maybe<void>();
-    }
-
-    Maybe<void>
-    downloadAndSaveAllCertificates(const vector<Certificate> &certificates, vector<string> &data_updates)
-    {
-        dbgFlow(D_ORCHESTRATOR) << "Download certificates using batch method";
-
-        if (certificates.empty()) {
-            dbgDebug(D_ORCHESTRATOR) << "No certificates to download";
-            return Maybe<void>();
-        }
-
-        // Collect all certificate IDs and version mappings
-        vector<string> cert_ids;
-        unordered_map<string, string> cert_id_to_version;
-
-        for (const auto &cert : certificates) {
-            cert_ids.push_back(cert.getId());
-            cert_id_to_version[cert.getId()] = cert.getVersion();
-        }
-
-        dbgInfo(D_ORCHESTRATOR)
-            << "Batch downloading "
-            << cert_ids.size()
-            << " certificates from fog";
-
-        // Download all certificates in one batch request
-        auto maybe_cert_file_path = Singleton::Consume<I_Downloader>::by<OrchestrationComp>()
-            ->downloadCertificatesFromFog(cert_ids);
-
-        if (!maybe_cert_file_path.ok()) {
-            dbgWarning(D_ORCHESTRATOR)
-                << "Failed to batch download certificates: "
-                << maybe_cert_file_path.getErr();
-
-            UpdatesProcessEvent(
-                UpdatesProcessResult::FAILED,
-                UpdatesConfigType::DATA,
-                UpdatesFailureReason::DOWNLOAD_FILE,
-                "certificates_batch",
-                maybe_cert_file_path.getErr()
-            ).notify();
-            return maybe_cert_file_path.passErr();
-        }
-
-        string cert_file_path = maybe_cert_file_path.unpack();
-        dbgInfo(D_ORCHESTRATOR) << "Successfully downloaded certificates batch file: " << cert_file_path;
-
-        const string certificates_data_path = getPolicyConfigPath("certificates", Config::ConfigFileType::Data);
-
-        if(!i_orchestration_tools->copyFile(cert_file_path, certificates_data_path)) {
-            dbgWarning(D_ORCHESTRATOR)
-                << "Failed to copy certificates data file to "
-                << certificates_data_path;
-            return genError("Failed to copy certificates data file to " + certificates_data_path);
-        }
-
-        dbgInfo(D_ORCHESTRATOR)
-            << "Successfully saved certsificates to "
-            << certificates_data_path;
-
-        data_updates.push_back("certificates");
-
-        dbgInfo(D_ORCHESTRATOR) << "Certificate batch download process completed";
-        return Maybe<void>();
-    }
-
-    Maybe<void>
-    parseDataBC(const string &data_file_content, map<string, Data> &parsed_data)
-    {
-        try {
-            stringstream is(data_file_content);
-            cereal::JSONInputArchive archive_in(is);
-            cereal::load(archive_in, parsed_data);
-        } catch (exception &e) {
-            return genError(e.what());
-        }
-        return Maybe<void>();
-    }
-
-    Maybe<void>
-    parseDataByEntry(
-        const string &data_file_content,
-        map<string, Data> &parsed_data,
-        vector<Certificate> &certificates)
-    {
-        auto split_result = i_orchestration_tools->jsonObjectSplitter(data_file_content, "", "");
-        if (!split_result.ok()) {
-            return genError(split_result.getErr());
-        }
-        for (const auto &kv : split_result.unpack()) {
-            try {
-                string json_obj = string("{\"") + kv.first + "\":" + kv.second + "}";
-
-                dbgDebug(D_ORCHESTRATOR) << "Parsing data entry '" << kv.first << "'";
-                stringstream ss(json_obj);
-                dbgDebug(D_ORCHESTRATOR) << "Data entry content: " << ss.str();
-                cereal::JSONInputArchive archive_in(ss);
-                if (kv.first == "certificates") {
-                    archive_in(cereal::make_nvp("certificates", certificates));
-                } else {
-                    Data data_obj;
-                    archive_in(cereal::make_nvp(kv.first, data_obj));
-                    parsed_data[kv.first] = data_obj;
-                }
-            } catch (const exception &e) {
-                dbgWarning(D_ORCHESTRATOR)
-                    << "Skipping invalid data entry '" << kv.first << "'. Error: " << e.what();
-                continue;
-            }
-        }
         return Maybe<void>();
     }
 
@@ -1813,53 +1646,6 @@ private:
         }
     }
 
-    bool
-    isSocketTriggered() {
-#if defined(gaia) || defined(smb)
-        static int tries = 5;
-        if (!g_is_start_socket || m_server_socket == I_Socket::INVALID_SOCKET) {
-            return false;
-        }
-        auto i_socket = Singleton::Consume<I_Socket>::by<OrchestrationComp>();
-        if (!i_socket->isDataAvailable(m_server_socket)) {
-            if (m_server_socket > 0 && i_socket->isError(m_server_socket)) {
-                // Retry to create a socket on error (max 5 tries)
-                if (tries > 0) {
-                    tries--;
-                } else {
-                    return false;
-                }
-                try {
-                    i_socket->closeSocket(m_server_socket);
-                    m_server_socket = I_Socket::INVALID_SOCKET;
-                } catch (const exception& err) {
-                    dbgWarning(D_ORCHESTRATOR) << "Failed to close the old socket (" << m_server_socket << ")";
-                }
-                Maybe<I_Socket::socketFd> new_server_socket =
-                    i_socket->genSocket(I_Socket::SocketType::UNIXDG, false, true, g_socket_path);
-                if (new_server_socket.ok()) {
-                    m_server_socket = new_server_socket.unpack();
-                } else {
-                    dbgWarning(D_ORCHESTRATOR)
-                        << "Failed to create socket for attributes trigger. Error: "
-                        << new_server_socket.getErr();
-                }
-            }
-            return false;
-        }
-        Maybe<vector<char>> data_response = i_socket->receiveData(m_server_socket, 1, false);
-        if (!data_response.ok()) {
-            dbgWarning(D_ORCHESTRATOR) << "Failed to receive data from attributes socket: " << data_response.getErr();
-            return false;
-        } else {
-            dbgInfo(D_ORCHESTRATOR) << "Received data from attributes socket, size: " << data_response->size();
-            return true;
-        }
-#else
-        return false;
-#endif // gaia
-    }
-
     void
     run()
     {
@@ -1951,60 +1737,9 @@ private:
 
         setDelayedUpgradeTime();
 
-#if defined(gaia) || defined(smb)
-        auto agent_type = getSetting<string>("agentType");
-        set<string> socket_skip_by_agent_type = {
-            "AppSecGateway",
-        };
-        g_is_start_socket = true;
-        if (agent_type.ok()) {
-            if (socket_skip_by_agent_type.find(*agent_type) != socket_skip_by_agent_type.end()) {
-                g_is_start_socket = false;
-            }
-        }
-
-        if (g_is_start_socket) {
-            auto i_socket = Singleton::Consume<I_Socket>::by<OrchestrationComp>();
-
-            auto maybe_vs_id = Singleton::Consume<I_Environment>::by<OrchestrationComp>()->get<string>("VS ID");
-            auto maybe_domain_name =
-                Singleton::Consume<I_Environment>::by<OrchestrationComp>()->get<string>("Domain Name");
-
-            g_socket_path =
-                getSettingWithDefault<string>("/tmp/cpnano-attributes.sock", "attributes_socket_path");
-
-            if (maybe_vs_id.ok()) {
-                g_socket_path += ".vs" + maybe_vs_id.unpack();
-            }
-            if (maybe_domain_name.ok()) {
-                g_socket_path += ".domain-" + maybe_domain_name.unpack();
-            }
-
-            dbgInfo(D_ORCHESTRATOR)
-                    << "Socket for attributes trigger. UNIX datagram socket path: "
-                    << g_socket_path;
-
-            Maybe<I_Socket::socketFd> new_server_socket =
-                        i_socket->genSocket(I_Socket::SocketType::UNIXDG, false, true, g_socket_path);
-
-            if (new_server_socket.ok()) {
-                m_server_socket = new_server_socket.unpack();
-            } else {
-                dbgWarning(D_ORCHESTRATOR)
-                    << "Failed to create socket for attributes trigger. Error: "
-                    << new_server_socket.getErr();
-            }
-        }
-
-#endif // gaia
-
         while (true) {
             Singleton::Consume<I_Environment>::by<OrchestrationComp>()->startNewTrace(false);
-#if defined(gaia) || defined(smb)
-            if (shouldReportAgentDetailsMetadata() || isSocketTriggered()) {
-#else
             if (shouldReportAgentDetailsMetadata()) {
-#endif // gaia
                 reportAgentDetailsMetaData();
             }
             preformCheckUpdate();

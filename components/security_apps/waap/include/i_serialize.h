@@ -13,5 +13,292 @@
 
 #pragma once
 
-// This file has been moved to components/include/i_serialize.h
-#include "../../../include/i_serialize.h"
+#include <chrono>
+#include <fstream>
+#include "i_time_get.h"
+#include "rest.h"
+#include "i_messaging.h"
+#include "i_mainloop.h"
+#include "i_agent_details.h"
+#include "compression_utils.h"
+#include <sstream>
+#include <vector>
+
+static const uint max_send_obj_retries = 3;
+static const std::chrono::microseconds wait_next_attempt(5000000);
+
+USE_DEBUG_FLAG(D_WAAP_SERIALIZE);
+
+// Forward declarations
+class WaapComponent;
+
+class RestGetFile : public ClientRest
+{
+public:
+    // decrypts and load json
+    bool loadJson(const std::string &json);
+    // gen json and encrypt
+    Maybe<std::string> genJson() const;
+};
+
+struct FileMetaData
+{
+    std::string filename;
+    std::string modified;
+};
+
+class RemoteFilesList : public ClientRest
+{
+public:
+    RemoteFilesList();
+
+    // parses xml instead of json
+    // extracts a file list in <Contents><Key>
+    bool loadJson(const std::string &xml);
+
+    const std::vector<FileMetaData> &getFilesMetadataList() const;
+    const std::vector<std::string> &getFilesList() const;
+
+private:
+    RestParam<std::vector<FileMetaData>> files;
+    std::vector<std::string> filesPathsList;
+};
+
+class I_Serializable {
+public:
+    virtual void serialize(std::ostream &stream) = 0;
+    virtual void deserialize(std::istream &stream) = 0;
+};
+
+class I_RemoteSyncSerialize {
+public:
+    virtual bool postData() = 0;
+    virtual void pullData(const std::vector<std::string> &files) = 0;
+    virtual void processData() = 0;
+    virtual void postProcessedData() = 0;
+    virtual void pullProcessedData(const std::vector<std::string> &files) = 0;
+    virtual void updateState(const std::vector<std::string> &files) = 0;
+    virtual Maybe<std::string> getRemoteStateFilePath() const { return genError("No remote state file path defined"); }
+};
+
+class I_Backup {
+public:
+    // open stream and serialize data
+    virtual void saveData() = 0;
+    // open stream and deserialize data
+    virtual void restore() = 0;
+};
+
+class SerializeToFileBase :
+    public I_Backup,
+    public I_Serializable
+{
+public:
+    SerializeToFileBase(const std::string &filePath);
+    virtual ~SerializeToFileBase();
+
+    virtual void saveData();
+    virtual void restore();
+
+protected:
+    // saved file name for testing
+    std::string m_filePath;
+private:
+    void loadFromFile(const std::string &filePath); // Updated to match implementation
+};
+
+class SerializeToFilePeriodically : public SerializeToFileBase
+{
+public:
+    SerializeToFilePeriodically(std::chrono::seconds pollingIntervals, const std::string &filePath);
+    virtual ~SerializeToFilePeriodically();
+
+    void setInterval(std::chrono::seconds newInterval);
+
+protected:
+    void backupWorker();
+
+private:
+    std::chrono::microseconds m_lastSerialization;
+    std::chrono::seconds m_interval;
+};
+
+class WaapComponent;
+
+class SerializeToLocalAndRemoteSyncBase : public I_RemoteSyncSerialize, public SerializeToFileBase
+{
+public:
+    SerializeToLocalAndRemoteSyncBase(std::chrono::minutes interval,
+        std::chrono::seconds waitForSync,
+        const std::string &filePath,
+        const std::string &remotePath,
+        const std::string &assetId,
+        const std::string &owner);
+    virtual ~SerializeToLocalAndRemoteSyncBase();
+
+    virtual void restore();
+
+    virtual void syncWorker();
+    bool shouldNotSync() const;
+    void setInterval(std::chrono::seconds newInterval);
+    std::chrono::seconds getIntervalDuration() const;
+    void setRemoteSyncEnabled(bool enabled);
+protected:
+    void mergeProcessedFromRemote();
+    std::string getWindowId();
+    void waitSync();
+    std::string getPostDataUrl();
+    std::string getUri();
+    size_t getIntervalsCount();
+    void incrementIntervalsCount();
+    bool isBase() const;
+
+    template<typename T>
+    bool sendObject(T &obj, HTTPMethod method, std::string uri)
+    {
+        I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
+        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
+        if (agentDetails->getOrchestrationMode() == OrchestrationMode::OFFLINE) {
+            dbgDebug(D_WAAP_SERIALIZE) << "offline mode not sending object";
+            return false;
+        }
+        if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
+            MessageMetadata req_md(getSharedStorageHost(), 80);
+            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+            auto req_status = messaging->sendSyncMessage(
+                method,
+                uri,
+                obj,
+                MessageCategory::GENERIC,
+                req_md
+            );
+            if (!req_status.ok()) {
+                dbgWarning(D_WAAP_SERIALIZE) << "failed to send request to uri: " << uri
+                    << ", error: " << req_status.getErr().toString();
+            }
+            return req_status.ok();
+        }
+        MessageMetadata req_md;
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_FOG_CONN);
+        auto req_status = messaging->sendSyncMessage(
+            method,
+            uri,
+            obj,
+            MessageCategory::GENERIC,
+            req_md
+        );
+        if (!req_status.ok()) {
+            dbgWarning(D_WAAP_SERIALIZE) << "failed to send request to uri: " << uri
+                << ", error: " << req_status.getErr().toString();
+        }
+        return req_status.ok();
+    }
+
+    template<typename T>
+    bool sendObjectWithRetry(T &obj, HTTPMethod method, std::string uri)
+    {
+        I_MainLoop *mainloop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
+        for (uint i = 0; i < max_send_obj_retries; i++)
+        {
+            if (sendObject(obj, method, uri))
+            {
+                dbgTrace(D_WAAP_SERIALIZE) <<
+                    "object sent successfully after " << i << " retry attempts";
+                return true;
+            }
+            dbgInfo(D_WAAP_SERIALIZE) << "Failed to send object. Attempt: " << i;
+            mainloop->yield(wait_next_attempt);
+        }
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
+            max_send_obj_retries;
+        return false;
+    }
+
+    template<typename T>
+    bool sendNoReplyObject(T &obj, HTTPMethod method, std::string uri)
+    {
+        I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
+        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
+        if (agentDetails->getOrchestrationMode() == OrchestrationMode::OFFLINE) {
+            dbgDebug(D_WAAP_SERIALIZE) << "offline mode not sending object";
+            return false;
+        }
+        if (agentDetails->getOrchestrationMode() == OrchestrationMode::HYBRID) {
+            MessageMetadata req_md(getSharedStorageHost(), 80);
+            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+            return messaging->sendSyncMessageWithoutResponse(
+                method,
+                uri,
+                obj,
+                MessageCategory::GENERIC,
+                req_md
+            );
+        }
+        MessageMetadata req_md;
+        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_FOG_CONN);
+        return messaging->sendSyncMessageWithoutResponse(
+            method,
+            uri,
+            obj,
+            MessageCategory::GENERIC,
+            req_md
+        );
+    }
+
+    template<typename T>
+    bool sendNoReplyObjectWithRetry(T &obj, HTTPMethod method, const std::string &uri)
+    {
+        I_MainLoop *mainloop= Singleton::Consume<I_MainLoop>::by<WaapComponent>();
+        for (uint i = 0; i < max_send_obj_retries; i++)
+        {
+            if (sendNoReplyObject(obj, method, uri))
+            {
+                dbgTrace(D_WAAP_SERIALIZE) <<
+                    "object sent successfully after " << i << " retry attempts";
+                return true;
+            }
+            dbgInfo(D_WAAP_SERIALIZE) << "Failed to send object. Attempt: " << i;
+            mainloop->yield(wait_next_attempt);
+        }
+        dbgWarning(D_WAAP_SERIALIZE) << "Failed to send object to " << uri << ", reached maximum attempts: " <<
+            max_send_obj_retries;
+        return false;
+    }
+
+    const std::string m_remotePath; // Created from tenentId + / + assetId + / + class
+    std::chrono::seconds m_interval;
+    std::string m_owner;
+    const std::string m_assetId;
+    bool m_remoteSyncEnabled;
+
+private:
+    bool localSyncAndProcess();
+    void updateStateFromRemoteService();
+    Maybe<std::string> getStateTimestampByListing();
+    bool checkAndUpdateStateTimestamp(const std::string& currentStateTimestamp);
+    RemoteFilesList getProcessedFilesList();
+    RemoteFilesList getRemoteProcessedFilesList();
+    std::string getLearningHost();
+    std::string getSharedStorageHost();
+    std::string getStateTimestampPath();
+    Maybe<std::string> getStateTimestamp();
+    Maybe<void> updateStateFromRemoteFile();
+    bool shouldSendSyncNotification() const;
+
+    I_MainLoop* m_pMainLoop;
+    std::chrono::microseconds m_waitForSync;
+    uint m_workerRoutineId;
+    size_t m_daysCount;
+    size_t m_windowsCount;
+    size_t m_intervalsCounter;
+    const bool m_isAssetIdUuid;
+    std::string m_type;
+    std::string m_lastProcessedModified;
+    Maybe<std::string> m_shared_storage_host;
+    Maybe<std::string> m_learning_host;
+};
+

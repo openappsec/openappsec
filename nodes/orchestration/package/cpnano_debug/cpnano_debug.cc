@@ -99,7 +99,6 @@ enum class Service {
     IOT_ACCESS_CONTROL,
     HORIZON_TELEMETRY,
     ERM,
-    UNIFIED_LEARNING_SERVICE,
 
     COUNT
 };
@@ -180,7 +179,6 @@ getServiceString(const Service service)
         case (Service::IOT_ACCESS_CONTROL): return "iot-access-control";
         case (Service::HORIZON_TELEMETRY): return "horizon-telemetry";
         case (Service::ERM): return "erm";
-        case (Service::UNIFIED_LEARNING_SERVICE): return "unified-learning-service";
         default:
             cerr
                 << "Internal Error: the provided service ("
@@ -388,11 +386,6 @@ getServiceConfig (const Service service)
             return ServiceConfig(
                 filesystem_path + "/conf/cp-nano-erm-conf.json",
                 log_files_path + "/nano_agent/cp-nano-erm.dbg"
-            );
-        case (Service::UNIFIED_LEARNING_SERVICE):
-            return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-unified-learning-service-debug-conf.json",
-                log_files_path + "/nano_agent/cp-nano-unified-learning-service.dbg"
             );
         default:
             cerr

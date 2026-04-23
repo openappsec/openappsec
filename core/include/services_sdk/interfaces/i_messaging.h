@@ -81,8 +81,7 @@ public:
         const std::string &uri,
         const std::string &download_file_path,
         const MessageCategory category = MessageCategory::GENERIC,
-        MessageMetadata message_metadata = MessageMetadata(),
-        const std::string &body = ""
+        MessageMetadata message_metadata = MessageMetadata()
     ) = 0;
 
     virtual Maybe<void, HTTPResponse> uploadFile(

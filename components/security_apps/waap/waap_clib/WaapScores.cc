@@ -15,8 +15,6 @@
 #include <vector>
 #include <string>
 #include <cmath>
-#include <algorithm>
-#include <set>
 
 #include "ScoreBuilder.h"
 #include "WaapDefines.h"
@@ -80,15 +78,8 @@ addKeywordScore(
 {
     double score = scoreBuilder.getSnapshotKeywordScore(keyword, defaultScore, poolName);
     double coef = scoreBuilder.getSnapshotKeywordCoef(keyword, defaultCoef, poolName);
-    dbgDebug(D_WAAP_SCORE_BUILDER)
-        << "Adding score: "
-        << score
-        << " coef: "
-        << coef
-        << " keyword: '"
-        << keyword
-        << "' pool: "
-        << poolName;
+    dbgDebug(D_WAAP_SCORE_BUILDER) << "Adding score: " << score << " coef: " << coef
+                                    << " keyword: '" << keyword << "' pool: " << poolName;
     scoresArray.push_back(score);
     coefArray.push_back(coef);
 }
@@ -112,80 +103,6 @@ calcIndividualKeywords(
     }
 }
 
-// Helper: Calculate default score for a keyword combination
-// Returns calculated average if poolName is base_scores, otherwise DEFAULT_COMBI_SCORE
-static double calcDefaultCombinationScore(
-    const ScoreBuilder& scoreBuilder,
-    const std::string& poolName,
-    const std::string& keyword1,
-    const std::string& keyword2)
-{
-    if (poolName != KEYWORDS_SCORE_POOL_BASE) {
-        return DEFAULT_COMBI_SCORE;
-    }
-    double score1 = scoreBuilder.getSnapshotKeywordScore(keyword1, DEFAULT_KEYWORD_SCORE, poolName);
-    double score2 = scoreBuilder.getSnapshotKeywordScore(keyword2, DEFAULT_KEYWORD_SCORE, poolName);
-    return std::min((score1 + score2) / 2.0, DEFAULT_COMBI_SCORE);
-}
-
-// Helper: Process special links for a keyword, checking only forward in keyword_matches
-static void processSpecialLinksForKeyword(
-    const ScoreBuilder& scoreBuilder,
-    const std::string& poolName,
-    const std::string& keyword,
-    const std::vector<std::string>& keyword_matches,
-    size_t startIndex,
-    std::set<std::string>& processedCombinations,
-    std::vector<double>& scoresArray,
-    std::vector<double>& coefArray,
-    std::vector<std::string>& keyword_combinations)
-{
-    const std::vector<std::string>& links = scoreBuilder.getSnapshotSpecialLinks(keyword, poolName);
-
-    if (links.empty()) {
-        return;
-    }
-
-    // Two-pointer technique: both keyword_matches and links are sorted
-    // O(L + M) instead of O(L x M)
-    size_t j = startIndex;
-    for (const std::string& link : links) {
-        // Skip keywords that are lexicographically before the current link
-        while (j < keyword_matches.size() && keyword_matches[j] < link) {
-            ++j;
-        }
-
-        // Check if we've exhausted keyword_matches or passed the link
-        if (j >= keyword_matches.size() || keyword_matches[j] > link) {
-            continue; // No match for this link
-        }
-
-        // Match found: keyword_matches[j] == link
-        std::string combo_key = keyword + " " + keyword_matches[j];
-
-        dbgTrace(D_WAAP_SCORE_BUILDER)
-            << "  Special link match found: '"
-            << combo_key
-            << "'";
-
-        // Skip if already processed
-        if (processedCombinations.count(combo_key)) {
-            ++j; // Move to next keyword for subsequent links
-            continue;
-        }
-
-        processedCombinations.insert(combo_key);
-        keyword_combinations.push_back(combo_key);
-
-        // Apply model score for special non-adjacent combination
-        double score = scoreBuilder.getSnapshotKeywordScore(combo_key, 0.0, poolName);
-        double coef = scoreBuilder.getSnapshotKeywordCoef(combo_key, DEFAULT_COMBI_COEF, poolName);
-        addKeywordScore(scoreBuilder, poolName, combo_key, score, coef, scoresArray, coefArray);
-
-        ++j; // Move to next keyword for subsequent links
-    }
-}
-
 // Calculate keyword combinations and their scores
 void
 calcCombinations(
@@ -198,59 +115,34 @@ calcCombinations(
 {
     keyword_combinations.clear();
 
-    static std::set<std::string> processedCombinations;
-    processedCombinations.clear();
-
-    // Process adjacent pairs AND special links for each keyword
-    for (size_t i = 0; i < keyword_matches.size() - 1; ++i)
-    {
-        const std::string& current = keyword_matches[i];
-        const std::string& next = keyword_matches[i + 1];
-        std::string combo_key = current + " " + next;
-
-        processedCombinations.insert(combo_key);
-        keyword_combinations.push_back(combo_key);
-
-        // Check if special combination (single type lookup)
-        if (scoreBuilder.getSnapshotKeywordType(combo_key, poolName) == KEYWORD_TYPE_SPECIAL_COMBINATION) {
-            // Adjacent special pair: Use default score (average of parts)
-            double defaultScore = calcDefaultCombinationScore(scoreBuilder, poolName, current, next);
-
-            dbgTrace(D_WAAP_SCORE_BUILDER)
-                << "Applying default score for adjacent special pair: "
-                << combo_key
-                << " Score: "
-                << defaultScore;
-
-            scoresArray.push_back(defaultScore);
-            coefArray.push_back(DEFAULT_COMBI_COEF);
+    for (size_t i = 0; i < keyword_matches.size(); ++i) {
+        std::vector<std::string> combinations;
+        for (size_t j = i; j < std::min(i + 2, keyword_matches.size()); ++j) {
+            combinations.push_back(keyword_matches[j]);
         }
-        else {
-            // Standard adjacent pair: Look up in model
-            double score = scoreBuilder.getSnapshotKeywordScore(combo_key, 0.0, poolName);
-            double coef = scoreBuilder.getSnapshotKeywordCoef(combo_key, 0.0, poolName);
+        if (combinations.size() > 1) {
+            // Must be sorted to build a string that exactly matches the keys (strings)
+            // from signature_scores database.
+            std::sort(combinations.begin(), combinations.end());
+            std::string combination;
+            double default_score = 0.0f;
 
-            if (score == 0.0 && coef == 0.0) {
-                // Not in model: calculate default
-                score = calcDefaultCombinationScore(scoreBuilder, poolName, current, next);
-                coef = DEFAULT_COMBI_COEF;
+            // note that std::set<> container output sorted data when iterated.
+            for (auto it = combinations.begin(); it != combinations.end(); it++) {
+                // add space between all items, except the first one
+                if (it != combinations.begin()) {
+                    combination += " ";
+                }
+                combination += *it;
+                default_score += scoreBuilder.getSnapshotKeywordScore(*it, 0.0f, poolName);
             }
-
-            addKeywordScore(scoreBuilder, poolName, combo_key, score, coef, scoresArray, coefArray);
+            // set default combination score to be the sum of its keywords, bounded by 1
+            default_score = std::min(default_score, DEFAULT_COMBI_SCORE);
+            addKeywordScore(
+                scoreBuilder, poolName, combination, default_score, DEFAULT_COMBI_COEF, scoresArray, coefArray
+            );
+            keyword_combinations.push_back(combination);
         }
-
-        // Process special links for current keyword (check forward from i+1)
-        processSpecialLinksForKeyword(
-            scoreBuilder,
-            poolName,
-            current,
-            keyword_matches,
-            i + 1,  // Start checking from next position forward
-            processedCombinations,
-            scoresArray,
-            coefArray,
-            keyword_combinations
-        );
     }
 }
 
@@ -273,7 +165,7 @@ double
 calcLogisticRegressionScore(std::vector<double> &coefArray, double intercept, double nnzCoef)
 {
     // Sparse logistic regression model, with boolean feature values
-    //Instead of performing a dot product of features*coefficients, we sum the coefficients of the non-zero features
+    // Instead of performing a dot product of features*coefficients, we sum the coefficients of the non-zero features
     // An additional feature was added for the log of the number of non-zero features, as a regularization term
     double log_odds = intercept + nnzCoef * log(static_cast<double>(coefArray.size()) + 1);
     for (double &pCoef : coefArray) {

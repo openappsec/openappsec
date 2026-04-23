@@ -30,15 +30,14 @@ public:
         )
     );
 
-    MOCK_METHOD6(
+    MOCK_METHOD5(
         downloadFile,
         Maybe<void, HTTPResponse> (
             HTTPMethod,
             const string &,
             const string &,
             MessageCategory,
-            MessageMetadata,
-            const string &
+            MessageMetadata
         )
     );
 

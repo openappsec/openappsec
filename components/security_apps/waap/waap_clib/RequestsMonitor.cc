@@ -34,7 +34,6 @@ void SourcesRequestMonitor::syncWorker()
     dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Running the sync worker for assetId='" << m_assetId << "', owner='" <<
         m_owner << "'";
     incrementIntervalsCount();
-    m_dataWasSent = false; // Reset flag before calling postData()
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
         Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
@@ -49,13 +48,6 @@ void SourcesRequestMonitor::syncWorker()
             << " is enabled: "
             << to_string(m_enabled)
             << ", mode: " << int(mode);
-        m_sourcesRequests.clear();
-        return;
-    }
-
-    // Only continue if data was actually sent
-    if (!wasDataSent()) {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "No data was sent, skipping sync notification";
         m_sourcesRequests.clear();
         return;
     }
@@ -145,11 +137,6 @@ bool SourcesRequestMonitor::postData()
 {
     dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Sending the data to remote";
     // send collected data to remote and clear the local data
-    if (m_sourcesRequests.empty()) {
-        dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "No data to post, skipping";
-        m_dataWasSent = false; // No data was sent
-        return true;
-    }
     string url = getPostDataUrl();
     string agentId = Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getAgentId();
     SourcesRequestsReport currentWindow(m_sourcesRequests, agentId);
@@ -158,9 +145,6 @@ bool SourcesRequestMonitor::postData()
         url);
     if (!ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
-        m_dataWasSent = false; // Failed to send data
-    } else {
-        m_dataWasSent = true; // Successfully sent data
     }
     dbgInfo(D_WAAP_CONFIDENCE_CALCULATOR) << "Data sent to remote: " << ok;
     m_sourcesRequests.clear();
