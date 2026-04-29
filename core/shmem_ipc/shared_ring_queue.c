@@ -155,20 +155,15 @@ isLargerDataSegmentSupported()
 
     initializeDockerEnvironment();
 
-    if (!is_dual_docker_env && !is_dual_docker_nginx_env) {
-        writeDebug(TraceLevel, "Not a dual docker environment, assuming larger data segment is supported");
-        return 1;
-    }
-
     char *effective_size_str = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
     if (effective_size_str != NULL) {
         int effective_size = atoi(effective_size_str);
         writeDebug(TraceLevel, "Found EFFECTIVE_SHM_SEGMENT_SIZE in environment: %d", effective_size);
         return (effective_size > SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC) ? 1 : 0;
     }
-    
+
     if (stat(ATTACHMENT_METADATA_FILE_PATH, &st) != 0) {
-        writeDebug(WarningLevel, "Attachment metadata file does not exist: %s", ATTACHMENT_METADATA_FILE_PATH);
+        writeDebug(TraceLevel, "No attachment metadata file, assuming BC data segment size");
         return 0;
     }
     
