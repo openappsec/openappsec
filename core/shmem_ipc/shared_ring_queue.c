@@ -29,7 +29,6 @@
 
 // Attachment metadata file path
 #define ATTACHMENT_METADATA_FILE_PATH "/dev/shm/attachment-metadata"
-#define DUAL_DOCKER_NGINX_FILE "/etc/dual_docker_nginx"
 
 static const uint16_t empty_buff_mgmt_magic = 0xfffe;
 static const uint16_t skip_buff_mgmt_magic = 0xfffd;
@@ -51,19 +50,6 @@ static int g_queue_params_initialized = 0;
 uint16_t g_effective_segment_size = 0;
 uint16_t g_effective_entry_size = 0;
 int g_effective_size_initialized = 0;
-static int is_dual_docker_nginx_env = 0;
-static int is_dual_docker_env = 0;
-int g_docker_env_initialized = 0;
-
-static void
-initializeDockerEnvironment()
-{
-    if (!g_docker_env_initialized) {
-        g_docker_env_initialized = 1;
-        is_dual_docker_nginx_env = (access(DUAL_DOCKER_NGINX_FILE, F_OK) == 0);
-        is_dual_docker_env = getenv("INFINITY_NEXT_NANO_AGENT") != NULL;
-    }
-}
 
 static void
 initializeQueueParams()
@@ -153,29 +139,23 @@ isLargerDataSegmentSupported()
     size_t len = 0;
     ssize_t read_len;
 
-    initializeDockerEnvironment();
-
-    if (!is_dual_docker_env && !is_dual_docker_nginx_env) {
-        writeDebug(TraceLevel, "Not a dual docker environment, assuming larger data segment is supported");
-        return 1;
-    }
-
     char *effective_size_str = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
     if (effective_size_str != NULL) {
         int effective_size = atoi(effective_size_str);
         writeDebug(TraceLevel, "Found EFFECTIVE_SHM_SEGMENT_SIZE in environment: %d", effective_size);
         return (effective_size > SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC) ? 1 : 0;
     }
-    
+
     if (stat(ATTACHMENT_METADATA_FILE_PATH, &st) != 0) {
-        writeDebug(WarningLevel, "Attachment metadata file does not exist: %s", ATTACHMENT_METADATA_FILE_PATH);
+        // No metadata file means an old attachment that never wrote it — use BC size for safety.
+        writeDebug(WarningLevel, "Attachment metadata file not found, defaulting to BC segment size: %s", ATTACHMENT_METADATA_FILE_PATH);
         return 0;
     }
-    
+
     file = fopen(ATTACHMENT_METADATA_FILE_PATH, "r");
     if (file == NULL) {
-        writeDebug(WarningLevel, "Failed to open attachment metadata file: %s", ATTACHMENT_METADATA_FILE_PATH);
-        return 1;
+        writeDebug(WarningLevel, "Failed to open attachment metadata file, defaulting to BC segment size: %s", ATTACHMENT_METADATA_FILE_PATH);
+        return 0;
     }
     
     while ((read_len = getline(&line, &len, file)) != -1) {
