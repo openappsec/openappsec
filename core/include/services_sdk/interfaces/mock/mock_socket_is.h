@@ -14,6 +14,7 @@ public:
     MOCK_METHOD3(acceptSocket, Maybe<socketFd> (socketFd, bool, const std::string &authorized_ip));
     MOCK_METHOD1(closeSocket, void (socketFd &));
     MOCK_METHOD1(isDataAvailable, bool (socketFd));
+    MOCK_METHOD1(isError, bool (socketFd));
     MOCK_METHOD2(writeData, bool (socketFd, const std::vector<char> &));
     MOCK_METHOD2(writeDataAsync, bool (socketFd, const std::vector<char> &));
     MOCK_METHOD3(receiveData, Maybe<std::vector<char>> (socketFd, uint, bool is_blocking));
