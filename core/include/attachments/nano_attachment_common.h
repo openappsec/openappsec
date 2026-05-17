@@ -21,6 +21,8 @@ typedef int64_t NanoHttpCpInjectPos;
 #define MAX_NGINX_UID_LEN 32
 #define MAX_SHARED_MEM_PATH_LEN 128
 #define NUM_OF_NGINX_IPC_ELEMENTS 200
+// The maximum is 2048, but we limit it to 2000 to avoid Alpine memory page layout issues (SIGBUS)
+#define NUM_OF_NGINX_IPC_ELEMENTS_ASYNC 2000
 #define DEFAULT_KEEP_ALIVE_INTERVAL_MSEC 300000u
 #define SHARED_MEM_PATH "/dev/shm/"
 #define SHARED_REGISTRATION_SIGNAL_PATH SHARED_MEM_PATH "check-point/cp-nano-attachment-registration"
