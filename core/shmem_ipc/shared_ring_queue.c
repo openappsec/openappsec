@@ -36,6 +36,7 @@ char g_tx_location_name[MAX_ONE_WAY_QUEUE_NAME_LENGTH] = "";
 int32_t g_rx_fd = -1;
 int32_t g_tx_fd = -1;
 int32_t g_memory_size = -1;
+static int is_global_shmem_params_initialized = 0;
 
 static uint16_t g_num_of_data_segments = 0;
 
@@ -190,13 +191,18 @@ createSharedRingQueue(const char *shared_location_name, uint16_t num_of_data_seg
         queue->user_fd = fd;
     }
 
-    g_memory_size = size_of_memory;
-    if (is_tx) {
-        g_tx_fd = fd;
-        snprintf(g_tx_location_name, MAX_ONE_WAY_QUEUE_NAME_LENGTH, "%s", shared_location_name);
-    } else {
-        g_rx_fd = fd;
-        snprintf(g_rx_location_name, MAX_ONE_WAY_QUEUE_NAME_LENGTH, "%s", shared_location_name);
+    // Only set global parameters on first call to preserve corruption detection state
+    if (!is_global_shmem_params_initialized || g_tx_fd == -1 || g_rx_fd == -1) {
+        g_num_of_data_segments = num_of_data_segments;
+        g_memory_size = size_of_memory;
+        if (is_tx) {
+            g_tx_fd = fd;
+            snprintf(g_tx_location_name, MAX_ONE_WAY_QUEUE_NAME_LENGTH, "%s", shared_location_name);
+        } else {
+            g_rx_fd = fd;
+            snprintf(g_rx_location_name, MAX_ONE_WAY_QUEUE_NAME_LENGTH, "%s", shared_location_name);
+        }
+        is_global_shmem_params_initialized = 1;
     }
 
     writeDebug(
