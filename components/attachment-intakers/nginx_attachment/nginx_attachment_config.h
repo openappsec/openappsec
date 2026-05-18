@@ -45,9 +45,7 @@ public:
     unsigned int getNumOfNginxElements() const { return conf_data.getNumericalValue("num_of_nginx_ipc_elements"); }
     unsigned int getKeepAliveIntervalMsec() const { return conf_data.getNumericalValue("keep_alive_interval_msec"); }
     bool getIsPairedAffinityEnabled() const { return conf_data.getNumericalValue("is_paired_affinity_enabled"); }
-// LCOV_EXCL_START Reason: Temporary INXT-49318
     bool isAsyncModeEnabled() const { return conf_data.getNumericalValue("is_async_mode_enabled"); }
-// LCOV_EXCL_STOP
 
 private:
     void setGradualDeploymentIPs();
