@@ -568,12 +568,7 @@ HttpAttachmentConfig::setAsyncMode() {
 
     if (is_async_mode_enabled) {
         uint num_of_nginx_ipc_elements = calculateAsyncIpcElements(NUM_OF_NGINX_IPC_ELEMENTS_ASYNC);
-        
         dbgInfo(D_NGINX_ATTACHMENT) << "Number of Async NGINX IPC elements: " << num_of_nginx_ipc_elements;
-        uint num_of_nginx_ipc_elements = getProfileAgentSettingWithDefault<uint>(
-            NUM_OF_NGINX_IPC_ELEMENTS_ASYNC,
-            "nginxAttachment.numOfNginxIpcElements"
-        );
         
         if (num_of_nginx_ipc_elements > NUM_OF_NGINX_IPC_ELEMENTS_ASYNC) {
             dbgWarning(D_NGINX_ATTACHMENT)
