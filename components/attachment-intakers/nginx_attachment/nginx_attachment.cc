@@ -580,8 +580,8 @@ private:
             }
         }
 
-        // Initialize secondary sync IPC if not already initialized
-        if (secondary_attachment_sync_ipc == nullptr) {
+        // Initialize secondary sync IPC if not already initialized (only needed in async mode)
+        if (attachment_config.isAsyncModeEnabled() && secondary_attachment_sync_ipc == nullptr) {
             string secondary_unique_id = curr_instance_unique_id + "_sync";
             secondary_attachment_sync_ipc = initIpc(
                 secondary_unique_id.c_str(),
