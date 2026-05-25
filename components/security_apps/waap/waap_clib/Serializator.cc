@@ -17,6 +17,7 @@
 #include "WaapAssetState.h"
 #include "i_instance_awareness.h"
 #include "buffered_compressed_stream.h"
+#include "unified_learning_comp.h"
 #include <boost/regex.hpp>
 #include <sstream>
 #include <fstream>
@@ -45,7 +46,8 @@ static const string defaultSharedStorageHost = "appsec-shared-storage-svc";
 #define SHARED_STORAGE_HOST_ENV_NAME "SHARED_STORAGE_HOST"
 #define LEARNING_HOST_ENV_NAME "LEARNING_HOST"
 
-bool RestGetFile::loadJson(const string &json)
+template<typename ComponentType>
+bool RestGetFileT<ComponentType>::loadJson(const string &json)
 {
     // Try streaming approach first - handles both encryption and compression
     try {
@@ -88,8 +90,9 @@ bool RestGetFile::loadJson(const string &json)
     dbgTrace(D_WAAP_SERIALIZE) << "before decompression in loadJson, data size: "
         << json_str.size() << " bytes";
     auto compression_stream = initCompressionStream();
-    DecompressionResult res = decompressData(
+    DecompressionResult res = decompressDataSafe(
         compression_stream,
+        CompressionType::GZIP,
         json_str.size(),
         reinterpret_cast<const unsigned char *>(json_str.c_str()));
 
@@ -108,7 +111,8 @@ bool RestGetFile::loadJson(const string &json)
     return ClientRest::loadJson(json_str);
 }
 
-Maybe<string> RestGetFile::genJson() const
+template<typename ComponentType>
+Maybe<string> RestGetFileT<ComponentType>::genJson() const
 {
     stringstream output_stream;
     try
@@ -145,12 +149,16 @@ private:
     S2C_PARAM(string, timestamp);
 };
 
-SerializeToFilePeriodically::SerializeToFilePeriodically(ch::seconds pollingIntervals, const string &filePath) :
-    SerializeToFileBase(filePath),
+template <typename ComponentType>
+SerializeToFilePeriodicallyT<ComponentType>::SerializeToFilePeriodicallyT(
+    ch::seconds pollingIntervals,
+    const string &filePath
+) :
+    SerializeToFileBaseT<ComponentType>(filePath),
     m_lastSerialization(0),
     m_interval(pollingIntervals)
 {
-    I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<WaapComponent>();
+    I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<ComponentType>();
 
     if (timer != NULL)
     {
@@ -158,14 +166,16 @@ SerializeToFilePeriodically::SerializeToFilePeriodically(ch::seconds pollingInte
     }
 }
 
-SerializeToFilePeriodically::~SerializeToFilePeriodically()
+template<typename ComponentType>
+SerializeToFilePeriodicallyT<ComponentType>::~SerializeToFilePeriodicallyT()
 {
 
 }
 
-void SerializeToFilePeriodically::backupWorker()
+template<typename ComponentType>
+void SerializeToFilePeriodicallyT<ComponentType>::backupWorker()
 {
-    I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<WaapComponent>();
+    I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<ComponentType>();
     auto currentTime = timer->getMonotonicTime();
 
     dbgTrace(D_WAAP_SERIALIZE) << "backup worker: current time: " << currentTime.count();
@@ -175,37 +185,41 @@ void SerializeToFilePeriodically::backupWorker()
         dbgTrace(D_WAAP_SERIALIZE) << "backup worker: backing up data";
         m_lastSerialization = currentTime;
         // save data
-        saveData();
+        this->saveData();
 
         dbgTrace(D_WAAP_SERIALIZE) << "backup worker: data is backed up";
     }
 }
 
-void SerializeToFilePeriodically::setInterval(ch::seconds newInterval)
+template<typename ComponentType>
+void SerializeToFilePeriodicallyT<ComponentType>::setInterval(ch::seconds newInterval)
 {
     if (m_interval != newInterval)
     {
         m_interval = newInterval;
-        I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<WaapComponent>();
+        I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<ComponentType>();
         m_lastSerialization = timer->getMonotonicTime();
     }
 }
 
-SerializeToFileBase::SerializeToFileBase(const string &fileName) : m_filePath(fileName)
+template<typename ComponentType>
+SerializeToFileBaseT<ComponentType>::SerializeToFileBaseT(const string &fileName) : m_filePath(fileName)
 {
-    dbgTrace(D_WAAP_SERIALIZE) << "SerializeToFileBase::SerializeToFileBase() fname='" << m_filePath
+    dbgTrace(D_WAAP_SERIALIZE) << "SerializeToFileBaseT::SerializeToFileBaseT() fname='" << m_filePath
         << "'";
 }
 
-SerializeToFileBase::~SerializeToFileBase()
+template<typename ComponentType>
+SerializeToFileBaseT<ComponentType>::~SerializeToFileBaseT()
 {
 
 }
 
-void SerializeToFileBase::saveData()
+template<typename ComponentType>
+void SerializeToFileBaseT<ComponentType>::saveData()
 {
     fstream filestream;
-    auto maybe_routine = Singleton::Consume<I_MainLoop>::by<WaapComponent>()->getCurrentRoutineId();
+    auto maybe_routine = Singleton::Consume<I_MainLoop>::by<ComponentType>()->getCurrentRoutineId();
     dbgTrace(D_WAAP_SERIALIZE) << "saving to file: " << m_filePath;
     filestream.open(m_filePath, fstream::out);
 
@@ -217,12 +231,12 @@ void SerializeToFileBase::saveData()
         return;
     }
     if (maybe_routine.ok()) {
-        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+        Singleton::Consume<I_MainLoop>::by<ComponentType>()->yield(false);
     }
     serialize(ss);
 
     if (maybe_routine.ok()) {
-        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+        Singleton::Consume<I_MainLoop>::by<ComponentType>()->yield(false);
     }
     const string &data = ss.str(); // Use const reference to avoid copying
     dbgDebug(D_WAAP_SERIALIZE) << "Serialized data size: " << data.size() << " bytes";
@@ -270,7 +284,7 @@ void SerializeToFileBase::saveData()
         offset += chunk_size;
         chunk_count++;
         if (maybe_routine.ok()) {
-            Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+            Singleton::Consume<I_MainLoop>::by<ComponentType>()->yield(false);
             dbgTrace(D_WAAP_SERIALIZE) << "Compression chunk " << chunk_count
                 << " processed (" << offset << "/" << data.size() << " bytes, "
                 << (offset * 100 / data.size()) << "%) - yielded";
@@ -304,7 +318,7 @@ void SerializeToFileBase::saveData()
         filestream.write(data_to_write.c_str() + offset, current_chunk_size);
         offset += current_chunk_size;
         write_chunks++;
-        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->yield(false);
+        Singleton::Consume<I_MainLoop>::by<ComponentType>()->yield(false);
         dbgTrace(D_WAAP_SERIALIZE) << "Write chunk " << write_chunks
             << " complete: " << offset << "/" << data_to_write.size() << " bytes ("
             << (offset * 100 / data_to_write.size()) << "%) - yielded";
@@ -322,8 +336,9 @@ string decompress(const string &fileContent) {
     }
     auto compression_stream = initCompressionStream();
 
-    DecompressionResult res = decompressData(
+    DecompressionResult res = decompressDataSafe(
         compression_stream,
+        CompressionType::GZIP,
         fileContent.size(),
         reinterpret_cast<const unsigned char *>(fileContent.c_str())
     );
@@ -341,7 +356,8 @@ string decompress(const string &fileContent) {
     return fileContent;
 }
 
-void SerializeToFileBase::loadFromFile(const string &filePath)
+template<typename ComponentType>
+void SerializeToFileBaseT<ComponentType>::loadFromFile(const string &filePath)
 {
     dbgTrace(D_WAAP_SERIALIZE) << "loadFromFile() file: " << filePath;
     fstream filestream;
@@ -358,7 +374,7 @@ void SerializeToFileBase::loadFromFile(const string &filePath)
         // if we fail to open a file because it doesn't exist and instance awareness is present
         // try to strip the unique ID from the path and load the file from the parent directory
         // that might exist in previous run where instance awareness didn't exits.
-        I_InstanceAwareness* instanceAwareness = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
+        I_InstanceAwareness* instanceAwareness = Singleton::Consume<I_InstanceAwareness>::by<ComponentType>();
         Maybe<string> id = instanceAwareness->getUniqueID();
         if (!id.ok())
         {
@@ -425,7 +441,8 @@ void SerializeToFileBase::loadFromFile(const string &filePath)
     }
 }
 
-void SerializeToFileBase::restore()
+template<typename ComponentType>
+void SerializeToFileBaseT<ComponentType>::restore()
 {
     loadFromFile(m_filePath);
 }
@@ -517,7 +534,9 @@ const vector<FileMetaData> &RemoteFilesList::getFilesMetadataList() const
     return files.get();
 }
 
-SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
+
+template<typename ComponentType>
+SerializeToLocalAndRemoteSyncBaseT<ComponentType>::SerializeToLocalAndRemoteSyncBaseT(
     ch::minutes interval,
     ch::seconds waitForSync,
     const string &filePath,
@@ -525,12 +544,13 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
     const string &assetId,
     const string &owner
 ) :
-    SerializeToFileBase(filePath),
+    SerializeToFileBaseT<ComponentType>(filePath),
     m_remotePath(replaceAllCopy(remotePath, "//", "/")),
     m_interval(0),
     m_owner(owner),
     m_assetId(replaceAllCopy(assetId, "/", "")),
     m_remoteSyncEnabled(true),
+    m_dataWasSent(false),
     m_pMainLoop(nullptr),
     m_waitForSync(waitForSync),
     m_workerRoutineId(0),
@@ -543,10 +563,10 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
 {
     dbgInfo(D_WAAP_SERIALIZE) << "Create SerializeToLocalAndRemoteSyncBase. assetId='" << assetId <<
         "', owner='" << m_owner << "'";
-    m_pMainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
+    m_pMainLoop = Singleton::Consume<I_MainLoop>::by<ComponentType>();
 
     if (Singleton::exists<I_AgentDetails>() &&
-        Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() ==
+        Singleton::Consume<I_AgentDetails>::by<ComponentType>()->getOrchestrationMode() ==
             OrchestrationMode::HYBRID) {
         char* sharedStorageHost = getenv(SHARED_STORAGE_HOST_ENV_NAME);
         if (sharedStorageHost != NULL) {
@@ -583,15 +603,18 @@ SerializeToLocalAndRemoteSyncBase::SerializeToLocalAndRemoteSyncBase(
             m_type = type;
         }
     }
+
     setInterval(interval);
 }
 
-bool SerializeToLocalAndRemoteSyncBase::isBase() const
+template<typename ComponentType>
+bool SerializeToLocalAndRemoteSyncBaseT<ComponentType>::isBase() const
 {
     return m_remotePath == "";
 }
 
-void SerializeToLocalAndRemoteSyncBase::waitSync()
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::waitSync()
 {
     if (m_pMainLoop == nullptr)
     {
@@ -600,42 +623,48 @@ void SerializeToLocalAndRemoteSyncBase::waitSync()
     m_pMainLoop->yield(m_waitForSync);
 }
 
-string SerializeToLocalAndRemoteSyncBase::getUri()
+template<typename ComponentType>
+string SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getUri()
 {
     static const string hybridModeUri = "/api";
     static const string onlineModeUri = "/storage/waap";
     if (Singleton::exists<I_AgentDetails>() &&
-        Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() ==
+        Singleton::Consume<I_AgentDetails>::by<ComponentType>()->getOrchestrationMode() ==
         OrchestrationMode::HYBRID) return hybridModeUri;
     return onlineModeUri;
 }
 
-size_t SerializeToLocalAndRemoteSyncBase::getIntervalsCount()
+template<typename ComponentType>
+size_t SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getIntervalsCount()
 {
     return m_intervalsCounter;
 }
 
-void SerializeToLocalAndRemoteSyncBase::incrementIntervalsCount()
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::incrementIntervalsCount()
 {
     m_intervalsCounter++;
 }
 
-SerializeToLocalAndRemoteSyncBase::~SerializeToLocalAndRemoteSyncBase()
+template<typename ComponentType>
+SerializeToLocalAndRemoteSyncBaseT<ComponentType>::~SerializeToLocalAndRemoteSyncBaseT()
 {
 
 }
 
-string SerializeToLocalAndRemoteSyncBase::getWindowId()
+template <typename ComponentType>
+string SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getWindowId()
 {
     return "window_" + to_string(m_daysCount) + "_" + to_string(m_windowsCount);
 }
 
-string SerializeToLocalAndRemoteSyncBase::getPostDataUrl()
+template<typename ComponentType>
+string SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getPostDataUrl()
 {
-    string agentId = Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getAgentId();
+    string agentId = Singleton::Consume<I_AgentDetails>::by<ComponentType>()->getAgentId();
     if (Singleton::exists<I_InstanceAwareness>())
     {
-        I_InstanceAwareness* instance = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
+        I_InstanceAwareness* instance = Singleton::Consume<I_InstanceAwareness>::by<ComponentType>();
         Maybe<string> uniqueId = instance->getUniqueID();
         if (uniqueId.ok() && !uniqueId.unpack().empty())
         {
@@ -645,98 +674,74 @@ string SerializeToLocalAndRemoteSyncBase::getPostDataUrl()
     string windowId = getWindowId();
     return getUri() + "/" + m_remotePath + "/" + windowId + "/" + agentId + "/data.data";
 }
-void SerializeToLocalAndRemoteSyncBase::setRemoteSyncEnabled(bool enabled)
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::setRemoteSyncEnabled(bool enabled)
 {
     m_remoteSyncEnabled = enabled;
 }
 
-void SerializeToLocalAndRemoteSyncBase::setInterval(ch::seconds newInterval)
+template <typename ComponentType>
+void
+SerializeToLocalAndRemoteSyncBaseT<ComponentType>::setInterval(ch::seconds newInterval)
 {
-    if (newInterval == m_interval)
-    {
+    if (newInterval == m_interval) {
         return;
     }
-    dbgDebug(D_WAAP_SERIALIZE) << "setInterval: from " << m_interval.count() << " to " <<
-        newInterval.count() << " seconds. assetId='" << m_assetId << "', owner='" << m_owner << "'";
+    dbgInfo(D_WAAP_SERIALIZE)
+        << "setInterval: from "
+        << m_interval.count()
+        << " to "
+        << newInterval.count()
+        << " seconds. assetId='"
+        << m_assetId
+        << "', owner='"
+        << m_owner << "'";
 
     m_interval = newInterval;
 
-    if (m_workerRoutineId != 0)
-    {
-        return;
+    if (m_workerRoutineId != 0) {
+        m_pMainLoop->stop(m_workerRoutineId);
+        m_workerRoutineId = 0;
     }
-    I_MainLoop::Routine syncRoutineOnLoad = [this]() {
-        I_TimeGet* timer = Singleton::Consume<I_TimeGet>::by<WaapComponent>();
-        ch::microseconds timeBeforeSyncWorker = timer->getWalltime();
-        ch::microseconds timeAfterSyncWorker = timeBeforeSyncWorker;
-        while (true)
-        {
-            m_daysCount = ch::duration_cast<days>(timeBeforeSyncWorker).count();
 
-            ch::microseconds timeSinceMidnight = timeBeforeSyncWorker - ch::duration_cast<days>(timeBeforeSyncWorker);
+    // Distribute syncWorker tasks for different assets spread over assetSyncTimeSliceLengthintervals
+    // It is guaranteed that for the same asset, sync events will start at the same time on all
+    // http_transaction_host instances.
+    size_t slicesCount = m_interval / assetSyncTimeSliceLength;
+    size_t sliceIndex = 0;
+    if (slicesCount != 0 && m_assetId != "") {
+        sliceIndex = hash<string>{}(m_assetId) % slicesCount;
+    }
+    ch::microseconds sliceOffset = assetSyncTimeSliceLength * sliceIndex;
+
+    m_workerRoutineId = m_pMainLoop->addBalancedIntervalRoutine(
+        I_MainLoop::RoutineType::System,
+        m_interval,
+        [this]()
+        {
+            // Calculate current time window before syncing
+            I_TimeGet *timer = Singleton::Consume<I_TimeGet>::by<ComponentType>();
+            ch::microseconds currentTime = timer->getWalltime();
+
+            m_daysCount = ch::duration_cast<days>(currentTime).count();
+            ch::microseconds timeSinceMidnight = currentTime - ch::duration_cast<days>(currentTime);
             m_windowsCount = timeSinceMidnight / m_interval;
 
-            // Distribute syncWorker tasks for different assets spread over assetSyncTimeSliceLengthintervals
-            // It is guaranteed that for the same asset, sync events will start at the same time on all
-            // http_transaction_host instances.
-            size_t slicesCount = m_interval / assetSyncTimeSliceLength;
-            size_t sliceIndex = 0;
-            if (slicesCount != 0 && m_assetId != "") {
-                sliceIndex = hash<string>{}(m_assetId) % slicesCount;
-            }
-            ch::seconds sliceOffset = assetSyncTimeSliceLength * sliceIndex;
-
-            ch::microseconds remainingTime = m_interval - (timeAfterSyncWorker - timeBeforeSyncWorker) -
-                timeBeforeSyncWorker % m_interval + sliceOffset;
-
-            if (remainingTime > m_interval) {
-                // on load between trigger and offset remaining time is larger than the interval itself
-                remainingTime -= m_interval;
-                dbgDebug(D_WAAP_SERIALIZE) << "adjusting remaining time: " << remainingTime.count();
-                if (timeBeforeSyncWorker.count() != 0)
-                {
-                    auto updateTime = timeBeforeSyncWorker - m_interval;
-                    m_daysCount = ch::duration_cast<days>(updateTime).count();
-
-                    ch::microseconds timeSinceMidnight = updateTime - ch::duration_cast<days>(updateTime);
-                    m_windowsCount = timeSinceMidnight / m_interval;
-                }
-            }
-
-            if (remainingTime < ch::seconds(0)) {
-                // syncWorker execution time was so large the remaining time became negative
-                remainingTime = ch::seconds(0);
-                dbgError(D_WAAP_SERIALIZE) << "syncWorker execution time (owner='" << m_owner <<
-                    "', assetId='" << m_assetId << "') is " <<
-                    ch::duration_cast<ch::seconds>(timeAfterSyncWorker - timeBeforeSyncWorker).count() <<
-                    " seconds, too long to cause negative remainingTime. Waiting 0 seconds...";
-            }
-
-            dbgDebug(D_WAAP_SERIALIZE) << "current time: " << timeBeforeSyncWorker.count() << " \u00b5s" <<
-                ": assetId='" << m_assetId << "'" <<
-                ", owner='" << m_owner << "'" <<
-                ", daysCount=" << m_daysCount <<
-                ", windowsCount=" << m_windowsCount <<
-                ", interval=" << m_interval.count() << " seconds"
-                ", seconds till next window=" << ch::duration_cast<ch::seconds>(remainingTime - sliceOffset).count() <<
-                ", sliceOffset=" << sliceOffset.count() << " seconds" <<
-                ", hashIndex=" << sliceIndex <<
-                ": next wakeup in " << ch::duration_cast<ch::seconds>(remainingTime).count() << " seconds";
-            m_pMainLoop->yield(remainingTime);
-
-            timeBeforeSyncWorker = timer->getWalltime();
             syncWorker();
-            timeAfterSyncWorker = timer->getWalltime();
-        }
-    };
-    m_workerRoutineId = m_pMainLoop->addOneTimeRoutine(
-        I_MainLoop::RoutineType::System,
-        syncRoutineOnLoad,
-        "Sync worker learning on load"
+        },
+        "Sync worker learning on load",
+        sliceOffset
     );
 }
 
-bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
+template<typename ComponentType>
+bool SerializeToLocalAndRemoteSyncBaseT<ComponentType>::wasDataSent() const
+{
+    return m_dataWasSent;
+}
+
+template<typename ComponentType>
+bool SerializeToLocalAndRemoteSyncBaseT<ComponentType>::localSyncAndProcess()
 {
     bool isBackupSyncEnabled = getProfileAgentSettingWithDefault<bool>(
         false,
@@ -745,7 +750,7 @@ bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
     if (!isBackupSyncEnabled) {
         dbgInfo(D_WAAP_SERIALIZE) << "Local sync is disabled";
         processData();
-        saveData();
+        this->saveData();
         return true;
     }
 
@@ -765,17 +770,19 @@ bool SerializeToLocalAndRemoteSyncBase::localSyncAndProcess()
 
     pullData(rawDataFiles.getFilesList());
     processData();
-    saveData();
+    this->saveData();
     postProcessedData();
     return true;
 }
 
-ch::seconds SerializeToLocalAndRemoteSyncBase::getIntervalDuration() const
+template<typename ComponentType>
+ch::seconds SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getIntervalDuration() const
 {
     return m_interval;
 }
 
-Maybe<string> SerializeToLocalAndRemoteSyncBase::getStateTimestampByListing()
+template<typename ComponentType>
+Maybe<string> SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getStateTimestampByListing()
 {
     RemoteFilesList remoteFiles = getRemoteProcessedFilesList();
     if (remoteFiles.getFilesMetadataList().empty())
@@ -788,7 +795,9 @@ Maybe<string> SerializeToLocalAndRemoteSyncBase::getStateTimestampByListing()
     return remoteFiles.getFilesMetadataList()[0].modified;
 }
 
-bool SerializeToLocalAndRemoteSyncBase::checkAndUpdateStateTimestamp(const string& currentStateTimestamp)
+template <typename ComponentType>
+bool
+SerializeToLocalAndRemoteSyncBaseT<ComponentType>::checkAndUpdateStateTimestamp(const string &currentStateTimestamp)
 {
     // Check if the state has been updated since last check
     if (currentStateTimestamp != m_lastProcessedModified)
@@ -800,7 +809,8 @@ bool SerializeToLocalAndRemoteSyncBase::checkAndUpdateStateTimestamp(const strin
     return false; // State unchanged
 }
 
-void SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteService()
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::updateStateFromRemoteService()
 {
     bool useFallbackMethod = false;
     for (int i = 0; i < remoteSyncMaxPollingAttempts; i++)
@@ -855,7 +865,8 @@ void SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteService()
     localSyncAndProcess();
 }
 
-Maybe<void> SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteFile()
+template<typename ComponentType>
+Maybe<void> SerializeToLocalAndRemoteSyncBaseT<ComponentType>::updateStateFromRemoteFile()
 {
     auto maybeRemoteFilePath = getRemoteStateFilePath();
     if (!maybeRemoteFilePath.ok())
@@ -872,27 +883,40 @@ Maybe<void> SerializeToLocalAndRemoteSyncBase::updateStateFromRemoteFile()
     return Maybe<void>();
 }
 
-bool SerializeToLocalAndRemoteSyncBase::shouldNotSync() const
+template<typename ComponentType>
+bool SerializeToLocalAndRemoteSyncBaseT<ComponentType>::shouldNotSync() const
 {
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
-        Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
+        Singleton::Consume<I_AgentDetails>::by<ComponentType>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
     return mode == OrchestrationMode::OFFLINE  || !m_remoteSyncEnabled || isBase();
 }
 
-bool SerializeToLocalAndRemoteSyncBase::shouldSendSyncNotification() const
+template<typename ComponentType>
+bool SerializeToLocalAndRemoteSyncBaseT<ComponentType>::shouldSendSyncNotification() const
 {
+    // Only send sync notification if data was actually sent
     return getSettingWithDefault<bool>(true, "features", "learningLeader") &&
         ((m_type == "CentralizedData") ==
-        (getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging")));
+            (getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging") ||
+            getProfileAgentSettingWithDefault<bool>(false, "agent.learning.unifiedLearning"))) &&
+        wasDataSent();
 }
 
-void SerializeToLocalAndRemoteSyncBase::syncWorker()
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::syncWorker()
 {
-    dbgInfo(D_WAAP_SERIALIZE) << "Running the sync worker for assetId='" << m_assetId << "', owner='" <<
-        m_owner << "'" << " last modified state: " << m_lastProcessedModified;
+    dbgInfo(D_WAAP_SERIALIZE)
+        << "Running the sync worker for assetId='"
+        << m_assetId
+        << "', owner='"
+        << m_owner
+        << "'"
+        << " last modified state: "
+        << m_lastProcessedModified;
     incrementIntervalsCount();
+    m_dataWasSent = false; // Reset flag before calling postData()
     OrchestrationMode mode = Singleton::exists<I_AgentDetails>() ?
-        Singleton::Consume<I_AgentDetails>::by<WaapComponent>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
+        Singleton::Consume<I_AgentDetails>::by<ComponentType>()->getOrchestrationMode() : OrchestrationMode::ONLINE;
 
     if (shouldNotSync() || !postData()) {
         dbgDebug(D_WAAP_SERIALIZE)
@@ -904,42 +928,12 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
             << to_string(m_remoteSyncEnabled)
             << ", mode: " << int(mode);
         processData();
-        saveData();
+        this->saveData();
         return;
     }
 
     dbgTrace(D_WAAP_SERIALIZE) << "Waiting for all agents to post their data";
     waitSync();
-    // check if learning service is operational
-    if (m_lastProcessedModified == "")
-    {
-        dbgTrace(D_WAAP_SERIALIZE) << "check if remote service is operational";
-        Maybe<string> maybeTimestamp = getStateTimestamp();
-        if (maybeTimestamp.ok() && !maybeTimestamp.unpack().empty())
-        {
-            m_lastProcessedModified = maybeTimestamp.unpack();
-            dbgInfo(D_WAAP_SERIALIZE) << "First sync by remote service: " << m_lastProcessedModified;
-        }
-        else
-        {
-            dbgWarning(D_WAAP_SERIALIZE) << "Failed to get state timestamp from remote service: "
-                << maybeTimestamp.getErr();
-            maybeTimestamp = getStateTimestampByListing();
-            if (maybeTimestamp.ok() && !maybeTimestamp.unpack().empty())
-            {
-                m_lastProcessedModified = maybeTimestamp.unpack();
-                dbgInfo(D_WAAP_SERIALIZE) << "First sync by remote service using listing: " << m_lastProcessedModified;
-            }
-            else
-            {
-                dbgWarning(D_WAAP_SERIALIZE)
-                    << "Failed to get state timestamp from remote service by listing: "
-                    << maybeTimestamp.getErr()
-                    << " skipping syncWorker for assetId='"
-                    << m_assetId << "', owner='" << m_owner << "'";
-            }
-        }
-    }
 
     // check if learning service is enabled
     bool isRemoteServiceEnabled = getProfileAgentSettingWithDefault<bool>(
@@ -956,26 +950,31 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     // TODO: add should send sync notification function (e.g. do not sync if not leader)
 
     if (mode == OrchestrationMode::HYBRID) {
-        dbgDebug(D_WAAP_SERIALIZE) << "detected running in standalone mode";
-        I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<WaapComponent>();
-        I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<WaapComponent>();
+        // Only send sync notification if data was actually sent
+        if (!wasDataSent()) {
+            dbgDebug(D_WAAP_SERIALIZE) << "No data was sent, skipping sync notification in HYBRID mode";
+        } else {
+            dbgDebug(D_WAAP_SERIALIZE) << "detected running in standalone mode";
+            I_AgentDetails *agentDetails = Singleton::Consume<I_AgentDetails>::by<ComponentType>();
+            I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ComponentType>();
 
-        SyncLearningObject syncObj(m_assetId, m_type, getWindowId());
+            SyncLearningObject syncObj(m_assetId, m_type, getWindowId());
 
-        MessageMetadata req_md(getLearningHost(), 80);
-        req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
-        req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
-        req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
-        bool ok = messaging->sendSyncMessageWithoutResponse(
-            HTTPMethod::POST,
-            "/api/sync",
-            syncObj,
-            MessageCategory::GENERIC,
-            req_md
-        );
-        dbgDebug(D_WAAP_SERIALIZE) << "sent learning sync notification ok: " << ok;
-        if (!ok) {
-            dbgWarning(D_WAAP_SERIALIZE) << "failed to send learning notification";
+            MessageMetadata req_md(getLearningHost(), 80);
+            req_md.insertHeader("X-Tenant-Id", agentDetails->getTenantId());
+            req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
+            req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
+            bool ok = messaging->sendSyncMessageWithoutResponse(
+                HTTPMethod::POST,
+                "/api/sync",
+                syncObj,
+                MessageCategory::GENERIC,
+                req_md
+            );
+            dbgDebug(D_WAAP_SERIALIZE) << "sent learning sync notification ok: " << ok;
+            if (!ok) {
+                dbgWarning(D_WAAP_SERIALIZE) << "failed to send learning notification";
+            }
         }
     } else if (shouldSendSyncNotification())
     {
@@ -993,7 +992,7 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
         );
     }
 
-    if (m_lastProcessedModified != "" && isRemoteServiceEnabled)
+    if (isRemoteServiceEnabled)
     {
         // wait for remote service to process the data
         waitSync();
@@ -1001,9 +1000,10 @@ void SerializeToLocalAndRemoteSyncBase::syncWorker()
     }
 }
 
-void SerializeToLocalAndRemoteSyncBase::restore()
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::restore()
 {
-    SerializeToFileBase::restore();
+    SerializeToFileBaseT<ComponentType>::restore();
     if (!isBase())
     {
         dbgTrace(D_WAAP_SERIALIZE) << "merge state from remote service";
@@ -1011,7 +1011,8 @@ void SerializeToLocalAndRemoteSyncBase::restore()
     }
 }
 
-RemoteFilesList SerializeToLocalAndRemoteSyncBase::getRemoteProcessedFilesList()
+template<typename ComponentType>
+RemoteFilesList SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getRemoteProcessedFilesList()
 {
     RemoteFilesList remoteFiles;
     bool isRemoteServiceEnabled = getProfileAgentSettingWithDefault<bool>(
@@ -1037,7 +1038,8 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getRemoteProcessedFilesList()
 }
 
 
-RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
+template<typename ComponentType>
+RemoteFilesList SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getProcessedFilesList()
 {
     RemoteFilesList processedFilesList = getRemoteProcessedFilesList();
 
@@ -1081,7 +1083,7 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
             " can't check backward compatibility";
         return processedFilesList;
     }
-    I_InstanceAwareness* instanceAwareness = Singleton::Consume<I_InstanceAwareness>::by<WaapComponent>();
+    I_InstanceAwareness* instanceAwareness = Singleton::Consume<I_InstanceAwareness>::by<ComponentType>();
     Maybe<string> id = instanceAwareness->getUniqueID();
     if (!id.ok())
     {
@@ -1108,7 +1110,8 @@ RemoteFilesList SerializeToLocalAndRemoteSyncBase::getProcessedFilesList()
     return processedFilesList;
 }
 
-void SerializeToLocalAndRemoteSyncBase::mergeProcessedFromRemote()
+template<typename ComponentType>
+void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::mergeProcessedFromRemote()
 {
     dbgDebug(D_WAAP_SERIALIZE) << "Merging processed data from remote. assetId='" << m_assetId <<
         "', owner='" << m_owner << "'";
@@ -1155,8 +1158,9 @@ void SerializeToLocalAndRemoteSyncBase::mergeProcessedFromRemote()
     );
 }
 
-string
-SerializeToLocalAndRemoteSyncBase::getLearningHost()
+
+template<typename ComponentType>
+string SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getLearningHost()
 {
     if (m_learning_host.ok()) {
         return *m_learning_host;
@@ -1171,8 +1175,9 @@ SerializeToLocalAndRemoteSyncBase::getLearningHost()
     return defaultLearningHost;
 }
 
-string
-SerializeToLocalAndRemoteSyncBase::getSharedStorageHost()
+
+template<typename ComponentType>
+string SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getSharedStorageHost()
 {
     if (m_shared_storage_host.ok()) {
         return *m_shared_storage_host;
@@ -1187,12 +1192,14 @@ SerializeToLocalAndRemoteSyncBase::getSharedStorageHost()
     return defaultSharedStorageHost;
 }
 
-string SerializeToLocalAndRemoteSyncBase::getStateTimestampPath()
+template<typename ComponentType>
+string SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getStateTimestampPath()
 {
     return m_remotePath + "/internal/lastModified.data";
 }
 
-Maybe<string> SerializeToLocalAndRemoteSyncBase::getStateTimestamp()
+template<typename ComponentType>
+Maybe<string> SerializeToLocalAndRemoteSyncBaseT<ComponentType>::getStateTimestamp()
 {
     string timestampPath = getStateTimestampPath();
     if (timestampPath.empty()) {
@@ -1215,3 +1222,15 @@ Maybe<string> SerializeToLocalAndRemoteSyncBase::getStateTimestamp()
         << " from path: " << timestampPath;
     return timestampRetriever.getStateTimestamp().unpack();
 }
+
+// Explicit template instantiations for backward compatibility
+template class RestGetFileT<WaapComponent>;
+template class SerializeToFileBaseT<WaapComponent>;
+template class SerializeToFilePeriodicallyT<WaapComponent>;
+template class SerializeToLocalAndRemoteSyncBaseT<WaapComponent>;
+
+// Explicit template instantiations for UnifiedLearningComponent
+template class RestGetFileT<UnifiedLearningComponent>;
+template class SerializeToFileBaseT<UnifiedLearningComponent>;
+template class SerializeToFilePeriodicallyT<UnifiedLearningComponent>;
+template class SerializeToLocalAndRemoteSyncBaseT<UnifiedLearningComponent>;

@@ -89,6 +89,7 @@ enum class AudienceTeam
     FILE_UPLOAD,
     IDENTITY_AWARENESS,
     HORIZON_TELEMETRY,
+    THREAT_PREVENTION,
     NONE,
 
     COUNT

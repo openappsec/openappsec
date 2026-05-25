@@ -51,6 +51,10 @@ HTTPRequest::setConnectionHeaders(const Connection &conn)
             method_statement = "PUT " + uri_prefix + uri + " HTTP/1.1";
             break;
         }
+        case HTTPMethod::HEAD: {
+            method_statement = "HEAD " + uri_prefix + uri + " HTTP/1.1";
+            break;
+        }
         case HTTPMethod::CONNECT: {
             host = host + ":" + to_string(conn.getConnKey().getPort());
             method_statement = "CONNECT " + host + " HTTP/1.1";

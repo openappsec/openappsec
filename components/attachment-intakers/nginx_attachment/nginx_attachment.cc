@@ -588,7 +588,7 @@ private:
                 nginx_user_id,
                 nginx_group_id,
                 1,
-                num_of_nginx_ipc_elements,
+                200,
                 IpcDebug
             );
 
@@ -598,7 +598,7 @@ private:
                 return false;
             }
         }
-        
+
         dbgDebug(D_NGINX_ATTACHMENT) << "Successfully initialized shmem channel";
         nginx_worker_user_id = nginx_user_id;
         nginx_worker_group_id = nginx_group_id;
@@ -1116,7 +1116,16 @@ private:
         CompressionStream *compression_stream = content_encoding == CompressionType::NO_COMPRESSION ?
             nullptr :
             opaque.getResponseCompressionStream();
-        auto http_response_body_maybe = NginxParser::parseResponseBody(data, compression_stream);
+
+        if (content_encoding != CompressionType::NO_COMPRESSION && compression_stream == nullptr) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Response Content-Encoding indicates compression but compression stream is null. "
+                << "Cannot decompress response body. Returning default verdict to avoid crash. Content-Encoding: "
+                << static_cast<int>(content_encoding);
+            return default_verdict;
+        }
+
+        auto http_response_body_maybe = NginxParser::parseResponseBody(data, compression_stream, content_encoding);
 
         return handleModifiableChunk(http_response_body_maybe, "response body", false);
     }
@@ -1379,33 +1388,86 @@ private:
         vector<uint16_t> &verdict_data_sizes,
         const CustomResponse &custom_response_data)
     {
-        HttpJsonResponseData json_response_data;
-
-        json_response_data.response_code = custom_response_data.getStatusCode();
         string response_body = custom_response_data.getBody();
-        string content_type = custom_response_data.getContentType();
-        json_response_data.body_size = response_body.size();
-
-        if (content_type == "application/json") {
-            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_APPLICATION_JSON;
-        } else if (content_type == "text/html") {
-            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_TEXT_HTML;
-        } else {
-            json_response_data.content_type = AttachmentContentType::CONTENT_TYPE_OTHER;
+        const auto& headers_map = custom_response_data.getHeaders();
+        
+        size_t total_headers_size = 0;
+        vector<string> header_keys;
+        vector<string> header_values;
+        
+        for (const auto& header_pair : headers_map) {
+            header_keys.push_back(header_pair.first);
+            header_values.push_back(header_pair.second);
+            total_headers_size += sizeof(HttpHeaderPackedData) + header_pair.first.size() + header_pair.second.size();
         }
+        
+        size_t custom_response_size =
+            sizeof(HttpCustomResponseData) +
+            total_headers_size +
+            response_body.size();
 
-        verdict_data.push_back(reinterpret_cast<const char *>(&json_response_data));
-        verdict_data_sizes.push_back(sizeof(HttpJsonResponseData));
-
-        verdict_data.push_back(reinterpret_cast<const char *>(response_body.data()));
-        verdict_data_sizes.push_back(response_body.size());
+        static vector<char> custom_response_buffer;
+        custom_response_buffer.resize(custom_response_size);
+        char* buffer_ptr = custom_response_buffer.data();
+        
+        HttpCustomResponseData* custom_response_header =
+            reinterpret_cast<HttpCustomResponseData*>(buffer_ptr);
+        custom_response_header->response_code = custom_response_data.getStatusCode();
+        
+        if (response_body.size() > UINT16_MAX) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Response body size (" << response_body.size()
+                << ") exceeds uint16_t maximum (" << UINT16_MAX
+                << "). Body will be truncated.";
+            custom_response_header->body_size = UINT16_MAX;
+        } else {
+            custom_response_header->body_size = static_cast<uint16_t>(response_body.size());
+        }
+        
+        if (headers_map.size() > UINT8_MAX) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "Headers count (" << headers_map.size()
+                << ") exceeds uint8_t maximum (" << UINT8_MAX
+                << "). Only first " << UINT8_MAX << " headers will be sent.";
+            custom_response_header->headers_count = UINT8_MAX;
+        } else {
+            custom_response_header->headers_count = static_cast<uint8_t>(headers_map.size());
+        }
+        
+        buffer_ptr += sizeof(HttpCustomResponseData);
+        
+        for (size_t i = 0; i < header_keys.size(); ++i) {
+            HttpHeaderPackedData* header_data = reinterpret_cast<HttpHeaderPackedData*>(buffer_ptr);
+            header_data->key_size = header_keys[i].size();
+            header_data->value_size = header_values[i].size();
+            
+            buffer_ptr += sizeof(HttpHeaderPackedData);
+            
+            memcpy(buffer_ptr, header_keys[i].data(), header_keys[i].size());
+            buffer_ptr += header_keys[i].size();
+            
+            memcpy(buffer_ptr, header_values[i].data(), header_values[i].size());
+            buffer_ptr += header_values[i].size();
+            
+            dbgTrace(D_NGINX_ATTACHMENT)
+                << "Packed header: '"
+                << header_keys[i]
+                << "' = '"
+                << header_values[i]
+                << "'";
+        }
+        
+        memcpy(buffer_ptr, response_body.data(), response_body.size());
+        
+        verdict_data.push_back(custom_response_buffer.data());
+        verdict_data_sizes.push_back(custom_response_buffer.size());
 
         dbgTrace(D_NGINX_ATTACHMENT)
-            << "Added Custom JSON Response to current session."
-            << " Response code: "
-            << static_cast<uint>(json_response_data.response_code)
-            << ", Body size: "
-            << static_cast<uint>(json_response_data.body_size);
+            << "Added Custom Response to current session."
+            << " Response code: " << custom_response_data.getStatusCode()
+            << ", Headers count: " << headers_map.size()
+            << ", Body size: " << response_body.size()
+            << ", Total size: " << custom_response_size;
 
         sendChunkedData(ipc, verdict_data_sizes.data(), verdict_data.data(), verdict_data.size());
     }
@@ -1767,7 +1829,8 @@ private:
                 return false;
             }
 
-            if (!i_transaction_table->createEntry(session_id, chrono::minutes(1))) {
+            auto timeout_minutes = attachment_config.getTransactionEntryTimeoutMinutes();
+            if (!i_transaction_table->createEntry(session_id, chrono::minutes(timeout_minutes))) {
                 dbgWarning(D_NGINX_ATTACHMENT)
                     << "Failed to create table entry for transaction with session ID: " << session_id;
                 return false;
@@ -2390,7 +2453,7 @@ private:
                 << "Could not convert "
                 <<  static_cast<int>(transaction_data->data_type)
                 << " to ChunkType enum. Resetting IPC"
-                 << dumpIpcWrapper(ipc);
+                << dumpIpcWrapper(ipc);
             popData(ipc);
             resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
             resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
@@ -2550,6 +2613,7 @@ NginxAttachment::preload()
     registerExpectedConfiguration<uint>("HTTP manager", "Keep Alive interval in sec");
     registerExpectedConfiguration<uint>("HTTP manager", "Fail Open timeout msec");
     registerExpectedSetting<DebugConfig>("HTTP manager", "debug context");
+    registerExpectedConfiguration<uint>("HTTP manager", "NGINX transaction entry timeout minutes");
     registerExpectedConfiguration<uint>("HTTP manager", "NGINX response processing timeout msec");
     registerExpectedConfiguration<uint>("HTTP manager", "NGINX request processing timeout msec");
     registerExpectedConfiguration<uint>("HTTP manager", "NGINX registration thread timeout msec");

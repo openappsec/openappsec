@@ -51,6 +51,7 @@ typedef enum NanoWebResponseType
     CUSTOM_WEB_BLOCK_PAGE_RESPONSE,
     RESPONSE_CODE_ONLY,
     REDIRECT_WEB_RESPONSE,
+    CUSTOM_RESPONSE_WITH_HEADERS,
 
     NO_WEB_RESPONSE
 } NanoWebResponseType;
@@ -223,18 +224,6 @@ typedef enum ServiceVerdict
 } ServiceVerdict;
 
 #ifdef __cplusplus
-typedef enum class AttachmentContentType
-#else
-typedef enum AttachmentContentType
-#endif
-{
-    CONTENT_TYPE_APPLICATION_JSON,
-    CONTENT_TYPE_TEXT_HTML,
-    CONTENT_TYPE_TEXT_PLAIN,
-    CONTENT_TYPE_OTHER
-} AttachmentContentType;
-
-#ifdef __cplusplus
 typedef enum class AttachmentVerdict
 #else
 typedef enum AttachmentVerdict
@@ -288,12 +277,14 @@ typedef struct __attribute__((__packed__)) HttpWebResponseData {
     } response_data;
 } HttpWebResponseData;
 
-typedef struct __attribute__((__packed__)) HttpJsonResponseData {
+// Custom response structure with dynamic headers
+typedef struct __attribute__((__packed__)) HttpCustomResponseData {
     uint16_t response_code;
     uint16_t body_size;
-    AttachmentContentType content_type;
-    char body[0];
-} HttpJsonResponseData;
+    uint8_t headers_count;
+    char data[0]; // headers followed by body
+    // Memory layout: [HttpHeaderPackedData1][HttpHeaderPackedData2]...[body_data]
+} HttpCustomResponseData;
 
 typedef struct {
     size_t              len;
@@ -309,6 +300,21 @@ typedef struct CustomResponseData {
 typedef struct RedirectData {
     unsigned char redirect_location[REDIRECT_RESPONSE_LOCATION_SIZE];
 } RedirectData;
+
+typedef struct CustomResponseHeaderData {
+    uint16_t key_size;
+    uint16_t value_size;
+    char *key;
+    char *value;
+} CustomResponseHeaderData;
+
+typedef struct CustomResponseWithHeaders {
+    uint16_t response_code;
+    uint16_t body_size;
+    uint8_t headers_count;
+    CustomResponseHeaderData *headers;
+    char *body;
+} CustomResponseWithHeaders;
 
 typedef struct WebResponseData {
     NanoWebResponseType web_response_type;
@@ -419,6 +425,13 @@ typedef struct HttpHeaderData {
     nano_str_t value;
 } HttpHeaderData;
 
+// Packed header data structure for dynamic headers in custom responses (IPC transfer)
+typedef struct __attribute__((__packed__)) HttpHeaderPackedData {
+    uint16_t key_size;
+    uint16_t value_size;
+    char data[0]; // key followed by value
+} HttpHeaderPackedData;
+
 typedef struct HttpHeaders {
     HttpHeaderData *data;
     size_t headers_count;
@@ -451,7 +464,7 @@ typedef struct AttachmentData {
 typedef union __attribute__((__packed__)) HttpModifyData {
     HttpInjectData inject_data[0];
     HttpWebResponseData web_response_data[0];
-    HttpJsonResponseData json_response_data[0];
+    HttpCustomResponseData custom_response_data[0];
 } HttpModifyData;
 
 typedef struct __attribute__((__packed__)) HttpReplyFromService {

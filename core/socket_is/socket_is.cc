@@ -229,6 +229,7 @@ public:
         s_poll.fd = socket_int;
         s_poll.events = POLLIN;
         s_poll.revents = 0;
+
         int poll_result = poll(&s_poll, 1, 0);
         
         if (poll_result < 0) {

@@ -13,10 +13,14 @@
 
 #include "UnifiedIndicatorsContainer.h"
 
+#include <sstream>
 #include <cereal/archives/json.hpp>
+#include <cereal/archives/binary.hpp>
 #include <cereal/types/string.hpp>
 #include <cereal/types/vector.hpp>
-#include <algorithm>
+#include "debug.h"
+
+USE_DEBUG_FLAG(D_WAAP_LEARN);
 
 using std::string;
 using std::unordered_map;
@@ -24,6 +28,59 @@ using std::unordered_set;
 using std::ostream;
 using std::istream;
 
+// -------------------------------
+// Entry serialization methods
+// -------------------------------
+std::vector<char>
+UnifiedIndicatorsContainer::Entry::serialize() const
+{
+    std::ostringstream oss;
+    {
+        cereal::BinaryOutputArchive ar(oss);
+        ar(*this);
+    }
+    std::string str = oss.str();
+    return std::vector<char>(str.begin(), str.end());
+}
+
+bool
+UnifiedIndicatorsContainer::Entry::deserialize(const std::vector<char>& buffer)
+{
+    return deserialize(buffer.data(), buffer.size());
+}
+
+bool
+UnifiedIndicatorsContainer::Entry::deserialize(const char* data, size_t size)
+{
+    if (!data || size == 0) return false;
+    
+    try {
+        std::istringstream iss(std::string(data, size));
+        cereal::BinaryInputArchive ar(iss);
+        ar(*this);
+        
+        // Validate required fields
+        if (key.empty() || sourceId.empty()) {
+            dbgWarning(D_WAAP_LEARN) << "Deserialized Entry has empty required fields";
+            return false;
+        }
+        
+        return true;
+    } catch (const cereal::Exception& e) {
+        dbgWarning(D_WAAP_LEARN)
+            << "Cereal exception during Entry deserialization: "
+            << e.what();
+        return false;
+    } catch (const std::exception& e) {
+        dbgWarning(D_WAAP_LEARN)
+            << "Exception during Entry deserialization: "
+            << e.what();
+        return false;
+    } catch (...) {
+        dbgWarning(D_WAAP_LEARN) << "Unknown exception during Entry deserialization";
+        return false;
+    }
+}
 // -------------------------------
 // Interning helpers
 // -------------------------------

@@ -6,7 +6,7 @@
 class HTTPResponseParser
 {
 public:
-    Maybe<HTTPResponse> parseData(const std::string &data, bool is_connect);
+    Maybe<HTTPResponse> parseData(const std::string &data, HTTPMethod method, bool is_connect);
 
     bool
     hasReachedError() const
@@ -17,7 +17,7 @@ public:
 private:
     bool parseStatusLine();
     bool handleHeaders();
-    bool handleBody(bool is_connect);
+    bool handleBody(HTTPMethod method, bool is_connect);
 
     Maybe<std::string> getHeaderVal(const std::string &header_key);
 

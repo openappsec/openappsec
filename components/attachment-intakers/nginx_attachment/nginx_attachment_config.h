@@ -41,6 +41,12 @@ public:
         return conf_data.getNumericalValue("sessions_per_minute_limit_verdict");
     }
 
+    unsigned int
+    getTransactionEntryTimeoutMinutes() const
+    {
+        return conf_data.getNumericalValue("transaction_entry_timeout_minutes");
+    }
+
     unsigned int getMaxSessionsPerMinute() const { return conf_data.getNumericalValue("max_sessions_per_minute"); }
     unsigned int getNumOfNginxElements() const { return conf_data.getNumericalValue("num_of_nginx_ipc_elements"); }
     unsigned int getKeepAliveIntervalMsec() const { return conf_data.getNumericalValue("keep_alive_interval_msec"); }

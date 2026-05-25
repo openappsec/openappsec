@@ -662,13 +662,13 @@ run_update_gradual_policy() # Initials - rugp
         return
     fi
     # Reload NGINX
-    rugp_errors=$(nginx -t 2>&1)
+    rugp_errors=$(LD_LIBRARY_PATH= nginx -t 2>&1)
     if echo "$rugp_errors" | grep -q "failed"; then
         echo "Could not load nginx - configuration test failed"
         echo "Error: $rugp_errors"
         return
     fi
-    nginx -s reload
+    LD_LIBRARY_PATH= nginx -s reload
     echo "$rugp_success_message"
 }
 

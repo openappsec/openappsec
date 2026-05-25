@@ -24,6 +24,7 @@ class I_Socket
 public:
     enum class SocketType { UNIX, UNIXDG, TCP, UDP };
     using socketFd = int;
+    const static socketFd INVALID_SOCKET = -1;
 
     virtual Maybe<socketFd>
     genSocket(SocketType type, bool is_blocking, bool is_server, const std::string &address) = 0;

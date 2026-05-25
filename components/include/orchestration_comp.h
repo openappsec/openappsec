@@ -33,6 +33,7 @@
 #include "i_package_handler.h"
 #include "i_proxy_configuration.h"
 #include "i_env_details.h"
+#include "i_socket_is.h"
 #include "component.h"
 
 class OrchestrationComp
@@ -56,7 +57,8 @@ class OrchestrationComp
     Singleton::Consume<I_Downloader>,
     Singleton::Consume<I_ManifestController>,
     Singleton::Consume<I_EnvDetails>,
-    Singleton::Consume<I_ProxyConfiguration>
+    Singleton::Consume<I_ProxyConfiguration>,
+    Singleton::Consume<I_Socket>
 {
 public:
     OrchestrationComp();

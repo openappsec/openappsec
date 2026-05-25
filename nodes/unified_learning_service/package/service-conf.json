@@ -1,0 +1,48 @@
+{
+    "Logging": {
+        "Log file name": [
+            {
+                "value": "/var/log/nano_agent/cp-nano-unified-learning-service.log"
+            }
+        ]
+    },
+    "connection": {
+        "Nano service API Port Primary": [
+            {
+                "value": 4020
+            }
+        ],
+        "Nano service API Port Alternative": [
+            {
+                "value": 4021
+            }
+        ],
+        "Redis IP": [
+            {
+                "value": "127.0.0.1"
+            }
+        ],
+        "Redis Port": [
+            {
+                "value": 6379
+            }
+        ],
+        "Redis Timeout": [
+            {
+                "value": 30000
+            }
+        ],
+        "Queue Discovery Interval": [
+            {
+                "value": 30000
+            }
+        ]
+    },
+    "message": {
+        "Connection timeout": [
+            {
+                "value": 10000000
+            }
+        ]
+    }
+}

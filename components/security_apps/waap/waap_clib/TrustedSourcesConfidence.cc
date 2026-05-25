@@ -136,6 +136,7 @@ bool TrustedSourcesConfidenceCalculator::postData()
     if (m_incremental_logger->empty())
     {
         dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "No data to post, skipping";
+        m_dataWasSent = false; // No data was sent
         return true; // Nothing to post
     }
     std::string url = getPostDataUrl();
@@ -153,6 +154,9 @@ bool TrustedSourcesConfidenceCalculator::postData()
         url);
     if (!ok) {
         dbgError(D_WAAP_CONFIDENCE_CALCULATOR) << "Failed to post collected data to: " << url;
+        m_dataWasSent = false; // Failed to send data
+    } else {
+        m_dataWasSent = true; // Successfully sent data
     }
     return ok;
 }
@@ -385,6 +389,19 @@ void TrustedSourcesConfidenceCalculator::reset()
 {
     m_persistent_state.clear();
     m_incremental_logger->clear();
+}
+
+void TrustedSourcesConfidenceCalculator::reset(std::chrono::seconds newIntervalDuration)
+{
+    std::chrono::seconds currentInterval = getIntervalDuration();
+    
+    if (currentInterval == newIntervalDuration) {
+        return;  // No change needed
+    }
+    
+    reset();  // Clear state before updating interval
+    setInterval(newIntervalDuration);
+    return;
 }
 
 void TrustedSourcesConfidenceCalculator::mergeIncrementalToPersistent()

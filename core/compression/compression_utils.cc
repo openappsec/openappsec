@@ -112,6 +112,7 @@ struct CompressionStream
 {
     CompressionStream()
         :
+    compression_type(CompressionType::UNKNOWN_COMPRESSION),
     br_encoder_state(nullptr),
     br_decoder_state(nullptr)
     {
@@ -120,12 +121,29 @@ struct CompressionStream
 
     ~CompressionStream() { fini(); }
 
+    void
+    setCompressionType(CompressionType type)
+    {
+        compression_type = type;
+    }
+
     tuple<basic_string<unsigned char>, bool>
     decompress(const unsigned char *data, uint32_t size)
     {
-        if (state == TYPE::UNINITIALIZED && size > 0 && isBrotli(data, size)) return decompressBrotli(data, size);
-
         if (state == TYPE::DECOMPRESS_BROTLI) return decompressBrotli(data, size);
+
+        if (state == TYPE::UNINITIALIZED && size > 0) {
+            switch (compression_type) {
+                case CompressionType::BROTLI:
+                    return decompressBrotli(data, size);
+                case CompressionType::GZIP:
+                case CompressionType::ZLIB:
+                    break;
+                default:
+                    if (isBrotli(data, size)) return decompressBrotli(data, size);
+                    break;
+            }
+        }
 
         initInflate();
         if (state != TYPE::DECOMPRESS) throw runtime_error("Could not start decompression");
@@ -374,8 +392,8 @@ private:
             );
 
             if (result == BROTLI_DECODER_RESULT_ERROR) {
-                fini();
                 auto error_msg = string(BrotliDecoderErrorString(BrotliDecoderGetErrorCode(br_decoder_state)));
+                fini();
                 throw runtime_error("Brotli decompression error: " + error_msg);
             }
 
@@ -418,6 +436,11 @@ private:
     isBrotli(const unsigned char *data, uint32_t size)
     {
         if (size < 4) return false;
+
+        // Reject known non-Brotli formats to avoid false positives (e.g. gzip mistaken for Brotli).
+        if (size >= 2 && data[0] == 0x1f && data[1] == 0x8b) return false;  // gzip magic
+        if (size >= 2 && data[0] == 0x78 && (data[1] == 0x01 || data[1] == 0x9c || data[1] == 0xda))
+            return false;  // zlib magic
 
         BrotliDecoderState* test_decoder = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
         if (!test_decoder) return false;
@@ -503,6 +526,7 @@ private:
         }
     }
 
+    CompressionType compression_type;
     z_stream stream;
         enum class TYPE {
         UNINITIALIZED,
@@ -606,4 +630,18 @@ decompressData(
     }
 
     return result;
+}
+
+DecompressionResult
+decompressDataSafe(
+    CompressionStream *compression_stream,
+    const CompressionType compression_type,
+    const uint32_t compressed_data_size,
+    const unsigned char *compressed_data
+)
+{
+    if (compression_stream != nullptr) {
+        compression_stream->setCompressionType(compression_type);
+    }
+    return decompressData(compression_stream, compressed_data_size, compressed_data);
 }
