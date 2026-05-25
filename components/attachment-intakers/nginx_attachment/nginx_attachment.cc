@@ -203,6 +203,13 @@ public:
 
         dbgInfo(D_NGINX_ATTACHMENT) << "Async mode configuration: enabled=" << attachment_config.isAsyncModeEnabled();
 
+        ofstream agent_metadata_stream(SHARED_MEM_PATH "agent-metadata", ofstream::out);
+        if (agent_metadata_stream.is_open()) {
+            agent_metadata_stream << "EFFECTIVE_SHM_SEGMENT_SIZE=4096\n";
+        } else {
+            dbgWarning(D_NGINX_ATTACHMENT) << "Failed to write agent metadata file";
+        }
+
         nginx_attachment_metric.init(
             "Nginx Attachment data",
             ReportIS::AudienceTeam::AGENT_CORE,
@@ -349,6 +356,7 @@ public:
     fini()
     {
         resetCompressionDebugFunctionsToStandardError();
+        remove(SHARED_MEM_PATH "agent-metadata");
 
         if (server_sock > 0) {
             i_socket->closeSocket(server_sock);

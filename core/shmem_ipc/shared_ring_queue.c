@@ -210,12 +210,13 @@ getEffectiveSegmentSize()
             }
         }
         
-        g_effective_segment_size = isLargerDataSegmentSupported() ? sizeof(DataSegment) : sizeof(DataSegmentBC);
+        int larger_supported = isLargerDataSegmentSupported();
+        g_effective_segment_size = larger_supported ? sizeof(DataSegment) : sizeof(DataSegmentBC);
         writeDebug(
             WarningLevel,
             "Effective segment size determined: %u (larger segment supported: %d)",
             g_effective_segment_size,
-            isLargerDataSegmentSupported()
+            larger_supported
         );
     }
 
