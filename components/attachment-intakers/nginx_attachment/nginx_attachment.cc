@@ -203,6 +203,13 @@ public:
 
         dbgInfo(D_NGINX_ATTACHMENT) << "Async mode configuration: enabled=" << attachment_config.isAsyncModeEnabled();
 
+        ofstream agent_metadata_stream(SHARED_MEM_PATH "agent-metadata", ofstream::out);
+        if (agent_metadata_stream.is_open()) {
+            agent_metadata_stream << "EFFECTIVE_SHM_SEGMENT_SIZE=4096\n";
+        } else {
+            dbgWarning(D_NGINX_ATTACHMENT) << "Failed to write agent metadata file";
+        }
+
         nginx_attachment_metric.init(
             "Nginx Attachment data",
             ReportIS::AudienceTeam::AGENT_CORE,
@@ -349,6 +356,7 @@ public:
     fini()
     {
         resetCompressionDebugFunctionsToStandardError();
+        remove(SHARED_MEM_PATH "agent-metadata");
 
         if (server_sock > 0) {
             i_socket->closeSocket(server_sock);
@@ -580,8 +588,8 @@ private:
             }
         }
 
-        // Initialize secondary sync IPC if not already initialized
-        if (secondary_attachment_sync_ipc == nullptr) {
+        // Initialize secondary sync IPC if not already initialized (only needed in async mode)
+        if (attachment_config.isAsyncModeEnabled() && secondary_attachment_sync_ipc == nullptr) {
             string secondary_unique_id = curr_instance_unique_id + "_sync";
             secondary_attachment_sync_ipc = initIpc(
                 secondary_unique_id.c_str(),
@@ -1940,24 +1948,25 @@ private:
 
         dbgAssert(sock.unpack() > 0) << alert << "The generated server socket is OK, yet negative";
         server_sock = sock.unpack();
+        if (attachment_config.isAsyncModeEnabled()) {
+            Maybe<I_Socket::socketFd> secondary_sock = i_socket->genSocket(
+                I_Socket::SocketType::UNIX,
+                true,
+                true,
+                shared_verdict_signal_path + "_secondary"
+            );
+            if (SHOULD_FAIL(
+                secondary_sock.ok(), IntentionalFailureHandler::FailureType::CreateSocket, &did_fail_on_purpose
+            )) {
+                dbgWarning(D_NGINX_ATTACHMENT)
+                    << "Failed to open a secondary server socket. Error: "
+                    << (did_fail_on_purpose ? "Intentional Failure" : secondary_sock.getErr());
+                return false;
+            }
 
-        Maybe<I_Socket::socketFd> secondary_sock = i_socket->genSocket(
-            I_Socket::SocketType::UNIX,
-            true,
-            true,
-            shared_verdict_signal_path + "_secondary"
-        );
-        if (SHOULD_FAIL(
-            secondary_sock.ok(), IntentionalFailureHandler::FailureType::CreateSocket, &did_fail_on_purpose
-        )) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Failed to open a secondary server socket. Error: "
-                << (did_fail_on_purpose ? "Intentional Failure" : secondary_sock.getErr());
-            return false;
+            dbgAssert(secondary_sock.unpack() > 0) << alert << "The generated secondary server socket is OK, yet negative";
+            secondary_server_sock = secondary_sock.unpack();
         }
-
-        dbgAssert(secondary_sock.unpack() > 0) << alert << "The generated secondary server socket is OK, yet negative";
-        secondary_server_sock = secondary_sock.unpack();
 
         I_MainLoop::Routine accept_attachment_routine =
             [this] ()
@@ -2081,65 +2090,67 @@ private:
             true
         );
 
-        I_MainLoop::Routine secondary_accept_attachment_routine =
-            [this] ()
-            {
-                bool did_fail_on_purpose = false;
-                Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(secondary_server_sock, true);
-                if (SHOULD_FAIL(
-                    new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
-                )) {
-                    dbgWarning(D_NGINX_ATTACHMENT) << "Failed to accept a new socket. Error: "
-                    << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
-                    return;
-                }
-                dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
-                I_Socket::socketFd secondary_attachment_sock_tmp = new_sock.unpack();
-                if (secondary_attachment_sock > 0 && secondary_attachment_sock != secondary_attachment_sock_tmp) {
-                    i_socket->closeSocket(secondary_attachment_sock);
-                }
-                secondary_attachment_sock = secondary_attachment_sock_tmp;
+        if (attachment_config.isAsyncModeEnabled()) {
+            I_MainLoop::Routine secondary_accept_attachment_routine =
+                [this] ()
+                {
+                    bool did_fail_on_purpose = false;
+                    Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(secondary_server_sock, true);
+                    if (SHOULD_FAIL(
+                        new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
+                    )) {
+                        dbgWarning(D_NGINX_ATTACHMENT) << "Failed to accept a new socket. Error: "
+                        << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
+                        return;
+                    }
+                    dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
+                    I_Socket::socketFd secondary_attachment_sock_tmp = new_sock.unpack();
+                    if (secondary_attachment_sock > 0 && secondary_attachment_sock != secondary_attachment_sock_tmp) {
+                        i_socket->closeSocket(secondary_attachment_sock);
+                    }
+                    secondary_attachment_sock = secondary_attachment_sock_tmp;
 
-                if (
-                    secondary_attachment_routine_id > 0
-                    && mainloop->doesRoutineExist(secondary_attachment_routine_id)
-                ) {
-                    mainloop->stop(secondary_attachment_routine_id);
-                    secondary_attachment_routine_id = 0;
-                }
+                    if (
+                        secondary_attachment_routine_id > 0
+                        && mainloop->doesRoutineExist(secondary_attachment_routine_id)
+                    ) {
+                        mainloop->stop(secondary_attachment_routine_id);
+                        secondary_attachment_routine_id = 0;
+                    }
 
-                secondary_attachment_routine_id = mainloop->addFileRoutine(
-                    I_MainLoop::RoutineType::RealTime,
-                    secondary_attachment_sock,
-                    [this] () mutable
-                    {
-                        auto on_exit = make_scope_exit(
-                            [this]()
-                            {
-                                nginx_attachment_event.notify();
-                                nginx_attachment_event.resetAllCounters();
-                                nginx_intaker_event.notify();
-                                nginx_intaker_event.resetAllCounters();
+                    secondary_attachment_routine_id = mainloop->addFileRoutine(
+                        I_MainLoop::RoutineType::RealTime,
+                        secondary_attachment_sock,
+                        [this] () mutable
+                        {
+                            auto on_exit = make_scope_exit(
+                                [this]()
+                                {
+                                    nginx_attachment_event.notify();
+                                    nginx_attachment_event.resetAllCounters();
+                                    nginx_intaker_event.notify();
+                                    nginx_intaker_event.resetAllCounters();
+                                }
+                            );
+
+                            while (isSignalPending(secondary_attachment_sock)) {
+                                dbgTrace(D_NGINX_ATTACHMENT) << "Processing secondary attachment socket";
+                                if (!handleInspection(secondary_attachment_sock, secondary_attachment_sync_ipc)) break;
                             }
-                        );
+                        },
+                        "Secondary Nginx Attachment inspection handler",
+                        true
+                    );
+                };
 
-                        while (isSignalPending(secondary_attachment_sock)) {
-                            dbgTrace(D_NGINX_ATTACHMENT) << "Processing secondary attachment socket";
-                            if (!handleInspection(secondary_attachment_sock, secondary_attachment_sync_ipc)) break;
-                        }
-                    },
-                    "Secondary Nginx Attachment inspection handler",
-                    true
-                );
-            };
-
-        mainloop->addFileRoutine(
-            I_MainLoop::RoutineType::System,
-            secondary_server_sock,
-            secondary_accept_attachment_routine,
-            "Nginx Secondary Attachment registration listener",
-            true
-        );
+            mainloop->addFileRoutine(
+                I_MainLoop::RoutineType::System,
+                secondary_server_sock,
+                secondary_accept_attachment_routine,
+                "Nginx Secondary Attachment registration listener",
+                true
+            );
+        }
 
         return true;
     }
