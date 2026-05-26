@@ -72,7 +72,7 @@ getQueueParams(const char *location_name)
 {
     int i;
     initializeQueueParams();
-    
+
     for (i = 0; i < MAX_QUEUES; i++) {
         if (g_queue_params[i].in_use && strcmp(g_queue_params[i].location_name, location_name) == 0) {
             return &g_queue_params[i];
@@ -86,7 +86,7 @@ addQueueParams(const char *location_name, uint16_t num_of_data_segments, int32_t
 {
     int i;
     initializeQueueParams();
-    
+
     for (i = 0; i < MAX_QUEUES; i++) {
         if (g_queue_params[i].in_use && strcmp(g_queue_params[i].location_name, location_name) == 0) {
             g_queue_params[i].num_of_data_segments = num_of_data_segments;
@@ -95,7 +95,7 @@ addQueueParams(const char *location_name, uint16_t num_of_data_segments, int32_t
             return &g_queue_params[i];
         }
     }
-    
+
     // Find empty slot
     for (i = 0; i < MAX_QUEUES; i++) {
         if (!g_queue_params[i].in_use) {
@@ -107,7 +107,7 @@ addQueueParams(const char *location_name, uint16_t num_of_data_segments, int32_t
             return &g_queue_params[i];
         }
     }
-    
+
     writeDebug(WarningLevel, "addQueueParams: No available slots for queue %s", location_name);
     return NULL;
 }
@@ -117,7 +117,7 @@ removeQueueParams(const char *location_name)
 {
     int i;
     initializeQueueParams();
-    
+
     for (i = 0; i < MAX_QUEUES; i++) {
         if (g_queue_params[i].in_use && strcmp(g_queue_params[i].location_name, location_name) == 0) {
             g_queue_params[i].in_use = 0;
@@ -157,35 +157,35 @@ isLargerDataSegmentSupported()
         writeDebug(WarningLevel, "Failed to open attachment metadata file, defaulting to BC segment size: %s", ATTACHMENT_METADATA_FILE_PATH);
         return 0;
     }
-    
+
     while ((read_len = getline(&line, &len, file)) != -1) {
         if (read_len > 0 && line[read_len - 1] == '\n') {
             line[read_len - 1] = '\0';
         }
-        
+
         char *eq_pos = strchr(line, '=');
         if (eq_pos != NULL) {
             *eq_pos = '\0';
             char *key = line;
             char *value = eq_pos + 1;
-            
+
             if (strlen(key) > 0 && strlen(value) > 0) {
                 writeDebug(TraceLevel, "Setting environment variable from metadata file: %s=%s", key, value);
                 setenv(key, value, 1);
             }
         }
     }
-    
+
     free(line);
     fclose(file);
-    
+
     effective_size_str = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
     if (effective_size_str != NULL) {
         int effective_size = atoi(effective_size_str);
         writeDebug(TraceLevel, "Found EFFECTIVE_SHM_SEGMENT_SIZE from metadata: %d", effective_size);
         return (effective_size > SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC) ? 1 : 0;
     }
-    
+
     return 1;
 }
 
@@ -194,7 +194,7 @@ getEffectiveSegmentSize()
 {
     if (!g_effective_size_initialized) {
         g_effective_size_initialized = 1;
-        
+
         char *effective_size_str = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
         if (effective_size_str != NULL) {
             int effective_size = atoi(effective_size_str);
@@ -209,7 +209,7 @@ getEffectiveSegmentSize()
                 return g_effective_segment_size;
             }
         }
-        
+
         int larger_supported = isLargerDataSegmentSupported();
         g_effective_segment_size = larger_supported ? sizeof(DataSegment) : sizeof(DataSegmentBC);
         writeDebug(
@@ -247,7 +247,7 @@ static char *
 getDataSegmentAddress(SharedRingQueue *queue, uint16_t segment_idx)
 {
     uint16_t effective_segment_size = getEffectiveSegmentSize();
-    
+
     if (effective_segment_size == SHARED_MEMORY_SEGMENT_ENTRY_SIZE) {
         return queue->data_segment[segment_idx].data;
     } else {
@@ -276,7 +276,7 @@ isThereEnoughMemoryInQueue(SharedRingQueue *queue, uint16_t write_pos, uint16_t 
     int res;
     QueueParams *params = getQueueParams(queue->shared_location_name);
     uint16_t num_of_data_segments;
-    
+
     if (params == NULL) return 0;
     num_of_data_segments = params->num_of_data_segments;
 
@@ -312,7 +312,7 @@ static int
 isGetPossitionSucceccful(SharedRingQueue *queue, uint16_t *read_pos, uint16_t *write_pos)
 {
     QueueParams *params = getQueueParams(queue->shared_location_name);
-    
+
     if (params == NULL) return 0;
     if (params->num_of_data_segments == 0) return 0;
 
@@ -337,13 +337,13 @@ resetRingQueue(SharedRingQueue *queue, uint16_t num_of_data_segments)
     queue->read_pos = 0;
     queue->write_pos = 0;
     queue->num_of_data_segments = num_of_data_segments;
-    
+
     // Update queue params if exists
     params = getQueueParams(queue->shared_location_name);
     if (params != NULL) {
         params->num_of_data_segments = num_of_data_segments;
     }
-    
+
     buffer_mgmt = (uint16_t *)queue->mgmt_segment.data;
     for (idx = 0; idx < queue->num_of_data_segments; idx++) {
         buffer_mgmt[idx] = empty_buff_mgmt_magic;
@@ -361,7 +361,7 @@ createSharedRingQueue(const char *shared_location_name, uint16_t num_of_data_seg
     unsigned int idx;
 
     (void)is_tx;  // Parameter kept for API compatibility but no longer used
-    
+
     writeDebug(TraceLevel, "Creating a new shared ring queue");
 
     g_effective_size_initialized = 0;
@@ -472,12 +472,12 @@ destroySharedRingQueue(SharedRingQueue *queue, int is_owner, int is_tx)
     uint32_t size_of_memory;
     int32_t fd = 0;
     char location_name[MAX_ONE_WAY_QUEUE_NAME_LENGTH];
-    
+
     (void)is_tx;  // Parameter kept for API compatibility but no longer used
 
     snprintf(location_name, MAX_ONE_WAY_QUEUE_NAME_LENGTH, "%s", queue->shared_location_name);
     params = getQueueParams(location_name);
-    
+
     if (params != NULL) {
         size_of_memory = params->memory_size;
         fd = params->fd;
@@ -566,7 +566,7 @@ peekToQueue(SharedRingQueue *queue, const char **output_buffer, uint16_t *output
         writeDebug(WarningLevel, "Corrupted shared memory - cannot peek");
         return -1;
     }
-    
+
     params = getQueueParams(queue->shared_location_name);
     if (params == NULL) {
         writeDebug(WarningLevel, "peekToQueue: Queue parameters not found");
@@ -606,7 +606,7 @@ peekToQueue(SharedRingQueue *queue, const char **output_buffer, uint16_t *output
 
     *output_buffer_size = buffer_mgmt[read_pos];
     *output_buffer = getDataSegmentAddress(queue, read_pos);
-    
+
     queue->read_pos = read_pos;
 
     writeDebug(
@@ -642,7 +642,7 @@ pushBuffersToQueue(
         writeDebug(WarningLevel, "Corrupted shared memory - cannot push new buffers");
         return -1;
     }
-    
+
     params = getQueueParams(queue->shared_location_name);
     if (params == NULL) {
         writeDebug(WarningLevel, "pushBuffersToQueue: Queue parameters not found");
@@ -761,7 +761,7 @@ popFromQueue(SharedRingQueue *queue)
         writeDebug(WarningLevel, "Corrupted shared memory - cannot pop data");
         return -1;
     }
-    
+
     params = getQueueParams(queue->shared_location_name);
     if (params == NULL) {
         writeDebug(WarningLevel, "popFromQueue: Queue parameters not found");
@@ -830,7 +830,7 @@ int
 isCorruptedQueue(SharedRingQueue *queue, int is_tx)
 {
     QueueParams *params = getQueueParams(queue->shared_location_name);
-    
+
     writeDebug(
         TraceLevel,
         "Checking if shared ring queue is corrupted. "
