@@ -663,6 +663,9 @@ MainloopComponent::Impl::addFileRoutine(
                     throw;
                 }
                 active_file_callbacks.erase(routine_id);
+                if ((s_poll.revents & (POLLHUP | POLLERR | POLLNVAL)) != 0) {
+                    terminal_file_routines.insert(routine_id);
+                }
                 if (priority == I_MainLoop::RoutineType::RealTime) {
                     if (s_poll.revents & POLLHUP) {
                         updateCurrentStress(false);

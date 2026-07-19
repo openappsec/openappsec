@@ -2,6 +2,8 @@
 #include "mainloop.h"
 
 #include <fcntl.h>
+#include <poll.h>
+#include <sys/socket.h>
 #include <chrono>
 #include <thread>
 
@@ -605,7 +607,60 @@ TEST_F(MainloopTest, timed_yield_in_file_callback_suspends_descriptor_polling)
     EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
 }
 
-TEST_F(MainloopTest, terminal_file_descriptor_does_not_spin_the_scheduler)
+TEST_F(MainloopTest, readable_eof_does_not_spin_the_scheduler)
+{
+    size_t monotonic_reads = 0;
+    auto start_time = steady_clock::now();
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(
+        InvokeWithoutArgs(
+            [&monotonic_reads, start_time] () {
+                monotonic_reads++;
+                return duration_cast<microseconds>(steady_clock::now() - start_time);
+            }
+        )
+    );
+
+    int socket_fds[2];
+    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, socket_fds));
+    close(socket_fds[1]);
+    auto close_reader = make_scope_exit([&socket_fds] () { close(socket_fds[0]); });
+
+    struct pollfd readiness;
+    readiness.fd = socket_fds[0];
+    readiness.events = POLLIN;
+    readiness.revents = 0;
+    ASSERT_EQ(1, poll(&readiness, 1, 0));
+    ASSERT_NE(0, readiness.revents & POLLIN);
+    ASSERT_NE(0, readiness.revents & POLLHUP);
+
+    size_t callback_count = 0;
+    mainloop->addFileRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        socket_fds[0],
+        [&socket_fds, &callback_count] () {
+            char byte;
+            EXPECT_EQ(0, read(socket_fds[0], &byte, 1));
+            callback_count++;
+        },
+        "closed socket reader",
+        true
+    );
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        [this] () {
+            mainloop->yield(milliseconds(250));
+            mainloop->stopAll();
+        },
+        "terminal descriptor timeout",
+        false
+    );
+
+    mainloop->run();
+    EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
+    EXPECT_LT(callback_count, 10u) << "EOF callback ran " << callback_count << " times";
+}
+
+TEST_F(MainloopTest, terminal_only_event_does_not_spin_the_scheduler)
 {
     size_t monotonic_reads = 0;
     auto start_time = steady_clock::now();
