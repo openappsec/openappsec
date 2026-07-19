@@ -14,13 +14,18 @@
 #include "mainloop.h"
 
 #include <cstddef>
+#include <cerrno>
+#include <climits>
+#include <cstdint>
 #include <memory>
 #include <system_error>
 #include <map>
+#include <set>
 #include <sstream>
 #include <poll.h>
 #include <unistd.h>
 #include <functional>
+#include <vector>
 
 #include "config.h"
 #include "coroutine.h"
@@ -43,6 +48,8 @@ class MainloopStop {};
 class MainloopComponent::Impl : Singleton::Provide<I_MainLoop>::From<MainloopComponent>
 {
     using RoutineMap = map<RoutineID, RoutineWrapper>;
+    using FileRoutineMap = map<RoutineID, int>;
+    using WakeupMap = map<RoutineID, chrono::microseconds>;
 
 public:
     void run() override;
@@ -145,6 +152,12 @@ public:
 private:
     void reportStartupEvent();
     void stop(const RoutineMap::iterator &iter);
+    bool canWaitForEvents(bool has_primary_routines, chrono::microseconds current_time) const;
+    chrono::microseconds getIdleWaitDuration(
+        chrono::microseconds current_time,
+        chrono::microseconds maximum_wait
+    ) const;
+    void waitForEvents(chrono::microseconds timeout);
     uint32_t getCurrentTimeSlice(uint32_t current_stress, int idle_time_slice, int busy_time_slice);
     RoutineID getNextID();
 
@@ -165,6 +178,10 @@ private:
     I_Environment *env = nullptr;
 
     RoutineMap routines;
+    FileRoutineMap file_routines;
+    WakeupMap routine_wakeup_times;
+    set<RoutineID> active_file_callbacks;
+    set<RoutineID> terminal_file_routines;
     RoutineMap::iterator curr_iter = routines.end();
     RoutineID next_routine_id = 0;
 
@@ -197,6 +214,114 @@ static I_MainLoop::RoutineType rounds[] = {
     I_MainLoop::RoutineType::RealTime,
     I_MainLoop::RoutineType::Offline,
 };
+
+bool
+MainloopComponent::Impl::canWaitForEvents(
+    bool has_primary_routines,
+    chrono::microseconds current_time) const
+{
+    if (!has_primary_routines) return false;
+
+    bool has_waiting_routine = false;
+    for (const auto &routine : routines) {
+        if (!routine.second.isActive()) continue;
+        if (routine.second.isHalted()) {
+            has_waiting_routine = true;
+            continue;
+        }
+
+        auto wakeup = routine_wakeup_times.find(routine.first);
+        if (wakeup != routine_wakeup_times.end() && current_time < wakeup->second) {
+            has_waiting_routine = true;
+            continue;
+        }
+
+        if (
+            file_routines.find(routine.first) != file_routines.end() &&
+            active_file_callbacks.find(routine.first) == active_file_callbacks.end()
+        ) {
+            has_waiting_routine = true;
+            continue;
+        }
+
+        return false;
+    }
+
+    return has_waiting_routine;
+}
+
+chrono::microseconds
+MainloopComponent::Impl::getIdleWaitDuration(
+    chrono::microseconds current_time,
+    chrono::microseconds maximum_wait) const
+{
+    chrono::microseconds wait_time = maximum_wait;
+    for (const auto &wakeup : routine_wakeup_times) {
+        auto routine = routines.find(wakeup.first);
+        if (
+            routine == routines.end() ||
+            !routine->second.isActive() ||
+            routine->second.isHalted()
+        ) {
+            continue;
+        }
+
+        if (wakeup.second <= current_time) return chrono::microseconds::zero();
+        wait_time = min(wait_time, wakeup.second - current_time);
+    }
+    return wait_time;
+}
+
+void
+MainloopComponent::Impl::waitForEvents(chrono::microseconds timeout)
+{
+    if (timeout <= chrono::microseconds::zero()) return;
+
+    vector<struct pollfd> poll_fds;
+    vector<RoutineID> poll_ids;
+    poll_fds.reserve(file_routines.size());
+    poll_ids.reserve(file_routines.size());
+    for (const auto &file_routine : file_routines) {
+        auto routine = routines.find(file_routine.first);
+        if (
+            routine == routines.end() ||
+            !routine->second.isActive() ||
+            routine->second.isHalted() ||
+            terminal_file_routines.find(file_routine.first) != terminal_file_routines.end() ||
+            active_file_callbacks.find(file_routine.first) != active_file_callbacks.end()
+        ) {
+            continue;
+        }
+
+        struct pollfd descriptor;
+        descriptor.fd = file_routine.second;
+        descriptor.events = POLLIN;
+        descriptor.revents = 0;
+        poll_fds.push_back(descriptor);
+        poll_ids.push_back(file_routine.first);
+    }
+
+    auto timeout_count = timeout.count();
+    int timeout_in_msec = timeout_count >= static_cast<int64_t>(INT_MAX) * 1000
+        ? INT_MAX
+        : static_cast<int>((timeout_count + 999) / 1000);
+    int rc = poll(poll_fds.data(), poll_fds.size(), timeout_in_msec);
+    if (rc < 0 && errno != EINTR) {
+        dbgWarning(D_MAINLOOP)
+            << "Failed to wait for mainloop events: "
+            << error_code(errno, generic_category()).message();
+    } else if (rc > 0) {
+        for (size_t i = 0; i < poll_fds.size(); i++) {
+            if ((poll_fds[i].revents & POLLIN) != 0) {
+                terminal_file_routines.erase(poll_ids[i]);
+            } else if ((poll_fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) != 0) {
+                // A terminal-only event stays ready forever. Stop including it in the
+                // central wait so an abandoned descriptor cannot spin the scheduler.
+                terminal_file_routines.insert(poll_ids[i]);
+            }
+        }
+    }
+}
 
 void
 MainloopComponent::Impl::reportStartupEvent()
@@ -266,6 +391,8 @@ MainloopComponent::Impl::run()
     int idle_time_slice = getConfigurationWithDefault<int>(1500, "Mainloop", "Idle routine time slice");
     int busy_time_slice = getConfigurationWithDefault<int>(100, "Mainloop", "Busy routine time slice");
     int exceed_warning_slice = getConfigurationWithDefault(100, "Mainloop", "Exceed Warning");
+    uint idle_event_wait_timeout =
+        getConfigurationWithDefault<uint>(100, "Mainloop", "Idle event wait timeout in msec");
 
     while (has_primary_routines) {
         mainloop_event.setStressValue(current_stress);
@@ -273,6 +400,8 @@ MainloopComponent::Impl::run()
             idle_time_slice = getConfigurationWithDefault<int>(1500, "Mainloop", "Idle routine time slice");
             busy_time_slice = getConfigurationWithDefault<int>(100, "Mainloop", "Busy routine time slice");
             exceed_warning_slice = getConfigurationWithDefault(100, "Mainloop", "Exceed Warning");
+            idle_event_wait_timeout =
+                getConfigurationWithDefault<uint>(100, "Mainloop", "Idle event wait timeout in msec");
             reload_configuration = false;
         }
         int time_slice_to_use = getCurrentTimeSlice(current_stress, idle_time_slice, busy_time_slice);
@@ -288,13 +417,21 @@ MainloopComponent::Impl::run()
                 break;
             }
             if (!curr_iter->second.isActive()) {
+                file_routines.erase(curr_iter->first);
+                routine_wakeup_times.erase(curr_iter->first);
+                active_file_callbacks.erase(curr_iter->first);
+                terminal_file_routines.erase(curr_iter->first);
                 curr_iter = routines.erase(curr_iter);
                 continue;
             }
 
             if (curr_iter->second.isPrimary()) has_primary_routines = true;
 
-            if (curr_iter->second.shouldRun(rounds[round])) {
+            auto wakeup = routine_wakeup_times.find(curr_iter->first);
+            bool is_waiting =
+                wakeup != routine_wakeup_times.end() &&
+                getTimer()->getMonotonicTime() < wakeup->second;
+            if (!is_waiting && curr_iter->second.shouldRun(rounds[round])) {
                 // Set the time upon which `hasAdditionalTime` will yield.
                 stop_time = getTimer()->getMonotonicTime() + basic_time_slice;
                 dbgTrace(D_MAINLOOP) <<
@@ -351,12 +488,24 @@ MainloopComponent::Impl::run()
 
         uint64_t signed_sleep_time = 0;
         chrono::microseconds current_time = getTimer()->getMonotonicTime();
-        if (start_time + basic_time_slice > current_time) {
+        bool should_wait_for_events =
+            idle_event_wait_timeout > 0 &&
+            current_stress == 0 &&
+            canWaitForEvents(has_primary_routines, current_time);
+        if (should_wait_for_events) {
+            auto maximum_wait = chrono::duration_cast<chrono::microseconds>(
+                chrono::milliseconds(idle_event_wait_timeout)
+            );
+            auto wait_time = getIdleWaitDuration(current_time, maximum_wait);
+            waitForEvents(wait_time);
+            auto after_wait = getTimer()->getMonotonicTime();
+            if (after_wait > current_time) signed_sleep_time = (after_wait - current_time).count();
+        } else if (start_time + basic_time_slice > current_time) {
             chrono::microseconds sleep_time = start_time + basic_time_slice - current_time;
             signed_sleep_time = sleep_time.count();
-            sleep_count += signed_sleep_time;
             usleep(signed_sleep_time);
         }
+        sleep_count += signed_sleep_time;
 
         mainloop_event.setSleepTime(signed_sleep_time);
         mainloop_event.notify();
@@ -377,6 +526,10 @@ MainloopComponent::Impl::run()
     dbgInfo(D_MAINLOOP) << "Mainloop ended - stopping all routines";
     stopAll();
     routines.clear();
+    file_routines.clear();
+    routine_wakeup_times.clear();
+    active_file_callbacks.clear();
+    terminal_file_routines.clear();
 }
 
 string
@@ -500,7 +653,16 @@ MainloopComponent::Impl::addFileRoutine(
             s_poll.revents = 0;
             int rc = poll(&s_poll, 1, 0);
             if (rc > 0 && (s_poll.revents & POLLIN) != 0) {
-                func();
+                RoutineID routine_id = curr_iter->first;
+                terminal_file_routines.erase(routine_id);
+                active_file_callbacks.insert(routine_id);
+                try {
+                    func();
+                } catch (...) {
+                    active_file_callbacks.erase(routine_id);
+                    throw;
+                }
+                active_file_callbacks.erase(routine_id);
                 if (priority == I_MainLoop::RoutineType::RealTime) {
                     if (s_poll.revents & POLLHUP) {
                         updateCurrentStress(false);
@@ -515,7 +677,9 @@ MainloopComponent::Impl::addFileRoutine(
         }
     };
 
-    return addOneTimeRoutine(priority, func_wrapper, routine_name, is_primary);
+    RoutineID id = addOneTimeRoutine(priority, func_wrapper, routine_name, is_primary);
+    file_routines.emplace(id, fd);
+    return id;
 }
 
 bool
@@ -550,14 +714,20 @@ MainloopComponent::Impl::yield(bool force)
 void
 MainloopComponent::Impl::yield(chrono::microseconds time)
 {
+    if (time < chrono::microseconds::zero()) return;
     if (time == chrono::microseconds::zero()) {
         yield(true);
         return;
     }
-    chrono::microseconds restart_time = getTimer()->getMonotonicTime() + time;
-    while (getTimer()->getMonotonicTime() < restart_time) {
-        yield(true);
+    if (curr_iter == routines.end()) {
+        dbgAssertOpt(curr_iter != routines.end()) << alert << "Calling 'yield' without a running current routine";
+        return;
     }
+
+    RoutineID routine_id = curr_iter->first;
+    routine_wakeup_times[routine_id] = getTimer()->getMonotonicTime() + time;
+    yield(true);
+    routine_wakeup_times.erase(routine_id);
 }
 
 void
@@ -704,6 +874,7 @@ MainloopComponent::preload()
 {
     registerExpectedConfiguration<int>("Mainloop", "Idle routine time slice");
     registerExpectedConfiguration<int>("Mainloop", "Busy routine time slice");
+    registerExpectedConfiguration<uint>("Mainloop", "Idle event wait timeout in msec");
     registerExpectedConfiguration<uint>("Mainloop", "metric reporting interval");
     registerExpectedConfiguration<uint>("Mainloop", "Exceed Warning");
     registerExpectedConfiguration<bool>("Mainloop", "Report Startup Event");
