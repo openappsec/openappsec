@@ -31,7 +31,10 @@
 #include "ParserBinaryFile.h"
 #include "ParserKnownBenignSkipper.h"
 #include "ParserScreenedJson.h"
+#include "ParserDefaultSpecial.h"
 #include "WaapAssetState.h"
+#include "../include/i_waapConfig.h"
+#include "WaapOverride.h"
 #include "Waf2Regex.h"
 #include "Waf2Util.h"
 #include "debug.h"
@@ -64,7 +67,8 @@ DeepParser::DeepParser(
     m_globalMaxObjectDepth(std::numeric_limits<size_t>::max()),
     m_localMaxObjectDepth(0),
     m_globalMaxObjectDepthReached(false),
-    m_is_wbxml(false)
+    m_is_wbxml(false),
+    m_cachedDedicatedParsersPolicy(nullptr)
 {}
 
 DeepParser::~DeepParser()
@@ -87,6 +91,7 @@ DeepParser::clear()
     kv_pairs.clear();
     m_keywordInfo.clear();
     m_multipart_boundary = "";
+    m_cachedDedicatedParsersPolicy = nullptr;
 }
 
 size_t
@@ -192,15 +197,42 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     if (shouldUpdateKeyStack) {
         m_key.push(k, k_len);
     }
-    // Maintain dot-delimited key stack
+    // Derive payload-type booleans and canonical location label in a single pass.
+    // Size checks provide fast rejection before full string comparison.
+    const std::string& keyFirst = m_key.first();
+    const size_t keyFirstLen = keyFirst.size();
 
-    bool isUrlParamPayload = (m_key.first().size() == 9 && m_key.first() == "url_param");
-    bool isRefererParamPayload = (m_key.first().size() == 13 && m_key.first() == "referer_param");
-    bool isRefererPayload = (m_key.first().size() == 7 && m_key.first().find("referer") == 0);
-    bool isUrlPayload = (m_key.first().size() == 3 && m_key.first().find("url") == 0);
-    bool isHeaderPayload = (m_key.first().size() == 6 && m_key.first() == "header");
-    bool isCookiePayload = (m_key.first().size() == 6 && m_key.first() == "cookie");
-    bool isBodyPayload = (m_key.first().size() == 4 && m_key.first() == "body");
+    bool isBodyPayload = false;
+    bool isUrlParamPayload = false;
+    bool isUrlPayload = false;
+    bool isHeaderPayload = false;
+    bool isCookiePayload = false;
+    bool isRefererParamPayload = false;
+    bool isRefererPayload = false;
+    std::string locationLabel;
+
+    if (keyFirstLen == 4 && keyFirst == "body") {
+        isBodyPayload = true;
+        locationLabel = "body";
+    } else if (keyFirstLen == 9 && keyFirst == "url_param") {
+        isUrlParamPayload = true;
+        locationLabel = "url_param";
+    } else if (keyFirstLen == 13 && keyFirst == "referer_param") {
+        isRefererParamPayload = true;
+        locationLabel = "referer_param";
+    } else if (keyFirstLen == 7 && keyFirst == "referer") {
+        isRefererPayload = true;
+        locationLabel = "referer";
+    } else if (keyFirstLen == 3 && keyFirst == "url") {
+        isUrlPayload = true;
+        locationLabel = "url";
+    } else if (keyFirstLen == 6 && keyFirst == "header") {
+        isHeaderPayload = true;
+        locationLabel = "header";
+    } else if (keyFirstLen == 6 && keyFirst == "cookie") {
+        isCookiePayload = true;
+        locationLabel = "cookie";
+    }
 
 
     if (isBodyPayload && v_len < 32 && k_len == 11 &&
@@ -290,6 +322,25 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
 
     // TODO:: do we need to construct std::string for this in this function??
     std::string cur_val = std::string(v, v_len);
+
+    // Detect a JWT and re-scan its decoded claims (attacks often hide in a base64url-encoded claim).
+    std::string jwtDecodedHeader, jwtDecodedPayload;
+    if (Waap::Util::splitAndDecodeJwt(cur_val, jwtDecodedHeader, jwtDecodedPayload)) {
+        static const char *jwtKey = "#jwt";
+        constexpr size_t jwtKeyLen = sizeof("#jwt") - 1; // strlen("#jwt")
+        dbgTrace(D_WAAP_DEEP_PARSER) << "DeepParser::onKv(): JWT detected - scanning decoded claims.";
+        const std::string *jwtSegments[] = { &jwtDecodedPayload, &jwtDecodedHeader };
+        for (const std::string *seg : jwtSegments) {
+            rc = onKv(jwtKey, jwtKeyLen, seg->data(), seg->size(), flags, parser_depth);
+            if (rc != CONTINUE_PARSING) {
+                if (shouldUpdateKeyStack) {
+                    m_key.pop("deep parser key");
+                }
+                m_depth--;
+                return rc;
+            }
+        }
+    }
 
     // Detect and decode potential base64 chunks in the value before further processing
 
@@ -423,6 +474,8 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
     Waap::Util::decodeUtf16Value(valueStats, cur_val);
 
     // First buffer in stream
+    bool b64DataEncoded = !base64ParamFound
+        && base64BinaryFileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE;
     int offset;
     if (flags & BUFFERED_RECEIVER_F_FIRST) {
         offset = createInternalParser(
@@ -436,9 +489,11 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             isUrlPayload,
             isUrlParamPayload,
             isCookiePayload,
+            locationLabel,
             flags,
             parser_depth,
-            base64BinaryFileType
+            base64BinaryFileType,
+            b64DataEncoded
         );
     } else {
         offset = 0;
@@ -488,9 +543,11 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
             isUrlPayload,
             isUrlParamPayload,
             isCookiePayload,
+            locationLabel,
             flags,
             parser_depth,
-            base64BinaryFileType
+            base64BinaryFileType,
+            b64DataEncoded
         );
         if (offset >= 0) {
             dbgTrace(D_WAAP_DEEP_PARSER) << "2nd pass of createInternalParser succeeded. Update values and proceed";
@@ -552,6 +609,7 @@ DeepParser::onKv(const char *k, size_t k_len, const char *v, size_t v_len, int f
                 isUrlPayload,
                 isUrlParamPayload,
                 isCookiePayload,
+                locationLabel,
                 flags,
                 parser_depth,
                 base64ParamFound,
@@ -926,6 +984,7 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
     bool isUrlPayload,
     bool isUrlParamPayload,
     bool isCookiePayload,
+    const std::string &locationLabel,
     int flags,
     size_t parser_depth,
     bool base64ParamFound,
@@ -934,6 +993,8 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
     int offset = -1;
     int rc = 0;
     bool shouldUpdateKeyStack = (flags & BUFFERED_RECEIVER_F_UNNAMED) == 0;
+    bool b64DataEncoded = !base64ParamFound
+        && b64FileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE;
     if (flags & BUFFERED_RECEIVER_F_FIRST) {
         offset = createInternalParser(
             k,
@@ -946,9 +1007,11 @@ DeepParser::parseAfterMisleadingMultipartBoundaryCleaned(
             isUrlPayload,
             isUrlParamPayload,
             isCookiePayload,
+            locationLabel,
             flags,
             parser_depth,
-            b64FileType
+            b64FileType,
+            b64DataEncoded
         );
     } else {
         offset = 0;
@@ -1039,6 +1102,111 @@ size_t parser_depth
     return ret_val;
 }
 
+void
+DeepParser::initRequestContext()
+{
+    m_cachedDedicatedParsersPolicy = nullptr;
+
+    if (!m_pWaapAssetState || !m_pTransaction) {
+        dbgTrace(D_WAAP_DEEP_PARSER) << "No asset state or transaction";
+        return;
+    }
+
+    const IWaapConfig* waapConfig = m_pTransaction->getSiteConfig();
+    if (!waapConfig) {
+        dbgInfo(D_WAAP_DEEP_PARSER) << "No WAAP config available";
+        return;
+    }
+
+    if (!waapConfig->hasDedicatedParsers()) {
+        dbgTrace(D_WAAP_DEEP_PARSER) << "No dedicated parsers configured";
+        return;
+    }
+
+    m_cachedDedicatedParsersPolicy = waapConfig->get_DedicatedParsersPolicy().get();
+
+    dbgTrace(D_WAAP_DEEP_PARSER)
+        << "Dedicated parsers active: "
+        << waapConfig->get_DedicatedParsersPolicy()->size()
+        << " rules, uri='" << m_pTransaction->getUri()
+        << "', method='"
+        << m_pTransaction->getMethod()
+        << "'";
+}
+
+Maybe<Waap::DedicatedParsers::ParserType>
+DeepParser::getDedicatedParserType(
+    const std::string& paramName,
+    const std::string& location) const
+{
+    // Use the per-request cached policy pointer set by initRequestContext().
+    // Callers must check m_cachedDedicatedParsersPolicy before calling this function;
+    // the guard below is a safety net only.
+    if (!m_cachedDedicatedParsersPolicy) {
+        return genError("No dedicated parsers configured");
+    }
+
+    dbgTrace(D_WAAP_DEEP_PARSER)
+        << "getDedicatedParserType: looking up param='"
+        << paramName
+        << "', uri='"
+        << m_pTransaction->getUri()
+        << "', location='"
+        << location
+        << "', method='"
+        << m_pTransaction->getMethod()
+        << "'";
+
+    return m_cachedDedicatedParsersPolicy->getParserType(
+        paramName, m_pTransaction->getUri(), location, m_pTransaction->getMethod());
+}
+
+int
+DeepParser::createDedicatedParser(
+    Waap::DedicatedParsers::ParserType parserType,
+    size_t parser_depth)
+{
+    using namespace Waap::DedicatedParsers;
+
+    dbgTrace(D_WAAP_DEEP_PARSER) << "Creating dedicated parser: " << parserTypeToString(parserType);
+
+    switch (parserType) {
+        case ParserType::JSON:
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserJson>>(*this, parser_depth + 1, m_pTransaction));
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Created dedicated JSON parser";
+            return 0;
+
+        case ParserType::XML:
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserXML>>(*this, parser_depth + 1));
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Created dedicated XML parser";
+            return 0;
+
+        case ParserType::GRAPHQL:
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserGql>>(*this, parser_depth + 1, m_pTransaction));
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Created dedicated GraphQL parser";
+            return 0;
+
+        case ParserType::HTML:
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserHTML>>(*this, parser_depth + 1));
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Created dedicated HTML parser";
+            return 0;
+
+        case ParserType::DEFAULT_SPECIAL:
+            m_parsersDeque.push_back(
+                std::make_shared<BufferedParser<ParserDefaultSpecial>>(*this, parser_depth + 1));
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Created dedicated DefaultSpecial parser";
+            return 0;
+
+        default:
+            dbgWarning(D_WAAP_DEEP_PARSER) << "Unknown dedicated parser type";
+            return -1;
+    }
+}
+
 
 int
 DeepParser::createInternalParser(
@@ -1052,9 +1220,11 @@ DeepParser::createInternalParser(
     bool isUrlPayload,
     bool isUrlParamPayload,
     bool isCookiePayload,
+    const std::string &locationLabel,
     int flags,
     size_t parser_depth,
-    Waap::Util::BinaryFileType b64FileType
+    Waap::Util::BinaryFileType b64FileType,
+    bool b64DataEncoded
 )
 {
     dbgTrace(D_WAAP_DEEP_PARSER)
@@ -1084,12 +1254,45 @@ DeepParser::createInternalParser(
         << isUrlParamPayload
         << "\n\tisCookiePayload: "
         << isCookiePayload;
+
+    // Check for dedicated parser configuration FIRST (before auto-detection).
+    // m_cachedDedicatedParsersPolicy is set once per request by initRequestContext(); nullptr means no
+    // dedicated parsers are active. This is a zero-cost pointer comparison for the common case.
+    if (m_cachedDedicatedParsersPolicy) {
+        std::string paramName(k, k_len);
+        auto dedicatedParserType = getDedicatedParserType(paramName, locationLabel);
+
+        if (dedicatedParserType.ok()) {
+            int dedicatedOffset = createDedicatedParser(dedicatedParserType.unpack(), parser_depth);
+            if (dedicatedOffset >= 0) {
+                dbgTrace(D_WAAP_DEEP_PARSER)
+                    << "Using dedicated parser for param: "
+                    << paramName
+                    << ", location: "
+                    << locationLabel
+                    << ", type: "
+                    << Waap::DedicatedParsers::parserTypeToString(dedicatedParserType.unpack());
+                return dedicatedOffset;
+            }
+            // Dedicated parser creation failed (e.g. multipart without boundary) - fall through.
+            dbgTrace(D_WAAP_DEEP_PARSER) << "Dedicated parser creation failed, falling back to auto-detection";
+        } else {
+            dbgTrace(D_WAAP_DEEP_PARSER)
+                << "getDedicatedParserType: no match for param='"
+                << paramName
+                << "', location='"
+                << locationLabel
+                << "'";
+        }
+    }
+
     bool isPipesType = false, isSemicolonType = false, isAsteriskType = false, isCommaType = false,
         isAmperType = false;
     bool isKeyValDelimited = false;
     bool isHtmlType = false;
     bool isBinaryType = false;
     int offset = -1;
+
     auto pWaapAssetState = m_pTransaction->getAssetState();
     std::shared_ptr<Signatures> signatures = m_pWaapAssetState->getSignatures();
     if (pWaapAssetState != nullptr && pWaapAssetState->m_filtersMngr != nullptr) {
@@ -1364,9 +1567,12 @@ DeepParser::createInternalParser(
                 }
             }
         } else if (b64FileType != Waap::Util::BinaryFileType::FILE_TYPE_NONE) {
-            dbgTrace(D_WAAP_DEEP_PARSER) << "Starting to parse a known binary file, base64 encoded";
+            dbgTrace(D_WAAP_DEEP_PARSER)
+                << "Starting to parse a known binary file"
+                << (b64DataEncoded ? " (base64 encoded)" : " (decoded)");
             m_parsersDeque.push_back(
-                std::make_shared<BufferedParser<ParserBinaryFile>>(*this, parser_depth + 1, false, b64FileType)
+                std::make_shared<BufferedParser<ParserBinaryFile>>(
+                    *this, parser_depth + 1, b64DataEncoded, b64FileType)
             );
             offset = 0;
         }

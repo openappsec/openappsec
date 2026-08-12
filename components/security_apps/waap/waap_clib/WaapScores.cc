@@ -140,7 +140,7 @@ static void processSpecialLinksForKeyword(
     std::vector<double>& coefArray,
     std::vector<std::string>& keyword_combinations)
 {
-    const std::vector<std::string>& links = scoreBuilder.getSnapshotSpecialLinks(keyword, poolName);
+    const std::vector<std::string> links = scoreBuilder.getSnapshotSpecialLinks(keyword, poolName);
 
     if (links.empty()) {
         return;

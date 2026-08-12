@@ -72,9 +72,13 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"remove_server_header\": 1,\n"
             "\"decompression_pool_size\": 524288,\n"
             "\"recompression_pool_size\": 32768,\n"
+            "\"max_decompressed_body_size\": 12345,\n"
             "\"is_paired_affinity_enabled\": 0,\n"
             "\"is_async_mode_enabled\": 0,\n"
-            "\"is_brotli_inspection_enabled\": 1\n"
+            "\"async_body_stage_timeout_msec\": 500,\n"
+            "\"is_brotli_inspection_enabled\": 1,\n"
+            "\"is_websocket_stream_enabled\": 1,\n"
+            "\"is_max_chunks_to_process_enabled\": 1\n"
         "}\n";
     ofstream valid_configuration_file(attachment_configuration_file_name);
     valid_configuration_file << valid_configuration;
@@ -106,9 +110,12 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(getRemoveResServerHeader(), 1u);
     EXPECT_EQ(getDecompressionPoolSize(), 524288u);
     EXPECT_EQ(getRecompressionPoolSize(), 32768u);
+    EXPECT_EQ(getMaxDecompressedBodySize(), 12345u);
     EXPECT_EQ(getHoldVerdictRetries(), 3u);
     EXPECT_EQ(getHoldVerdictPollingTime(), 1u);
     EXPECT_EQ(getIsBrotliInspectionEnabled(), 1u);
+    EXPECT_EQ(getIsWebSocketStreamEnabled(), 1u);
+    EXPECT_EQ(getIsMaxChunksToProcessEnabled(), 1u);
 
     EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/abc"), 1);
     EXPECT_EQ(isDebugContext("1.2.3.9", "5.6.7.8", 80, "GET", "test", "/abc"), 0);
@@ -136,6 +143,7 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
 
     EXPECT_EQ(isPairedAffinityEnabled(), 0u);
     EXPECT_EQ(isAsyncModeEnabled(), 0u);
+    EXPECT_EQ(getAsyncBodyStageTimeoutMsec(), 500u);
 }
 
 TEST_F(HttpAttachmentUtilTest, CheckIPAddrValidity)
@@ -145,4 +153,186 @@ TEST_F(HttpAttachmentUtilTest, CheckIPAddrValidity)
 
     EXPECT_EQ(isIPAddress("333.0.0.1"), 0);
     EXPECT_EQ(isIPAddress("2001:0gb8:85a3:0000:0000:8a2e:0370:7334"), 0);
+}
+
+TEST_F(HttpAttachmentUtilTest, ExtensiveUriMatching)
+{
+    // Test configurations for different URI scenarios
+
+    // Single URI exact matching
+    string single_uri_config =
+        "{\n"
+            "\"context_values\": {"
+                "\"clientIp\": \"1.2.3.4\","
+                "\"listeningIp\": \"5.6.7.8\","
+                "\"uriPrefix\": \"/exact\","
+                "\"hostName\": \"test\","
+                "\"httpMethod\": \"GET\","
+                "\"listeningPort\": 80"
+            "},"
+            "\"dbg_level\": 1\n"
+        "}\n";
+
+    ofstream single_uri_file(attachment_configuration_file_name);
+    single_uri_file << single_uri_config;
+    single_uri_file.close();
+
+    EXPECT_EQ(initAttachmentConfig(attachment_configuration_file_name.c_str()), 1);
+
+    // Single URI - exact matches
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/exact"), 1);
+
+    // Single URI - should NOT match partial, prefix, or suffix
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/exa"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/exact/more"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/exactmore"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "exact"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/"), 0);
+
+    // Multiple URI patterns with pipe delimiter
+    string multi_uri_config =
+        "{\n"
+            "\"context_values\": {"
+                "\"clientIp\": \"1.2.3.4\","
+                "\"listeningIp\": \"5.6.7.8\","
+                "\"uriPrefix\": \"/api|/admin|/users\","
+                "\"hostName\": \"test\","
+                "\"httpMethod\": \"GET\","
+                "\"listeningPort\": 80"
+            "},"
+            "\"dbg_level\": 1\n"
+        "}\n";
+
+    ofstream multi_uri_file(attachment_configuration_file_name);
+    multi_uri_file << multi_uri_config;
+    multi_uri_file.close();
+
+    EXPECT_EQ(initAttachmentConfig(attachment_configuration_file_name.c_str()), 1);
+
+    // Multiple URI - exact matches for each pattern
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/admin"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/users"), 1);
+
+    // Multiple URI - should NOT match partial matches
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/ap"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api/v1"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/administrator"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/user"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/"), 0);
+
+    // Multiple URI - should NOT match unrelated URIs
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/public"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/login"), 0);
+
+    // Multiple URI with whitespace around pipes
+    string whitespace_uri_config =
+        "{\n"
+            "\"context_values\": {"
+                "\"clientIp\": \"1.2.3.4\","
+                "\"listeningIp\": \"5.6.7.8\","
+                "\"uriPrefix\": \"/path1 | /path2  |  /path3\","
+                "\"hostName\": \"test\","
+                "\"httpMethod\": \"GET\","
+                "\"listeningPort\": 80"
+            "},"
+            "\"dbg_level\": 1\n"
+        "}\n";
+
+    ofstream whitespace_uri_file(attachment_configuration_file_name);
+    whitespace_uri_file << whitespace_uri_config;
+    whitespace_uri_file.close();
+
+    EXPECT_EQ(initAttachmentConfig(attachment_configuration_file_name.c_str()), 1);
+
+    // Whitespace handling - should match exactly despite spaces around pipes
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/path1"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/path2"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/path3"), 1);
+
+    // Special characters in URIs
+    string special_chars_config =
+        "{\n"
+            "\"context_values\": {"
+                "\"clientIp\": \"1.2.3.4\","
+                "\"listeningIp\": \"5.6.7.8\","
+                "\"uriPrefix\": \"/api/v1/user-profile|/api/v2/user_data|/special%20path\","
+                "\"hostName\": \"test\","
+                "\"httpMethod\": \"GET\","
+                "\"listeningPort\": 80"
+            "},"
+            "\"dbg_level\": 1\n"
+        "}\n";
+
+    ofstream special_chars_file(attachment_configuration_file_name);
+    special_chars_file << special_chars_config;
+    special_chars_file.close();
+
+    EXPECT_EQ(initAttachmentConfig(attachment_configuration_file_name.c_str()), 1);
+
+    // Special characters - exact matching
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api/v1/user-profile"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api/v2/user_data"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/special%20path"), 1);
+
+    // Special characters - should not match similar but different URIs
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api/v1/user_profile"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api/v2/user-data"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/special path"), 0);
+
+    // Empty URI pattern - should match everything
+    string empty_uri_config =
+        "{\n"
+            "\"context_values\": {"
+                "\"clientIp\": \"1.2.3.4\","
+                "\"listeningIp\": \"5.6.7.8\","
+                "\"uriPrefix\": \"\","
+                "\"hostName\": \"test\","
+                "\"httpMethod\": \"GET\","
+                "\"listeningPort\": 80"
+            "},"
+            "\"dbg_level\": 1\n"
+        "}\n";
+
+    ofstream empty_uri_file(attachment_configuration_file_name);
+    empty_uri_file << empty_uri_config;
+    empty_uri_file.close();
+
+    EXPECT_EQ(initAttachmentConfig(attachment_configuration_file_name.c_str()), 1);
+
+    // Empty URI pattern - should match any URI
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/any/path"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/api/users/123"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", ""), 1);
+
+    // Edge cases - root path and similar patterns
+    string root_path_config =
+        "{\n"
+            "\"context_values\": {"
+                "\"clientIp\": \"1.2.3.4\","
+                "\"listeningIp\": \"5.6.7.8\","
+                "\"uriPrefix\": \"/|/root|/r\","
+                "\"hostName\": \"test\","
+                "\"httpMethod\": \"GET\","
+                "\"listeningPort\": 80"
+            "},"
+            "\"dbg_level\": 1\n"
+        "}\n";
+
+    ofstream root_path_file(attachment_configuration_file_name);
+    root_path_file << root_path_config;
+    root_path_file.close();
+
+    EXPECT_EQ(initAttachmentConfig(attachment_configuration_file_name.c_str()), 1);
+
+    // Root path and similar patterns - exact matching only
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/root"), 1);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/r"), 1);
+
+    // Should NOT match longer paths that start with these patterns
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/ro"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/root/sub"), 0);
+    EXPECT_EQ(isDebugContext("1.2.3.4", "5.6.7.8", 80, "GET", "test", "/rootuser"), 0);
 }

@@ -52,6 +52,10 @@ public:
     unsigned int getKeepAliveIntervalMsec() const { return conf_data.getNumericalValue("keep_alive_interval_msec"); }
     bool getIsPairedAffinityEnabled() const { return conf_data.getNumericalValue("is_paired_affinity_enabled"); }
     bool isAsyncModeEnabled() const { return conf_data.getNumericalValue("is_async_mode_enabled"); }
+    bool isWebSocketStreamEnabled() const { return conf_data.getNumericalValue("is_websocket_stream_enabled"); }
+    bool isMaxChunksToProcessEnabled() const {
+        return conf_data.getNumericalValue("is_max_chunks_to_process_enabled");
+    }
 
 private:
     void setGradualDeploymentIPs();
@@ -83,6 +87,10 @@ private:
     void setPairedAffinityEnabled();
 
     void setAsyncMode();
+
+    void setWebSocketStreamEnabled();
+
+    void setIsMaxChunksToProcessEnabled();
 
     WebTriggerConf web_trigger_conf;
     HttpAttachmentConfiguration conf_data;

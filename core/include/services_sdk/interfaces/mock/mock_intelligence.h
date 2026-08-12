@@ -42,6 +42,7 @@ public:
         )
     );
     MOCK_METHOD1(unregisterInvalidation, void(uint id));
+    MOCK_METHOD1(setIntelligenceFallback, void(bool do_fallback));
     MOCK_CONST_METHOD5(
         getResponse,
         Maybe<Response>(

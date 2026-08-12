@@ -44,7 +44,7 @@ operator<<(ostream &os, const EventVerdict &event)
         case ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT: return os << "Irrelevant";
         case ServiceVerdict::TRAFFIC_VERDICT_RECONF: return os << "Reconf";
         case ServiceVerdict::TRAFFIC_VERDICT_DELAYED: return os << "Wait";
-        case ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE: return os << "Force 200";
+        case ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE: return os << "Custom Response";
     }
 
     dbgAssert(false)

@@ -25,6 +25,7 @@
 #include "SecurityHeadersPolicy.h"
 #include "UserLimitsPolicy.h"
 #include "TrustedSources.h"
+#include "WaapDedicatedParsers.h"
 #include "Waf2Util.h"
 #include "debug.h"
 
@@ -58,6 +59,8 @@ public:
     virtual const std::shared_ptr<Waap::SecurityHeaders::Policy>& get_SecurityHeadersPolicy() const;
     virtual const std::shared_ptr<Waap::RateLimiting::Policy>& get_ErrorLimitingPolicy() const;
     virtual const std::shared_ptr<Waap::UserLimits::Policy>& get_UserLimitsPolicy() const;
+    virtual const std::shared_ptr<Waap::DedicatedParsers::DedicatedParsersConfig>& get_DedicatedParsersPolicy() const;
+    virtual bool hasDedicatedParsers() const override;
 
     virtual void printMe(std::ostream& os) const;
 
@@ -78,6 +81,7 @@ private:
     void loadTrustedSourcesPolicy(cereal::JSONInputArchive& ar);
     void loadWaapParametersPolicy(cereal::JSONInputArchive& ar);
     void loadUserLimitsPolicy(cereal::JSONInputArchive& ar);
+    void loadDedicatedParsersPolicy(cereal::JSONInputArchive& ar);
 
     void readJSONByCereal(cereal::JSONInputArchive& ar);
     BlockingLevel blockingLevelBySensitivityStr(const std::string& sensitivity) const;
@@ -106,6 +110,10 @@ private:
     std::shared_ptr<Waap::ErrorLimiting::ErrorLimiter> m_errorLimiting;
     std::shared_ptr<Waap::UserLimits::Policy> m_userLimitsPolicy;
     std::shared_ptr<Waap::SecurityHeaders::Policy> m_securityHeadersPolicy;
+    std::shared_ptr<Waap::DedicatedParsers::DedicatedParsersConfig> m_dedicatedParsersPolicy;
+    // Pre-computed at load time from m_dedicatedParsersPolicy->empty().
+    // Avoids shared_ptr dereference on the per-request initRequestContext() fast path.
+    bool m_hasDedicatedParsers;
 };
 
 #endif // __WAAP_CONFIG_BASE_H__

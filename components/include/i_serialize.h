@@ -309,6 +309,7 @@ private:
     I_MainLoop* m_pMainLoop;
     std::chrono::microseconds m_waitForSync;
     uint m_workerRoutineId;
+    I_MainLoop::RoutineID m_mergeRoutineId = 0;
     size_t m_daysCount;
     size_t m_windowsCount;
     size_t m_intervalsCounter;

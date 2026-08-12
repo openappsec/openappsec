@@ -32,6 +32,7 @@ public:
 
     virtual bool isGetCall(const std::string &uri) const = 0;
     virtual std::string invokeGet(const std::string &uri) const = 0;
+    virtual std::string getGetContentType(const std::string &uri) const = 0;
 
     virtual bool isPostCall(const std::string &uri) const = 0;
     virtual Maybe<std::string> invokePost(const std::string &uri, const std::string &body) const = 0;

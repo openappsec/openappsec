@@ -26,6 +26,8 @@ class WaapAssetState;
 class I_WaapAssetStatesManager {
 public:
     virtual bool initBasicWaapSigs(const std::string& waapDataFileName) = 0;
+    virtual bool reloadBasicWaapSigs(const std::string& waapDataFileName) = 0;
+    virtual int getLastBuildNumber() const = 0;
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateGlobal() = 0;
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateById(const std::string& assetId) = 0;
     virtual void setAssetDirectoryPath(const std::string &assetDirectoryPath) = 0;
@@ -38,6 +40,8 @@ public:
 
     void preload();
     virtual bool initBasicWaapSigs(const std::string& waapDataFileName);
+    virtual bool reloadBasicWaapSigs(const std::string& waapDataFileName);
+    virtual int getLastBuildNumber() const;
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateGlobal();
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateById(const std::string& assetId);
 
@@ -55,6 +59,8 @@ public:
     virtual ~Impl();
 
     virtual bool initBasicWaapSigs(const std::string& waapDataFileName);
+    virtual bool reloadBasicWaapSigs(const std::string& waapDataFileName);
+    virtual int getLastBuildNumber() const;
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateGlobal();
     virtual std::shared_ptr<WaapAssetState> getWaapAssetStateById(const std::string& assetId);
     virtual void setAssetDirectoryPath(const std::string &assetDirectoryPath);
@@ -64,10 +70,14 @@ private:
         CreateWaapSigsForAsset(const std::shared_ptr<WaapAssetState>& pWaapAssetState,
             const std::string& assetId,
             const std::string& instanceId);
+    bool loadSignaturesFromFile(const std::string& waapDataFileName);
 
     std::shared_ptr<Signatures> m_signatures;
     std::shared_ptr<WaapHyperscanEngine> m_hyperscanEngine;
     std::shared_ptr<WaapAssetState> m_basicWaapSigs;
     std::unordered_map<std::string, std::shared_ptr<WaapAssetState>> m_AssetBasedWaapSigs;
     std::string m_assetDirectoryPath;
+    int m_lastBuildNumber = -1;
+
+    friend class WaapAssetStatesManager;
 };

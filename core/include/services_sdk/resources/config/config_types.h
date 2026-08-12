@@ -18,12 +18,15 @@
 #error "config_types.h should not be included directly"
 #endif // __CONFIG_H__
 
+#include <cstdint>
 #include <functional>
 
 namespace Config
 {
 
 using ConfigCb = std::function<void(void)>;
+using ConfigCbHandle = uint64_t;
+static constexpr ConfigCbHandle INVALID_CB_HANDLE = 0;
 
 enum class Errors { MISSING_TAG, MISSING_CONTEXT, BAD_NODE };
 enum class ConfigFileType { Policy, Data, RawData, COUNT };

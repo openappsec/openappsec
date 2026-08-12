@@ -90,6 +90,12 @@ HTTPResponse::getHTTPStatusCode() const
     return status_code;
 }
 
+long
+HTTPResponse::getRawHTTPStatusCode() const
+{
+    return raw_status_code;
+}
+
 string
 HTTPResponse::toString() const
 {

@@ -140,7 +140,7 @@ MessagingComp::sendMessage(
     auto metadata = message_metadata;
     
     if (is_to_fog) {
-        if (method == HTTPMethod::GET && fog_get_requests_cache.doesKeyExists(uri)) {
+        if (message_metadata.useCache() && method == HTTPMethod::GET && fog_get_requests_cache.doesKeyExists(uri)) {
             HTTPResponse res = fog_get_requests_cache.getEntry(uri);
             dbgTrace(D_MESSAGING) << "Response returned from Fog cache. res body: " << res.getBody();
             return fog_get_requests_cache.getEntry(uri);
@@ -187,7 +187,9 @@ MessagingComp::sendMessage(
         return suspendMessage(body, method, uri, category, rate_limit_metadata);
     }
 
-    if (is_to_fog && method == HTTPMethod::GET) fog_get_requests_cache.emplaceEntry(uri, *response);
+    if (is_to_fog && method == HTTPMethod::GET && message_metadata.useCache()) {
+        fog_get_requests_cache.emplaceEntry(uri, *response);
+    }
     return response;
 }
 

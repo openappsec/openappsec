@@ -2,6 +2,7 @@
 #define __I_UNIFIED_LEARNING_H__
 
 #define BATCH_SIZE 50
+#define BACKUP_DIRECTORY_PATH "/etc/cp/conf/waap/"
 
 // Forward declaration
 class UnifiedIndicatorsContainer;

@@ -70,7 +70,8 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
             "\"recompression_pool_size\": 32768,\n"
             "\"is_paired_affinity_enabled\": 0,\n"
             "\"is_async_mode_enabled\": 0,\n"
-            "\"is_brotli_inspection_enabled\": 1\n"
+            "\"is_brotli_inspection_enabled\": 1,\n"
+            "\"is_websocket_stream_enabled\": 0\n"
         "}\n";
     ofstream valid_configuration_file(attachment_configuration_file_name);
     valid_configuration_file << valid_configuration;
@@ -100,9 +101,13 @@ TEST_F(HttpAttachmentUtilTest, GetValidAttachmentConfiguration)
     EXPECT_EQ(conf_data_out.getNumericalValue("remove_server_header"), 0u);
     EXPECT_EQ(conf_data_out.getNumericalValue("decompression_pool_size"), 524288u);
     EXPECT_EQ(conf_data_out.getNumericalValue("recompression_pool_size"), 32768u);
+    // INXT-53862: key omitted from the config above -> load() must apply the 100MB default so the
+    // cap is always in effect even with an older nano-service that does not emit the key.
+    EXPECT_EQ(conf_data_out.getNumericalValue("max_decompressed_body_size"), 104857600u);
     EXPECT_EQ(conf_data_out.getNumericalValue("is_paired_affinity_enabled"), 0u);
     EXPECT_EQ(conf_data_out.getNumericalValue("is_async_mode_enabled"), 0u);
     EXPECT_EQ(conf_data_out.getNumericalValue("is_brotli_inspection_enabled"), 1u);
+    EXPECT_EQ(conf_data_out.getNumericalValue("is_websocket_stream_enabled"), 0u);
 }
 
 TEST_F(HttpAttachmentUtilTest, GetMalformedAttachmentConfiguration)

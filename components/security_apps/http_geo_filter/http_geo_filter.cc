@@ -100,7 +100,7 @@ public:
         auto maybe_source_ip = env->get<IPAddr>(HttpTransactionData::client_ip_ctx);
         if (!maybe_source_ip.ok()) {
             dbgWarning(D_GEO_FILTER) << "failed to get source ip from env";
-            return EventVerdict(default_action);
+            return createVerdict(default_action);
         }
         auto source_ip = convertIpAddrToString(maybe_source_ip.unpack());
 
@@ -117,7 +117,7 @@ public:
 
         ServiceVerdict exception_verdict = getExceptionVerdict(ip_set);
         if (exception_verdict != ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT) {
-            return EventVerdict(exception_verdict);
+            return createVerdict(exception_verdict);
         }
 
         // deprecated for now
@@ -126,10 +126,54 @@ public:
         //     return EventVerdict(geo_lookup_verdict);
         // }
 
-        return EventVerdict(default_action);
+        return createVerdict(default_action);
     }
 
 private:
+    EventVerdict
+    createVerdict(ServiceVerdict verdict)
+    {
+        EventVerdict event_verdict(verdict);
+        if (verdict != ServiceVerdict::TRAFFIC_VERDICT_DROP) {
+            return event_verdict;
+        }
+
+        auto maybe_web_response_id = getCurrentWebUserResponseId();
+        if (!maybe_web_response_id.ok()) {
+            dbgTrace(D_GEO_FILTER)
+                << "No HTTP Geo Filter web user response trigger found for DROP verdict. Error: "
+                << maybe_web_response_id.getErr();
+            return event_verdict;
+        }
+
+        event_verdict.setWebUserResponseByPractice(maybe_web_response_id.unpack());
+        dbgTrace(D_GEO_FILTER)
+            << "Set HTTP Geo Filter web user response trigger: "
+            << maybe_web_response_id.unpack();
+
+        return event_verdict;
+    }
+
+    Maybe<string>
+    getCurrentWebUserResponseId() const
+    {
+        auto maybe_rule_by_ctx = getConfigurationWithCache<BasicRuleConfig>("rulebase", "rulesConfig");
+        if (!maybe_rule_by_ctx.ok()) {
+            dbgWarning(D_GEO_FILTER) << "Failed to get current rule for HTTP Geo Filter. Error: "
+                << maybe_rule_by_ctx.getErr();
+            return genError("Failed to get current rule for HTTP Geo Filter");
+        }
+
+        for (const auto &trigger : maybe_rule_by_ctx.unpack().getTriggers()) {
+            if (boost::iequals(trigger.getType(), "WebUserResponse") ||
+                boost::iequals(trigger.getType(), "webUserResponse")) {
+                return trigger.getId();
+            }
+        }
+
+        return genError("No WebUserResponse trigger found on current HTTP Geo Filter rule");
+    }
+
     std::set<std::string>
     split(const std::string& s, char delim) {
         std::set<std::string> elems;

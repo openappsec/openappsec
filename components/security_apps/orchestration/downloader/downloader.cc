@@ -131,6 +131,11 @@ Downloader::Impl::init()
         dir_path = dir_path + "/vs" + maybe_vs_id.unpack();
     }
 
+    auto maybe_domain_name = Singleton::Consume<I_Environment>::by<Downloader>()->get<string>("Domain Name");
+    if (maybe_domain_name.ok()) {
+        dir_path = dir_path + "/domain-" + maybe_domain_name.unpack();
+    }
+
     Singleton::Consume<I_OrchestrationTools>::by<Downloader>()->createDirectory(dir_path);
 }
 

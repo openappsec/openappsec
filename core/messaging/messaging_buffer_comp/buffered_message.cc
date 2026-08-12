@@ -37,7 +37,8 @@ static const std::map<std::string, HTTPMethod> string_to_method = {
     { "post",    HTTPMethod::POST   },
     { "patch",   HTTPMethod::PATCH  },
     { "connect", HTTPMethod::CONNECT},
-    { "put",     HTTPMethod::PUT    }
+    { "put",     HTTPMethod::PUT    },
+    { "delete",  HTTPMethod::DELETE }
 };
 
 static const std::map<HTTPMethod, std::string> method_to_string = {
@@ -45,7 +46,8 @@ static const std::map<HTTPMethod, std::string> method_to_string = {
     { HTTPMethod::POST,    "post"   },
     { HTTPMethod::PATCH,   "patch"  },
     { HTTPMethod::CONNECT, "connect"},
-    { HTTPMethod::PUT,     "put"    }
+    { HTTPMethod::PUT,     "put"    },
+    { HTTPMethod::DELETE,  "delete" }
 };
 
 void

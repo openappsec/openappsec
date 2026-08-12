@@ -17,9 +17,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <list>
+#include <memory>
 #include "FpMitigation.h"
 #include "Waf2Util.h"
 #include "picojson.h"
+#include "i_mainloop.h"
 #include "i_serialize.h"
 #include <cereal/archives/json.hpp>
 #include <cereal/types/unordered_map.hpp>
@@ -174,7 +176,12 @@ class ScoreBuilder {
 public:
     ScoreBuilder(I_WaapAssetState* pWaapAssetState);
     ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& baseScores);
-    ~ScoreBuilder() {}
+    ~ScoreBuilder();
+
+    // Copying would alias m_serializedData through the reference member and
+    // duplicate ownership of the pending rebuild routine (double stop()).
+    ScoreBuilder(const ScoreBuilder &) = delete;
+    ScoreBuilder &operator=(const ScoreBuilder &) = delete;
 
     void analyzeFalseTruePositive(ScoreBuilderData& data, const std::string &poolName, bool doBackup=true);
 
@@ -199,7 +206,9 @@ public:
         const std::string &keyword,
         const std::string &poolName
     ) const;
-    const std::vector<std::string>& getSnapshotSpecialLinks(
+    // Returns by value: the result must not reference a snapshot that a later
+    // rebuild swap can retire while the caller still holds it.
+    std::vector<std::string> getSnapshotSpecialLinks(
         const std::string &keyword,
         const std::string &poolName
     ) const;
@@ -214,9 +223,25 @@ public:
 
     void mergeScores(const ScoreBuilder& baseScores);
 protected:
-    typedef std::map<std::string, double> KeywordScoreMap;
     typedef std::map<std::string, std::vector<std::string>> KeywordSpecialLinksMap;
-    typedef std::map<std::string, KeywordType> KeywordTypeMap;
+
+    // Consolidated snapshot entry -- replaces 3 separate maps (score, coef, type)
+    // with a single map, eliminating duplicate string key storage.
+    struct SnapshotEntry {
+        double score = 0.0;
+        double coef = 0.0;
+        KeywordType type = KEYWORD_TYPE_UNKNOWN;
+    };
+    typedef std::map<std::string, SnapshotEntry> KeywordSnapshotMap;
+
+    // Immutable snapshot of the live score pools, published by pointer swap
+    // (double buffer). Readers copy the shared_ptr at entry; the single-threaded
+    // cooperative mainloop makes plain assignment the atomic publish.
+    struct SnapshotState {
+        std::map<std::string, KeywordSnapshotMap> keywordsMap;
+        std::map<std::string, KeywordSpecialLinksMap> specialLinksMap;
+        std::map<std::string, KeywordsStats> statsMap;
+    };
 
     struct SerializedData {
         template <class Archive>
@@ -254,15 +279,16 @@ protected:
         KeywordType keywordSource,
         KeywordsScorePool &keywordsScorePool);
 
+    std::shared_ptr<const SnapshotState> buildSnapshot(I_MainLoop *yieldingMainLoop) const;
+    void scheduleSnapshotRebuild();
+
     unsigned int m_scoreTrigger;
     FalsePoisitiveStore m_fpStore;
     SerializedData m_serializedData;
     std::map<std::string, KeywordsScorePool> &m_keywordsScorePools;
-    std::map<std::string, KeywordScoreMap> m_snapshotKwScoreMap;
-    std::map<std::string, KeywordScoreMap> m_snapshotKwCoefMap;
-    std::map<std::string, KeywordSpecialLinksMap> m_snapshotSpecialLinksMap;
-    std::map<std::string, KeywordTypeMap> m_snapshotKwTypeMap;
-    std::map<std::string, KeywordsStats> m_snapshotStatsMap;
+    std::shared_ptr<const SnapshotState> m_snapshot; // never null
+    I_MainLoop::RoutineID m_snapRoutineId; // 0 == no rebuild pending
+    unsigned int m_calcScoreGeneration; // bumped by calcScore(); a rebuild re-runs if it changed mid-build
     std::list<std::string> m_falsePositivesSetsIntersection;
     I_WaapAssetState* m_pWaapAssetState;
 };

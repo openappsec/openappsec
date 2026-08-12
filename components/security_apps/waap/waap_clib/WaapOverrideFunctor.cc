@@ -204,3 +204,17 @@ bool WaapOverrideFunctor::operator()(
     dbgDebug(D_WAAP) << "Invalid override tag: " << tag;
     return false;
 }
+
+const std::vector<std::pair<std::string, std::string>>&
+WaapOverrideFunctor::getHeaderPairs() const
+{
+    static const std::vector<std::pair<std::string, std::string>> empty;
+    if (!waf2Transaction.checkIsHeaderOverrideScanRequired()) return empty;
+    return waf2Transaction.getLowercasedHdrPairs();
+}
+
+const std::vector<std::pair<std::string, std::string>>&
+WaapOverrideFunctor::getParamPairs() const
+{
+    return waf2Transaction.getKeywordInfoPairs();
+}

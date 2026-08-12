@@ -22,7 +22,9 @@
 #include "config.h"
 #include "i_service_controller.h"
 
-class ServiceDetails : Singleton::Consume<I_ServiceController>
+class ServiceDetails :
+    Singleton::Consume<I_ServiceController>,
+    Singleton::Consume<Config::I_Config>
 {
 public:
     ServiceDetails() = default;

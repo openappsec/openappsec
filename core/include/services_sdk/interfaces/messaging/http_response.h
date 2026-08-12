@@ -34,15 +34,18 @@ public:
     HTTPResponse(
         HTTPStatusCode _status_code,
         const std::string &_body,
-        std::unordered_map<std::string, std::string> _headers = std::unordered_map<std::string, std::string>()
+        std::unordered_map<std::string, std::string> _headers = std::unordered_map<std::string, std::string>(),
+        long _raw_status_code = 0
     )
             :
         status_code(_status_code),
         body(_body),
-        headers(_headers)
+        headers(_headers),
+        raw_status_code(_raw_status_code)
     {}
 
     HTTPStatusCode getHTTPStatusCode() const;
+    long getRawHTTPStatusCode() const;
     const std::string & getBody() const;
     std::string toString() const;
     Maybe<std::string> getHeaderVal(const std::string &header_key);
@@ -51,6 +54,7 @@ private:
     HTTPStatusCode status_code;
     std::string body;
     std::unordered_map<std::string, std::string> headers;
+    long raw_status_code = 0;
 };
 
 #endif // __HTTP_RESPONSE_H__

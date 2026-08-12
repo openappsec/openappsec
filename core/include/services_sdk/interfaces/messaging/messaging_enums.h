@@ -43,6 +43,7 @@ enum class HTTPMethod
     CONNECT,
     PUT,
     HEAD,
+    DELETE,
 
     COUNT
 };

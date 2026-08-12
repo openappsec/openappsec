@@ -196,7 +196,7 @@ public:
                 if (isDropContext(context.first, context.second)) setDrop(ips_state);
             }
             ips_state.clearPendingContexts();
-            if (isDrop(ips_state)) return DROP;
+            if (isDrop(ips_state)) return createDropVerdict();
         }
 
         return INSPECT;
@@ -253,10 +253,10 @@ public:
                 line_sep +
                 ips_state.getBuffer("HTTP_REQUEST_HEADER") +
                 line_sep;
-            if (isDropContext("HTTP_REQUEST_DATA", data)) return DROP;
+            if (isDropContext("HTTP_REQUEST_DATA", data)) return createDropVerdict();
         }
 
-        if (isDrop(ips_state)) return DROP;
+        if (isDrop(ips_state)) return createDropVerdict();
 
         if (isContextActive("HTTP_RESPONSE_HEADER")) return INSPECT;
         if (isContextActive("HTTP_RESPONSE_BODY")) return INSPECT;
@@ -273,7 +273,7 @@ public:
         auto leave_context = make_scope_exit([&ips_state] () { ips_state.uponLeavingContext(); });
 
         Buffer buf(reinterpret_cast<const char *>(&event), sizeof(event), Buffer::MemoryType::VOLATILE);
-        if (isDropContext("HTTP_RESPONSE_CODE", buf)) return DROP;
+        if (isDropContext("HTTP_RESPONSE_CODE", buf)) return createDropVerdict();
 
         return INSPECT;
     }
@@ -287,7 +287,7 @@ public:
         ips_state.uponEnteringContext();
         auto leave_context = make_scope_exit([&ips_state] () { ips_state.uponLeavingContext(); });
 
-        if (isDropContext("HTTP_RESPONSE_HEADER", event.getValue())) return DROP;
+        if (isDropContext("HTTP_RESPONSE_HEADER", event.getValue())) return createDropVerdict();
 
         return INSPECT;
     }
@@ -301,7 +301,7 @@ public:
         ips_state.uponEnteringContext();
         auto leave_context = make_scope_exit([&ips_state] () { ips_state.uponLeavingContext(); });
 
-        if (isDropContext("HTTP_RESPONSE_BODY", event.getData())) return DROP;
+        if (isDropContext("HTTP_RESPONSE_BODY", event.getData())) return createDropVerdict();
 
         return event.isLastChunk() ? ACCEPT : INSPECT;
     }
@@ -325,6 +325,23 @@ public:
 private:
     static void setDrop(IPSEntry &state) { state.setDrop(); }
     static bool isDrop(const IPSEntry &state) { return state.isDrop(); }
+
+    EventVerdict
+    createDropVerdict()
+    {
+        EventVerdict verdict = DROP;
+
+        auto maybe_ips_config = getConfiguration<IPSSignatures>("IPS", "IpsProtections");
+        if (maybe_ips_config.ok()) {
+            const string &web_user_response_id = maybe_ips_config.unpack().getWebUserResponse();
+            if (!web_user_response_id.empty()) {
+                verdict.setWebUserResponseByPractice(web_user_response_id);
+                dbgTrace(D_IPS) << "Set web user response: " << web_user_response_id;
+            }
+        }
+        dbgTrace(D_IPS) << "IPS verdict: DROP, with web user response: " << verdict.getWebUserResponseByPractice();
+        return verdict;
+    }
 
     bool
     isDropContext(const string &name, const Buffer &buf)

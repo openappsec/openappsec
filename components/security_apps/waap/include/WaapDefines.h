@@ -14,6 +14,8 @@
 #pragma once
 
 #define BACKUP_DIRECTORY_PATH "/etc/cp/conf/waap/"
+#define WAAP_DATA_LOCAL_PATH "/etc/cp/conf/waap/waap.data"
+#define WAAP_DATA_CLOUD_PATH "/etc/cp/conf/data/waap.data"
 // reduce from 2048 in order to accomodate in 10K max log size in Kibana
 #define MAX_LOG_FIELD_SIZE 1536
 // maximum bytes response body log field size can reduce from request body log

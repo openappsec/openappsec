@@ -41,11 +41,22 @@ static const std::string default_ip = "127.0.0.1";
 static const std::string default_aws_resolver_ip = "169.254.169.253";
 static const std::string default_azure_resolver_ip = "168.63.129.16";
 static const std::string default_syslog_socket_address = "127.0.0.1:1514";
+static const std::string default_anomaly_detection_syslog_socket_address = "127.0.0.1:1515";
 static const std::string rpm_full_load_path = "/tmp/rpm_full_load";
 static const std::string rpm_partial_load_path = "/tmp/rpm_partial_load";
 static const std::string first_rpm_policy_load_path = "/tmp/first_rpm_policy_load";
 static const std::string readiness_file_path = "/tmp/readiness";
 
 static const int default_port = 5555;
+
+// Graceful (blue/green) upgrade: bounded poll counts (0.5s each) used by the
+// reverse-proxy watchdog while overlapping the new container and draining the old one.
+static const int graceful_readiness_polls = 20; // ~10s: wait for the new nginx container to serve
+static const int graceful_drain_polls = 30;     // ~15s: let the old container finish in-flight
+
+static const std::string default_stream_config_path = "/etc/cp/conf/rpmanager/stream_servers";
+static const std::string default_rpm_stream_prepare_path = "/etc/cp/conf/rpmanager/prepare/stream_servers";
+static const std::string default_stream_template_path = "/etc/cp/conf/rpmanager/nginx-stream-template";
+static const int ws_bridge_port_base = 20000;
 
 #endif //__REVERSE_PROXY_MANAGER_DEFAULTS_H__

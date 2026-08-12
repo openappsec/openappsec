@@ -34,7 +34,7 @@ public:
 
         EXPECT_CALL(
             mock_rest,
-            addGetCall("metrics", _)
+            addGetCall("metrics", _, "text/plain; version=0.0.4; charset=utf-8")
         ).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
 
         prometheus_comp.init();
@@ -130,4 +130,3 @@ TEST_F(PrometheusCompTest, checkAddingMetricWithUniqueName)
         "total_requests_counter{method=\"post\",code=\"200\"} 1534\n\n";
     EXPECT_EQ(metric_str,  get_metrics_func());
 }
-

@@ -33,7 +33,8 @@ public:
         const std::string &asset_id,
         std::chrono::minutes sync_interval,
         std::chrono::seconds wait_for_sync,
-        const std::string &remotePath = ""
+        const std::string &remotePath = "",
+        const std::string &backupPath = ""
     );
 
     ~AssetIndicatorsSyncUnit() = default;

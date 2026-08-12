@@ -142,6 +142,25 @@ TEST(TempCaching, expiration)
     cache.endExpiration();
 }
 
+TEST(CacheHolder, set_new_time)
+{
+    StrictMock<MockTimeGet> mock_time;
+    auto i_time_get = Singleton::Consume<I_TimeGet>::from<MockProvider<I_TimeGet>>();
+
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillOnce(Return(seconds(5)));
+    Cache::Holder<Int, int> holder(i_time_get);
+    EXPECT_EQ(holder.getTime(), seconds(5));
+
+    // Non-null timer: time is updated to the new value
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillOnce(Return(seconds(10)));
+    holder.setNewTime(i_time_get);
+    EXPECT_EQ(holder.getTime(), seconds(10));
+
+    // Null timer: time is left unchanged
+    holder.setNewTime(nullptr);
+    EXPECT_EQ(holder.getTime(), seconds(10));
+}
+
 TEST(TempCaching, capacity)
 {
     TemporaryCache<int, Int> cache;

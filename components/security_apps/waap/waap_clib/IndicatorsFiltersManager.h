@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <chrono>
 #include "IndicatorsFilterBase.h"
 #include "TrustedSources.h"
 #include "KeywordIndicatorFilter.h"
@@ -27,6 +28,7 @@
 #include "UnifiedIndicatorsContainer.h"
 #include "i_mainloop.h"
 #include "singleton.h"
+#include "config.h"
 
 #include "UnifiedIndicatorsContainer.h"
 
@@ -100,6 +102,8 @@ private:
     void registerRedisWithMainLoop();
     void unregisterRedisFromMainLoop();
     void disconnectRedis();
+    void scheduleNextReconnect();
+    void resetReconnectBackoff();
     
     std::unique_ptr<KeywordIndicatorFilter> m_keywordsFreqFilter;
     std::unique_ptr<TypeIndicatorFilter> m_typeFilter;
@@ -117,9 +121,12 @@ private:
     struct redisAsyncContext* m_redis_client = nullptr;
     bool m_unified_learning_enabled = false;
     bool m_redis_connected = false;
-    I_MainLoop::RoutineID m_redis_routine_id;
+    I_MainLoop::RoutineID m_redis_routine_id = 0;
+    std::chrono::microseconds m_next_reconnect_time = std::chrono::microseconds::min();
+    std::chrono::seconds m_current_reconnect_backoff{0};
     std::string family_id;
     std::string m_id;
     std::shared_ptr<UnifiedIndicatorsContainer> m_unifiedIndicators;
     bool m_centralLogging_enabled = false;
+    Config::ConfigCbHandle m_configLoadCbHandle{Config::INVALID_CB_HANDLE};
 };

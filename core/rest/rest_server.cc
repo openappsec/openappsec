@@ -51,7 +51,11 @@ public:
     bool createIpv4Socket();
     bool createIpv6Socket();
     bool addRestCall(RestAction oper, const string &uri, unique_ptr<RestInit> &&init) override;
-    bool addGetCall(const string &uri, const function<string()> &cb) override;
+    bool addGetCall(
+        const string &uri,
+        const function<string()> &cb,
+        const string &content_type
+    ) override;
     bool addWildcardGetCall(const string &uri, const function<string(const string &)> &callback);
     bool addPostCall(const string &uri, const function<Maybe<string>(const string &)> &callback) override;
     uint16_t getListeningPort() const override { return listening_port; }
@@ -59,6 +63,7 @@ public:
     Maybe<string> getSchema(const string &uri) const override;
     Maybe<string> invokeRest(const string &uri, istream &in, const map<string, string> &headers) const override;
     bool isGetCall(const string &uri) const override;
+    string getGetContentType(const string &uri) const override;
     string invokeGet(const string &uri) const override;
     bool isPostCall(const string &uri) const override;
     Maybe<string> invokePost(const string &uri, const string &body) const override;
@@ -75,11 +80,13 @@ private:
     I_MainLoop *mainloop;
     map<string, unique_ptr<RestInit>> rest_calls;
     map<string, function<string()>> get_calls;
+    map<string, string> get_content_types;
     map<string, function<string(const string &)>> wildcard_get_calls;
     map<string, function<Maybe<string>(const string &)>> post_calls;
     uint16_t listening_port = 0;
     uint16_t starting_port_range = 0;
     vector<uint16_t> port_range;
+    string localhost_ip;
 };
 
 bool
@@ -128,8 +135,13 @@ RestServer::Impl::setupIpv4ServerSocket(bool accept_get_from_external_ip)
         addr.sin_addr.s_addr = htonl(INADDR_ANY);
         dbgDebug(D_API) << "Socket listening on any address";
     } else {
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        dbgDebug(D_API) << "Socket listening on local address";
+        if (localhost_ip != "127.0.0.1") {
+            inet_pton(AF_INET, localhost_ip.c_str(), &addr.sin_addr);
+            dbgDebug(D_API) << "Socket listening on localhost address: " << localhost_ip;
+        } else {
+            addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            dbgDebug(D_API) << "Socket listening on localhost address (127.0.0.1)";
+        }
     }
 
     bool create_socket = true;
@@ -263,16 +275,26 @@ RestServer::Impl::init()
 {
     mainloop = Singleton::Consume<I_MainLoop>::by<RestServer>();
 
+    const char *env_cma_ip = getenv("CP_CMA_LOCAL_HOST_IP");
+    if (env_cma_ip != nullptr && strlen(env_cma_ip) > 0) {
+        localhost_ip = env_cma_ip;
+    } else {
+        localhost_ip = "127.0.0.1";
+    }
+
     auto init_connection = [this] () {
         auto allow_external_conn = "Nano service API Allow Get From External IP";
         auto conf_value = getConfiguration<bool>("connection", allow_external_conn);
         bool accept_get_from_external_ip = false;
         if (conf_value.ok()) {
             accept_get_from_external_ip = *conf_value;
+            dbgDebug(D_API) << "REST server external connections configured";
         } else {
             auto env_value = Singleton::Consume<I_Environment>::by<RestServer>()->get<bool>(allow_external_conn);
             if (env_value.ok()) {
                 accept_get_from_external_ip = *env_value;
+            } else {
+                dbgDebug(D_API) << "REST server external connections not configured";
             }
         }
 
@@ -376,10 +398,12 @@ RestServer::Impl::addRestCall(RestAction oper, const string &uri, unique_ptr<Res
 }
 
 bool
-RestServer::Impl::addGetCall(const string &uri, const function<string()> &callback)
+RestServer::Impl::addGetCall(const string &uri, const function<string()> &callback, const string &content_type)
 {
     if (rest_calls.find(uri) != rest_calls.end()) return false;
-    return get_calls.emplace(uri, callback).second;
+    if (!get_calls.emplace(uri, callback).second) return false;
+    get_content_types[uri] = content_type;
+    return true;
 }
 
 bool
@@ -448,6 +472,16 @@ RestServer::Impl::invokeGet(const string &uri) const
     }
 
     return "";
+}
+
+string
+RestServer::Impl::getGetContentType(const string &uri) const
+{
+    // Wildcard GET calls registered via addWildcardGetCall are not supported here;
+    // they always return the default content type. Extend if needed.
+    auto iter = get_content_types.find(uri);
+    if (iter != get_content_types.end()) return iter->second;
+    return "application/json";
 }
 
 Maybe<string>

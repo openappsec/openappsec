@@ -36,6 +36,10 @@ typedef enum CompressionUtilsDebugLevel
 void resetCompressionDebugFunctionsToStandardError();
 void setCompressionDebugFunction(const CompressionUtilsDebugLevel debug_level, void (*debug_function)(const char *));
 
+// INXT-53862: cap the size of decompressed (inflated) output the gzip/zlib path will accumulate,
+// mirroring the brotli path's fixed 256 MB guard but configurable. 0 restores the default.
+void setCompressionMaxDecompressedSize(size_t max_decompressed_bytes);
+
 typedef struct CompressionStream CompressionStream;
 
 typedef enum CompressionType

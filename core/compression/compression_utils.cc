@@ -35,6 +35,12 @@ static const int max_retries = 3;
 static const size_t default_brotli_buffer_size = 16384;
 static const size_t brotli_decompression_probe_size = 64;
 
+// INXT-53862: configurable ceiling on inflated (decompressed) output for the gzip/zlib path,
+// mirroring the brotli path's fixed 256 MB guard. Prevents a decompression-bomb response from
+// ballooning the worker's memory. Set via setCompressionMaxDecompressedSize (0 -> default).
+static const size_t default_max_decompressed_size = 256UL * 1024 * 1024;
+static size_t g_max_decompressed_size = default_max_decompressed_size;
+
 static void
 defaultPrint(const char *debug_message)
 {
@@ -171,6 +177,14 @@ struct CompressionStream
 
             if (stream.total_out != old_total_out) {
                 res.append(work_space.data(), stream.total_out - old_total_out);
+                // INXT-53862: refuse a decompression-bomb response instead of accumulating
+                // unbounded inflate output (the brotli path already caps at 256 MB).
+                if (res.size() > g_max_decompressed_size) {
+                    fini();
+                    throw runtime_error(
+                        "decompressed size exceeds limit of " + to_string(g_max_decompressed_size) + " bytes"
+                    );
+                }
             } else {
                 ++retries;
                 if (retries > max_retries) {
@@ -552,6 +566,12 @@ setCompressionDebugFunction(const CompressionUtilsDebugLevel debug_level, void (
     ZlibDebugStream::setDebugFunction(debug_level, debug_function);
 }
 
+void
+setCompressionMaxDecompressedSize(size_t max_decompressed_bytes)
+{
+    g_max_decompressed_size = max_decompressed_bytes == 0 ? default_max_decompressed_size : max_decompressed_bytes;
+}
+
 CompressionStream *
 initCompressionStream()
 {
@@ -598,7 +618,10 @@ compressData(
     } catch (const exception &e) {
         zlibDbgError << "Compression failed " << e.what();
 
+        // zero the output so the failure path returns a NULL/0 result, not a garbage pointer
         result.ok = 0;
+        result.output = nullptr;
+        result.num_output_bytes = 0;
     }
 
     return result;
@@ -626,7 +649,10 @@ decompressData(
     } catch (const exception &e) {
         zlibDbgError << "Decompression failed " << e.what();
 
+        // zero the output so the failure path returns a NULL/0 result, not a garbage pointer
         result.ok = 0;
+        result.output = nullptr;
+        result.num_output_bytes = 0;
     }
 
     return result;

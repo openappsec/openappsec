@@ -25,6 +25,9 @@ USE_DEBUG_FLAG(D_PROMETHEUS);
 using namespace std;
 using namespace ReportIS;
 
+static const string PROMETHEUS_CONTENT_TYPE =
+    "text/plain; version=0.0.4; charset=utf-8";
+
 struct ServiceData
 {
     template <typename Archive>
@@ -97,7 +100,8 @@ public:
     {
         Singleton::Consume<I_RestApi>::by<PrometheusComp>()->addGetCall(
             "metrics",
-            [&] () { return getFormatedPrometheusMetrics(); }
+            [&] () { return getFormatedPrometheusMetrics(); },
+            PROMETHEUS_CONTENT_TYPE
         );
     }
 

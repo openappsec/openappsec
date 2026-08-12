@@ -113,18 +113,18 @@ WaapAssetState::WaapAssetState(
         pWaapAssetState->m_cleanValuesCache.capacity(),
         pWaapAssetState->m_suspiciousValuesCache.capacity(),
         pWaapAssetState->m_sampleTypeCache.capacity(),
-        id)
+        id,
+        waapDataFileName)
 {
     scoreBuilder.mergeScores(pWaapAssetState->scoreBuilder);
     updateScores();
     m_typeValidator = pWaapAssetState->m_typeValidator;
 
-    registerConfigLoadCb(
-    [this]()
-        {
-            clearRateLimitingState();
-            clearSecurityHeadersState();
-            clearErrorLimitingState();
+    m_configLoadCbHandle = registerConfigLoadCb([this]()
+    {
+        clearRateLimitingState();
+        clearSecurityHeadersState();
+        clearErrorLimitingState();
     });
 }
 
@@ -135,10 +135,17 @@ WaapAssetState::WaapAssetState(
     size_t cleanValuesCacheCapacity,
     size_t suspiciousValuesCacheCapacity,
     size_t sampleTypeCacheCapacity,
-    const std::string& assetId) :
+    const std::string& assetId,
+    const std::string& waapDataLocalFileName
+) :
     m_Signatures(signatures),
     m_hyperscanEngine(hyperscanEngine),
     m_waapDataFileName(waapDataFileName),
+    m_waapDataLocalFileName(
+        waapDataLocalFileName == ""
+            ? getConfigurationWithDefault<std::string>(WAAP_DATA_LOCAL_PATH, "waap data", "base folder")
+            : waapDataLocalFileName
+    ),
     m_assetId(assetId),
     m_requestsMonitor(nullptr),
     scoreBuilder(this),
@@ -172,6 +179,12 @@ WaapAssetState::WaapAssetState(
     }
 
     WaapAssetState::~WaapAssetState() {
+        if (m_configLoadCbHandle != Config::INVALID_CB_HANDLE &&
+            Singleton::exists<Config::I_Config>()) {
+            unregisterConfigLoadCb(m_configLoadCbHandle);
+        }
+        dbgInfo(D_WAAP_ASSET_STATE) << "~WaapAssetState: destroying assetId='" << m_assetId
+            << "' dataFile='" << m_waapDataFileName << "'";
         // TODO:: leaving this uncommented may introduce (not critical) memory leak.
         // Should return this code after testing it well.
 #if 0
@@ -1917,9 +1930,9 @@ std::map<std::string, std::vector<std::string>>& WaapAssetState::getFilterVerbos
 
 std::string WaapAssetState::getWaapDataDir() const
 {
-    size_t lastSlash = m_waapDataFileName.find_last_of('/');
+    size_t lastSlash = m_waapDataLocalFileName.find_last_of('/');
     std::string sigsFilterDir = ((lastSlash == std::string::npos) ?
-        m_waapDataFileName : m_waapDataFileName.substr(0, lastSlash));
+        m_waapDataLocalFileName : m_waapDataLocalFileName.substr(0, lastSlash));
     dbgTrace(D_WAAP_ASSET_STATE) << " signatures filters directory: " << sigsFilterDir;
     return sigsFilterDir;
 }

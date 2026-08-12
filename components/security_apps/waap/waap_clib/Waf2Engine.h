@@ -129,6 +129,8 @@ public:
     const std::vector<std::string> getNotes() const;
     DeepParser& getDeepParser();
     std::vector<std::pair<std::string, std::string> > getHdrPairs() const;
+    const std::vector<std::pair<std::string, std::string>>& getLowercasedHdrPairs() const;
+    const std::vector<std::pair<std::string, std::string>>& getKeywordInfoPairs() const;
     virtual const std::string getHdrContent(std::string hdrName) const;
     const std::string getRequestBody() const;
     const std::string getTransactionIdStr() const;
@@ -238,6 +240,9 @@ public:
     bool shouldIgnoreOverride(const Waf2ScanResult &res);
     Waap::OpenRedirect::State &getOpenRedirectState() { return m_openRedirectState; }
     IWaapConfig* getSiteConfig() { return m_siteConfig; }
+    // Returns true when dedicated parser rules are active for the current request body.
+    // Useful for tests and debug logging.
+    bool hasDedicatedParsers() const { return m_deepParser.hasDedicatedParsers(); }
     void addNote(const std::string &note) { m_notes.push_back(note); }
     Waap::ResponseInspectReasons &getResponseInspectReasons(void) { return m_responseInspectReasons; }
     bool getForceNotSendingLog() const { return m_forceNotSendingLog; }
@@ -276,7 +281,10 @@ private:
     Waap::Override::State getOverrideState(IWaapConfig* sitePolicy);
     std::set<ParameterBehavior> getBehaviors(
         const std::unordered_map<std::string, std::set<std::string>> &exceptions_dict,
-        const std::vector<std::string>& exceptions, bool checkResponse);
+        const std::vector<std::string>& exceptions,
+        DecisionType practiceType,
+        bool checkResponse = false);
+    const ParameterException &getCachedParameterException(const std::string &id);
     std::unordered_map<std::string, std::set<std::string>> getExceptionsDict(DecisionType practiceType);
     bool shouldEnforceByPracticeExceptions(DecisionType practiceType);
     void setOverrideState(const std::set<ParameterBehavior>& behaviors, Waap::Override::State& state);
@@ -319,6 +327,8 @@ private:
     int m_remote_port;
     std::string m_local_addr;
     int m_local_port;
+
+    std::unordered_map<std::string, ParameterException> m_paramExceptionCache;
 
     // Matched override IDs
     std::set<std::string> m_matchedOverrideIds;
@@ -377,6 +387,10 @@ private:
     bool m_processedUri;
     bool m_processedHeaders;
     bool m_isHeaderOverrideScanRequired;
+    mutable std::vector<std::pair<std::string, std::string>> m_lowercased_hdr_pairs;
+    mutable bool m_lowercased_hdr_pairs_cached = false;
+    mutable std::vector<std::pair<std::string, std::string>> m_keyword_info_pairs;
+    mutable bool m_keyword_info_pairs_cached = false;
     bool m_isScanningRequired;
     int m_responseStatus;
     Waap::ResponseInspectReasons m_responseInspectReasons;

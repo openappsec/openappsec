@@ -121,6 +121,8 @@ private:
         CompressionStream* m_compression_stream;
         bool m_eof_reached;
         bool m_stream_finished; // Whether we've finished processing the entire stream
+        bool m_plain_passthrough; // Stream is plain (not encrypted/compressed); pass bytes through
+        size_t m_chunks_attempted; // Count of chunks attempted (for first-chunk fallback decision)
     };
 
     std::unique_ptr<DecompressedBuffer> m_buffer;

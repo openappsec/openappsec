@@ -107,6 +107,7 @@ HttpAttachmentConfiguration::save(cereal::JSONOutputArchive &archive) const
             "waiting_for_verdict_thread_timeout_msec",
             getNumericalValue("waiting_for_verdict_thread_timeout_msec")
         ),
+        cereal::make_nvp("async_body_stage_timeout_msec", getNumericalValue("async_body_stage_timeout_msec")),
         cereal::make_nvp("nginx_inspection_mode", getNumericalValue("nginx_inspection_mode")),
         cereal::make_nvp("num_of_nginx_ipc_elements", getNumericalValue("num_of_nginx_ipc_elements")),
         cereal::make_nvp("keep_alive_interval_msec", getNumericalValue("keep_alive_interval_msec")),
@@ -118,9 +119,12 @@ HttpAttachmentConfiguration::save(cereal::JSONOutputArchive &archive) const
         cereal::make_nvp("remove_server_header", getNumericalValue("remove_server_header")),
         cereal::make_nvp("decompression_pool_size", getNumericalValue("decompression_pool_size")),
         cereal::make_nvp("recompression_pool_size", getNumericalValue("recompression_pool_size")),
+        cereal::make_nvp("max_decompressed_body_size", getNumericalValue("max_decompressed_body_size")),
         cereal::make_nvp("is_paired_affinity_enabled", getNumericalValue("is_paired_affinity_enabled")),
         cereal::make_nvp("is_async_mode_enabled", getNumericalValue("is_async_mode_enabled")),
-        cereal::make_nvp("is_brotli_inspection_enabled", getNumericalValue("is_brotli_inspection_enabled"))
+        cereal::make_nvp("is_brotli_inspection_enabled", getNumericalValue("is_brotli_inspection_enabled")),
+        cereal::make_nvp("is_websocket_stream_enabled", getNumericalValue("is_websocket_stream_enabled")),
+        cereal::make_nvp("is_max_chunks_to_process_enabled", getNumericalValue("is_max_chunks_to_process_enabled"))
     );
 }
 
@@ -171,6 +175,7 @@ HttpAttachmentConfiguration::load(cereal::JSONInputArchive &archive)
     loadNumericalValue(archive, "res_header_thread_timeout_msec", 100);
     loadNumericalValue(archive, "res_body_thread_timeout_msec", 150);
     loadNumericalValue(archive, "waiting_for_verdict_thread_timeout_msec", 150);
+    loadNumericalValue(archive, "async_body_stage_timeout_msec", 5000);
     loadNumericalValue(archive, "nginx_inspection_mode", 0);
     loadNumericalValue(archive, "num_of_nginx_ipc_elements", 200);
     loadNumericalValue(archive, "keep_alive_interval_msec", DEFAULT_KEEP_ALIVE_INTERVAL_MSEC);
@@ -182,8 +187,11 @@ HttpAttachmentConfiguration::load(cereal::JSONInputArchive &archive)
     loadNumericalValue(archive, "remove_server_header", 0);
     loadNumericalValue(archive, "decompression_pool_size", 262144);
     loadNumericalValue(archive, "recompression_pool_size", 16384);
+    loadNumericalValue(archive, "max_decompressed_body_size", 104857600);
     loadNumericalValue(archive, "is_paired_affinity_enabled", 0);
     loadNumericalValue(archive, "is_brotli_inspection_enabled", 0);
+    loadNumericalValue(archive, "is_websocket_stream_enabled", 0);
+    loadNumericalValue(archive, "is_max_chunks_to_process_enabled", 1);
 
     int g_env_async_mode = 0;
 

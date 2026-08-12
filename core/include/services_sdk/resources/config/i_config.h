@@ -49,6 +49,7 @@ public:
 
     virtual const string & getFilesystemPathConfig() const = 0;
     virtual const string & getLogFilesPathConfig() const = 0;
+    virtual string getLocalhostIP() const = 0;
 
     virtual string getPolicyConfigPath(
         const string &policy,
@@ -100,9 +101,13 @@ public:
 
     virtual bool saveConfiguration(ostream &os) const = 0;
 
-    virtual void registerConfigPrepareCb(ConfigCb) = 0;
-    virtual void registerConfigLoadCb(ConfigCb) = 0;
-    virtual void registerConfigAbortCb(ConfigCb) = 0;
+    virtual ConfigCbHandle registerConfigPrepareCb(ConfigCb) = 0;
+    virtual ConfigCbHandle registerConfigLoadCb(ConfigCb) = 0;
+    virtual ConfigCbHandle registerConfigAbortCb(ConfigCb) = 0;
+
+    virtual void unregisterConfigPrepareCb(ConfigCbHandle) = 0;
+    virtual void unregisterConfigLoadCb(ConfigCbHandle) = 0;
+    virtual void unregisterConfigAbortCb(ConfigCbHandle) = 0;
 
     virtual void clearOldTenants() = 0;
 

@@ -34,6 +34,10 @@ public:
         const std::set<std::shared_ptr<boost::regex>, Waap::Util::RegexComparator> &rxes
     );
 
+    const std::vector<std::pair<std::string, std::string>>& getHeaderPairs() const;
+
+    const std::vector<std::pair<std::string, std::string>>& getParamPairs() const;
+
 private:
     Waf2Transaction &waf2Transaction;
 };

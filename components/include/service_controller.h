@@ -40,7 +40,8 @@ class ServiceController
     Singleton::Consume<I_OrchestrationTools>,
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_TenantManager>,
-    Singleton::Consume<I_TimeGet>
+    Singleton::Consume<I_TimeGet>,
+    Singleton::Consume<Config::I_Config>
 {
 public:
     ServiceController();

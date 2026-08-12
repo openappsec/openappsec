@@ -518,11 +518,10 @@ void Waf2Transaction::parseAuthorization(const char* value, int value_len, const
                 }
                 dbgTrace(D_WAAP_HEADERS) << "[transaction:" << this << "] special header '" << header_name
                     << " clean JWT algotitm detected";
-                return;
-            } else {
-                parseGenericHeaderValue(header_name, value, value_len);
             }
         }
+        // Scan the JWT claims (base64url-decoded inside the deep parser) regardless of alg.
+        parseGenericHeaderValue(header_name, value + bearer_str.size(), value_len - (int)bearer_str.size());
         return;
     }
 
@@ -542,6 +541,12 @@ void Waf2Transaction::parseAuthorization(const char* value, int value_len, const
         } else {
             parseGenericHeaderValue(header_name, value, value_len);
         }
+        return;
+    }
+
+    // Raw JWT in the Authorization value with no Bearer/Negotiate prefix.
+    if (Waap::Util::isJwtToken(v)) {
+        parseGenericHeaderValue(header_name, value, value_len);
     }
 }
 
@@ -571,6 +576,10 @@ void Waf2Transaction::start() {
     // TODO:: remove this! refactor extraction of kv_pairs!
     m_deepParser.clear();
     hdrs_map.clear();
+    m_keyword_info_pairs.clear();
+    m_keyword_info_pairs_cached = false;
+    m_lowercased_hdr_pairs.clear();
+    m_lowercased_hdr_pairs_cached = false;
     m_request_body.clear();
     m_response_body.clear();
     m_overrideStateByPractice.clear();
@@ -1165,11 +1174,18 @@ void Waf2Transaction::start_request_body() {
 
     clearRequestParserState();
 
+    // Build per-request dedicated-parser cache (resolved policy pointer, URI, method)
+    // so that createInternalParser() avoids repeated virtual calls on every parsed parameter.
+    m_deepParser.initRequestContext();
+
 
     m_requestBodyParser = new ParserRaw(m_deepParserReceiver, 0, "body");
 
     m_request_body_bytes_received = 0;
     m_request_body.clear();
+
+    m_keyword_info_pairs.clear();
+    m_keyword_info_pairs_cached = false;
 }
 
 void Waf2Transaction::add_request_body_chunk(const char* data, int data_len) {
@@ -1243,6 +1259,9 @@ void Waf2Transaction::end_request_body() {
             (m_requestBodyParser ? m_requestBodyParser->name() : "<NONE>") <<
             "'. ERROR: m_key is not empty. full key='" << m_deepParser.m_key.c_str() << "'";
     }
+
+    m_keyword_info_pairs.clear();
+    m_keyword_info_pairs_cached = false;
 
     clearRequestParserState();
 }
@@ -1371,52 +1390,57 @@ Waf2Transaction::isHtmlType(const char* data, int data_len){
 bool
 Waf2Transaction::findHtmlTagToInject(const char* data, int data_len, int& pos)
 {
-    bool headFound = false;
-    static const char tag[] = "<head>";
-    static size_t tagSize = sizeof(tag) - 1;
+    // Search for "<head" (case-insensitive) followed by '>' or whitespace, then
+    // find its closing '>' and set pos to one position after it.
+    // m_tagHist / m_tagHistPos are reused as a carry buffer (last <=5 bytes from
+    // the previous chunk) to handle <head> tags that straddle chunk boundaries.
+    static const std::string prefix = "<head";
+    static const int prefixSize = static_cast<int>(prefix.size()); // 5
 
-    // Searching tag <head> by iterating over data and always check last 6 bytes against the required tag.
-    for (pos = 0; pos<data_len && !headFound; ++pos) {
-        m_tagHist[m_tagHistPos] = data[pos];
-        m_tagHistPos++;
-        // wrap
-        if (m_tagHistPos >= tagSize) {
-            m_tagHistPos = 0;
-        }
-        // check
-        bool tagMatches = true;
-        size_t tagHistPosCheck = m_tagHistPos;
-        for (size_t i=0; i < tagSize; ++i) {
-            if (tag[i] != ::tolower(m_tagHist[tagHistPosCheck])) {
-                if (i == tagSize - 1 && m_tagHist[tagHistPosCheck] == ' ') {
-                    // match regex on head element with attributes
-                    string dataStr = Waap::Util::charToString(data + pos, data_len - pos);
-                    dataStr = dataStr.substr(0, dataStr.find('>')+1);
-                    tagMatches = NGEN::Regex::regexMatch(
-                        __FILE__,
-                        __LINE__,
-                        dataStr,
-                        boost::regex("(?:\\s+[a-zA-Z_:][-a-zA-Z0-9_:.]*(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s\"'>]*))?)*\\s*>")
-                        );
-                        pos += dataStr.length() - 1;
-                        dbgTrace(D_WAAP_BOT_PROTECTION) << "matching head element with attributes: " << dataStr << ". match: " << tagMatches;
-                    break;
-                }
-                tagMatches = false;
-                break;
-            }
-            tagHistPosCheck++;
-            if (tagHistPosCheck >= tagSize) {
-                tagHistPosCheck = 0;
-            }
-        }
-        if (tagMatches) {
-            headFound = true;
-        }
+    // Build combined string: carry from previous call + current chunk.
+    const int carryLen = static_cast<int>(m_tagHistPos);
+    std::string combined = std::string(m_tagHist, carryLen) + std::string(data, data_len);
+    std::string combinedLower = combined;
+    std::transform(combinedLower.begin(), combinedLower.end(), combinedLower.begin(), ::tolower);
+
+    // Update carry: last min(data_len, prefixSize) bytes of the current chunk,
+    // so the next call can stitch across the boundary.
+    // Skip the update for empty chunks to preserve carry from the previous call.
+    if (data_len > 0) {
+        const int newCarryLen = std::min(data_len, prefixSize);
+        m_tagHistPos = static_cast<size_t>(newCarryLen);
+        std::memcpy(m_tagHist, data + data_len - newCarryLen, newCarryLen);
     }
 
-    dbgTrace(D_WAAP_BOT_PROTECTION) << "head element tag found: " << headFound;
-    return headFound;
+    auto headPos = combinedLower.find(prefix);
+    if (headPos == std::string::npos) {
+        pos = data_len; // convention: advance pos to end of chunk when not found
+        dbgTrace(D_WAAP_BOT_PROTECTION) << "head element tag not found";
+        return false;
+    }
+
+    // The character immediately after "<head" must be '>' or whitespace
+    // to avoid false-positives on tags like <header>.
+    auto nextPos = headPos + static_cast<size_t>(prefixSize);
+    if (nextPos >= combinedLower.size() ||
+        (combinedLower[nextPos] != '>' && !std::isspace(static_cast<unsigned char>(combinedLower[nextPos])))) {
+        pos = data_len;
+        dbgTrace(D_WAAP_BOT_PROTECTION) << "head element tag not found";
+        return false;
+    }
+
+    // Scan forward to find the closing '>'.
+    auto closePos = combinedLower.find('>', nextPos);
+    if (closePos == std::string::npos) {
+        pos = data_len;
+        dbgTrace(D_WAAP_BOT_PROTECTION) << "head element tag not found - no closing '>'";
+        return false;
+    }
+
+    // Convert the position in 'combined' back to a position in 'data'.
+    pos = static_cast<int>(closePos) + 1 - carryLen; // inject after '>'
+    dbgTrace(D_WAAP_BOT_PROTECTION) << "head element tag found, inject pos: " << pos;
+    return true;
 }
 
 void
@@ -1827,6 +1851,11 @@ Waf2Transaction::sendLog()
         break;
     }
 
+    if (!final_decision->shouldBlock()) {
+        // Request was not blocked (e.g. detect mode, or NO_WAAP_DECISION fallback).
+        telemetryData.blockType = NOT_BLOCKING;
+    }
+
     bool shouldBlock = false;
     if (final_decision->shouldForceBlock()) {
         telemetryData.blockType = FORCE_BLOCK;
@@ -2017,7 +2046,7 @@ Waf2Transaction::sendLog()
     }
     case AUTONOMOUS_SECURITY_DECISION: {
         bool all_web_requests = triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webRequests);
-        bool send_log_due_to_action = 
+        bool send_log_due_to_action =
             send_extended_log ||
             std::dynamic_pointer_cast<AutonomousSecurityDecision>(final_decision)
                 ->getThreatLevel() != ThreatLevel::NO_THREAT ||
@@ -2396,11 +2425,41 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
     exceptions_dict["hostName"].insert(m_hostStr);
     exceptions_dict["method"].insert(m_methodStr);
 
+    if (res.location == "header") {
+        std::string key_path = res.param_name;
+        std::transform(key_path.begin(), key_path.end(), key_path.begin(), ::tolower);
+        const std::string *matched_name = nullptr;
+        const std::string *matched_value = nullptr;
+        for (const auto &hdr : hdrs_map) {
+            if (key_path.compare(0, hdr.first.size(), hdr.first) != 0) continue;
+            if (key_path.size() != hdr.first.size() && key_path[hdr.first.size()] != '.') continue;
+            if (matched_name == nullptr || hdr.first.size() > matched_name->size()) {
+                matched_name = &hdr.first;
+                matched_value = &hdr.second;
+            }
+        }
+        std::string hdr_name = (matched_name != nullptr) ? *matched_name : key_path;
+        exceptions_dict["headerName"].insert(hdr_name);
+
+        if (matched_value != nullptr) {
+            std::string real_value = *matched_value;
+            std::transform(real_value.begin(), real_value.end(), real_value.begin(), ::tolower);
+            exceptions_dict["headerValue"].insert(real_value);
+        }
+        std::string scanned = res.unescaped_line;
+        std::transform(scanned.begin(), scanned.end(), scanned.begin(), ::tolower);
+        if (scanned != hdr_name) {
+            exceptions_dict["headerValue"].insert(scanned);
+        }
+    }
+
     for (auto &keyword : res.keyword_matches) {
         exceptions_dict["indicator"].insert(keyword);
+        exceptions_dict["keyword"].insert(keyword);
     }
     for (auto &it : res.found_patterns) {
         exceptions_dict["indicator"].insert(it.first);
+        exceptions_dict["keyword"].insert(it.first);
     }
 
     bool isConfigExist = false;
@@ -2431,10 +2490,9 @@ Waf2Transaction::shouldIgnoreOverride(const Waf2ScanResult &res) {
 
     if (!site_exceptions.empty()) {
         dbgTrace(D_WAAP_OVERRIDE) << "get behaviors by web app practice";
-        I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<Waf2Transaction>();
         for (const auto &id : site_exceptions) {
             dbgTrace(D_WAAP_OVERRIDE) << "get parameter exception: " << id;
-            auto params = i_rulebase->getParameterException(id).getBehavior(exceptions_dict, ignored_keywords);
+            auto params = getCachedParameterException(id).getBehavior(exceptions_dict, ignored_keywords);
             behaviors.insert(params.begin(), params.end());
         }
     } else {

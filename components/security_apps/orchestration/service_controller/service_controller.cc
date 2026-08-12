@@ -204,8 +204,10 @@ ServiceDetails::sendNewConfigurations(int configuration_id, const string &policy
     SendConfigurations new_config(configuration_id, policy_version);
 
     I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ServiceController>();
-
-    MessageMetadata new_config_req_md("127.0.0.1", service_port);
+    auto service_controller = Singleton::Consume<I_ServiceController>::by<ServiceDetails>();
+    const string &localhost_ip = service_controller->getLocalhostIP();
+    dbgTrace(D_SERVICE_CONTROLLER) << "Using localhost IP: " << localhost_ip;
+    MessageMetadata new_config_req_md(localhost_ip, service_port);
     new_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
     new_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     new_config_req_md.setSuspension(false);
@@ -331,6 +333,8 @@ public:
 
     bool getServicesPolicyStatus() const override;
 
+    const string & getLocalhostIP() const override { return localhost_ip; }
+
 private:
     void cleanUpVirtualFiles();
 
@@ -375,6 +379,8 @@ private:
 
     I_OrchestrationTools *orchestration_tools = nullptr;
     I_MainLoop *mainloop = nullptr;
+    Config::I_Config *i_config = nullptr;
+    string localhost_ip;
 };
 
 class GetServicesPorts : public ServerRest
@@ -480,7 +486,9 @@ ServiceController::Impl::init()
 
     orchestration_tools = Singleton::Consume<I_OrchestrationTools>::by<ServiceController>();
     mainloop = Singleton::Consume<I_MainLoop>::by<ServiceController>();
-
+    i_config = Singleton::Consume<Config::I_Config>::by<ServiceController>();
+    localhost_ip = i_config->getLocalhostIP();
+    
     Singleton::Consume<I_MainLoop>::by<ServiceController>()->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
         chrono::seconds(
@@ -972,7 +980,6 @@ ServiceController::Impl::sendSignalForServices(
 {
     dbgFlow(D_SERVICE_CONTROLLER) << "Policy version to update: " << policy_version_to_update;
 
-    total_services_status = false;
     for (auto &service_id : nano_services_to_update) {
         auto nano_service = registered_services.find(service_id);
         if (nano_service == registered_services.end()) {
@@ -1151,11 +1158,18 @@ ServiceController::Impl::getUpdatePolicyVersion() const
 void
 ServiceController::Impl::updateReconfStatus(int id, const string &service_name, ReconfStatus status)
 {
-    if (status == ReconfStatus::FAILED) {
-        failed_services.emplace(id, status);
-    }
-
     if (services_reconf_status.find(id) == services_reconf_status.end()) {
+        if (id <= configuration_id) {
+            // Late ack for a reconfiguration round that already ended (the tracking map is
+            // cleared on success/failure/timeout). The id was issued by us, so this is a benign
+            // stale ack - drop it quietly instead of flagging a missing mapping. See INXT-53957.
+            dbgTrace(D_SERVICE_CONTROLLER)
+                << "Ignoring stale reconf-status update for expired reconfiguration ID: "
+                << id
+                << ". Service name: "
+                << service_name;
+            return;
+        }
         dbgError(D_SERVICE_CONTROLLER)
             << "Unable to find a mapping for reconfiguration ID:"
             << id
@@ -1163,6 +1177,11 @@ ServiceController::Impl::updateReconfStatus(int id, const string &service_name, 
             << service_name;
         return;
     }
+
+    if (status == ReconfStatus::FAILED) {
+        failed_services.emplace(id, status);
+    }
+
     dbgTrace(D_SERVICE_CONTROLLER)
         << "Updating reconf status for reconfiguration ID "
         << id

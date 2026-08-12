@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -437,7 +438,8 @@ private:
         char *buf;
         auto len = BIO_get_mem_data(outbio.get(), &buf);
         string recieved_public_key(buf, len);
-        dbgTrace(D_CONNECTION) << "Received public key " << recieved_public_key;
+
+        dbgTrace(D_CONNECTION) << "Received public key length: " << recieved_public_key.size();
 
         auto defualt_key_path = getFilesystemPathConfig() + "/certs/public-key.pem";
         auto key_path = getConfigurationWithDefault(defualt_key_path, "message", "Public key path");
@@ -448,7 +450,7 @@ private:
 
         stringstream pinned_key;
         pinned_key << pinned_public_file.rdbuf();
-        dbgTrace(D_CONNECTION) << "Saved public key: " << pinned_key.str();
+        dbgTrace(D_CONNECTION) << "Saved public key length: " << pinned_key.str().size();
 
         if (recieved_public_key != pinned_key.str()) return genError("Received and pinned keys don't match");
 
@@ -482,7 +484,8 @@ private:
     performHandshakeAndVerifyCert(I_TimeGet *i_time, I_MainLoop *i_mainloop)
     {
         dbgFlow(D_CONNECTION) << "Performing SSL handshake";
-        auto handshake_timeout = getConfigurationWithDefault<uint>(500000, "message", "Connection handshake timeout");
+        auto handshake_timeout = getConfigurationWithDefault<uint>(10000000,
+            "message", "Connection handshake timeout");
         auto handshake_end_time = i_time->getMonotonicTime() + chrono::microseconds(handshake_timeout);
 
         while (i_time->getMonotonicTime() < handshake_end_time) {

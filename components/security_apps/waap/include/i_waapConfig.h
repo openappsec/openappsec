@@ -24,6 +24,7 @@
 #include "../waap_clib/UserLimitsPolicy.h"
 #include "../waap_clib/RateLimiting.h"
 #include "../waap_clib/SecurityHeadersPolicy.h"
+#include "../waap_clib/WaapDedicatedParsers.h"
 #include <memory>
 
 enum class BlockingLevel {
@@ -72,6 +73,12 @@ public:
     virtual const std::shared_ptr<Waap::RateLimiting::Policy>& get_ErrorLimitingPolicy() const = 0;
     virtual const std::shared_ptr<Waap::SecurityHeaders::Policy>& get_SecurityHeadersPolicy() const = 0;
     virtual const std::shared_ptr<Waap::UserLimits::Policy>& get_UserLimitsPolicy() const = 0;
+    virtual const std::shared_ptr<Waap::DedicatedParsers::DedicatedParsersConfig>&
+        get_DedicatedParsersPolicy() const = 0;
+    // Returns true if any dedicated parser rules are active for this config.
+    // Pre-computed at policy load time; allows a zero-cost bool check on the hot parsing path
+    // instead of dereferencing the shared_ptr and calling empty() on every request.
+    virtual bool hasDedicatedParsers() const = 0;
     virtual WaapConfigType getType() const = 0;
 
     virtual void printMe(std::ostream& os) const = 0;

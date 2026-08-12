@@ -48,7 +48,11 @@ public:
         return addRestCall(oper, uri, std::make_unique<SpecificRestInit<T>>());
     }
 
-    virtual bool addGetCall(const std::string &uri, const std::function<std::string()> &callback) = 0;
+    virtual bool addGetCall(
+        const std::string &uri,
+        const std::function<std::string()> &callback,
+        const std::string &content_type = "application/json"
+    ) = 0;
     virtual bool addWildcardGetCall(
         const std::string &uri,
         const std::function<std::string(const std::string &)> &callback

@@ -538,7 +538,8 @@ TEST_F(MetricTest, getPromeathusMetric)
 {
     MetricScraper metric_scraper;
     function<string()> get_metrics_func;
-    EXPECT_CALL(rest, addGetCall("service-metrics", _)).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
+    EXPECT_CALL(rest, addGetCall("service-metrics", _, _))
+        .WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
     metric_scraper.init();
 
     stringstream configuration;
@@ -637,7 +638,8 @@ TEST_F(MetricTest, getPromeathusMultiMap)
 {
     MetricScraper metric_scraper;
     function<string()> get_metrics_func;
-    EXPECT_CALL(rest, addGetCall("service-metrics", _)).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
+    EXPECT_CALL(rest, addGetCall("service-metrics", _, _))
+        .WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
     metric_scraper.init();
 
     stringstream configuration;
@@ -706,7 +708,8 @@ TEST_F(MetricTest, getPromeathusTwoMetrics)
 {
     MetricScraper metric_scraper;
     function<string()> get_metrics_func;
-    EXPECT_CALL(rest, addGetCall("service-metrics", _)).WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
+    EXPECT_CALL(rest, addGetCall("service-metrics", _, _))
+        .WillOnce(DoAll(SaveArg<1>(&get_metrics_func), Return(true)));
     metric_scraper.init();
 
     stringstream configuration;

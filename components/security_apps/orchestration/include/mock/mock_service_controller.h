@@ -42,6 +42,8 @@ public:
 
     MOCK_CONST_METHOD0(getServicesPolicyStatus, bool());
 
+    MOCK_CONST_METHOD0(getLocalhostIP, const std::string &());
+
     MOCK_METHOD6(
         updateServiceConfiguration,
         Maybe<void>(

@@ -116,6 +116,7 @@ private:
     map<TenantProfilePair, TemporaryCache<string, void>> mapper;
 
     I_Messaging *i_messaging = nullptr;
+    Config::I_Config *i_config = nullptr;
     TenantManagerType type;
     ::Flags<MessageConnectionConfig> conn_flags;
 };
@@ -207,6 +208,7 @@ TenantManager::Impl::init()
 
     conn_flags.setFlag(MessageConnectionConfig::ONE_TIME_CONN);
     i_messaging = Singleton::Consume<I_Messaging>::by<TenantManager>();
+    i_config = Singleton::Consume<Config::I_Config>::by<TenantManager>();
 
     if (type == TenantManagerType::SERVER) {
         auto rest = Singleton::Consume<I_RestApi>::by<TenantManager>();
@@ -228,8 +230,9 @@ TenantManager::Impl::getAllTenants() const
     dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a client. Requesting the active tenants";
 
     GetActiveTenants active_tenant;
+    string localhost_ip = i_config->getLocalhostIP();
 
-    MessageMetadata get_active_tenants_req_md("127.0.0.1", 7777, conn_flags);
+    MessageMetadata get_active_tenants_req_md(localhost_ip, 7777, conn_flags);
     get_active_tenants_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     auto get_active_tenants_req_status = i_messaging->sendSyncMessage(
         HTTPMethod::POST,
@@ -240,7 +243,7 @@ TenantManager::Impl::getAllTenants() const
     );
 
     if (!get_active_tenants_req_status.ok()) {
-        MessageMetadata secondery_port_req_md("127.0.0.1", 7778, conn_flags);
+        MessageMetadata secondery_port_req_md(localhost_ip, 7778, conn_flags);
         secondery_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         get_active_tenants_req_status = i_messaging->sendSyncMessage(
             HTTPMethod::POST,
@@ -265,8 +268,9 @@ TenantManager::Impl::getProfileIds(const string &_tenant_id) const
     dbgFlow(D_TENANT_MANAGER) << "Tenant Manager is a client. Requesting the active profiles";
 
     GetProfileIds tenant_id(_tenant_id);
+    string localhost_ip = i_config->getLocalhostIP();
 
-    MessageMetadata get_profile_id_req_md("127.0.0.1", 7777, conn_flags);
+    MessageMetadata get_profile_id_req_md(localhost_ip, 7777, conn_flags);
     get_profile_id_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
     auto get_profile_id_req_status = i_messaging->sendSyncMessage(
         HTTPMethod::POST,
@@ -278,7 +282,7 @@ TenantManager::Impl::getProfileIds(const string &_tenant_id) const
 
 
     if (!get_profile_id_req_status.ok()) {
-        MessageMetadata secondery_port_req_md("127.0.0.1", 7778, conn_flags);
+        MessageMetadata secondery_port_req_md(localhost_ip, 7778, conn_flags);
         secondery_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         get_profile_id_req_status = i_messaging->sendSyncMessage(
             HTTPMethod::POST,

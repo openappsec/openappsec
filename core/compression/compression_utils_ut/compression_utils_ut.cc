@@ -726,3 +726,59 @@ TEST_F(CompressionUtilsTest, DecompressPlainTextWithExplicitBrotliTypeFails)
         HasSubstr("Brotli decompression error")
     );
 }
+
+// INXT-53862: the gzip/zlib decompressor accumulated inflate output unbounded (while the brotli
+// path capped at 256 MB). A configurable output-size cap must refuse a decompression-bomb
+// response instead of ballooning memory. Cap set small so the test is deterministic/cheap.
+TEST_F(CompressionUtilsTest, GzipDecompressionRefusedWhenExceedingCap)
+{
+    string large_payload = string(4 * 1024 * 1024, 'A'); // 4 MB of 'A' -> tiny gzip, large inflate
+    Maybe<string> compressed = compressString(CompressionType::GZIP, large_payload);
+    ASSERT_TRUE(compressed.ok());
+
+    setCompressionMaxDecompressedSize(1024 * 1024); // cap decompressed output at 1 MB
+
+    Maybe<string> decompressed = decompressString(compressed.unpack());
+
+    EXPECT_FALSE(decompressed.ok());
+    EXPECT_THAT(
+        capture_debug.str(),
+        HasSubstr("decompressed size exceeds limit")
+    );
+
+    setCompressionMaxDecompressedSize(0); // 0 -> restore default cap; keep other tests unaffected
+}
+
+// INXT-53862: output under the configured cap must still decompress normally.
+TEST_F(CompressionUtilsTest, GzipDecompressionAllowedWithinCap)
+{
+    string payload = string(512 * 1024, 'A'); // 512 KB, well under the 2 MB cap below
+    Maybe<string> compressed = compressString(CompressionType::GZIP, payload);
+    ASSERT_TRUE(compressed.ok());
+
+    setCompressionMaxDecompressedSize(2 * 1024 * 1024); // 2 MB cap
+
+    Maybe<string> decompressed = decompressString(compressed.unpack());
+    EXPECT_TRUE(decompressed.ok());
+    EXPECT_EQ(payload, decompressed.unpack());
+
+    setCompressionMaxDecompressedSize(0); // restore default
+}
+
+TEST_F(CompressionUtilsTest, DecompressDataFailureYieldsZeroedResult)
+{
+    // On the failure path decompressData must return a zeroed result (output == NULL,
+    // num_output_bytes == 0), not an uninitialized pointer. Unchecked C callers (e.g.
+    // nano_decompress_body) copy these fields directly, so a garbage pointer/length there
+    // would be a segfault or heap corruption.
+    auto compression_stream = initCompressionStream();
+
+    unsigned char invalid_data[] = "This is not compressed data";
+    DecompressionResult result = decompressData(compression_stream, sizeof(invalid_data), invalid_data);
+
+    EXPECT_EQ(result.ok, 0);
+    EXPECT_EQ(result.output, nullptr);
+    EXPECT_EQ(result.num_output_bytes, 0u);
+
+    finiCompressionStream(compression_stream);
+}

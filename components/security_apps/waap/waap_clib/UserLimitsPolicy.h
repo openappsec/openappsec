@@ -26,6 +26,7 @@ namespace UserLimits {
 typedef unsigned long long ull;
 #define DEFAULT_URL_MAX_SIZE 32*1024
 #define DEFAULT_HEADER_MAX_SIZE 100*1024
+#define DEFAULT_HEADER_MAX_AMOUNT 0
 #define DEFAULT_BODY_MAX_SIZE_KB 1000000
 #define DEFAULT_BODY_MAX_SIZE 1000000*1024
 #define DEFAULT_OBJECT_MAX_DEPTH 40
@@ -45,6 +46,7 @@ class Policy {
         Config() :
         urlMaxSize(DEFAULT_URL_MAX_SIZE),
         httpHeaderMaxSize(DEFAULT_HEADER_MAX_SIZE),
+        httpHeaderMaxAmount(DEFAULT_HEADER_MAX_AMOUNT),
         httpBodyMaxSizeKb(DEFAULT_BODY_MAX_SIZE_KB),
         httpBodyMaxSize(DEFAULT_BODY_MAX_SIZE),
         maxObjectDepth(DEFAULT_OBJECT_MAX_DEPTH),
@@ -55,6 +57,11 @@ class Policy {
         void serialize(_A& ar) {
             ar(cereal::make_nvp("urlMaxSize", urlMaxSize));
             ar(cereal::make_nvp("httpHeaderMaxSize", httpHeaderMaxSize));
+            try {
+                ar(cereal::make_nvp("httpHeaderMaxAmount", httpHeaderMaxAmount));
+            } catch (...) {
+                httpHeaderMaxAmount = DEFAULT_HEADER_MAX_AMOUNT;
+            }
             httpBodyMaxSizeKb = 0;
             ar(cereal::make_nvp("httpRequestBodyMaxSize", httpBodyMaxSizeKb));
             // Kilobytes to bytes conversion
@@ -69,6 +76,7 @@ class Policy {
 
         size_t urlMaxSize;  // URL max size in bytes
         size_t httpHeaderMaxSize;  // Header Size in Bytes
+        size_t httpHeaderMaxAmount;  // Max number of headers (0 = no limit)
         size_t httpBodyMaxSizeKb;  // Body Size in Kilobytes
         ull httpBodyMaxSize;  // Body Size in Bytes
         size_t maxObjectDepth;  // Can range from 0 to 1024
@@ -88,6 +96,7 @@ public:
     size_t getUrlMaxSize() const { return m_config.urlMaxSize; }
     size_t getMaxObjectDepth() const { return m_config.maxObjectDepth; }
     size_t getHttpHeaderMaxSize() const { return m_config.httpHeaderMaxSize; }
+    size_t getHttpHeaderMaxAmount() const { return m_config.httpHeaderMaxAmount; }
     size_t getHttpBodyMaxSizeKb() const { return m_config.httpBodyMaxSizeKb; }
     ull getHttpBodyMaxSize() const { return m_config.httpBodyMaxSize; }
     bool isHttpIllegalMethodAllowed() const { return m_config.httpIllegalMethodsAllowed; }
@@ -126,6 +135,7 @@ public:
         URL_OVERFLOW,
         HEADER_LIMIT,
         HEADER_OVERFLOW,
+        HEADER_COUNT_LIMIT,
         BODY_LIMIT,
         BODY_OVERFLOW,
         OBJECT_DEPTH_LIMIT
@@ -135,6 +145,7 @@ public:
         m_policy(policy),
         m_urlSize(0),
         m_httpHeaderSize(0),
+        m_httpHeaderCount(0),
         m_httpBodySize(0),
         m_objectDepth(0),
         m_currState(StateType::NO_STATE),
@@ -172,6 +183,7 @@ private:
     const Policy& m_policy;
     size_t m_urlSize;
     size_t m_httpHeaderSize;
+    size_t m_httpHeaderCount;
     ull m_httpBodySize;
     size_t m_objectDepth;
     StateType m_currState;  // State that is currently being enforced

@@ -48,16 +48,7 @@ public:
     init()
     {
         i_socket = Singleton::Consume<I_Socket>::by<AttachmentRegistrator>();
-        Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addOneTimeRoutine(
-            I_MainLoop::RoutineType::System,
-            [this] ()
-            {
-                while(!initSocket()) {
-                    Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->yield(chrono::seconds(1));
-                }
-            },
-            "Initialize attachment registration IPC"
-        );
+        startSocketInitRoutine();
 
         uint expiration_timeout = getProfileAgentSettingWithDefault<uint>(
             300, "attachmentRegistrator.expirationCheckSeconds"
@@ -68,6 +59,20 @@ public:
             [this] () { handleExpiration(); },
             "Attachment's expiration handler",
             true
+        );
+
+        // The file routines only run when the polled descriptor turns readable, so a listener that
+        // dies without its descriptor number being reused would never reach the accept-failure
+        // recovery. This routine catches those silent cases.
+        uint health_check_interval = getProfileAgentSettingWithDefault<uint>(
+            30, "attachmentRegistrator.listenerHealthCheckSeconds"
+        );
+        Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addRecurringRoutine(
+            I_MainLoop::RoutineType::Timer,
+            chrono::seconds(health_check_interval),
+            [this] () { verifyListeners(); },
+            "Attachment registration listeners health check",
+            false
         );
     }
 
@@ -92,6 +97,15 @@ private:
     {
         registered_attachments[family_id] = vector<bool>(num_of_members, true);
 
+        // The watchdog registration is per-(family, count), not per-member: every member
+        // sends the same pair, and re-running the no-op script per member puts a ~100ms
+        // blocking fork in front of each reply - once a few registrations queue up, every
+        // peer misses its reply deadline and no attachment ever registers (build 1643242).
+        auto watchdog_reg = watchdog_registered_families.find(family_id);
+        if (watchdog_reg != watchdog_registered_families.end() && watchdog_reg->second == num_of_members) {
+            return true;
+        }
+
         const int cmd_tmout = 900;
         I_ShellCmd *shell_cmd = Singleton::Consume<I_ShellCmd>::by<AttachmentRegistrator>();
         Maybe<string> registration_res = shell_cmd->getExecOutput(
@@ -113,6 +127,7 @@ private:
             return false;
         }
 
+        watchdog_registered_families[family_id] = num_of_members;
         return true;
     }
 
@@ -200,6 +215,68 @@ private:
         return registration_command.str();
     }
 
+    void
+    startSocketInitRoutine()
+    {
+        Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addOneTimeRoutine(
+            I_MainLoop::RoutineType::System,
+            [this] ()
+            {
+                while(!initSocket()) {
+                    Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->yield(chrono::seconds(1));
+                }
+            },
+            "Initialize attachment registration IPC"
+        );
+    }
+
+    static bool
+    isListeningSocket(I_Socket::socketFd socket_fd)
+    {
+        int is_accepting = 0;
+        socklen_t len = sizeof(is_accepting);
+        if (getsockopt(socket_fd, SOL_SOCKET, SO_ACCEPTCONN, &is_accepting, &len) != 0) return false;
+        return is_accepting != 0;
+    }
+
+    // A listener descriptor can stop being a listening socket while the file routine polling it is
+    // still registered (e.g. the descriptor was closed elsewhere and the number was reused), which
+    // otherwise leaves accept() failing forever and no attachment able to register.
+    void
+    recoverLostListener(
+        I_Socket::socketFd &socket_fd,
+        I_MainLoop::RoutineID &routine_id,
+        const string &socket_role)
+    {
+        dbgError(D_ATTACHMENT_REGISTRATION)
+            << "The "
+            << socket_role
+            << " socket is no longer listening. Re-initializing the registration IPC";
+
+        i_socket->closeSocket(socket_fd);
+        socket_fd = -1;
+        startSocketInitRoutine();
+
+        // Ends the file routine polling the dead descriptor; initSocket registers a new one.
+        // Stopping throws when it ends the routine that is currently running, so it must be last.
+        I_MainLoop::RoutineID stale_routine_id = routine_id;
+        routine_id = 0;
+        auto mainloop = Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>();
+        if (mainloop->doesRoutineExist(stale_routine_id)) mainloop->stop(stale_routine_id);
+    }
+
+    void
+    verifyListeners()
+    {
+        if (server_sock > 0 && !isListeningSocket(server_sock)) {
+            recoverLostListener(server_sock, server_sock_routine_id, "registration");
+            return;
+        }
+        if (keep_alive_sock > 0 && !isListeningSocket(keep_alive_sock)) {
+            recoverLostListener(keep_alive_sock, keep_alive_routine_id, "keep-alive");
+        }
+    }
+
     bool
     initSocket()
     {
@@ -222,7 +299,7 @@ private:
                 return false;
             }
 
-            Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addFileRoutine(
+            server_sock_routine_id = Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addFileRoutine(
                 I_MainLoop::RoutineType::RealTime,
                 server_sock,
                 [this] () { handleAttachmentRegistration(); },
@@ -244,7 +321,7 @@ private:
                 return false;
             }
 
-            Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addFileRoutine(
+            keep_alive_routine_id = Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->addFileRoutine(
                 I_MainLoop::RoutineType::System,
                 keep_alive_sock,
                 [this] () { handleKeepAlives(); },
@@ -281,6 +358,9 @@ private:
             dbgWarning(D_ATTACHMENT_REGISTRATION)
                 << "Failed to accept new keep-alive request socket: "
                 << accepted_socket.getErr();
+            if (!isListeningSocket(keep_alive_sock)) {
+                recoverLostListener(keep_alive_sock, keep_alive_routine_id, "keep-alive");
+            }
             return;
         }
 
@@ -361,6 +441,7 @@ private:
 
         for (const string &family : deleted_families) {
             registered_attachments.erase(family);
+            watchdog_registered_families.erase(family);
             dbgWarning(D_ATTACHMENT_REGISTRATION)
                 << "Successfully un-registered attachments family. Family id: "
                 << family;
@@ -375,6 +456,9 @@ private:
             dbgWarning(D_ATTACHMENT_REGISTRATION)
                 << "Failed to accept a new client socket: "
                 << accepted_socket.getErr();
+            if (!isListeningSocket(server_sock)) {
+                recoverLostListener(server_sock, server_sock_routine_id, "registration");
+            }
             return;
         }
 
@@ -417,9 +501,32 @@ private:
         replyWithRelevantHandler(client_socket, *attachment_id, *family_id, *attachment_type);
     }
 
+    // Freshly accepted sockets are blocking and the first read has no preceding
+    // poll, so a peer that connected but has not written yet would hang the
+    // mainloop thread. Wait for data with a bounded yield-retry instead.
+    bool
+    waitForSocketData(I_Socket::socketFd socket)
+    {
+        for (int retry = 0; retry < 100; retry++) {
+            if (i_socket->isDataAvailable(socket)) return true;
+            // A hung-up/reconnecting peer (POLLHUP/POLLERR) sets the socket error but leaves
+            // data unavailable; bail at once instead of spinning the full retry budget.
+            if (i_socket->isError(socket)) return false;
+            // Wait in wall-clock time: the peer needs a kernel scheduling slot to issue its
+            // first write after connect, and yield(true) with no other ready routine returns
+            // immediately - all 100 retries would burn in microseconds and time out every
+            // keep-alive (which expires the family and restarts the handlers).
+            Singleton::Consume<I_MainLoop>::by<AttachmentRegistrator>()->yield(chrono::milliseconds(1));
+        }
+        return false;
+    }
+
     Maybe<uint8_t>
     readNumericParam(I_Socket::socketFd socket)
     {
+        if (!waitForSocketData(socket)) {
+            return genError("Timed out waiting for a numeric parameter");
+        }
         Maybe<vector<char>> param_to_read = i_socket->receiveData(socket, sizeof(uint8_t));
         if (!param_to_read.ok()) {
             dbgWarning(D_ATTACHMENT_REGISTRATION) << "Failed to read param: " << param_to_read.getErr();
@@ -452,15 +559,30 @@ private:
             << "Successfully received string size. Size: "
             << static_cast<int>(*param_size);
 
+        // Zero-length string: the peer sends nothing after the size byte (empty container
+        // id on VM installs), so waiting here can only expire - it burned the whole budget
+        // and rejected every live embedded registration, while closed peers slipped through
+        // on POLLIN-for-EOF and got replies into a broken pipe (builds 1641069..1643291).
+        if (*param_size == 0) return string();
+
+        if (!waitForSocketData(socket)) {
+            return genError("Timed out waiting for a string parameter");
+        }
         Maybe<vector<char>> param_to_read = i_socket->receiveData(socket, param_size.unpack());
+        // A peer that declares a size then closes after a short payload yields a read error here;
+        // unpack() on an error is a fatal assert, so return the error instead (mirrors readNumericParam).
+        if (!param_to_read.ok()) return param_to_read.passErr();
 
         return string(param_to_read.unpack().begin(), param_to_read.unpack().end());
     }
 
     I_Socket::socketFd server_sock = -1;
     I_Socket::socketFd keep_alive_sock = -1;
+    I_MainLoop::RoutineID server_sock_routine_id = 0;
+    I_MainLoop::RoutineID keep_alive_routine_id = 0;
     I_Socket *i_socket = nullptr;
     map<string, vector<bool>> registered_attachments;
+    map<string, uint8_t> watchdog_registered_families;
     string shared_registration_path;
 };
 

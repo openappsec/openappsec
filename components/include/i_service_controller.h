@@ -68,6 +68,8 @@ public:
 
     virtual bool getServicesPolicyStatus() const = 0;
 
+    virtual const std::string & getLocalhostIP() const = 0;
+
 protected:
     virtual ~I_ServiceController() {}
 };

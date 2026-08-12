@@ -41,6 +41,9 @@ enum base64_decode_status {B64_DECODE_INVALID, B64_DECODE_OK, B64_DECODE_INCOMPL
 #define BASE64_ENTROPY_THRESHOLD_DELTA 0.25
 #define BASE64_MIN_SIZE_LIMIT 16
 #define BASE64_MAX_SIZE_LIMIT 1024
+#define MIN_B64_CANDIDATE_LEN 8
+
+extern const int8_t base64_table[256];
 
 // This is portable version of stricmp(), which is non-standard function (not even in C).
 // Contrary to stricmp(), for a slight optimization, s2 is ASSUMED to be already in lowercase.
@@ -959,6 +962,11 @@ namespace Util {
         return ((unsigned int)ch | 32) - 'a' < 26;
     }
 
+    // True for A-Z, a-z, 0-9, '/', '+'. Excludes '=' padding.
+    inline bool isBase64AlphaChar(unsigned char ch) {
+        return isAlphaAsciiFast(ch) || (ch >= '0' && ch <= '9') || ch == '/' || ch == '+';
+    }
+
     // Compare two objects referenced by pointer - comparison is done by value (comparing objects themselves)
     // This is different from comparing object pointers.
     template<typename _T>
@@ -1132,6 +1140,10 @@ namespace Util {
     std::string AES128Decrypt(std::string& key, std::string& iv, std::string& message);
     std::string base64Encode(const std::string &input);
     std::string base64Decode(const std::string &input);
+
+    // Detect/decode a base64url JWT (header.payload.signature) to its JSON segments for re-scanning.
+    bool isJwtToken(const std::string &token);
+    bool splitAndDecodeJwt(const std::string &token, std::string &decodedHeader, std::string &decodedPayload);
     std::string obfuscateXor(const std::string& toEncrypt);
     std::string obfuscateXorBase64(const std::string& toEncrypt);
 

@@ -603,6 +603,12 @@ public:
         return source_id;
     }
 
+    const std::string &
+    getWebUserResponse() const
+    {
+        return web_user_response;
+    }
+
 private:
     std::map<std::string, IPSSignaturesPerContext> signatures_per_context;
     std::string asset_name;
@@ -610,6 +616,7 @@ private:
     std::string practice_name;
     std::string practice_id;
     std::string source_id;
+    std::string web_user_response;
 };
 
 /// \class SnortSignatures

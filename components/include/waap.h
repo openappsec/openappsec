@@ -64,6 +64,8 @@ public:
     void fini();
 
 private:
+    void reloadWaapDataOnConfigChange();
+
     class Impl;
     std::unique_ptr<Impl> pimpl;
 };

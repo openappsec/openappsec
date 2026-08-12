@@ -55,6 +55,7 @@ unsigned int getReqHeaderThreadTimeout();
 unsigned int getReqBodyThreadTimeout();
 
 unsigned int getResProccessingTimeout();
+unsigned int getAsyncBodyStageTimeoutMsec();
 unsigned int getTransactionEntryTimeoutMinutes();
 unsigned int getResHeaderThreadTimeout();
 unsigned int getResBodyThreadTimeout();
@@ -64,7 +65,10 @@ unsigned int getReqBodySizeTrigger();
 unsigned int getRemoveResServerHeader();
 unsigned int getDecompressionPoolSize();
 unsigned int getRecompressionPoolSize();
+unsigned int getMaxDecompressedBodySize();
 unsigned int getIsBrotliInspectionEnabled();
+unsigned int getIsWebSocketStreamEnabled();
+unsigned int getIsMaxChunksToProcessEnabled();
 
 unsigned int getWaitingForVerdictThreadTimeout();
 

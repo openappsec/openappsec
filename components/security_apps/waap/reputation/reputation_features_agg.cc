@@ -59,9 +59,18 @@ public:
     Impl()
             :
         DefaultListener<ResponseCodeEvent>(EventVerdict(ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT)),
-        m_agg_entries()
+        m_agg_entries(),
+        m_routineId(0)
         {
         }
+
+    ~Impl()
+    {
+        if (m_routineId != 0 && Singleton::exists<I_MainLoop>()) {
+            Singleton::Consume<I_MainLoop>::by<ReputationFeaturesAgg>()->stop(m_routineId);
+            m_routineId = 0;
+        }
+    }
 
     void reportReputationFeatures();
 
@@ -75,8 +84,15 @@ public:
         }
         registerListener();
         I_MainLoop* i_mainLoop = Singleton::Consume<I_MainLoop>::by<ReputationFeaturesAgg>();
-        I_MainLoop::Routine routine = [this]() { reportReputationFeatures(); };
-        i_mainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::Offline, routine, "report reputation features");
+        m_routineId = i_mainLoop->addOneTimeRoutine(
+            I_MainLoop::RoutineType::Offline,
+            [this]()
+            {
+                reportReputationFeatures();
+                m_routineId = 0;
+            },
+            "report reputation features"
+        );
     }
 
     void
@@ -102,6 +118,7 @@ public:
 
 private:
     map<string, map<string, SourceReputationFeaturesAgg>> m_agg_entries;
+    I_MainLoop::RoutineID m_routineId;
 };
 
 void

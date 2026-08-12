@@ -38,6 +38,7 @@ class I_Intelligence_IS_V2
 public:
     virtual bool sendInvalidation(const Intelligence::Invalidation &invalidation) const = 0;
     virtual bool isIntelligenceHealthy() const = 0;
+    virtual void setIntelligenceFallback(bool do_fallback) = 0;
     virtual Maybe<uint> registerInvalidation(
         const Intelligence::Invalidation &invalidation,
         const std::function<void(const Intelligence::Invalidation &)> &callback,

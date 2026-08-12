@@ -103,7 +103,9 @@ public:
         auto details = Singleton::Consume<I_AgentDetails>::by<IntelligenceComponentV2>();
         res << "\"name\": \"" << (agent_id.empty() ? details->getAgentId() : agent_id) << "\", ";
         auto rest = Singleton::Consume<I_RestApi>::by<IntelligenceComponentV2>();
-        res << "\"url\": \"http://127.0.0.1:" << rest->getListeningPort() <<"/set-new-invalidation\", ";
+        auto i_config = Singleton::Consume<Config::I_Config>::by<IntelligenceComponentV2>();
+        string localhost_ip = i_config->getLocalhostIP();
+        res << "\"url\": \"http://" << localhost_ip << ":" << rest->getListeningPort() <<"/set-new-invalidation\", ";
         res << "\"capabilities\": { \"getBulkCallback\": true, \"returnRegistrationTTL\": true }, ";
         res << "\"dataMap\": [";
         res << stream.str();
@@ -369,6 +371,7 @@ public:
     {
         message = Singleton::Consume<I_Messaging>::by<IntelligenceComponentV2>();
         mainloop = Singleton::Consume<I_MainLoop>::by<IntelligenceComponentV2>();
+        i_config = Singleton::Consume<Config::I_Config>::by<IntelligenceComponentV2>();
 
         mainloop->addRecurringRoutine(
             I_MainLoop::RoutineType::System,
@@ -442,6 +445,12 @@ public:
     unregisterInvalidation(uint id) override
     {
         invalidations.erase(id);
+    }
+
+    void
+    setIntelligenceFallback(bool do_fallback) override
+    {
+        intelligence_global_fallback = do_fallback;
     }
 
     Maybe<Response>
@@ -530,6 +539,11 @@ private:
         dbgFlow(D_INTELLIGENCE) << "Sending intelligence request";
         auto res = sendLocalIntelligenceToLocalServer(rest_req);
         if (res.ok()) return res;
+        if (hasLocalIntelligenceSupport() && !intelligence_global_fallback) {
+            dbgDebug(D_INTELLIGENCE)
+                << "Local only mode is active and local intelligence failed, not falling back to global intelligence";
+            return res;
+        }
         return sendGlobalIntelligence(rest_req);
     }
 
@@ -796,10 +810,12 @@ private:
         return paging.getResponse();
     }
 
-    InvalidationCallBack         invalidations;
-    I_Messaging               *message = nullptr;
-    I_MainLoop                   *mainloop = nullptr;
+    InvalidationCallBack invalidations;
+    I_Messaging *message = nullptr;
+    I_MainLoop *mainloop = nullptr;
+    Config::I_Config *i_config = nullptr;
     string agent_id = "";
+    bool intelligence_global_fallback = true;
 };
 
 IntelligenceComponentV2::IntelligenceComponentV2()

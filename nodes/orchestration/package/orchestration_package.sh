@@ -23,7 +23,7 @@ WATCHDOG_MAX_ROTATIONS=10
 WATCHDOG_MAX_FILE_SIZE=4096
 FORCE_CLEAN_FLAG='^(--force-clean|-f)$'
 VS_ID=""
-VS_LIB_SUB_FOLDER=
+SUFFIX_SUB_FOLDER=
 
 is_wlp_orchestration="false"
 is_static_orchestration="false"
@@ -85,6 +85,12 @@ var_mds_release=1
 var_alpine_release=1
 var_which_cmd_exists=0
 var_cloud_storage=
+
+domains_file="/etc/cp/mds_data/domains_data.json"
+domain_uid=
+CURRENT_DOMAIN_NAME=
+CMA_LOCALHOST_IP=
+
 
 if [ -f /.dockerenv ]; then
     var_container_mode=true
@@ -283,7 +289,7 @@ while true; do
         var_fog_address=$1
     elif [ "$1" = "--max-log-size-kb" ]; then
         shift
-        WATCHDOG_MAX_FILE_SIZE=$(($1 * 1024))
+        WATCHDOG_MAX_FILE_SIZE=$1
     elif [ "$1" = "--max-log-rotation" ]; then
         shift
         WATCHDOG_MAX_ROTATIONS=$1
@@ -328,7 +334,7 @@ while true; do
             export FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
             NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
             NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
-            VS_LIB_SUB_FOLDER="/vs${VS_ID}"
+            SUFFIX_SUB_FOLDER="/vs${VS_ID}"
             LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
             TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
         fi
@@ -381,9 +387,296 @@ if [ -z "$VS_ID" ]; then
         export FILESYSTEM_PATH="/etc/cp/vs${VS_ID}"
         NANO_AGENT_SERVICE_NAME="nano_agent_${VS_ID}"
         NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
-        VS_LIB_SUB_FOLDER="/vs${VS_ID}"
+        SUFFIX_SUB_FOLDER="/vs${VS_ID}"
         LOG_FILE_PATH="${LOG_FILE_PATH}/vs${VS_ID}"
         TMP_FOLDER="${TMP_FOLDER}/vs${VS_ID}"
+    fi
+fi
+
+is_domain()
+{
+    case "$FWDIR" in
+        *customers*) return 0 ;;
+        *)           return 1 ;;
+    esac
+}
+
+is_mds()
+{
+    IS_MDS=$("$CPDIR/bin/cpprod_util" CPPROD_GetValue PROVIDER-1 ProdActive 1 2>/dev/null)
+    if [ "X$IS_MDS" = "X1" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+get_cma_name()
+{
+    VERUTILOUT=$("$MDSVERUTIL" CMANameByFwDir -d "$FWDIR" 2>/dev/null)
+    if [ -n "$VERUTILOUT" ]; then
+        echo "$VERUTILOUT"
+    else
+        echo "Global"
+    fi
+}
+
+get_next_domain_ip()
+{
+    gndip_domains_file="$1"
+
+    if [ ! -f "$gndip_domains_file" ]; then
+        echo "127.0.0.2"
+        return
+    fi
+
+    gndip_used_ips=$(jq -r 'map(.ip | ltrimstr("127.0.0.") | tonumber) | sort' "$gndip_domains_file" 2>/dev/null)
+
+    if [ -z "$gndip_used_ips" ] || [ "$gndip_used_ips" = "[]" ]; then
+        echo "127.0.0.2"
+        return
+    fi
+
+    gndip_next_ip=2
+    for ip in $(echo "$gndip_used_ips" | jq -r '.[]' 2>/dev/null); do
+        if [ "$ip" -gt "$gndip_next_ip" ]; then
+            break
+        elif [ "$ip" -eq "$gndip_next_ip" ]; then
+            gndip_next_ip=$((gndip_next_ip + 1))
+        fi
+    done
+
+    echo "127.0.0.$gndip_next_ip"
+}
+
+domain_exists_in_file()
+{
+    deif_domains_file="$1"
+    deif_domain_name="$2"
+    deif_domain_uid="$3"
+
+    if [ ! -f "$deif_domains_file" ]; then
+        return 1
+    fi
+
+    if grep -q "\"name\": \"$deif_domain_name\"" "$deif_domains_file" 2>/dev/null; then
+        return 0
+    fi
+
+    if [ -n "$deif_domain_uid" ] && grep -q "\"uid\": \"$deif_domain_uid\"" "$deif_domains_file" 2>/dev/null; then
+        return 0
+    fi
+
+    return 1
+}
+
+cp_print()
+{
+    if [ "$var_installation_debug_mode" = "true" ] || { [ -n "$2" ] && [ "$2" = "true" ]; }; then
+        printf "%b\n" "$1"
+    fi
+    if [ "$is_smb" != "1" ]; then
+        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> "${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}"
+    else
+        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> "${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}"
+    fi
+}
+
+update_domain_name()
+{
+    udn_cma_name="$1"
+
+    get_domain_name_and_uid "$udn_cma_name"
+
+    udn_existing_name=$(jq -r --arg uid "$domain_uid" '.[] | select(.uid == $uid) | .name' "$domains_file" 2>/dev/null)
+
+    if [ "$udn_existing_name" = "$CURRENT_DOMAIN_NAME" ]; then
+        cp_print "Domain name unchanged: '$CURRENT_DOMAIN_NAME' (UID: $domain_uid)" ${FORCE_STDOUT}
+        return 0
+    fi
+
+    cp_print "Domain name changed from '$udn_existing_name' to '$CURRENT_DOMAIN_NAME' for UID: $domain_uid" ${FORCE_STDOUT}
+
+    if jq --arg uid "$domain_uid" --arg new_name "$CURRENT_DOMAIN_NAME" '
+        map(if .uid == $uid then .name = $new_name else . end)
+    ' "$domains_file" > "${domains_file}.tmp"; then
+        mv "${domains_file}.tmp" "$domains_file"
+        cp_print "Successfully updated domain name to: '$CURRENT_DOMAIN_NAME'" ${FORCE_STDOUT}
+        return 0
+    else
+        rm -f "${domains_file}.tmp"
+        cp_print "ERROR: Failed to update domain name in domains file" ${FORCE_STDOUT}
+        return 1
+    fi
+}
+
+get_domain_name_and_uid()
+{
+    cma="$*"
+    out=""
+    domain_info=""
+    api_port=443
+
+    if command -v python3 > /dev/null 2>&1; then
+        py_path=$(command -v python3)
+        api_port=$("$py_path" "$FWDIR/scripts/api_get_port.py" 2>/dev/null | grep "external_port" || echo "")
+        api_port=$(echo "$api_port" | head -n 1)
+        if [ -n "$api_port" ]; then
+            api_port=$(echo "$api_port" | cut -d':' -f2 | tr -d ' ' | tr -d '"')
+        else
+            api_port=443
+        fi
+    fi
+
+    cp_print "Looking for CMA: '$cma'" ${FORCE_STDOUT}
+
+    if ! out=$(mgmt_cli --port "$api_port" -r true show domains details-level full --format json 2>&1); then
+        cp_print "ERROR: Failed to extract domain name or UID for CMA: '$cma'" ${FORCE_STDOUT}
+        printf '%s\n' "$out" >&2
+        return 1
+    fi
+
+    domain_info=$(printf '%s' "$out" | jq -r --arg cma "$cma" '
+        .objects[]
+        | select((.servers // [])[]? |
+            (.name == $cma) or
+            (.["ipv4-address"] == $cma) or
+            (.["multi-domain-server"] == $cma)
+          )
+        | "\(.name)|\(.uid)"
+    ' 2>/dev/null | head -n1) || {
+        cp_print "ERROR: failed to parse mgmt_cli JSON" ${FORCE_STDOUT}
+        return 1
+    }
+
+    if [ -z "$domain_info" ]; then
+        cp_print "No domain found for CMA: '$cma'" ${FORCE_STDOUT}
+        return 1
+    fi
+
+    CURRENT_DOMAIN_NAME=$(echo "$domain_info" | cut -d'|' -f1)
+    domain_uid=$(echo "$domain_info" | cut -d'|' -f2)
+
+    if [ -z "$CURRENT_DOMAIN_NAME" ] || [ -z "$domain_uid" ]; then
+        cp_print "ERROR: Failed to extract domain name or UID from: '$domain_info'" ${FORCE_STDOUT}
+        return 1
+    fi
+    return 0
+}
+
+create_or_update_domains_data()
+{
+    coud_cma_name="$1"
+
+    if ! get_domain_name_and_uid "$coud_cma_name"; then
+        cp_print "ERROR: Failed to get domain name and UID for: '$coud_cma_name'" ${FORCE_STDOUT}
+        return 1
+    fi
+
+    if [ -z "$CURRENT_DOMAIN_NAME" ] || [ -z "$domain_uid" ]; then
+        cp_print "ERROR: Domain name or UID is empty after conversion" ${FORCE_STDOUT}
+        return 1
+    fi
+
+    cp_print "Creating entry for domain: '$CURRENT_DOMAIN_NAME' with UID: '$domain_uid'" ${FORCE_STDOUT}
+
+    mkdir -p "/etc/cp/mds_data"
+
+    if domain_exists_in_file "$domains_file" "$CURRENT_DOMAIN_NAME" "$domain_uid"; then
+        cp_print "Domain $CURRENT_DOMAIN_NAME (UID: $domain_uid) already exists in domains_data.json" ${FORCE_STDOUT}
+        update_domain_name "$coud_cma_name"
+        return 0
+    fi
+
+    CMA_LOCALHOST_IP=$(get_next_domain_ip "$domains_file")
+
+    coud_new_entry="{\"name\": \"$CURRENT_DOMAIN_NAME\", \"uid\": \"$domain_uid\", \"ip\": \"$CMA_LOCALHOST_IP\"}"
+
+    if [ ! -f "$domains_file" ]; then
+        cp_print "Creating domains_data.json with domain $CURRENT_DOMAIN_NAME -> $CMA_LOCALHOST_IP " ${FORCE_STDOUT}
+        echo "[$coud_new_entry]" | jq '.' > "$domains_file"
+    else
+        cp_print "Adding domain $CURRENT_DOMAIN_NAME -> $CMA_LOCALHOST_IP to domains_data.json" ${FORCE_STDOUT}
+        jq ". += [$coud_new_entry]" "$domains_file" > "${domains_file}.tmp" && mv "${domains_file}.tmp" "$domains_file"
+    fi
+
+    cp_print "Domain mapping created: $CURRENT_DOMAIN_NAME -> $CMA_LOCALHOST_IP" ${FORCE_STDOUT}
+}
+
+remove_domain_from_data()
+{
+    rdd_cma_name="$1"
+
+    get_domain_name_and_uid "$rdd_cma_name"
+
+    if ! domain_exists_in_file "$domains_file" "$CURRENT_DOMAIN_NAME" "$domain_uid"; then
+        cp_print "WARNING: Domain '$CURRENT_DOMAIN_NAME' (UID: $domain_uid) not found in domains_data.json" ${FORCE_STDOUT}
+        return 0
+    fi
+
+    cp_print "Removing domain: '$CURRENT_DOMAIN_NAME' (UID: $domain_uid) from domains_data.json" ${FORCE_STDOUT}
+
+    if jq --arg uid "$domain_uid" '
+        map(select(.uid != $uid))
+    ' "$domains_file" > "${domains_file}.tmp"; then
+        mv "${domains_file}.tmp" "$domains_file"
+        cp_print "Successfully removed domain '$CURRENT_DOMAIN_NAME' from domains_data.json" ${FORCE_STDOUT}
+
+        rdd_entry_count=$(jq '. | length' "$domains_file" 2>/dev/null || echo "0")
+        if [ "$rdd_entry_count" = "0" ]; then
+            cp_print "domains_data.json is now empty - removing file" ${FORCE_STDOUT}
+            rm -f "$domains_file"
+        fi
+        return 0
+    else
+        rm -f "${domains_file}.tmp"
+        cp_print "ERROR: Failed to remove domain from domains_data.json" ${FORCE_STDOUT}
+        return 1
+    fi
+}
+
+handle_mds_installation_and_upgrade()
+{
+    if is_mds; then
+        cp_print "MDS detected - setting up domains_data.json" ${FORCE_STDOUT}
+        if is_domain; then
+            hmiu_current_cma=$(get_cma_name)
+            cp_print "Domain detection result: '$hmiu_current_cma'" ${FORCE_STDOUT}
+            if [ "$hmiu_current_cma" != "NA" ] && [ -n "$hmiu_current_cma" ]; then
+                if ! create_or_update_domains_data "$hmiu_current_cma"; then
+                    cp_print "Warning: Could not map CMA '$hmiu_current_cma' to domain name" ${FORCE_STDOUT}
+                fi
+            else
+                cp_print "Warning: Could not determine CMA name" ${FORCE_STDOUT}
+            fi
+        else
+            cp_print "Warning: MDS detected but no domain context found" ${FORCE_STDOUT}
+        fi
+    else
+        cp_print "Non-MDS environment detected - skipping domains_data.json creation" ${FORCE_STDOUT}
+    fi
+}
+
+handle_mds_uninstallation()
+{
+    cp_print "Handling MDS uninstallation tasks" ${FORCE_STDOUT}
+    if is_mds && is_domain; then
+        hmu_current_cma=$(get_cma_name)
+        if ! remove_domain_from_data "$hmu_current_cma"; then
+            cp_print "Warning: Could not remove domain entry for CMA '$hmu_current_cma'" ${FORCE_STDOUT}
+        fi
+    fi
+}
+
+if is_mds && is_domain; then
+    get_domain_name_and_uid "$(get_cma_name)"
+    if [ -n "$CURRENT_DOMAIN_NAME" ]; then
+        export FILESYSTEM_PATH="/etc/cp/domain-${CURRENT_DOMAIN_NAME}"
+        NANO_AGENT_SERVICE_NAME="nano_agent_${CURRENT_DOMAIN_NAME}"
+        NANO_AGENT_SERVICE_FILE="${NANO_AGENT_SERVICE_NAME}.service"
+        SUFFIX_SUB_FOLDER="/domain-${CURRENT_DOMAIN_NAME}"
+        LOG_FILE_PATH="${LOG_FILE_PATH}/domain-${CURRENT_DOMAIN_NAME}"
+        TMP_FOLDER="${TMP_FOLDER}/domain-${CURRENT_DOMAIN_NAME}"
     fi
 fi
 
@@ -456,18 +749,6 @@ if [ $var_arch != "gaia" ] && [ $var_arch != "gaia_arm" ] && [ $var_which_cmd_ex
         var_startup_service="upstart"
     fi
 fi
-
-cp_print()
-{
-    if [ "$var_installation_debug_mode" = "true" ] || { [ -n "$2" ] && [ "$2" = "true" ]; }; then
-        printf "%b\n" "$1"
-    fi
-    if [ "$is_smb" != "1" ]; then
-        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> ${LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
-    else
-        printf "[%s]    %b\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$1" >> ${SMB_LOG_FILE_PATH}/${LOG_PATH}/${INSTALLATION_LOG_FILE}
-    fi
-}
 
 cp_exec()
 {
@@ -587,6 +868,10 @@ install_watchdog_gaia()
         watchdog_pm_name="cp-nano-watchdog-vs${VS_ID}"
         cp_exec "ln -s ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/${watchdog_pm_name}"
     fi
+    if [ -n "$CURRENT_DOMAIN_NAME" ]; then
+        watchdog_pm_name="cp-nano-watchdog-domain-$(echo "$CURRENT_DOMAIN_NAME" | tr ':' '_')"
+        cp_exec "ln -s ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/${watchdog_pm_name}"
+    fi
 
     # verify that DB is clean from cp-nano-watchdog
     tellpm ${watchdog_pm_name}
@@ -661,7 +946,11 @@ install_watchdog()
         elif [ $var_startup_service = "systemd" ]; then
             cp_print "Install for systemd"
             cp_copy service/x86/ubuntu16/nano_agent.service /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
-            if [ -z "$VS_ID" ]; then
+            if [ -n "$CURRENT_DOMAIN_NAME" ]; then
+                CMA_NAME_SANITIZED="$(get_cma_name)"
+                echo "ExecStart=/bin/bash -c \". ${MDSDIR}/scripts/MDSprofile.sh; mdsenv ${CMA_NAME_SANITIZED}; ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+                echo "ExecStartPost=/bin/bash -c \". ${MDSDIR}/scripts/MDSprofile.sh; mdsenv ${CMA_NAME_SANITIZED}; ${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh\"" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
+            elif [ -z "$VS_ID" ]; then
                 echo "ExecStart=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/cp-nano-watchdog" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
                 echo "ExecStartPost=${FILESYSTEM_PATH}/${WATCHDOG_PATH}/wait-for-networking-inspection-modules.sh" >> /etc/systemd/system/${NANO_AGENT_SERVICE_FILE}
             else
@@ -752,6 +1041,9 @@ install_cp_nano_ctl()
     if [ -n "$VS_ID" ]; then
         CP_NANO_CTL="${CP_NANO_CTL}-vs${VS_ID}"
     fi
+    if [ -n "${CURRENT_DOMAIN_NAME}" ] && [ "${CURRENT_DOMAIN_NAME}" != "NA" ] && [ "${CURRENT_DOMAIN_NAME}" != "Global" ]; then
+        CP_NANO_CTL="${CP_NANO_CTL}-domain-${CURRENT_DOMAIN_NAME}"
+    fi
     cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/$CP_NANO_AGENT_CTL $USR_SBIN_PATH/${CP_NANO_CTL}"
     cp_exec "ln -s ${FILESYSTEM_PATH}/${SCRIPTS_PATH}/${OPEN_APPSEC_CTL}.sh $USR_SBIN_PATH/${OPEN_APPSEC_CTL}"
 
@@ -774,7 +1066,7 @@ install_cp_nano_ctl()
 set_conf_temp_location()
 {
     if [ -n "${CP_ENV_FILESYSTEM}" ]; then
-        prefix_filesystem=$(echo $CP_ENV_FILESYSTEM | sed 's|\(.*\)/.*|\1|')
+        prefix_filesystem=$(echo $FILESYSTEM_PATH | sed 's|\(.*\)/.*|\1|')
         temp_location=$prefix_filesystem/temp/orchestration_download
         escaped_temp_location=$(echo $temp_location | sed -e 's/\//\\\//g')
 
@@ -995,7 +1287,7 @@ install_orchestration()
     fi
 
     if [ "$is_smb" != "1" ]; then
-        cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}"
+        cp_exec "mkdir -p ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}"
     else
         cp_exec "mkdir -p /storage/nano_agent${USR_LIB_PATH}/cpnano"
         cp_exec "ln -sf /storage/nano_agent${USR_LIB_PATH}/cpnano ${USR_LIB_PATH}/cpnano"
@@ -1006,8 +1298,8 @@ install_orchestration()
     fi
 
     if [ "$is_static_orchestration" != "true" ]; then
-        ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
-        ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/
+        ${INSTALL_COMMAND} lib/*.so* ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}/
+        ${INSTALL_COMMAND} lib/boost/*.so* ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}/
     else
         cp_print "Skipping shared library installation for static orchestration" ${FORCE_STDOUT}
     fi
@@ -1055,7 +1347,7 @@ install_orchestration()
         if [ -n "${OTP_TOKEN}" ]; then
             cp_print "Saving authentication token to file"
             printf '{\n   "registration type": "token",\n   "registration data": "%b"\n}' "$OTP_TOKEN" | ${FILESYSTEM_PATH}/${BIN_PATH}/${CP_NANO_BASE64} -e > ${FILESYSTEM_PATH}/${CONF_PATH}/registration-data.json
-            previous_mode=$(awk -F\" '/Orchestration mode/{print $4}' /etc/cp/conf/agent_details.json)
+            previous_mode=$(awk -F\" '/Orchestration mode/{print $4}' ${FILESYSTEM_PATH}/${CONF_PATH}/agent_details.json)
             if [ "$previous_mode" = "hybrid_mode" ]; then
                 rm ${FILESYSTEM_PATH}/${CONF_PATH}/agent_details.json
                 rm ${FILESYSTEM_PATH}/${CONF_PATH}/orchestration_status.json
@@ -1079,6 +1371,8 @@ install_orchestration()
         if [ ${var_orchestration_mode} = "hybrid_mode" ]; then
             save_local_policy_config
         fi
+
+        handle_mds_installation_and_upgrade        
 
         cp_exec "cp -f configuration/orchestration.cfg ${FILESYSTEM_PATH}/${SERVICE_PATH}/${ORCHESTRATION_FILE_NAME}.cfg"
         execution_flags="execution_flags=\"--orchestration-mode=${var_orchestration_mode}\""
@@ -1122,6 +1416,19 @@ install_orchestration()
 
         cp_print "Upgrade completed successfully" ${FORCE_STDOUT}
 
+        if [ -f "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}" ]; then
+            grep -q "EnvironmentFile=/etc/environment" "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
+            result=$?
+
+            if [ "$var_container_mode" = false ] && [ "$result" -eq 0 ]; then
+                sed -i "$ d" "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
+                echo "EnvironmentFile=/etc/environment" >> "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
+                echo >> "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
+                check_and_run_restorecon "/etc/systemd/system/${NANO_AGENT_SERVICE_FILE}"
+                cp_exec "systemctl daemon-reload"
+                cp_exec "systemctl restart nano_agent"
+            fi
+        fi
         exit 0
     fi
 
@@ -1138,6 +1445,8 @@ install_orchestration()
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${CONF_PATH}"
     cp_exec "mkdir -p ${LOG_FILE_PATH}/${LOG_PATH}"
     cp_exec "mkdir -p ${FILESYSTEM_PATH}/${DATA_PATH}"
+
+    handle_mds_installation_and_upgrade  
 
     update_cloudguard_appsec_manifest
 
@@ -1163,6 +1472,12 @@ install_orchestration()
 		if [ -n "${VS_ID}" ]; then
 			echo "CP_VS_ID=${VS_ID}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
 		fi
+        if [ -n "${CURRENT_DOMAIN_NAME}" ]; then
+            echo "CP_DOMAIN_NAME=${CURRENT_DOMAIN_NAME}" >> "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
+        fi
+        if [ -n "${CMA_LOCALHOST_IP}" ]; then
+            echo "CP_CMA_LOCAL_HOST_IP=${CMA_LOCALHOST_IP}" >> "${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}"
+        fi
 		if [ -n "${LOG_FILE_PATH}" ]; then
 			echo "CP_ENV_LOG_FILE=${LOG_FILE_PATH}" >> ${FILESYSTEM_PATH}/${ENV_DETAILS_FILE}
 		fi
@@ -1318,19 +1633,19 @@ run_pre_install_test()
 run_post_install_test()
 {
     if [ "$var_is_alpine" = "false" ] && [ "$is_static_orchestration" = "false" ]; then
-        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_chrono.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}/libboost_chrono.so* ]; then
             cp_print "Error, libboost_chrono .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_context.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}/libboost_context.so* ]; then
             cp_print "Error, libboost_context .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_system.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}/libboost_system.so* ]; then
             cp_print "Error, libboost_system .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
-        if [ ! -f ${USR_LIB_PATH}/cpnano${VS_LIB_SUB_FOLDER}/libboost_thread.so* ]; then
+        if [ ! -f ${USR_LIB_PATH}/cpnano${SUFFIX_SUB_FOLDER}/libboost_thread.so* ]; then
             cp_print "Error, libboost_thread .so file is missing" ${FORCE_STDOUT}
             exit 1
         fi
@@ -1357,6 +1672,7 @@ uninstall_orchestration()
     fi
      cp_exec "${uninstall_script}"
     if test "$?" = "0"; then
+        handle_mds_uninstallation
         cp_print "open-appsec Nano Agent successfully uninstalled" ${FORCE_STDOUT}
     else
         cp_print "open-appsec Nano Agent failed to uninstall" ${FORCE_STDOUT}

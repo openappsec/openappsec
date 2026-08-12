@@ -244,6 +244,7 @@ TEST_F(ComponentTest, check_url_decoding)
                         "\"practiceId\": \"2-2-2\","
                         "\"practiceName\": \"practice1\","
                         "\"defaultAction\": \"Detect\","
+                        "\"webUserResponseId\": \"123\","
                         "\"rules\": ["
                             "{"
                                 "\"action\": \"Prevent\","
@@ -274,7 +275,9 @@ TEST_F(ComponentTest, check_url_decoding)
     );
 
     EXPECT_THAT(NewHttpTransactionEvent(new_transaction).query(), ElementsAre(inspect));
-    EXPECT_THAT(HttpRequestHeaderEvent(end_headers).query(), ElementsAre(drop));
+    auto header_result = HttpRequestHeaderEvent(end_headers).query();
+    EXPECT_THAT(header_result, ElementsAre(drop));
+    EXPECT_EQ(header_result[0].getWebUserResponseByPractice(), "123");
     EXPECT_THAT(EndRequestEvent().query(), ElementsAre(drop));
 }
 

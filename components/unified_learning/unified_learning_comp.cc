@@ -1,4 +1,5 @@
 #include "unified_learning_comp.h"
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <string>
@@ -8,6 +9,8 @@
 #include "UnifiedIndicatorsContainer.h"
 #include "debug.h"
 #include "hiredis/hiredis.h"
+#include "agent_core_utilities.h"
+#include "i_instance_awareness.h"
 #include "i_mainloop.h"
 #include "i_time_get.h"
 #include "i_unified_learning.h"
@@ -31,7 +34,7 @@ public:
     void
     init()
     {
-        dbgTrace(D_UNIFIED_LEARNING) << "Starting Redis-based Unified Learning Manager (Asset-based)";
+        dbgDebug(D_UNIFIED_LEARNING) << "Starting Redis-based Unified Learning Manager (Asset-based)";
 
         mainloop = Singleton::Consume<I_MainLoop>::by<UnifiedLearningComponent>();
         i_time_get = Singleton::Consume<I_TimeGet>::by<UnifiedLearningComponent>();
@@ -55,13 +58,13 @@ public:
             true
         );
 
-        dbgTrace(D_UNIFIED_LEARNING) << "Redis-based Unified Learning Manager initialized (Asset-based mode)";
+        dbgDebug(D_UNIFIED_LEARNING) << "Redis-based Unified Learning Manager initialized (Asset-based mode)";
     }
 
     void
     fini()
     {
-        dbgTrace(D_UNIFIED_LEARNING) << "Shutting down Unified Learning Manager";
+        dbgDebug(D_UNIFIED_LEARNING) << "Shutting down Unified Learning Manager";
 
         // Stop processing routine
         stopRedisProcessingRoutine();
@@ -70,7 +73,7 @@ public:
         saveAndClearAssetSyncUnits();
         disconnectRedis();
 
-        dbgTrace(D_UNIFIED_LEARNING) << "Unified Learning Manager shutdown complete";
+        dbgDebug(D_UNIFIED_LEARNING) << "Unified Learning Manager shutdown complete";
     }
 
 private:
@@ -103,17 +106,12 @@ private:
 
         redis = context;
 
-        // Set Redis memory limit to 512MB
-        redisReply *configReply =
-            static_cast<redisReply *>(redisCommand(redis, "CONFIG SET maxmemory 536870912")); // 512MB in bytes
-        if (configReply) {
-            freeReplyObject(configReply);
+        if (!runConfigSetCommand("CONFIG SET maxmemory 536870912")) {
+            return false;
         }
 
-        // Set eviction policy to remove oldest entries when memory limit reached
-        configReply = static_cast<redisReply *>(redisCommand(redis, "CONFIG SET maxmemory-policy allkeys-lru"));
-        if (configReply) {
-            freeReplyObject(configReply);
+        if (!runConfigSetCommand("CONFIG SET maxmemory-policy allkeys-lru")) {
+            return false;
         }
 
         // Load Lua script for batch processing
@@ -130,29 +128,103 @@ private:
         )";
 
         redisReply *loadReply = static_cast<redisReply *>(redisCommand(redis, "SCRIPT LOAD %s", luaScript.c_str()));
-        if (loadReply && loadReply->type == REDIS_REPLY_STRING) {
-            lua_script_hash = loadReply->str;
+        if (loadReply == nullptr) {
+            dbgWarning(D_UNIFIED_LEARNING) << "SCRIPT LOAD returned NULL reply, connection lost";
+            disconnectRedis();
+            return false;
+        }
+        if (loadReply->type != REDIS_REPLY_STRING) {
+            std::string err_str = (loadReply->type == REDIS_REPLY_ERROR && loadReply->str)
+                ? loadReply->str : "unexpected reply type";
+            dbgWarning(D_UNIFIED_LEARNING) << "SCRIPT LOAD failed: " << err_str;
             freeReplyObject(loadReply);
+            disconnectRedis();
+            return false;
+        }
+        lua_script_hash = loadReply->str;
+        freeReplyObject(loadReply);
+
+        if (redis->err) {
+            dbgWarning(D_UNIFIED_LEARNING)
+                << "Redis context poisoned after post-connect commands: "
+                << redis->errstr;
+            disconnectRedis();
+            return false;
         }
 
-        dbgTrace(D_UNIFIED_LEARNING) << "Successfully connected to Redis with 512MB memory limit";
+        dbgDebug(D_UNIFIED_LEARNING) << "Successfully connected to Redis with 512MB memory limit";
+        return true;
+    }
+
+    // REPLY_ERROR is tolerated (denied CONFIG SET still leaves the connection usable).
+    bool
+    runConfigSetCommand(const char *cmd)
+    {
+        redisReply *reply = static_cast<redisReply *>(redisCommand(redis, cmd));
+        if (reply == nullptr) {
+            dbgWarning(D_UNIFIED_LEARNING) << "Command returned NULL reply, connection lost: " << cmd;
+            disconnectRedis();
+            return false;
+        }
+        if (reply->type == REDIS_REPLY_ERROR) {
+            dbgWarning(D_UNIFIED_LEARNING)
+                << "Command rejected by Redis: "
+                << cmd
+                << " - "
+                << (reply->str ? reply->str : "(no error string)");
+        }
+        freeReplyObject(reply);
         return true;
     }
 
     void
-    reconnectRedis()
+    resetReconnectBackoff()
     {
-        if (!is_reconnecting) {
-            is_reconnecting = true;
-            mainloop->addOneTimeRoutine(
-                I_MainLoop::RoutineType::System,
-                [this]() {
-                    connectRedis();
-                    is_reconnecting = false;
-                },
-                "Reconnect Redis for Unified Learning"
-            );
+        m_current_reconnect_backoff = std::chrono::seconds(0);
+        m_next_reconnect_time = std::chrono::microseconds::min();
+    }
+
+    void
+    scheduleNextReconnect()
+    {
+        auto initial = std::chrono::seconds(
+            getConfigurationWithDefault<int>(5, "connection", "Redis Reconnect Initial Backoff Seconds")
+        );
+        auto cap = std::chrono::seconds(
+            getConfigurationWithDefault<int>(3600, "connection", "Redis Reconnect Max Backoff Seconds")
+        );
+
+        if (m_current_reconnect_backoff < initial) {
+            m_current_reconnect_backoff = initial;
+        } else {
+            m_current_reconnect_backoff = std::min(cap, m_current_reconnect_backoff * 2);
         }
+        m_next_reconnect_time = i_time_get->getMonotonicTime() + m_current_reconnect_backoff;
+        dbgDebug(D_UNIFIED_LEARNING)
+            << "Scheduled next Redis reconnect in "
+            << m_current_reconnect_backoff.count()
+            << "s";
+    }
+
+    bool
+    ensureRedisConnected()
+    {
+        if (redis != nullptr && redis->err == 0) return true;
+        if (redis != nullptr) {
+            // Poisoned context - drop it and fall through to the back-off path.
+            dbgWarning(D_UNIFIED_LEARNING)
+                << "Redis context poisoned (err=" << redis->err << "), dropping: " << redis->errstr;
+            disconnectRedis();
+            scheduleNextReconnect();
+            return false;
+        }
+        if (i_time_get->getMonotonicTime() < m_next_reconnect_time) return false;
+        if (connectRedis()) {
+            resetReconnectBackoff();
+            return true;
+        }
+        scheduleNextReconnect();
+        return false;
     }
 
     Maybe<std::vector<std::string>>
@@ -160,18 +232,24 @@ private:
     {
         std::vector<std::string> queues;
 
+        if (redis == nullptr) {
+            return genError("Redis not connected");
+        }
+
         redisReply *reply =
             static_cast<redisReply *>(redisCommand(redis, "SCAN 0 MATCH unified_learning_entries:* COUNT 128"));
 
         if (!reply) {
-            reconnectRedis();
+            disconnectRedis();
+            scheduleNextReconnect();
             return genError("SCAN command returned NULL reply");
         }
 
         if (reply->type == REDIS_REPLY_ERROR) {
             std::string error_msg = std::string("SCAN command failed: ") + reply->str;
             freeReplyObject(reply);
-            reconnectRedis();
+            disconnectRedis();
+            scheduleNextReconnect();
             return genError(error_msg);
         }
 
@@ -222,6 +300,10 @@ private:
     void
     processQueue(const std::string &queueKey, int batchSize)
     {
+        if (redis == nullptr) {
+            return;
+        }
+
         redisReply *reply = static_cast<redisReply *>(
             redisCommand(redis, "EVALSHA %s 1 %s %d", lua_script_hash.c_str(), queueKey.c_str(), batchSize)
         );
@@ -232,7 +314,8 @@ private:
                 << "EVALSHA command returned NULL reply for queue: "
                 << queueKey;
 
-            reconnectRedis();
+            disconnectRedis();
+            scheduleNextReconnect();
             return;
         }
 
@@ -244,7 +327,8 @@ private:
                 << reply->str;
 
             freeReplyObject(reply);
-            reconnectRedis();
+            disconnectRedis();
+            scheduleNextReconnect();
             return;
         }
 
@@ -265,7 +349,7 @@ private:
                 std::vector<char> data(reply->element[i]->str, reply->element[i]->str + reply->element[i]->len);
 
                 if (!processEntryData(data.data(), data.size())) {
-                    dbgTrace(D_UNIFIED_LEARNING)
+                    dbgDebug(D_UNIFIED_LEARNING)
                         << "Failed to process entry from "
                         << queueKey;
                 }
@@ -279,7 +363,7 @@ private:
     stopRedisProcessingRoutine()
     {
         if (processing_routine_id > 0 && mainloop->doesRoutineExist(processing_routine_id)) {
-            dbgTrace(D_UNIFIED_LEARNING)
+            dbgDebug(D_UNIFIED_LEARNING)
                 << "Stopping Redis processing routine with ID: "
                 << processing_routine_id;
             mainloop->stop(processing_routine_id);
@@ -299,13 +383,13 @@ private:
     void
     saveAndClearAssetSyncUnits()
     {
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
             << "Saving data for "
             << asset_sync_units.size()
             << " assets";
 
         for (auto& pair : asset_sync_units) {
-            dbgTrace(D_UNIFIED_LEARNING)
+            dbgDebug(D_UNIFIED_LEARNING)
                 << "Saving data for asset: "
                 << pair.first;
             pair.second->saveData();
@@ -322,7 +406,7 @@ private:
             false,
             "agent.learning.unifiedLearning"
         );
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
             << "old_unified_learning_enabled is: "
             << old_unified_learning_enabled
             << " new m_unified_learning_enabled is: "
@@ -331,21 +415,20 @@ private:
         if (old_unified_learning_enabled != m_unified_learning_enabled) {
             if (m_unified_learning_enabled) {
                 dbgInfo(D_UNIFIED_LEARNING) << "Unified Learning enabled via policy, connecting to Redis";
-                // Connect to Redis
+                resetReconnectBackoff();
                 if (!connectRedis()) {
-                    dbgError(D_UNIFIED_LEARNING) << "Failed to connect to Redis";
-                    return;
+                    dbgWarning(D_UNIFIED_LEARNING)
+                        << "Initial Redis connect failed; recurring routine will retry with back-off";
+                    scheduleNextReconnect();
                 }
-                // Start continuous Redis processing
+                // Start the recurring routine even on connect failure - it owns reconnect retries.
                 createRedisProcessingRoutine();
             } else {
                 dbgInfo(D_UNIFIED_LEARNING) << "Unified Learning disabled via policy, disconnecting from Redis";
-                // Stop processing routine
                 stopRedisProcessingRoutine();
-                // Save and clear all asset sync units before disconnecting
                 saveAndClearAssetSyncUnits();
-                // Disconnect from Redis
                 disconnectRedis();
+                resetReconnectBackoff();
             }
         }
         int interval_minutes = getProfileAgentSettingWithDefault<int>(
@@ -359,7 +442,7 @@ private:
         }
         // Notify all asset sync units about policy change
         for (auto& pair : asset_sync_units) {
-            dbgTrace(D_UNIFIED_LEARNING)
+            dbgDebug(D_UNIFIED_LEARNING)
                 << "Notifying asset sync unit about policy change: "
                 << pair.first;
             pair.second->handleNewPolicy();
@@ -369,6 +452,9 @@ private:
     void
     processRedisEntries()
     {
+        if (!ensureRedisConnected()) {
+            return;
+        }
         // Get all active queues
         auto activeQueues = getOrRefreshQueues();
         if (activeQueues.empty()) {
@@ -410,16 +496,31 @@ private:
             return it->second;
         }
 
+        auto instance_id =
+            Singleton::Consume<I_InstanceAwareness>::by<UnifiedLearningComponent>()->getUniqueID("");
+        std::string asset_dir = std::string(BACKUP_DIRECTORY_PATH) + asset_id;
+        if (!instance_id.empty()) asset_dir += "/" + instance_id;
+
+        std::string backup_path;
+        if (NGEN::Filesystem::exists(asset_dir) || NGEN::Filesystem::makeDirRecursive(asset_dir)) {
+            backup_path = asset_dir + "/unified_learning_backup.data";
+        } else {
+            dbgWarning(D_UNIFIED_LEARNING)
+                << "Failed to create backup dir " << asset_dir
+                << " for asset " << asset_id << "; local backup disabled";
+        }
+
         auto unit = std::make_shared<AssetIndicatorsSyncUnit>(
             asset_id,
             sync_interval,
             wait_for_sync,
-            m_tenant_id+"/"+asset_id+"/CentralizedData"
+            m_tenant_id+"/"+asset_id+"/CentralizedData",
+            backup_path
         );
 
         asset_sync_units[asset_id] = unit;
 
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
             << "Created new sync unit for asset: "
             << asset_id
             << "with sync_interval: "
@@ -444,7 +545,7 @@ private:
 
         // Route to appropriate asset sync unit
         if (entry.asset_id.empty()) {
-            dbgTrace(D_UNIFIED_LEARNING)
+            dbgDebug(D_UNIFIED_LEARNING)
                 << "Entry missing asset_id, skipping. Key: "
                 << entry.key;
             return false;
@@ -467,7 +568,10 @@ private:
     redisContext *redis = nullptr;
     std::string lua_script_hash;
     I_MainLoop::RoutineID processing_routine_id = 0;
-    bool is_reconnecting = false;
+
+    // Reconnect back-off state - drives the recurring routine's retry gating.
+    std::chrono::microseconds m_next_reconnect_time = std::chrono::microseconds::min();
+    std::chrono::seconds m_current_reconnect_backoff{0};
 
     // Queue discovery and caching
     std::vector<std::string> cached_queues;
@@ -528,6 +632,8 @@ UnifiedLearningComponent::preload()
     registerExpectedConfiguration<int>("connection", "Redis Port");
     registerExpectedConfiguration<int>("connection", "Redis Timeout");
     registerExpectedConfiguration<int>("connection", "Queue Discovery Interval");
+    registerExpectedConfiguration<int>("connection", "Redis Reconnect Initial Backoff Seconds");
+    registerExpectedConfiguration<int>("connection", "Redis Reconnect Max Backoff Seconds");
 }
 
 void

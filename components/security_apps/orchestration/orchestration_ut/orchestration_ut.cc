@@ -180,6 +180,7 @@ public:
         EXPECT_CALL(mock_details_resolver, isKernelVersion3OrHigher()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isGw()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isGwNotVsx()).WillRepeatedly(Return(false));
+        EXPECT_CALL(mock_details_resolver, isMgmtNotMds()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, isVersionAboveR8110()).WillRepeatedly(Return(false));
         EXPECT_CALL(mock_details_resolver, parseNginxMetadata()).WillRepeatedly(Return(no_nginx));
         EXPECT_CALL(mock_details_resolver, getAgentVersion()).WillRepeatedly(Return("1.1.1"));
@@ -1805,6 +1806,12 @@ TEST_F(OrchestrationTest, dataUpdate)
         )
     ).WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
 
+    // Mock for shouldDownloadDataFile and backupDataFile - file doesn't exist
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/conf/data/ips.data")
+    ).Times(2).WillRepeatedly(Return(false));
+
     EXPECT_CALL(mock_downloader,
         downloadFileFromURL(
             data_download_path,
@@ -2078,6 +2085,12 @@ TEST_F(OrchestrationTest, dataUpdate_with_certificates_array)
     EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/path/agentGeoDb"))
         .WillOnce(Return(string(geo_db_checksum)));
 
+    // Mock for shouldDownloadDataFile and backupDataFile - file doesn't exist
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/conf/data/agentGeoDb.data")
+    ).Times(2).WillRepeatedly(Return(false));
+
     EXPECT_CALL(mock_downloader,
         downloadFileFromURL(
             geo_db_download_path,
@@ -2336,6 +2349,12 @@ TEST_F(OrchestrationTest, dataUpdate_with_certificates_array_corrupted)
     EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/path/agentGeoDb"))
         .WillOnce(Return(string(geo_db_checksum)));
 
+    // Mock for shouldDownloadDataFile and backupDataFile - file doesn't exist
+    EXPECT_CALL(
+        mock_orchestration_tools,
+        doesFileExist("/etc/cp/conf/data/agentGeoDb.data")
+    ).Times(2).WillRepeatedly(Return(false));
+
     EXPECT_CALL(mock_downloader,
         downloadFileFromURL(
             geo_db_download_path,
@@ -2363,4 +2382,484 @@ TEST_F(OrchestrationTest, dataUpdate_with_certificates_array_corrupted)
     try {
         runRoutine();
     } catch (const invalid_argument& e) {}
+}
+
+TEST_F(OrchestrationTest, dataUpdate_skip_download_when_checksum_matches)
+{
+    EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "proxy", _))
+        .WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    waitForRestCall();
+    init();
+
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string data_file_path = "/etc/cp/conf/data.json";
+
+    string manifest_checksum = "manifest";
+    string policy_checksum = "policy";
+    string settings_checksum = "settings";
+    string data_checksum = "data";
+
+    string data_download_path = "https://a/data.json";
+    string data_checksum_type = "sha1sum";
+    string data_instance_checksum = "8d4a5709673a05b380ba7d6567e28910019118f5";
+
+    Maybe<string> data_response(string(
+        "{\n"
+        "    \"ips\": {\n"
+        "       \"version\": \"c\",\n"
+        "       \"downloadPath\": \"" +
+        data_download_path +
+        "\",\n"
+        "       \"checksumType\": \"" +
+        data_checksum_type +
+        "\",\n"
+        "       \"checksum\": \"" +
+        data_instance_checksum +
+        "\"\n"
+        "    }\n"
+        "}\n"
+    ));
+
+    vector<string> expected_empty_data_types = {};
+    ExpectationSet expectation_set =
+        EXPECT_CALL(
+            mock_service_controller,
+            updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "", _)
+        )
+            .WillOnce(Return(Maybe<void>()));
+
+    EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, readFile(data_file_path + ".download")).WillOnce(Return(data_response));
+
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(manifest_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(settings_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(policy_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(data_checksum));
+
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_))
+        .WillOnce(Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                req = CheckUpdateRequest("", "", "", "new data", "", "");
+                return Maybe<void>();
+            }
+        ));
+
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>()));
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([](chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+
+    string new_data_file_path = data_file_path + ".download";
+    GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
+    EXPECT_CALL(mock_downloader, downloadFile(string("new data"), Package::ChecksumTypes::SHA256, data_file))
+        .WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
+
+    // Mock shouldDownloadDataFile - file exists with matching checksum
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/ips.data"))
+        .WillOnce(Return(true)); // File exists
+    EXPECT_CALL(
+        mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/etc/cp/conf/data/ips.data")
+    )
+        .WillOnce(Return(data_instance_checksum)); // Checksum matches, skip download
+
+    // Verify downloadFileFromURL is NOT called (download skipped)
+    EXPECT_CALL(mock_downloader, downloadFileFromURL(_, _, _, _)).Times(0);
+
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_data_file_path, data_file_path));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string("daniel\n1\n")));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/certificates.data"))
+        .WillRepeatedly(Return(false));
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument &e) {
+    }
+}
+
+TEST_F(OrchestrationTest, dataUpdate_download_when_checksum_differs)
+{
+    EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "proxy", _))
+        .WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    waitForRestCall();
+    init();
+
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string data_file_path = "/etc/cp/conf/data.json";
+
+    string manifest_checksum = "manifest";
+    string policy_checksum = "policy";
+    string settings_checksum = "settings";
+    string data_checksum = "data";
+
+    string data_download_path = "https://a/data.json";
+    string data_checksum_type = "sha1sum";
+    string data_instance_checksum = "8d4a5709673a05b380ba7d6567e28910019118f5";
+    string old_checksum = "old_checksum_value_12345";
+
+    Maybe<string> data_response(string(
+        "{\n"
+        "    \"ips\": {\n"
+        "       \"version\": \"c\",\n"
+        "       \"downloadPath\": \"" +
+        data_download_path +
+        "\",\n"
+        "       \"checksumType\": \"" +
+        data_checksum_type +
+        "\",\n"
+        "       \"checksum\": \"" +
+        data_instance_checksum +
+        "\"\n"
+        "    }\n"
+        "}\n"
+    ));
+
+    vector<string> expected_empty_data_types = {};
+    ExpectationSet expectation_set =
+        EXPECT_CALL(
+            mock_service_controller,
+            updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "", _)
+        )
+            .WillOnce(Return(Maybe<void>()));
+
+    vector<string> expected_ips_data_types = { "ips" };
+    EXPECT_CALL(mock_service_controller, updateServiceConfiguration("", "", expected_ips_data_types, "", "", _))
+        .After(expectation_set)
+        .WillOnce(Return(Maybe<void>()));
+
+    EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, readFile(data_file_path + ".download")).WillOnce(Return(data_response));
+
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(manifest_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(settings_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(policy_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(data_checksum));
+
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_))
+        .WillOnce(Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                req = CheckUpdateRequest("", "", "", "new data", "", "");
+                return Maybe<void>();
+            }
+        ));
+
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>()));
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([](chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+
+    string new_data_file_path = data_file_path + ".download";
+    GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
+    EXPECT_CALL(mock_downloader, downloadFile(string("new data"), Package::ChecksumTypes::SHA256, data_file))
+        .WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
+
+    // Mock shouldDownloadDataFile - file exists but checksum differs
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/ips.data"))
+        .WillOnce(Return(true))  // For shouldDownloadDataFile check
+        .WillOnce(Return(true)); // For backupDataFile check
+    EXPECT_CALL(
+        mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/etc/cp/conf/data/ips.data")
+    )
+        .WillOnce(Return(old_checksum)); // Different checksum, download needed
+
+    // Mock backupDataFile - should create backup before download
+    EXPECT_CALL(mock_orchestration_tools, copyFile("/etc/cp/conf/data/ips.data", "/etc/cp/conf/data/ips.data.bk"))
+        .WillOnce(Return(true));
+
+    // Mock the download since checksum differs
+    EXPECT_CALL(
+        mock_downloader,
+        downloadFileFromURL(data_download_path, data_instance_checksum, Package::ChecksumTypes::SHA256, "data_ips")
+    )
+        .WillOnce(Return(Maybe<std::string>(string("/path/ips"))));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/path/ips"))
+        .WillOnce(Return(data_instance_checksum));
+
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_data_file_path, data_file_path));
+    EXPECT_CALL(mock_orchestration_tools, copyFile("/path/ips", "/etc/cp/conf/data/ips.data"));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string("daniel\n1\n")));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/certificates.data"))
+        .WillRepeatedly(Return(false));
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument &e) {
+    }
+}
+
+TEST_F(OrchestrationTest, dataUpdate_backup_failure_skips_download)
+{
+    EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "proxy", _))
+        .WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    waitForRestCall();
+    init();
+
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string data_file_path = "/etc/cp/conf/data.json";
+
+    string manifest_checksum = "manifest";
+    string policy_checksum = "policy";
+    string settings_checksum = "settings";
+    string data_checksum = "data";
+
+    string data_download_path = "https://a/data.json";
+    string data_checksum_type = "sha1sum";
+    string data_instance_checksum = "8d4a5709673a05b380ba7d6567e28910019118f5";
+    string old_checksum = "old_checksum_value_12345";
+
+    Maybe<string> data_response(string(
+        "{\n"
+        "    \"ips\": {\n"
+        "       \"version\": \"c\",\n"
+        "       \"downloadPath\": \"" +
+        data_download_path +
+        "\",\n"
+        "       \"checksumType\": \"" +
+        data_checksum_type +
+        "\",\n"
+        "       \"checksum\": \"" +
+        data_instance_checksum +
+        "\"\n"
+        "    }\n"
+        "}\n"
+    ));
+
+    vector<string> expected_empty_data_types = {};
+    EXPECT_CALL(
+        mock_service_controller,
+        updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "", _)
+    )
+        .WillOnce(Return(Maybe<void>()));
+
+    // No second updateServiceConfiguration call since both data_updates and settings_path are empty
+    // (backup failed, so no data updates and no settings)
+
+    EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, readFile(data_file_path + ".download")).WillOnce(Return(data_response));
+
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(manifest_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(settings_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(policy_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(data_checksum));
+
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_))
+        .WillOnce(Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                req = CheckUpdateRequest("", "", "", "new data", "", "");
+                return Maybe<void>();
+            }
+        ));
+
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>()));
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([](chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+
+    string new_data_file_path = data_file_path + ".download";
+    GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
+    EXPECT_CALL(mock_downloader, downloadFile(string("new data"), Package::ChecksumTypes::SHA256, data_file))
+        .WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
+
+    // Mock shouldDownloadDataFile - file exists with different checksum
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/ips.data"))
+        .WillOnce(Return(true))  // For shouldDownloadDataFile check
+        .WillOnce(Return(true)); // For backupDataFile check
+    EXPECT_CALL(
+        mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/etc/cp/conf/data/ips.data")
+    )
+        .WillOnce(Return(old_checksum)); // Different checksum
+
+    // Mock backupDataFile FAILURE - copy returns false
+    EXPECT_CALL(mock_orchestration_tools, copyFile("/etc/cp/conf/data/ips.data", "/etc/cp/conf/data/ips.data.bk"))
+        .WillOnce(Return(false));
+
+    // Verify downloadFileFromURL is NOT called (download skipped on backup failure)
+    EXPECT_CALL(mock_downloader, downloadFileFromURL(_, _, _, _)).Times(0);
+
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_data_file_path, data_file_path));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string("daniel\n1\n")));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/certificates.data"))
+        .WillRepeatedly(Return(false));
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument &e) {
+    }
+}
+
+TEST_F(OrchestrationTest, dataUpdate_checksum_calculation_failure_triggers_download)
+{
+    EXPECT_CALL(rest, mockRestCall(RestAction::ADD, "proxy", _))
+        .WillOnce(WithArg<2>(Invoke(this, &OrchestrationTest::restHandler)));
+    waitForRestCall();
+    init();
+
+    string manifest_file_path = "/etc/cp/conf/manifest.json";
+    string setting_file_path = "/etc/cp/conf/settings.json";
+    string policy_file_path = "/etc/cp/conf/policy.json";
+    string data_file_path = "/etc/cp/conf/data.json";
+
+    string manifest_checksum = "manifest";
+    string policy_checksum = "policy";
+    string settings_checksum = "settings";
+    string data_checksum = "data";
+
+    string data_download_path = "https://a/data.json";
+    string data_checksum_type = "sha1sum";
+    string data_instance_checksum = "8d4a5709673a05b380ba7d6567e28910019118f5";
+
+    Maybe<string> data_response(string(
+        "{\n"
+        "    \"ips\": {\n"
+        "       \"version\": \"c\",\n"
+        "       \"downloadPath\": \"" +
+        data_download_path +
+        "\",\n"
+        "       \"checksumType\": \"" +
+        data_checksum_type +
+        "\",\n"
+        "       \"checksum\": \"" +
+        data_instance_checksum +
+        "\"\n"
+        "    }\n"
+        "}\n"
+    ));
+
+    vector<string> expected_empty_data_types = {};
+    ExpectationSet expectation_set =
+        EXPECT_CALL(
+            mock_service_controller,
+            updateServiceConfiguration(policy_file_path, setting_file_path, expected_empty_data_types, "", "", _)
+        )
+            .WillOnce(Return(Maybe<void>()));
+
+    vector<string> expected_ips_data_types = { "ips" };
+    EXPECT_CALL(mock_service_controller, updateServiceConfiguration("", "", expected_ips_data_types, "", "", _))
+        .After(expectation_set)
+        .WillOnce(Return(Maybe<void>()));
+
+    EXPECT_CALL(mock_orchestration_tools, doesDirectoryExist("/etc/cp/conf/data")).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, readFile(data_file_path + ".download")).WillOnce(Return(data_response));
+
+    EXPECT_CALL(mock_update_communication, authenticateAgent()).WillOnce(Return(Maybe<void>()));
+    EXPECT_CALL(mock_manifest_controller, loadAfterSelfUpdate()).WillOnce(Return(false));
+    expectDetailsResolver();
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, manifest_file_path))
+        .WillOnce(Return(manifest_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, setting_file_path))
+        .WillOnce(Return(settings_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, policy_file_path))
+        .WillOnce(Return(policy_checksum));
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, data_file_path))
+        .WillOnce(Return(data_checksum));
+
+    EXPECT_CALL(mock_service_controller, getPolicyVersion()).WillRepeatedly(ReturnRef(first_policy_version));
+    string version = "1";
+    EXPECT_CALL(mock_service_controller, getUpdatePolicyVersion()).WillOnce(ReturnRef(version));
+
+    EXPECT_CALL(mock_update_communication, getUpdate(_))
+        .WillOnce(Invoke(
+            [&](CheckUpdateRequest &req)
+            {
+                req = CheckUpdateRequest("", "", "", "new data", "", "");
+                return Maybe<void>();
+            }
+        ));
+
+    EXPECT_CALL(mock_status, setLastUpdateAttempt());
+    EXPECT_CALL(mock_status, setIsConfigurationUpdated(A<EnumArray<OrchestrationStatusConfigType, bool>>()));
+
+    EXPECT_CALL(mock_ml, yield(A<chrono::microseconds>()))
+        .WillOnce(Return())
+        .WillOnce(Invoke([](chrono::microseconds) { throw invalid_argument("stop while loop"); }));
+
+    string new_data_file_path = data_file_path + ".download";
+    GetResourceFile data_file(GetResourceFile::ResourceFileType::DATA);
+    EXPECT_CALL(mock_downloader, downloadFile(string("new data"), Package::ChecksumTypes::SHA256, data_file))
+        .WillOnce(Return(Maybe<std::string>(string(new_data_file_path))));
+
+    // Mock shouldDownloadDataFile - file exists but checksum calculation fails
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/ips.data"))
+        .WillOnce(Return(true))  // For shouldDownloadDataFile check
+        .WillOnce(Return(true)); // For backupDataFile check
+
+    // Checksum calculation fails, should trigger download
+    Maybe<string> checksum_error = genError("Failed to calculate checksum");
+    EXPECT_CALL(
+        mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/etc/cp/conf/data/ips.data")
+    )
+        .WillOnce(Return(checksum_error));
+
+    // Mock backupDataFile - should create backup
+    EXPECT_CALL(mock_orchestration_tools, copyFile("/etc/cp/conf/data/ips.data", "/etc/cp/conf/data/ips.data.bk"))
+        .WillOnce(Return(true));
+
+    // Mock the download since checksum calculation failed (download proceeds)
+    EXPECT_CALL(
+        mock_downloader,
+        downloadFileFromURL(data_download_path, data_instance_checksum, Package::ChecksumTypes::SHA256, "data_ips")
+    )
+        .WillOnce(Return(Maybe<std::string>(string("/path/ips"))));
+
+    EXPECT_CALL(mock_orchestration_tools, calculateChecksum(Package::ChecksumTypes::SHA256, "/path/ips"))
+        .WillOnce(Return(data_instance_checksum));
+
+    EXPECT_CALL(mock_orchestration_tools, copyFile(new_data_file_path, data_file_path));
+    EXPECT_CALL(mock_orchestration_tools, copyFile("/path/ips", "/etc/cp/conf/data/ips.data"));
+    EXPECT_CALL(mock_shell_cmd, getExecOutput(_, _, _)).WillRepeatedly(Return(string("daniel\n1\n")));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist("/etc/cp/conf/data/certificates.data"))
+        .WillRepeatedly(Return(false));
+
+    try {
+        runRoutine();
+    } catch (const invalid_argument &e) {
+    }
 }

@@ -22,6 +22,7 @@
 #include "i_time_get.h"
 #include "i_agent_details.h"
 #include "i_rest_api.h"
+#include "config/i_config.h"
 #include "component.h"
 
 class IntelligenceComponentV2
@@ -33,7 +34,8 @@ class IntelligenceComponentV2
     Singleton::Consume<I_AgentDetails>,
     Singleton::Consume<I_RestApi>,
     Singleton::Consume<I_TimeGet>,
-    Singleton::Consume<I_Environment>
+    Singleton::Consume<I_Environment>,
+    Singleton::Consume<Config::I_Config>
 {
 public:
     IntelligenceComponentV2();

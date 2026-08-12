@@ -5,5 +5,5 @@ link_directories(${BOOST_ROOT}/lib)
 add_unit_test(
     agent_details_ut
     "agent_details_ut.cc"
-    "singleton;config;agent_details;environment;metric;event_is;-lboost_regex"
+    "singleton;mainloop;config;agent_details;environment;metric;event_is;-lboost_regex;messaging;"
 )

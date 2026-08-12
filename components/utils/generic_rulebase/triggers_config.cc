@@ -75,6 +75,37 @@ WebTriggerConf::operator==(const WebTriggerConf &other) const
         response_body == other.response_body;
 }
 
+CaptchaConf::CaptchaConf() : captcha_type(""), message_title(""), message_body("") {}
+
+CaptchaConf::CaptchaConf(const string &type, const string &title, const string &body)
+        :
+    captcha_type(type),
+    message_title(title),
+    message_body(body)
+{}
+
+void
+CaptchaConf::load(cereal::JSONInputArchive &archive_in)
+{
+    try {
+        parseJSONKey<string>("captchaType", captcha_type, archive_in);
+        parseJSONKey<string>("messageTitle", message_title, archive_in);
+        parseJSONKey<string>("messageBody", message_body, archive_in);
+    } catch (const exception &e) {
+        dbgWarning(D_RULEBASE_CONFIG) << "Failed to parse the captcha configuration: '" << e.what() << "'";
+        archive_in.setNextName(nullptr);
+    }
+}
+
+bool
+CaptchaConf::operator==(const CaptchaConf &other) const
+{
+    return
+        captcha_type == other.captcha_type &&
+        message_title == other.message_title &&
+        message_body == other.message_body;
+}
+
 LogTriggerConf::LogTriggerConf(string trigger_name, bool log_detect, bool log_prevent) : name(trigger_name)
 {
     if (log_detect) should_log_on_detect.setAll();
@@ -183,6 +214,8 @@ LogTriggerConf::load(cereal::JSONInputArchive& archive_in)
         setTriggersFlag("tpPrevent", archive_in, SecurityType::ThreatPrevention, should_log_on_prevent);
         setTriggersFlag("complianceWarnings", archive_in, SecurityType::Compliance, should_log_on_detect);
         setTriggersFlag("complianceViolations", archive_in, SecurityType::Compliance, should_log_on_prevent);
+        setTriggersFlag("logCaptcha", archive_in, SecurityType::Captcha, should_log_on_detect);
+        setTriggersFlag("logBenignfiles", archive_in, SecurityType::BenignFiles, should_log_on_detect);
         setTriggersFlag("acLogGeoLocation", archive_in, SecurityType::AccessControl, log_geo_location);
         setTriggersFlag("tpLogGeoLocation", archive_in, SecurityType::ThreatPrevention, log_geo_location);
         setTriggersFlag("complianceLogGeoLocation", archive_in, SecurityType::Compliance, log_geo_location);

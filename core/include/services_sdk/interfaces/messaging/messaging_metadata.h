@@ -270,6 +270,18 @@ public:
         return is_to_fog;
     }
 
+    bool
+    useCache() const
+    {
+        return use_cache;
+    }
+
+    void
+    setUseCache(bool _use_cache)
+    {
+        use_cache = _use_cache;
+    }
+
     void
     setSniHostName(const std::string &_host_name)
     {
@@ -352,6 +364,7 @@ private:
     std::string external_certificate = "";
     bool should_buffer = false;
     bool is_to_fog = false;
+    bool use_cache = true;
     bool is_rate_limit_block = false;
     uint rate_limit_block_time = 0;
     bool should_send_access_token = true;

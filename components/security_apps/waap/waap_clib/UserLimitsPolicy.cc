@@ -29,6 +29,7 @@ bool Policy::Config::operator==(const Policy::Config& other) const
 {
     return urlMaxSize == other.urlMaxSize &&
         httpHeaderMaxSize == other.httpHeaderMaxSize &&
+        httpHeaderMaxAmount == other.httpHeaderMaxAmount &&
         httpBodyMaxSize == other.httpBodyMaxSize &&
         maxObjectDepth == other.maxObjectDepth &&
         httpIllegalMethodsAllowed == other.httpIllegalMethodsAllowed;
@@ -39,6 +40,7 @@ std::ostream& operator<<(std::ostream& os, const Policy& policy)
     auto config = policy.getConfig();
     os << "[Policy] " << "urlMaxSize: " << config.urlMaxSize << "  " <<
         "httpHeaderMaxSize: " << config.httpHeaderMaxSize << "  " <<
+        "httpHeaderMaxAmount: " << config.httpHeaderMaxAmount << "  " <<
         "httpBodyMaxSize: " << config.httpBodyMaxSize << "  " <<
         "maxObjectDepth: " << config.maxObjectDepth << "  " <<
         std::boolalpha << "httpIllegalMethodsAllowed: " << config.httpIllegalMethodsAllowed;
@@ -71,6 +73,16 @@ bool State::addUrlBytes(size_t size)
 bool State::addHeaderBytes(const std::string& name, const std::string& value)
 {
     setCurrStateType(StateType::HEADER);
+
+    m_httpHeaderCount++;
+    if (m_policy.getHttpHeaderMaxAmount() > 0 &&
+        m_httpHeaderCount > m_policy.getHttpHeaderMaxAmount()) {
+        setViolationType(ViolationType::HEADER_COUNT_LIMIT);
+        dbgDebug(D_WAAP_ULIMITS) << "[USER LIMITS] Http header count limit exceeded " <<
+            m_httpHeaderCount << "/" << m_policy.getHttpHeaderMaxAmount() << ". Asset id: " << getAssetId();
+        return true;
+    }
+
     size_t chunkSize = name.size() + value.size();
     if (m_httpHeaderSize > std::numeric_limits<size_t>::max() - chunkSize) {
         // We are about to overflow
@@ -231,6 +243,10 @@ void State::setViolatedTypeStr()
             ss << "header size overflow";
             break;
         }
+        case ViolationType::HEADER_COUNT_LIMIT: {
+            ss << "header count exceeded";
+            break;
+        }
         case ViolationType::BODY_LIMIT: {
             ss << "body size exceeded";
             break;
@@ -285,6 +301,16 @@ void State::setViolatedPolicyStr()
             }
             break;
         }
+        case ViolationType::HEADER_COUNT_LIMIT: {
+            ss << m_policy.getHttpHeaderMaxAmount();
+            if (m_policy.getHttpHeaderMaxAmount() == 1) {
+                ss << " Header";
+            }
+            else {
+                ss << " Headers";
+            }
+            break;
+        }
         case ViolationType::BODY_LIMIT:
         case ViolationType::BODY_OVERFLOW: {
             ss << m_policy.getHttpBodyMaxSizeKb();
@@ -316,6 +342,8 @@ size_t State::getViolatingSize() const
         case ViolationType::HEADER_LIMIT:
         case ViolationType::HEADER_OVERFLOW:
             return m_httpHeaderSize;
+        case ViolationType::HEADER_COUNT_LIMIT:
+            return m_httpHeaderCount;
         case ViolationType::BODY_LIMIT:
         case ViolationType::BODY_OVERFLOW:
             return static_cast<size_t>(m_httpBodySize / 1024);

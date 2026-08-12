@@ -23,6 +23,7 @@
 #include "CidrMatch.h"
 #include "DecisionType.h"
 #include "RegexComparator.h"
+#include "agent_core_utilities.h"
 
 USE_DEBUG_FLAG(D_WAAP_OVERRIDE);
 
@@ -121,7 +122,13 @@ public:
                 m_isOverrideResponse = m_operand1->m_isOverrideResponse;
                 m_isValid = m_operand1->m_isValid;
             }
+            else {
+                dbgDebug(D_WAAP_OVERRIDE) << "Invalid override operator: " << m_op;
+                m_isValid = false;
+            }
         }
+
+        finalizeStructure();
     }
 
     template<typename TestFunctor>
@@ -145,6 +152,18 @@ public:
             return result;
         }
         if (m_op == "and") {
+            if (shouldDecomposeAnd()) {
+                bool result = m_operand1->match(testFunctor) && m_operand2->match(testFunctor);
+                dbgTrace(D_WAAP_OVERRIDE) << "Override matching decomposed AND result: " << result;
+                return result;
+            }
+            bool needHdr = m_hasHdrPair;
+            bool needPar = m_hasParPair;
+            if (needHdr || needPar) {
+                bool result = matchFamilyScoped(testFunctor, needHdr, needPar);
+                dbgTrace(D_WAAP_OVERRIDE) << "Override family-scoped AND result: " << result;
+                return result;
+            }
             bool result = m_operand1->match(testFunctor) && m_operand2->match(testFunctor);
             dbgTrace(D_WAAP_OVERRIDE) << "Override matching logical AND result: " << result;
             return result;
@@ -169,7 +188,152 @@ public:
 
     bool isValidMatch() const { return m_isValid; }
 
+    template<typename TestFunctor>
+    bool matchPositional(
+        TestFunctor &f,
+        bool isHeader,
+        const std::string &boundName,
+        const std::string &boundValue) const
+    {
+        const std::pair<std::string, std::string> bound(boundName, boundValue);
+        return isHeader ? matchBound(f, &bound, nullptr) : matchBound(f, nullptr, &bound);
+    }
+
+    template<typename TestFunctor>
+    bool matchBound(
+        TestFunctor &f,
+        const std::pair<std::string, std::string> *hdr,
+        const std::pair<std::string, std::string> *par) const
+    {
+        if (m_op == "basic") {
+            if (m_isCidr) return f(m_tag, m_ip_addr_values);
+            const std::string *bound = nullptr;
+            if (hdr != nullptr && m_tag == hdrNameTag()) bound = &hdr->first;
+            else if (hdr != nullptr && m_tag == hdrValueTag()) bound = &hdr->second;
+            else if (par != nullptr && m_tag == parNameTag()) bound = &par->first;
+            else if (par != nullptr && m_tag == parValueTag()) bound = &par->second;
+            if (bound == nullptr) return f(m_tag, m_valuesRegex);
+            boost::cmatch what;
+            for (const auto &rx : m_valuesRegex) {
+                if (NGEN::Regex::regexMatch(__FILE__, __LINE__, bound->c_str(), what, *rx)) return true;
+            }
+            return false;
+        }
+        if (m_op == "and") {
+            return m_operand1->matchBound(f, hdr, par) && m_operand2->matchBound(f, hdr, par);
+        }
+        if (m_op == "or") {
+            return m_operand1->matchBound(f, hdr, par) || m_operand2->matchBound(f, hdr, par);
+        }
+        if (m_op == "not") {
+            return !m_operand1->match(f);
+        }
+        return false;
+    }
+
 private:
+    static const std::string &hdrNameTag()  { static const std::string t = "headername";  return t; }
+    static const std::string &hdrValueTag() { static const std::string t = "headervalue"; return t; }
+    static const std::string &parNameTag()  { static const std::string t = "paramname";   return t; }
+    static const std::string &parValueTag() { static const std::string t = "paramvalue";  return t; }
+
+    template<typename TestFunctor>
+    bool matchFamilyScoped(TestFunctor &f, bool needHdr, bool needPar) const {
+        if (needHdr && needPar) {
+            const auto &hdrs = f.getHeaderPairs();
+            const auto &pars = f.getParamPairs();
+            for (const auto &h : hdrs) {
+                if (!matchBound(f, &h, nullptr)) continue;
+                for (const auto &p : pars) {
+                    if (matchBound(f, &h, &p)) return true;
+                }
+            }
+            return false;
+        }
+        if (needHdr) {
+            const auto &hdrs = f.getHeaderPairs();
+            for (const auto &h : hdrs) {
+                if (matchBound(f, &h, nullptr)) return true;
+            }
+            return false;
+        }
+        const auto &pars = f.getParamPairs();
+        for (const auto &p : pars) {
+            if (matchBound(f, nullptr, &p)) return true;
+        }
+        return false;
+    }
+
+    struct PairCounts {
+        unsigned hN = 0;
+        unsigned hV = 0;
+        unsigned pN = 0;
+        unsigned pV = 0;
+    };
+
+    unsigned countLeavesWithTag(const std::string &tag) const {
+        if (tag == hdrNameTag()) return m_leaves.hN;
+        if (tag == hdrValueTag()) return m_leaves.hV;
+        if (tag == parNameTag()) return m_leaves.pN;
+        if (tag == parValueTag()) return m_leaves.pV;
+        return 0u;
+    }
+
+    bool containsPair(const std::string &nameTag, const std::string &valueTag) const {
+        return countLeavesWithTag(nameTag) > 0 && countLeavesWithTag(valueTag) > 0;
+    }
+
+    bool hasFullPair() const { return m_hasHdrPair || m_hasParPair; }
+
+    bool shouldDecomposeAnd() const { return m_shouldDecompose; }
+
+    bool splitsFamily(unsigned nameLeaves, unsigned valueLeaves, bool op1Full, bool op2Full) const {
+        if (nameLeaves == 0 || valueLeaves == 0) return false;
+        return !op1Full && !op2Full;
+    }
+
+    void finalizeStructure() {
+        if (m_op == "basic" && !m_isCidr) {
+            m_leaves.hN = (m_tag == hdrNameTag()) ? 1u : 0u;
+            m_leaves.hV = (m_tag == hdrValueTag()) ? 1u : 0u;
+            m_leaves.pN = (m_tag == parNameTag()) ? 1u : 0u;
+            m_leaves.pV = (m_tag == parValueTag()) ? 1u : 0u;
+            m_andLeaves = m_leaves;
+        } else {
+            const PairCounts z;
+            const PairCounts &a = m_operand1 ? m_operand1->m_leaves : z;
+            const PairCounts &b = m_operand2 ? m_operand2->m_leaves : z;
+            m_leaves.hN = a.hN + b.hN;
+            m_leaves.hV = a.hV + b.hV;
+            m_leaves.pN = a.pN + b.pN;
+            m_leaves.pV = a.pV + b.pV;
+            if (m_op == "and" && m_operand1 && m_operand2) {
+                m_andLeaves.hN = m_operand1->m_andLeaves.hN + m_operand2->m_andLeaves.hN;
+                m_andLeaves.hV = m_operand1->m_andLeaves.hV + m_operand2->m_andLeaves.hV;
+                m_andLeaves.pN = m_operand1->m_andLeaves.pN + m_operand2->m_andLeaves.pN;
+                m_andLeaves.pV = m_operand1->m_andLeaves.pV + m_operand2->m_andLeaves.pV;
+            } else {
+                m_andLeaves = PairCounts();
+            }
+        }
+        m_hasHdrPair = m_leaves.hN > 0 && m_leaves.hV > 0;
+        m_hasParPair = m_leaves.pN > 0 && m_leaves.pV > 0;
+
+        m_shouldDecompose = false;
+        if (m_op == "and" && m_operand1 && m_operand2) {
+            if (m_operand1->hasFullPair() || m_operand2->hasFullPair()) {
+                bool hdrSplit = splitsFamily(m_leaves.hN, m_leaves.hV,
+                    m_operand1->m_hasHdrPair, m_operand2->m_hasHdrPair);
+                bool parSplit = splitsFamily(m_leaves.pN, m_leaves.pV,
+                    m_operand1->m_hasParPair, m_operand2->m_hasParPair);
+                m_shouldDecompose = !hdrSplit && !parSplit;
+            } else {
+                m_shouldDecompose = m_andLeaves.hN > 1 || m_andLeaves.hV > 1
+                    || m_andLeaves.pN > 1 || m_andLeaves.pV > 1;
+            }
+        }
+    }
+
     void sortAndMergeCIDRs() {
         if (m_ip_addr_values.empty()) return;
         std::sort(m_ip_addr_values.begin(), m_ip_addr_values.end());
@@ -187,6 +351,12 @@ private:
 
         m_ip_addr_values.resize(mergedIndex + 1);
     }
+
+    PairCounts m_leaves;
+    PairCounts m_andLeaves;
+    bool m_hasHdrPair = false;
+    bool m_hasParPair = false;
+    bool m_shouldDecompose = false;
 
     std::string m_op;
     std::shared_ptr<Match> m_operand1;

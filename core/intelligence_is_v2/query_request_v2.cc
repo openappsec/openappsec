@@ -170,11 +170,13 @@ QueryRequest::setRequestedAttr(const string &attr, uint min_conf, AttributeKeyTy
     requested_attributes.setSerializableAttribute(createAttributeString(attr, attr_type), min_conf);
 }
 
+// LCOV_EXCL_START reason: Unused until multi tenant support is used
 void
 QueryRequest::setTenantsList(const vector<string> tenants)
 {
     query_types.setSerializableTenantList(tenants);
 }
+// LCOV_EXCL_STOP
 
 void
 QueryRequest::setCrossTenantAssetDB(bool cross_tenant_asset_db)

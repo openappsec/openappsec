@@ -14,6 +14,7 @@
 #include "IndicatorsFiltersManager.h"
 #include "WaapConfigApi.h"
 #include "WaapConfigApplication.h"
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "config.h"
 #include "debug.h"
 #include "i_unified_learning.h"
+#include "i_time_get.h"
 #include "hiredis/async.h"
 
 USE_DEBUG_FLAG(D_WAAP_LEARN);
@@ -68,6 +70,8 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, con
     registerExpectedConfiguration<std::string>("connection", "Redis IP");
     registerExpectedConfiguration<int>("connection", "Redis Port");
     registerExpectedConfiguration<int>("connection", "Redis Routine Interval");
+    registerExpectedConfiguration<int>("connection", "Redis Reconnect Initial Backoff Seconds");
+    registerExpectedConfiguration<int>("connection", "Redis Reconnect Max Backoff Seconds");
 
     m_centralLogging_enabled = getProfileAgentSettingWithDefault<bool>(false, "agent.learning.centralLogging");
     m_unified_learning_enabled = getProfileAgentSettingWithDefault<bool>(false, "agent.learning.unifiedLearning");
@@ -82,7 +86,7 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, con
     initRedis();
     m_typeFilter = make_unique<TypeIndicatorFilter>(pWaapAssetState, remotePath, assetId, &m_tuning);
     m_uniqueSources.reserve(m_sources_limit);
-    registerConfigLoadCb([this](){
+    m_configLoadCbHandle = registerConfigLoadCb([this](){
         updateSourcesLimit();
         updateLearningLeaderFlag();
     });
@@ -90,6 +94,10 @@ IndicatorsFiltersManager::IndicatorsFiltersManager(const string& remotePath, con
 
 IndicatorsFiltersManager::~IndicatorsFiltersManager()
 {
+    if (m_configLoadCbHandle != Config::INVALID_CB_HANDLE &&
+        Singleton::exists<Config::I_Config>()) {
+        unregisterConfigLoadCb(m_configLoadCbHandle);
+    }
     disconnectRedis();
 }
 
@@ -123,10 +131,18 @@ bool IndicatorsFiltersManager::initRedis(){
         return false;
     }
     dbgTrace(D_WAAP_LEARN) << "Start Redis async context init, m_redis_client=" << (m_redis_client ? "valid" : "null");
-    // Check if already initialized
     if (m_redis_client != nullptr) {
-        dbgTrace(D_WAAP_LEARN) << "Redis client already exists, returning true";
-        return true;
+        if (m_redis_client->err == 0) {
+            dbgTrace(D_WAAP_LEARN) << "Redis client already exists, returning true";
+            return true;
+        }
+        dbgWarning(D_WAAP_LEARN)
+            << "Existing Redis context is in error state, recreating: "
+            << m_redis_client->errstr;
+        unregisterRedisFromMainLoop();
+        redisAsyncFree(m_redis_client);
+        m_redis_client = nullptr;
+        m_redis_connected = false;
     }
 
     string redis_host = getConfigurationWithDefault<std::string>("127.0.0.1", "connection", "Redis IP");
@@ -141,6 +157,7 @@ bool IndicatorsFiltersManager::initRedis(){
         } else {
             dbgWarning(D_WAAP_LEARN) << "Can't allocate redis async context";
         }
+        scheduleNextReconnect();
         return false;
     }
     
@@ -189,6 +206,15 @@ IndicatorsFiltersManager::pushEntryToRedis(UnifiedIndicatorsContainer::Entry &en
     dbgTrace(D_WAAP_LEARN) << "pushEntryToRedis() called, m_redis_connected=" << m_redis_connected
                             << ", m_redis_client=" << (m_redis_client ? "valid" : "null");
     if (!m_redis_connected || m_redis_client == nullptr) {
+        // Only throttle when we'd actually attempt a fresh reconnect (client is null).
+        // If the client is non-null we're still in CONNECTING; let the existing context drive.
+        if (m_redis_client == nullptr &&
+            Singleton::Consume<I_TimeGet>::by<WaapComponent>()->getMonotonicTime() < m_next_reconnect_time) {
+            dbgTrace(D_WAAP_LEARN)
+                << "Redis reconnect throttled, current backoff="
+                << m_current_reconnect_backoff.count() << "s; dropping entry";
+            return;
+        }
         if (!initRedis()) {
             dbgWarning(D_WAAP_LEARN) << "Failed to initialize Redis connection, cannot push entry";
             return;
@@ -706,20 +732,33 @@ void IndicatorsFiltersManager::updateState(const std::vector<std::string>& files
 }
 
 void IndicatorsFiltersManager::handleRedisEvents() {
-    if (m_redis_client) {
-        // redisAsyncHandleRead(m_redis_client);
-        redisAsyncHandleWrite(m_redis_client);
-        dbgTrace(D_WAAP_LEARN) << "processing Redis async writes";
+    if (m_redis_client == nullptr) {
+        // The disconnect callback nulled the pointer (e.g. Redis isn't running).
+        // Self-stop the routine here, where the MainloopStop throw can unwind
+        // safely through C++ frames only - never from inside a hiredis callback.
+        unregisterRedisFromMainLoop();
+        return;
     }
+    redisAsyncHandleRead(m_redis_client);
+    if (m_redis_client == nullptr) {
+        // redisAsyncHandleRead can synchronously invoke onRedisDisconnect on RST/EOF/parse-error,
+        // which nulls m_redis_client and frees the async context. Self-stop here to avoid a UAF
+        // in the redisAsyncHandleWrite call below.
+        unregisterRedisFromMainLoop();
+        return;
+    }
+    redisAsyncHandleWrite(m_redis_client);
+    dbgTrace(D_WAAP_LEARN) << "processing Redis async reads and writes";
 }
 
 // Static callback for connection established
 void IndicatorsFiltersManager::onRedisConnect(const redisAsyncContext* context, int status) {
     dbgTrace(D_WAAP_LEARN) << "onRedisConnect() called with status=" << status;
     IndicatorsFiltersManager* self = static_cast<IndicatorsFiltersManager*>(context->data);
-    
+
     if (status == REDIS_OK) {
         self->m_redis_connected = true;
+        self->resetReconnectBackoff();
         dbgDebug(D_WAAP_LEARN) << "Redis connected successfully";
     } else {
         dbgWarning(D_WAAP_LEARN)
@@ -727,18 +766,31 @@ void IndicatorsFiltersManager::onRedisConnect(const redisAsyncContext* context, 
             << status
             << ", error: " << context->errstr;
         self->m_redis_connected = false;
+        // On a failed connect, hiredis frees the context without invoking the
+        // disconnect callback (REDIS_CONNECTED was never set). Drop our pointer
+        // here to avoid a use-after-free on the next routine tick.
+        self->m_redis_client = nullptr;
+        self->scheduleNextReconnect();
     }
 }
 
-// Static callback for disconnection
+// Static callback for disconnection.
+// Must NOT throw - this is invoked from inside hiredis (C code). Throwing from
+// here unwinds through hiredis without letting it clear REDIS_IN_CALLBACK or
+// free the context, which then trips an assert on the next async-handle call.
+// We only mark state; the routine tick self-stops on the next invocation.
 void IndicatorsFiltersManager::onRedisDisconnect(const redisAsyncContext* context, int status) {
     IndicatorsFiltersManager* self = static_cast<IndicatorsFiltersManager*>(context->data);
-    
+
     self->m_redis_connected = false;
-    dbgWarning(D_WAAP_LEARN) << "Redis disconnected";
-    
-    // Unregister from main loop
-    self->unregisterRedisFromMainLoop();
+    // hiredis frees the async context after this callback returns - drop our
+    // pointer to avoid a dangling reference.
+    self->m_redis_client = nullptr;
+    // We had a working connection that just dropped. Reset the back-off so the
+    // next reconnect attempt is immediate; if THAT fails, we'll start ramping
+    // up again from the configured initial back-off.
+    self->resetReconnectBackoff();
+    dbgWarning(D_WAAP_LEARN) << "Redis disconnected with status: " << status;
 }
 
 void IndicatorsFiltersManager::unregisterRedisFromMainLoop() {
@@ -754,4 +806,29 @@ void IndicatorsFiltersManager::disconnectRedis(){
         redisAsyncDisconnect(m_redis_client);
         m_redis_client = nullptr;
     }
+}
+
+void IndicatorsFiltersManager::resetReconnectBackoff() {
+    m_current_reconnect_backoff = std::chrono::seconds(0);
+    m_next_reconnect_time = std::chrono::microseconds::min();
+}
+
+void IndicatorsFiltersManager::scheduleNextReconnect() {
+    auto initial = std::chrono::seconds(
+        getConfigurationWithDefault<int>(5, "connection", "Redis Reconnect Initial Backoff Seconds")
+    );
+    auto cap = std::chrono::seconds(
+        getConfigurationWithDefault<int>(3600, "connection", "Redis Reconnect Max Backoff Seconds")
+    );
+
+    if (m_current_reconnect_backoff < initial) {
+        m_current_reconnect_backoff = initial;
+    } else {
+        m_current_reconnect_backoff = std::min(cap, m_current_reconnect_backoff * 2);
+    }
+    m_next_reconnect_time =
+        Singleton::Consume<I_TimeGet>::by<WaapComponent>()->getMonotonicTime() + m_current_reconnect_backoff;
+    dbgDebug(D_WAAP_LEARN)
+        << "Scheduled next Redis reconnect in "
+        << m_current_reconnect_backoff.count() << "s";
 }

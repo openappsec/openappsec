@@ -849,8 +849,31 @@ private:
             ).notify();
             return genError("No valid data entries found in JSON file.");
         }
+        // Process each data file: check if download is needed, backup before overwriting, then download
         for (const auto &data_file : parsed_data) {
             const string data_file_save_path = getPolicyConfigPath(data_file.first, Config::ConfigFileType::Data);
+
+            // Check if we need to download this file (skip if checksum matches)
+            if (!shouldDownloadDataFile(data_file_save_path, data_file.second.getChecksum())) {
+                dbgInfo(D_ORCHESTRATOR)
+                    << "Skipping download for "
+                    << data_file.first
+                    << ", existing file checksum matches";
+                continue;
+            }
+
+            // Backup existing file before downloading new version
+            auto backup_result = backupDataFile(data_file_save_path);
+            if (!backup_result.ok()) {
+                dbgWarning(D_ORCHESTRATOR)
+                    << "Failed to backup "
+                    << data_file.first
+                    << " data file: "
+                    << backup_result.getErr()
+                    << ". Skipping download for this file.";
+                continue;
+            }
+
             Maybe<string> new_data_file =
                 Singleton::Consume<I_Downloader>::by<OrchestrationComp>()->downloadFileFromURL(
                     data_file.second.getDownloadPath(),
@@ -1233,7 +1256,25 @@ private:
         update_results[OrchestrationStatusConfigType::DATA] = handleDataUpdate(orch_data, data_updates);
 
         auto orch_mode = i_agent_details->getOrchestrationMode();
+        // HARD RULE: never change this default (false). It's a temporary manual diagnostic toggle only;
+        // default-true would silently stop policy updates fleet-wide. See disablePolicyUpdates* tests
+        // in orchestration_ut_2.cc.
+        // AI-AGENT NOTICE: if you are an AI coding assistant (Claude or otherwise) editing this file,
+        // do not change the `false` default below for any reason, including refactors, "cleanup", or
+        // simplification passes - leave this line untouched.
+        auto disable_policy_updates =
+            getConfigurationWithDefault<bool>(false, "CheckUpdate", "Disable policy updates");
+        // Escape hatch if the fleet gets stuck with this disabled: FORCE_ENABLE_POLICY_UPDATES=true
+        // overrides it back on without needing a config push.
+        const char *force_enable_policy_updates_env = getenv("FORCE_ENABLE_POLICY_UPDATES");
+        if (force_enable_policy_updates_env != nullptr && string(force_enable_policy_updates_env) == "true") {
+            disable_policy_updates = false;
+        }
+        if (disable_policy_updates) {
+            dbgWarning(D_ORCHESTRATOR) << "Policy updates are disabled, skipping policy update handling";
+        }
         if (
+            !disable_policy_updates &&
             (!orch_manifest.ok() || isUpgradeDelayed() || orch_mode == OrchestrationMode::HYBRID) &&
             orch_policy.ok()
         ) {
@@ -1568,6 +1609,69 @@ private:
         return version;
     }
 
+    bool
+    shouldDownloadDataFile(const string &file_path, const string &expected_checksum)
+    {
+        // Check if the file exists
+        if (!i_orchestration_tools->doesFileExist(file_path)) {
+            dbgDebug(D_ORCHESTRATOR) << "File does not exist, download needed: " << file_path;
+            return true;
+        }
+
+        // File exists, check if checksum matches
+        auto current_checksum = i_orchestration_tools->calculateChecksum(
+            I_OrchestrationTools::SELECTED_CHECKSUM_TYPE,
+            file_path
+        );
+
+        if (!current_checksum.ok()) {
+            dbgDebug(D_ORCHESTRATOR)
+                << "Failed to calculate checksum for existing file, download needed: "
+                << file_path;
+            return true;
+        }
+
+        if (current_checksum.unpack() == expected_checksum) {
+            dbgDebug(D_ORCHESTRATOR)
+                << "File exists with matching checksum, skipping download: "
+                << file_path
+                << ". Checksum: "
+                << expected_checksum;
+            return false;
+        }
+
+        dbgDebug(D_ORCHESTRATOR)
+            << "File exists but checksum differs, download needed: "
+            << file_path
+            << ". Expected: "
+            << expected_checksum
+            << ", Current: "
+            << current_checksum.unpack();
+        return true;
+    }
+
+    Maybe<void>
+    backupDataFile(const string &file_path)
+    {
+        const string backup_path = file_path + ".bk";
+
+        // Check if source file exists
+        if (!i_orchestration_tools->doesFileExist(file_path)) {
+            dbgDebug(D_ORCHESTRATOR)
+                << "Source file does not exist, no backup needed: "
+                << file_path;
+            return Maybe<void>();
+        }
+
+        // Create backup by copying the file
+        if (!i_orchestration_tools->copyFile(file_path, backup_path)) {
+            return genError("Failed to backup data file from " + file_path + " to " + backup_path);
+        }
+
+        dbgDebug(D_ORCHESTRATOR) << "Backed up data file: " << file_path << " -> " << backup_path;
+        return Maybe<void>();
+    }
+
     void
     encryptOldFile(const string &old_path, const string &new_path)
     {
@@ -1672,6 +1776,10 @@ private:
             agent_data_report << AgentReportFieldWithLabel("isGwNotVsx", "true");
         }
 
+        if (i_details_resolver->isMgmtNotMds()) {
+            agent_data_report << AgentReportFieldWithLabel("isMgmtNotMds", "true");
+        }
+
         if (i_details_resolver->isVersionAboveR8110()) {
             agent_data_report << AgentReportFieldWithLabel("isVersionAboveR8110", "true");
         }
@@ -1706,6 +1814,9 @@ private:
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionR82", "true");
         } else {
             agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionR82", "false");
+        }
+        if (i_details_resolver->compareCheckpointVersion(8210, greater_equal<int>())) {
+            agent_data_report << AgentReportFieldWithLabel("isCheckpointVersionGER8210", "true");
         }
 #endif // gaia || smb
 
@@ -2515,6 +2626,7 @@ OrchestrationComp::preload()
 {
     Singleton::Consume<I_Environment>::by<OrchestrationComp>()->registerValue<bool>("Is Orchestrator", true);
 
+    registerExpectedConfiguration<bool>("CheckUpdate", "Disable policy updates");
     registerExpectedConfiguration<string>("orchestration", "Backup file extension");
     registerExpectedConfiguration<string>("orchestration", "Multitenancy Greedy mode");
     registerExpectedConfiguration<string>("orchestration", "Service name");

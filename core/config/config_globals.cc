@@ -33,22 +33,40 @@ operator<<(ostream &os, const Errors &err)
     return os << "Unknown error";
 }
 
-void
+ConfigCbHandle
 registerConfigPrepareCb(ConfigCb cb)
 {
-    Singleton::Consume<I_Config>::from<MockConfigProvider>()->registerConfigPrepareCb(cb);
+    return Singleton::Consume<I_Config>::from<MockConfigProvider>()->registerConfigPrepareCb(cb);
 }
 
-void
+ConfigCbHandle
 registerConfigLoadCb(ConfigCb cb)
 {
-    Singleton::Consume<I_Config>::from<MockConfigProvider>()->registerConfigLoadCb(cb);
+    return Singleton::Consume<I_Config>::from<MockConfigProvider>()->registerConfigLoadCb(cb);
+}
+
+ConfigCbHandle
+registerConfigAbortCb(ConfigCb cb)
+{
+    return Singleton::Consume<I_Config>::from<MockConfigProvider>()->registerConfigAbortCb(cb);
 }
 
 void
-registerConfigAbortCb(ConfigCb cb)
+unregisterConfigPrepareCb(ConfigCbHandle handle)
 {
-    Singleton::Consume<I_Config>::from<MockConfigProvider>()->registerConfigAbortCb(cb);
+    Singleton::Consume<I_Config>::from<MockConfigProvider>()->unregisterConfigPrepareCb(handle);
+}
+
+void
+unregisterConfigLoadCb(ConfigCbHandle handle)
+{
+    Singleton::Consume<I_Config>::from<MockConfigProvider>()->unregisterConfigLoadCb(handle);
+}
+
+void
+unregisterConfigAbortCb(ConfigCbHandle handle)
+{
+    Singleton::Consume<I_Config>::from<MockConfigProvider>()->unregisterConfigAbortCb(handle);
 }
 
 bool

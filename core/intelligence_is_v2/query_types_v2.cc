@@ -16,11 +16,13 @@
 using namespace std;
 using namespace Intelligence_IS_V2;
 
+// LCOV_EXCL_START reason: Unused until multi tenant support is used
 void
 SerializableQueryTypes::serializeMultiTenant(cereal::JSONOutputArchive &ar) const
 {
     ar(cereal::make_nvp("multiTenant", *tenants));
 }
+// LCOV_EXCL_STOP
 
 void
 SerializableQueryTypes::serializeCrossTenantAssetDB(cereal::JSONOutputArchive &ar) const
@@ -40,11 +42,13 @@ SerializableQueryTypes::save(cereal::JSONOutputArchive &ar) const
     ar.finishNode();
 }
 
+// LCOV_EXCL_START reason: Unused until multi tenant support is used
 void
 SerializableQueryTypes::setSerializableTenantList(const vector<string> &tenant_list)
 {
     tenants = tenant_list;
-};
+}
+// LCOV_EXCL_STOP
 
 void
 SerializableQueryTypes::setQueryCrossTenantAssetDB(bool cross_tenant_asset_db)

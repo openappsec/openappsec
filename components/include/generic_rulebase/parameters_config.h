@@ -18,6 +18,7 @@
 #include <vector>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
@@ -216,10 +217,28 @@ public:
     getBehaviorForNonKVPairs(
         const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
 
+    std::set<ParameterBehavior>
+    getBehaviorForKVPairsOnly(
+        const std::unordered_map<std::string, std::set<std::string>> &key_value_pairs) const;
+
+    std::set<ParameterBehavior>
+    getBehaviorForKVPairs(
+        const std::unordered_map<std::string, std::set<std::string>> &base_dict,
+        const std::vector<std::pair<std::string, std::string>> &header_pairs,
+        const std::vector<std::pair<std::string, std::string>> &param_pairs) const;
+
+    std::set<ParameterBehavior>
+    getBehaviorForKVList(
+        const std::unordered_map<std::string, std::set<std::string>> &base_dict,
+        const std::vector<std::pair<std::string, std::string>> &kv_pairs,
+        const std::string &name_tag,
+        const std::string &value_tag) const;
+
     static bool isGeoLocationExceptionExists() { return is_geo_location_exception_exists; }
     const MatchQuery& getMatch() const { return match; }
     bool isContainingKVPair() const { return is_containing_kv_pair; }
     bool checkKVPair() const;
+    const std::unordered_set<std::string> &getAllReferencedKeys() const { return all_referenced_keys; }
 
 private:
     class MatchBehaviorPair
@@ -231,11 +250,17 @@ private:
     };
 
     std::vector<MatchBehaviorPair> match_queries;
+    // Precomputed at load time: indices into match_queries split by whether they contain KV pairs.
+    // Avoids per-call checkMatchQueryForKVPair() filtering during request processing.
+    // Uses indices (not pointers) so they remain valid after copy/move of the object.
+    std::vector<size_t> kv_match_query_indices;
+    std::vector<size_t> non_kv_match_query_indices;
+    std::unordered_set<std::string> all_referenced_keys;
     MatchQuery match;
     ParameterBehavior behavior;
     static bool is_geo_location_exception_exists;
     static bool is_geo_location_exception_being_loaded;
-    bool is_containing_kv_pair;
+    bool is_containing_kv_pair = false;
 };
 
 static const ParameterBehavior action_ignore(BehaviorKey::ACTION, BehaviorValue::IGNORE);

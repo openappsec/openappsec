@@ -133,6 +133,66 @@ private:
     bool add_event_id_to_header = false;
 };
 
+/// \class CaptchaConf
+/// \brief Represents the configuration for a captcha.
+class CaptchaConf
+{
+public:
+    /// \brief Default constructor for CaptchaConf.
+    CaptchaConf();
+
+    /// \brief Constructor for CaptchaConf.
+    /// \param type The type of captcha.
+    /// \param title The message title.
+    /// \param body The message body.
+    CaptchaConf(const std::string &type, const std::string &title, const std::string &body);
+
+    /// \brief Preload function to register expected configuration.
+    static void
+    preload()
+    {
+        registerExpectedConfigurationWithCache<CaptchaConf>("triggerId", "rulebase", "captcha");
+    }
+
+    /// \brief Load function to deserialize configuration from JSONInputArchive.
+    /// \param archive_in The JSON input archive.
+    void load(cereal::JSONInputArchive &archive_in);
+
+    /// \brief Equality operator for CaptchaConf.
+    /// \param other The CaptchaConf to compare.
+    /// \return True if the two CaptchaConf objects are equal, otherwise false.
+    bool operator==(const CaptchaConf &other) const;
+
+    /// \brief Get the captcha type.
+    /// \return The captcha type.
+    const std::string &
+    getCaptchaType() const
+    {
+        return captcha_type;
+    }
+
+    /// \brief Get the message title.
+    /// \return The message title.
+    const std::string &
+    getMessageTitle() const
+    {
+        return message_title;
+    }
+
+    /// \brief Get the message body.
+    /// \return The message body.
+    const std::string &
+    getMessageBody() const
+    {
+        return message_body;
+    }
+
+private:
+    std::string captcha_type;
+    std::string message_title;
+    std::string message_body;
+};
+
 /// \class LogTriggerConf
 /// \brief Represents the configuration for a log trigger.
 class LogTriggerConf : Singleton::Consume<I_Logging>
@@ -145,6 +205,8 @@ public:
         AccessControl,
         ThreatPrevention,
         Compliance,
+        Captcha,
+        BenignFiles,
         COUNT
     };
 
@@ -297,6 +359,22 @@ public:
         return log_geo_location.isSet(security_type);
     }
 
+    /// \brief Check if captcha logging is active.
+    /// \return True if captcha logging is active, otherwise false.
+    bool
+    isCaptchaLogActive() const
+    {
+        return should_log_on_detect.isSet(SecurityType::Captcha);
+    }
+
+    /// \brief Check if benign files logging is active.
+    /// \return True if benign files logging is active, otherwise false.
+    bool
+    isBenignFilesLogActive() const
+    {
+        return should_log_on_detect.isSet(SecurityType::BenignFiles);
+    }
+
     /// \brief Get the extended logging severity.
     /// \return The extended logging severity.
     extendLoggingSeverity
@@ -388,3 +466,4 @@ private:
 };
 
 #endif //__TRIGGERS_CONFIG_H__
+

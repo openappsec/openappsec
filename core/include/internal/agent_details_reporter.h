@@ -31,7 +31,8 @@ class AgentDetailsReporter
     Singleton::Consume<I_MainLoop>,
     Singleton::Consume<I_Environment>,
     Singleton::Consume<I_TimeGet>,
-    Singleton::Consume<I_RestApi>
+    Singleton::Consume<I_RestApi>,
+    Singleton::Consume<Config::I_Config>
 {
 public:
     AgentDetailsReporter();

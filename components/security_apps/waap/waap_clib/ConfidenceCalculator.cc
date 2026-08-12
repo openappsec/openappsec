@@ -71,6 +71,7 @@ ConfidenceCalculator::ConfidenceCalculator(
     m_post_index(0),
     m_mainLoop(Singleton::Consume<I_MainLoop>::by<WaapComponent>()),
     m_routineId(0),
+    m_gcRoutineId(0),
     m_filesToRemove(),
     m_indicator_tracking_keys(),
     m_tracking_keys_received(false)
@@ -85,6 +86,17 @@ ConfidenceCalculator::ConfidenceCalculator(
 
 ConfidenceCalculator::~ConfidenceCalculator()
 {
+    if (Singleton::exists<I_MainLoop>()) {
+        I_MainLoop *ml = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
+        if (m_routineId != 0) {
+            ml->stop(m_routineId);
+            m_routineId = 0;
+        }
+        if (m_gcRoutineId != 0) {
+            ml->stop(m_gcRoutineId);
+            m_gcRoutineId = 0;
+        }
+    }
     m_time_window_logger->clear();
     m_time_window_logger.reset();
     m_confident_sets.clear();
@@ -841,9 +853,10 @@ void ConfidenceCalculator::log(const Key &key, const Val &value, const string &s
             << m_estimated_memory_usage;
         // run a onetime routine to send the data to the server
         I_MainLoop *mainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
-        mainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::Offline,
+        m_routineId = mainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::Offline,
             [this]() {
                 postData();
+                m_routineId = 0;
             },
             "ConfidenceCalculator post data offsync"
         );
@@ -1171,7 +1184,7 @@ void ConfidenceCalculator::garbageCollector()
         " - starting asynchronous garbage collection of carry-on data files";
 
     I_MainLoop *mainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
-    mainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::Offline,
+    m_gcRoutineId = mainLoop->addOneTimeRoutine(I_MainLoop::RoutineType::Offline,
         // LCOV_EXCL_START
         [this, mainLoop]() {
             dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
@@ -1282,6 +1295,7 @@ void ConfidenceCalculator::garbageCollector()
 
             dbgDebug(D_WAAP_CONFIDENCE_CALCULATOR) << "Owner: " << m_owner <<
                 " - finished garbage collection.";
+            m_gcRoutineId = 0;
         },
         // LCOV_EXCL_STOP
         "ConfidenceCalculator garbage collection"

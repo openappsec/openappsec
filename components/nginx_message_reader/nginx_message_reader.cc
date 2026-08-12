@@ -251,7 +251,7 @@ private:
                     continue;
                 }
                 if (!log_sent) {
-                    dbgWarning(D_NGINX_MESSAGE_READER) << "Failed to send Log to Infinity Portal";
+                    dbgTrace(D_NGINX_MESSAGE_READER) << "Failed to send Log to Infinity Portal";
                 } else {
                     dbgTrace(D_NGINX_MESSAGE_READER) << "Succesfully sent nginx log to Infinity Portal";
                 }

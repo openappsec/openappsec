@@ -75,6 +75,8 @@ enum class Tags {
     AIGUARD,
     CENTRAL_NGINX_MANAGER,
     BROWSER_AGENT,
+    ANOMALY_DETECTION_LOG_UPLOAD,
+    ANTIBOT,
     COUNT
 };
 
@@ -167,7 +169,9 @@ enum class IssuingEngine {
     HORIZON_TELEMETRY_METRICS,
     API_DISCOVERY,
     LB_HEALTH_STATUS,
-    BROWSER_AGENT
+    BROWSER_AGENT,
+    ANOMALY_DETECTION,
+    ANTIBOT
 };
 
 } // namespace ReportIS

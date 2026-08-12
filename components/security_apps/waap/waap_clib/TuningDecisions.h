@@ -50,6 +50,7 @@ private:
     TuningDecisionType convertDecisionType(std::string decisionTypeStr);
     TuningDecisionEnum convertDecision(std::string decisionStr);
     std::string getSharedStorageHost();
+    I_MainLoop::RoutineID m_routineId = 0;
 
     template<typename T>
     bool sendObject(T &obj, HTTPMethod method, std::string uri)

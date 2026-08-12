@@ -46,6 +46,8 @@ private: //ugly but needed for build
     std::shared_ptr<Signatures> m_Signatures;
     std::shared_ptr<WaapHyperscanEngine> m_hyperscanEngine;
     std::string m_waapDataFileName;
+    std::string m_waapDataLocalFileName;
+    Config::ConfigCbHandle m_configLoadCbHandle{Config::INVALID_CB_HANDLE};
     std::map<std::string, std::vector<std::string>> m_filtered_keywords_verbose;
 
     void checkRegex(const SampleValue &sample, const Regex & pattern, std::vector<std::string>& keyword_matches,
@@ -75,7 +77,8 @@ public:
         size_t cleanCacheCapacity = SIGS_APPLY_CLEAN_CACHE_CAPACITY,
         size_t suspiciousCacheCapacity = SIGS_APPLY_SUSPICIOUS_CACHE_CAPACITY,
         size_t sampleTypeCacheCapacity = SIGS_SAMPLE_TYPE_CACHE_CAPACITY,
-        const std::string& assetId = "");
+        const std::string& assetId = "",
+        const std::string& waapDataLocalFileName = "");
     explicit WaapAssetState(const std::shared_ptr<WaapAssetState>& pWaapAssetState,
         const std::string& waapDataFileName, const std::string& assetId);
     virtual ~WaapAssetState();

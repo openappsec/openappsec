@@ -37,13 +37,6 @@ static set<string> us_debug_flags = {
 #undef DEFINE_FLAG
 };
 
-static set<string> kernel_debug_flags = {
-    "ALL",
-#define DEFINE_KDEBUG_FLAG(flag_name) #flag_name,
-#include "kdebug_flags.h"
-#undef DEFINE_KDEBUG_FLAG
-};
-
 static set<string> debug_levels = { "Trace", "Debug", "Warning", "Info", "Error", "None" };
 enum class DebugLevel {
     Trace,
@@ -53,10 +46,6 @@ enum class DebugLevel {
     Error,
     None
 };
-
-static DebugLevel max_debug_level = DebugLevel::None;
-
-static const vector<string> kernel_flags_in_user_space = {"D_MESSAGE_READER", "D_KERNEL_MESSAGE_READER"};
 
 static const string section = "|--";
 static const string vertical = "|  ";
@@ -189,24 +178,6 @@ getServiceString(const Service service)
                 << endl;
             exit(error_exit_code);
     }
-    return "";
-}
-
-static string
-getDebugLevelString(const DebugLevel level)
-{
-    if (level == DebugLevel::Trace) return "Trace";
-    if (level == DebugLevel::Debug) return "Debug";
-    if (level == DebugLevel::Info) return "Info";
-    if (level == DebugLevel::Warning) return "Warning";
-    if (level == DebugLevel::Error) return "Error";
-    if (level == DebugLevel::None) return "None";
-    cerr
-        << "Internal Error: the provided debug level ("
-        << static_cast<int>(level)
-        << ") has no string representation"
-        << endl;
-    exit(error_exit_code);
     return "";
 }
 
@@ -386,7 +357,7 @@ getServiceConfig (const Service service)
             );
         case (Service::ERM):
             return ServiceConfig(
-                filesystem_path + "/conf/cp-nano-erm-conf.json",
+                filesystem_path + "/conf/cp-nano-erm-debug-conf.json",
                 log_files_path + "/nano_agent/cp-nano-erm.dbg"
             );
         case (Service::UNIFIED_LEARNING_SERVICE):
@@ -743,121 +714,6 @@ private:
     Context context;
 };
 
-class KernelModuleConf
-{
-public:
-    KernelModuleConf() : context(Context(Service::ACCESS_CONTROL)) {}
-
-    void initCtx() { context.init(); }
-
-    void
-    save(cereal::JSONOutputArchive &ar) const
-    {
-        ar(cereal::make_nvp("kernel debug", kernel_debug));
-        try {
-            ar(cereal::make_nvp("debug context", context));
-        } catch(...) {
-        }
-    }
-
-    void
-    load(cereal::JSONInputArchive &ar)
-    {
-        ar(cereal::make_nvp("kernel debug", kernel_debug));
-        try {
-            ar(cereal::make_nvp("debug context", context));
-        } catch(...) {
-        }
-    }
-
-    void
-    resetDebug()
-    {
-        kernel_debug.front().clear();
-        kernel_debug.front()["All"] = "None";
-    }
-
-    void
-    addDebug(const map<string, string> &new_flags)
-    {
-        kernel_debug.front().erase("All");
-        for (const auto &flag : new_flags) {
-            kernel_debug.front()[flag.first] = flag.second;
-        }
-    }
-
-    void addContext(string &ctx_key, string &ctx_val) { context.addContext(ctx_key, ctx_val); }
-
-    multimap<string, string>
-    mapDebugConf(const string &service_name) const
-    {
-        multimap<string, string> debug_map;
-        for (const map<string, string> &stream : kernel_debug) {
-            if (stream.find("All") != stream.end() && stream.find("All")->second == "None") continue;
-            for (const auto &flag : stream) {
-                debug_map.insert({ "kernel debug", flag.first + " = " + flag.second });
-            }
-        }
-        if (debug_map.empty()) debug_map.insert({ "kernel debug", "debugs are off" });
-        debug_map.insert({ service_name, "kernel debug" });
-        return debug_map;
-    }
-
-    bool
-    checkIfHasKernelDebugFlags() const
-    {
-        auto stream_is_active = std::find_if(
-            kernel_debug.begin(),
-            kernel_debug.end(),
-            [] (const map<string, string> &stream) -> bool
-            {
-                if (stream.find("ALL") != stream.end() && stream.find("ALL")->second == "None") {
-                    return false;
-                }
-                return stream.size() > 0;
-            }
-        );
-
-        return stream_is_active != kernel_debug.end();
-    }
-
-    DebugLevel
-    getMinLevelKernel(vector<string> flags_to_ignore) const
-    {
-        DebugLevel min_level = max_debug_level;
-        for (const map<string, string> &stream : kernel_debug) {
-            if (stream.find("ALL") != stream.end() && stream.find("ALL")->second == "None") continue;
-            for (const auto &flag : stream) {
-                if (find(flags_to_ignore.begin(), flags_to_ignore.end(), flag.first) != flags_to_ignore.end()) {
-                    continue;
-                }
-                DebugLevel new_level = getDebugLevel(flag.second);
-                if (new_level < min_level) {
-                    min_level = new_level;
-                }
-            }
-        }
-        return min_level;
-    }
-
-    void
-    removeAllNoneFlag()
-    {
-        for (map<string, string> &stream : kernel_debug) {
-            if (stream.size() > 0) {
-                auto all_flag = stream.find("ALL");
-                if (all_flag != stream.end() && all_flag->second == "None") {
-                    stream.erase(all_flag);
-                }
-            }
-        }
-    }
-
-private:
-    vector<map<string, string>> kernel_debug;
-    Context context;
-};
-
 class DebugCli
 {
 public:
@@ -881,11 +737,9 @@ private:
     void setContexts(const vector<string> &context);
     void changeFlags(const string &output, const vector<string> &flags, bool is_reset_needed);
     vector<DebugConf> loadDebugConf(cereal::JSONInputArchive &archive_in);
-    void loadKernelModuleConf(stringstream &debug_stream);
 
     void saveDebugConf(Service service);
 
-    KernelModuleConf kernel_debug_conf;
     HttpHandlerContext http_ctx;
     map<Service, vector<DebugConf>> services_debug_confs;
     Context context;
@@ -916,7 +770,6 @@ DebugCli::setContexts(const vector<string> &contexts)
         string context_key = maybe_context.substr(0, delim);
         string context_value = maybe_context.substr(delim + 1);\
         context.addContext(context_key, context_value);
-        kernel_debug_conf.addContext(context_key, context_value);
         http_ctx.addContext(context_key, context_value);
     }
 }
@@ -943,19 +796,6 @@ DebugCli::listLegalFlags(bool should_indent)
     printDebugTree(flags_hierarchy, "D_ALL", prefix, true);
     cout << endl;
 
-    cout
-        << prefix << "Available Kernel Module Debug Flags:" << endl
-        << prefix << "------------------------------------" << endl;
-
-    flags_hierarchy.clear();
-    flags_hierarchy = {
-#define DEFINE_KDEBUG_FLAG(flag_name) { "ALL", #flag_name },
-#include "kdebug_flags.h"
-#undef DEFINE_KDEBUG_FLAG
-    };
-
-    sortMultimap(flags_hierarchy);
-    printDebugTree(flags_hierarchy, "ALL", prefix, true);
 }
 
 vector<DebugConf>
@@ -974,27 +814,11 @@ DebugCli::loadDebugConf(cereal::JSONInputArchive &archive_in)
     return debug;
 }
 
-void
-DebugCli::loadKernelModuleConf(stringstream &debug_stream)
-{
-    try {
-        cereal::JSONInputArchive archive_in(debug_stream);
-        archive_in(cereal::make_nvp("kernel module", kernel_debug_conf));
-    } catch (exception &e) {
-        cerr
-            << "Failed to parse Debug configuration file:" << endl
-            << debug_stream.str() << endl
-            << "With the following error: " << e.what();
-        exit(error_exit_code);
-    }
-}
-
 bool
 DebugCli::init(const vector<Service> &services_list)
 {
     context.init();
     http_ctx.init();
-    kernel_debug_conf.initCtx();
 
     for (const Service &service : services_list) {
         ifstream debug_conf_file(getServiceConfig(service).first);
@@ -1009,11 +833,6 @@ DebugCli::init(const vector<Service> &services_list)
         cereal::JSONInputArchive archive_in(debug_conf_stream);
         vector<DebugConf> debug = loadDebugConf(archive_in);
         services_debug_confs[service] = debug;
-        if (service == Service::ACCESS_CONTROL) {
-            debug_conf_stream.clear();
-            debug_conf_stream.seekg(0);
-            loadKernelModuleConf(debug_conf_stream);
-        }
         if (service == Service::HTTP_MANAGER || service == Service::HTTP_TRANSACTION_HANDLER) {
             try{
                 archive_in(cereal::make_nvp("HTTP manager", http_ctx));
@@ -1037,18 +856,9 @@ DebugCli::setDefault()
     map<string, string> default_fog_us_flags = { {"D_ALL", "Error"} };
 
     for (auto &service : services_debug_confs) {
-        if (service.first == Service::ACCESS_CONTROL) {
-            kernel_debug_conf.resetDebug();
-        }
-
         vector<DebugConf> &debug_list = service.second;
         const string &default_file_stream = getServiceConfig(service.first).second;
         for (DebugConf &debug : debug_list) {
-            if (service.first == Service::ACCESS_CONTROL) {
-                debug.removeDebug("", kernel_flags_in_user_space);
-                debug.removeDebug("FOG", kernel_flags_in_user_space);
-            }
-
             debug.deleteStreams("");
             debug.deleteStreams("FOG");
             debug.addDebug("", default_file_stream, default_stdout_us_flags);
@@ -1065,9 +875,6 @@ DebugCli::saveDebugConf(Service service)
     ofstream debug_conf_output(debug_conf_file, ofstream::out);
     cereal::JSONOutputArchive archive(debug_conf_output);
     archive(cereal::make_nvp("Debug", services_debug_confs[service]));
-    if (service == Service::ACCESS_CONTROL) {
-        archive(cereal::make_nvp("kernel module", kernel_debug_conf));
-    }
     if (service == Service::HTTP_MANAGER || service == Service::HTTP_TRANSACTION_HANDLER) {
         try{
             archive(cereal::make_nvp("HTTP manager", http_ctx));
@@ -1088,13 +895,6 @@ DebugCli::show()
                 debug_map.insert(debug_map_section);
             }
         }
-        if (service.first == Service::ACCESS_CONTROL) {
-            multimap<string, string> debug_sub_map = kernel_debug_conf.mapDebugConf(getServiceString(service.first));
-            for (const auto &debug_map_section : debug_sub_map) {
-                debug_map.insert(debug_map_section);
-            }
-        }
-
         sortMultimap(debug_map);
         printDebugTree(
             debug_map,
@@ -1113,10 +913,6 @@ DebugCli::remove(const string &output)
         for (DebugConf &debug : debug_list) {
             debug.deleteStreams(output);
         }
-        if (service.first == Service::ACCESS_CONTROL) {
-            kernel_debug_conf.resetDebug();
-            kernel_debug_conf.initCtx();
-        }
         if (service.first == Service::HTTP_MANAGER || service.first == Service::HTTP_TRANSACTION_HANDLER) {
             http_ctx.init();
         }
@@ -1129,9 +925,6 @@ void
 DebugCli::changeFlags(const string &output, const vector<string> &flags, bool is_reset_needed)
 {
     map<string, string> parsed_us_flags;
-    map<string, string> parsed_k_flags;
-    DebugLevel min_level_kernel = max_debug_level;
-    vector<string> new_kernel_flags;
     for (const string &maybe_flag : flags) {
         size_t delim = maybe_flag.find('=');
         if (delim == string::npos || delim == 0 || delim == flags.size() - 1) {
@@ -1139,7 +932,7 @@ DebugCli::changeFlags(const string &output, const vector<string> &flags, bool is
             continue;
         }
         string flag = maybe_flag.substr(0, delim);
-        if (us_debug_flags.count(flag) == 0 && kernel_debug_flags.count(flag) == 0) {
+        if (us_debug_flags.count(flag) == 0) {
             cerr
                 << "Ignoring non existing flag: \""
                 << flag
@@ -1161,48 +954,13 @@ DebugCli::changeFlags(const string &output, const vector<string> &flags, bool is
             continue;
         }
 
-        if (us_debug_flags.count(flag) > 0) {
-            parsed_us_flags[flag] = level;
-        } else {
-            DebugLevel new_debug_level = getDebugLevel(level);
-            if (new_debug_level < min_level_kernel) {
-                min_level_kernel = new_debug_level;
-            }
-            parsed_k_flags[flag] = level;
-            new_kernel_flags.push_back(flag);
-        }
-    }
-
-    if (!is_reset_needed) {
-        DebugLevel existing_min_level = kernel_debug_conf.getMinLevelKernel(new_kernel_flags);
-        if (existing_min_level < min_level_kernel) {
-            min_level_kernel = existing_min_level;
-        }
-    }
-
-    if (!parsed_k_flags.empty()) {
-        string new_debug_level = getDebugLevelString(min_level_kernel);
-        for (string flag : kernel_flags_in_user_space) {
-            parsed_us_flags[flag] = new_debug_level;
-        }
-        kernel_debug_conf.removeAllNoneFlag();
+        parsed_us_flags[flag] = level;
     }
 
     for (auto &service : services_debug_confs) {
-        if (service.first == Service::ACCESS_CONTROL) {
-            if (is_reset_needed) {
-                kernel_debug_conf.resetDebug();
-            }
-            kernel_debug_conf.addDebug(parsed_k_flags);
-        }
         vector<DebugConf> &debug_list = service.second;
         const string &default_file_stream = getServiceConfig(service.first).second;
         for (DebugConf &debug : debug_list) {
-            if (service.first == Service::ACCESS_CONTROL) {
-                if (parsed_k_flags.empty() && !kernel_debug_conf.checkIfHasKernelDebugFlags()) {
-                    debug.removeDebug(output, kernel_flags_in_user_space);
-                }
-            }
             if (is_reset_needed) {
                 debug.deleteStreams(output);
             }
@@ -1243,9 +1001,6 @@ DebugCli::resetContext(const vector<string> &contexts)
 {
     context.init();
     for(auto &service: services_debug_confs) {
-        if (service.first == Service::ACCESS_CONTROL) {
-            kernel_debug_conf.initCtx();
-        }
         if (service.first == Service::HTTP_MANAGER || service.first == Service::HTTP_TRANSACTION_HANDLER) {
             http_ctx.init();
         }

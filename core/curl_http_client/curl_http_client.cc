@@ -167,7 +167,7 @@ CurlHttpClient::perform_request(
         curl_easy_setopt(curl, CURLOPT_PROXY, no_proxy_hosts.c_str());
     }
 
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config.follow_redirects ? 1L : 0L);
 
     if (!username.empty() && !password.empty() && auth_enabled) {
         curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
@@ -218,5 +218,10 @@ CurlHttpClient::perform_request(
 
     curl_easy_cleanup(curl);
 
-    return HTTPResponse(convertStatusCode(status_code), response_body);
+    return HTTPResponse(
+        convertStatusCode(status_code),
+        response_body,
+        std::unordered_map<std::string, std::string>(),
+        status_code
+    );
 }

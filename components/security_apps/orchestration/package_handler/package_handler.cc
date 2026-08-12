@@ -104,14 +104,18 @@ packageHandlerActionsToString(PackageHandlerActions action)
     switch(action) {
         case PackageHandlerActions::INSTALL: {
             string installation_mode = " --install";
+            auto package_handler_env = Singleton::Consume<I_Environment>::by<PackageHandler>();
             auto trusted_ca_directory = getConfiguration<string>("message", "Trusted CA directory");
             if (trusted_ca_directory.ok() && !trusted_ca_directory.unpack().empty()) {
                 installation_mode += " --certs-dir ";
                 installation_mode += trusted_ca_directory.unpack();
             }
 
-            auto maybe_vs_id = Singleton::Consume<I_Environment>::by<PackageHandler>()->get<string>("VS ID");
+            auto maybe_vs_id = package_handler_env->get<string>("VS ID");
             if (maybe_vs_id.ok()) installation_mode += " --vs_id " + *maybe_vs_id;
+
+            auto maybe_domain_name = package_handler_env->get<string>("Domain Name");
+            if (maybe_domain_name.ok()) installation_mode += " --domain " + *maybe_domain_name;
 
             AdditionalFlagsConfiguration additional_flags = getConfigurationWithDefault<AdditionalFlagsConfiguration>(
                 AdditionalFlagsConfiguration(),

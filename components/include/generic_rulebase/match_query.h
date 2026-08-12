@@ -17,6 +17,7 @@
 #include <vector>
 #include <string>
 #include <set>
+#include <unordered_set>
 #include <map>
 #include <memory>
 #include <arpa/inet.h>
@@ -81,7 +82,7 @@ public:
     bool isKeyTypeDomain() const;
     bool isKeyTypeSpecificLabel() const;
     bool isKeyTypeStatic() const;
-    std::set<std::string> getAllKeys() const;
+    const std::unordered_set<std::string> &getAllKeys() const;
 
 private:
     bool matchAttributes(
@@ -112,6 +113,8 @@ private:
     std::vector<IpProtoRange> ip_proto_value;
     std::vector<MatchQuery> items;
     bool is_ignore_keyword;
+    mutable std::unordered_set<std::string> all_keys_cache;
+    mutable bool all_keys_cached = false;
 };
 
 #endif // __MATCH_QUERY_H__

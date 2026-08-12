@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <assert.h>
+#include "config.h"
 
 static const int BUCKET_SIZE = 300;
 
@@ -247,7 +248,12 @@ ReputationData BehaviorAnalyzer::analyze_behavior(BehaviorAnalysisInputData& dat
     ReputationData output;
     std::string &siteId = data.site_id;
 
-    if (m_count % COUNTER_BACKUP_THRESHOLD == 0)
+    // Profile-overridable bucket-reset threshold; defaults to the compiled-in
+    // COUNTER_BACKUP_THRESHOLD. Lowering it caps per-asset Source::sources peak
+    // memory; raising it preserves more history between resets.
+    const size_t resetThreshold = getProfileAgentSettingWithDefault<uint>(
+        COUNTER_BACKUP_THRESHOLD, "behaviorAnalysis.counterBackupThreshold");
+    if (m_count % resetThreshold == 0)
     {
         // TODO: backup
 

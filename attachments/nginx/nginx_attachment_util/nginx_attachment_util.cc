@@ -52,6 +52,55 @@ getDbgLevel()
     return conf_data.getNumericalValue("dbg_level");
 }
 
+// Helper function to check if URI exactly matches any of the configured URI patterns
+static bool
+matchesUriExact(const std::string &configured_uri, c_str request_uri)
+{
+    if (configured_uri.empty()) {
+        return true; // Empty means match all
+    }
+
+    // Check if the configured URI contains multiple patterns separated by '|'
+    size_t pipe_pos = configured_uri.find('|');
+    if (pipe_pos == std::string::npos) {
+        // Single URI pattern - direct comparison
+        return configured_uri == request_uri;
+    }
+
+    // Multiple URI patterns - split by '|' and check each for exact match
+    std::string remaining = configured_uri;
+    while (!remaining.empty()) {
+        size_t delimiter_pos = remaining.find('|');
+        std::string current_pattern;
+
+        if (delimiter_pos == std::string::npos) {
+            // Last pattern
+            current_pattern = remaining;
+            remaining.clear();
+        } else {
+            // Extract current pattern and continue with the rest
+            current_pattern = remaining.substr(0, delimiter_pos);
+            remaining = remaining.substr(delimiter_pos + 1);
+        }
+
+        // Trim whitespace from current pattern
+        size_t start = current_pattern.find_first_not_of(" \t");
+        if (start != std::string::npos) {
+            size_t end = current_pattern.find_last_not_of(" \t");
+            current_pattern = current_pattern.substr(start, end - start + 1);
+        } else {
+            current_pattern.clear();
+        }
+
+        // Check if current pattern exactly matches the request URI
+        if (!current_pattern.empty() && current_pattern == request_uri) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 int
 isDebugContext(c_str client, c_str server, unsigned int port, c_str method, c_str host , c_str uri)
 {
@@ -62,7 +111,7 @@ isDebugContext(c_str client, c_str server, unsigned int port, c_str method, c_st
         (ctx.port == 0 || ctx.port == port) &&
         (ctx.method == "" || ctx.method == method) &&
         (ctx.host == "" || ctx.host == host) &&
-        (ctx.uri == "" || ctx.uri == uri);
+        matchesUriExact(ctx.uri, uri);
 }
 
 c_str
@@ -168,6 +217,12 @@ getWaitingForVerdictThreadTimeout()
 }
 
 unsigned int
+getAsyncBodyStageTimeoutMsec()
+{
+    return conf_data.getNumericalValue("async_body_stage_timeout_msec");
+}
+
+unsigned int
 getMinRetriesForVerdict()
 {
     return conf_data.getNumericalValue("min_retries_for_verdict");
@@ -204,9 +259,27 @@ getRecompressionPoolSize()
 }
 
 unsigned int
+getMaxDecompressedBodySize()
+{
+    return conf_data.getNumericalValue("max_decompressed_body_size");
+}
+
+unsigned int
 getIsBrotliInspectionEnabled()
 {
     return conf_data.getNumericalValue("is_brotli_inspection_enabled");
+}
+
+unsigned int
+getIsWebSocketStreamEnabled()
+{
+    return conf_data.getNumericalValue("is_websocket_stream_enabled") != 0;
+}
+
+unsigned int
+getIsMaxChunksToProcessEnabled()
+{
+    return conf_data.getNumericalValue("is_max_chunks_to_process_enabled");
 }
 
 int

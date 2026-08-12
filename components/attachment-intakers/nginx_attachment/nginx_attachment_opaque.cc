@@ -113,6 +113,7 @@ NginxAttachmentOpaque::setSourceIdentifier(const string &header_key, const strin
 {
     identifier_type = header_key;
     source_identifier = new_source_identifier;
+    ctx.registerValue<string>(HttpTransactionData::source_identifier, source_identifier);
 }
 
 const string &

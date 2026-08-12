@@ -1469,3 +1469,119 @@ TEST_F(IntelligenceComponentTestV2, getInvalidations)
     EXPECT_TRUE(res.ok());
     EXPECT_TRUE(res.unpack().front().matches(invalidation));
 }
+
+static const string local_only_success_response =
+    "{\n"
+    "  \"assetCollections\": [\n"
+    "    {\n"
+    "      \"schemaVersion\": 1,\n"
+    "      \"assetType\": \"workload-cloud-local-only-test\",\n"
+    "      \"assetTypeSchemaVersion\": 1,\n"
+    "      \"permissionType\": \"tenant\",\n"
+    "      \"permissionGroupId\": \"local-only-test-group\",\n"
+    "      \"name\": \"local-only-test-asset\",\n"
+    "      \"class\": \"workload\",\n"
+    "      \"category\": \"cloud\",\n"
+    "      \"family\": \"local-only-test\",\n"
+    "      \"mainAttributes\": {\n"
+    "          \"ipv4Addresses\": \"1.1.1.1\",\n"
+    "          \"phase\": \"testing\"\n"
+    "      },\n"
+    "      \"sources\": [\n"
+    "        {\n"
+    "          \"tenantId\": \"175bb55c-e36f-4ac5-a7b1-7afa1229aa00\",\n"
+    "          \"sourceId\": \"54d7de10-7b2e-4505-955b-cc2c2c7aaa00\",\n"
+    "          \"assetId\": \"50255c3172b4fb7fda93025f0bfaa7abefd1\",\n"
+    "          \"ttl\": 120,\n"
+    "          \"expirationTime\": \"2020-07-29T11:21:12.253Z\",\n"
+    "          \"confidence\": 500,\n"
+    "          \"attributes\": {\n"
+    "            \"phase\": \"testing\",\n"
+    "            \"user\": \"Omry\",\n"
+    "            \"owners\": { \"names\": [ { \"name1\": \"Bob\", \"name2\": \"Alice\" } ] }\n"
+    "          }\n"
+    "        }\n"
+    "      ]\n"
+    "    }\n"
+    "  ],\n"
+    "  \"status\": \"done\",\n"
+    "  \"totalNumAssets\": 1,\n"
+    "  \"cursor\": \"start\"\n"
+    "}\n";
+
+// Local configured + local-only mode ON + local fails - error returned, no global fallback
+TEST_F(IntelligenceComponentTestV2, localOnlyModeLocalFailsNoFallbackTest)
+{
+    stringstream configuration;
+    configuration << "{";
+    configuration << "  \"agentSettings\":[";
+    configuration << "    {\"key\":\"agent.config.useLocalIntelligence\",\"id\":\"id1\",\"value\":\"true\"}";
+    configuration << "  ],";
+    configuration << "  \"intelligence\":{";
+    configuration << "    \"local intelligence server ip\":\"127.0.0.1\",";
+    configuration << "    \"local intelligence server primary port\":9090";
+    configuration << "  }";
+    configuration << "}";
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
+
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    intell->setIntelligenceFallback(false);
+
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true);
+
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
+
+    // Local call fails - StrictMock ensures no global fallback occurs
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_INTERNAL_SERVER_ERROR, "local server unavailable")));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(request);
+    EXPECT_FALSE(maybe_ans.ok());
+}
+
+// Local configured + local-only mode OFF (default) + local fails - falls back to global
+TEST_F(IntelligenceComponentTestV2, localOnlyModeDisabledFallsBackToGlobalTest)
+{
+    stringstream configuration;
+    configuration << "{";
+    configuration << "  \"agentSettings\":[";
+    configuration << "    {\"key\":\"agent.config.useLocalIntelligence\",\"id\":\"id1\",\"value\":\"true\"}";
+    configuration << "  ],";
+    configuration << "  \"intelligence\":{";
+    configuration << "    \"local intelligence server ip\":\"127.0.0.1\",";
+    configuration << "    \"local intelligence server primary port\":9090";
+    configuration << "  }";
+    configuration << "}";
+    Singleton::Consume<Config::I_Config>::from(conf)->loadConfiguration(configuration);
+
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true);
+
+    EXPECT_CALL(mock_rest, getListeningPort()).WillRepeatedly(Return(8888));
+
+    // Local call fails, global call succeeds
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_INTERNAL_SERVER_ERROR, "local server unavailable")))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, local_only_success_response)));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(request);
+    EXPECT_TRUE(maybe_ans.ok());
+}
+
+// No local configured + local-only mode ON - global intelligence used normally
+TEST_F(IntelligenceComponentTestV2, localOnlyModeNoLocalConfiguredUsesGlobalTest)
+{
+    I_Intelligence_IS_V2 *intell = Singleton::Consume<I_Intelligence_IS_V2>::by<IntelligenceComponentTestV2>();
+    intell->setIntelligenceFallback(false);
+
+    QueryRequest request(Condition::EQUALS, "category", "cloud", true);
+
+    EXPECT_CALL(mock_rest, getListeningPort()).WillOnce(Return(8888));
+
+    // Only global call is made
+    EXPECT_CALL(messaging_mock, sendSyncMessage(HTTPMethod::POST, _, _, MessageCategory::INTELLIGENCE, _))
+        .WillOnce(Return(HTTPResponse(HTTPStatusCode::HTTP_OK, local_only_success_response)));
+
+    auto maybe_ans = intell->queryIntelligence<Profile>(request);
+    EXPECT_TRUE(maybe_ans.ok());
+}

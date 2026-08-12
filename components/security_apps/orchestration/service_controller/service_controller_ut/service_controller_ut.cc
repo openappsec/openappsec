@@ -1903,3 +1903,146 @@ TEST_F(ServiceControllerTest, test_delayed_reconf)
     EXPECT_EQ(i_service_controller->getPolicyVersion(), version_value);
     EXPECT_EQ(i_service_controller->getUpdatePolicyVersion(), version_value);
 }
+
+TEST_F(ServiceControllerTest, stale_reconf_ack_is_not_a_missing_mapping)
+{
+    // A service that acks a reconfiguration AFTER its round already completed (and the tracking
+    // map was cleared) must be treated as a benign late/stale ack, not flagged as a missing
+    // mapping. Only an id that was never issued (id greater than configuration_id) is a genuine
+    // "Unable to find a mapping" anomaly. See INXT-53957.
+    init();
+    Debug::setUnitTestFlag(D_SERVICE_CONTROLLER, Debug::DebugLevel::NOISE);
+    Debug::setNewDefaultStdout(&capture_debug);
+
+    string new_configuration =
+        "{"
+        "   \"version\": \"" + version_value + "\""
+        "   \"versions\": " + versions +
+        "   \"l4_firewall\":"
+        "       {"
+        "           \"app\": \"netfilter\","
+        "           \"l4_firewall_rules\": ["
+        "               {"
+        "                   \"name\": \"allow_statefull_conns\","
+        "                   \"flags\": [\"established\"],"
+        "                   \"action\": \"accept\""
+        "               },"
+        "               {"
+        "                   \"name\": \"icmp drop\","
+        "                   \"flags\": [\"log\"],"
+        "                   \"services\": [{\"name\":\"icmp\"}],"
+        "                   \"action\": \"drop\""
+        "               }"
+        "           ]"
+        "       }"
+        "}";
+
+    string l4_firewall =
+        "{"
+        "    \"app\": \"netfilter\","
+        "    \"l4_firewall_rules\": ["
+        "        {"
+        "            \"name\": \"allow_statefull_conns\","
+        "            \"flags\": [\"established\"],"
+        "            \"action\": \"accept\""
+        "        },"
+        "        {"
+        "            \"name\": \"icmp drop\","
+        "            \"flags\": [\"log\"],"
+        "            \"services\": [{\"name\":\"icmp\"}],"
+        "            \"action\": \"drop\""
+        "        }"
+        "    ]"
+        "}";
+
+    setConfiguration(60, "orchestration", "Reconfiguration timeout seconds");
+
+    Maybe<map<string, string>> json_parser_return =
+        map<string, string>({{"l4_firewall", l4_firewall}, {"version", version_value}, {"versions", versions}});
+
+    string policy_versions_path = "/etc/cp/conf/versions/versions.policy";
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_versions_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(versions, policy_versions_path, false)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("versions", policy_versions_path, OrchestrationStatusConfigType::POLICY));
+
+    EXPECT_CALL(mock_orchestration_tools, readFile(file_name)).WillOnce(Return(new_configuration));
+    EXPECT_CALL(mock_orchestration_tools, jsonObjectSplitter(new_configuration, _, _))
+        .WillOnce(Return(json_parser_return));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(l4_firewall_policy_path)).WillOnce(Return(false));
+    EXPECT_CALL(mock_orchestration_tools, writeFile(l4_firewall, l4_firewall_policy_path, false)).
+        WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_status,
+        setServiceConfiguration("l4_firewall", l4_firewall_policy_path, OrchestrationStatusConfigType::POLICY));
+
+    EXPECT_CALL(mock_orchestration_tools, copyFile(policy_file_path, policy_file_path + backup_extension))
+        .WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, copyFile(file_name, policy_file_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_orchestration_tools, doesFileExist(policy_file_path)).WillOnce(Return(true));
+    EXPECT_CALL(mock_ml, yield(false)).Times(AnyNumber());
+
+    EXPECT_CALL(
+        mock_shell_cmd,
+        getExecOutput(
+            "/etc/cp/watchdog/cp-nano-watchdog --status --verbose --service mock access control"
+            " --family family1 --id id2",
+            _,
+            _
+        )
+    ).WillRepeatedly(Return(string("registered and running")));
+
+    string general_settings_path = "/my/settings/path";
+    string reply_msg = "{\"id\": 1, \"error\": false, \"finished\": false, \"error_message\": \"\"}";
+    stringstream reconf_status;
+    reconf_status
+        << "{"
+        << "    \"id\": 1,"
+        << "    \"service_name\": \"max\","
+        << "    \"finished\": true,"
+        << "    \"error\": false,"
+        << "    \"error_message\": \"\""
+        << "}";
+
+    expectNewConfigRequest(reply_msg);
+
+    // The service acks reconf id 1 during the wait loop -> the round succeeds and the tracking
+    // map is cleared. configuration_id is now 1.
+    auto func = [&] (chrono::microseconds) { set_reconf_status->performRestCall(reconf_status); };
+    EXPECT_CALL(mock_ml, yield(chrono::microseconds(2000000))).WillOnce(Invoke(func));
+
+    EXPECT_TRUE(i_service_controller->updateServiceConfiguration(file_name, general_settings_path).ok());
+
+    capture_debug.str("");
+
+    // Late ack for the already-completed (and cleared) round: id 1 was issued, so this is a
+    // benign stale ack, not a missing mapping.
+    stringstream stale_ack;
+    stale_ack
+        << "{"
+        << "    \"id\": 1,"
+        << "    \"service_name\": \"max\","
+        << "    \"finished\": true,"
+        << "    \"error\": false,"
+        << "    \"error_message\": \"\""
+        << "}";
+    set_reconf_status->performRestCall(stale_ack);
+
+    // Ack for an id that was never issued (greater than configuration_id): a genuine anomaly.
+    stringstream unknown_ack;
+    unknown_ack
+        << "{"
+        << "    \"id\": 999,"
+        << "    \"service_name\": \"max\","
+        << "    \"finished\": true,"
+        << "    \"error\": false,"
+        << "    \"error_message\": \"\""
+        << "}";
+    set_reconf_status->performRestCall(unknown_ack);
+
+    EXPECT_THAT(capture_debug.str(), Not(HasSubstr("Unable to find a mapping for reconfiguration ID:1")));
+    EXPECT_THAT(
+        capture_debug.str(),
+        HasSubstr("stale reconf-status update for expired reconfiguration ID: 1")
+    );
+    EXPECT_THAT(capture_debug.str(), HasSubstr("Unable to find a mapping for reconfiguration ID:999"));
+}

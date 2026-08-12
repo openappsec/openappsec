@@ -121,6 +121,7 @@ public:
     const string & getConfigurationFlagWithDefault(const string &default_val, const string &flag_name) const override;
     const string & getFilesystemPathConfig() const override;
     const string & getLogFilesPathConfig() const override;
+    string getLocalhostIP() const override;
 
     bool
     isConfigCacheEnabled() const override
@@ -150,9 +151,12 @@ public:
     AsyncLoadConfigStatus reloadConfiguration(const string &version, bool is_async, uint id) override;
     bool saveConfiguration(ostream &) const override { return false; }
 
-    void registerConfigPrepareCb(ConfigCb) override;
-    void registerConfigLoadCb(ConfigCb) override;
-    void registerConfigAbortCb(ConfigCb) override;
+    ConfigCbHandle registerConfigPrepareCb(ConfigCb) override;
+    ConfigCbHandle registerConfigLoadCb(ConfigCb) override;
+    ConfigCbHandle registerConfigAbortCb(ConfigCb) override;
+    void unregisterConfigPrepareCb(ConfigCbHandle) override;
+    void unregisterConfigLoadCb(ConfigCbHandle) override;
+    void unregisterConfigAbortCb(ConfigCbHandle) override;
     void clearOldTenants() override;
     void resetConfigCache() override;
 
@@ -178,6 +182,8 @@ private:
     map<string, string> & getProfileAgentSetting() const;
 
     void resolveVsId() const;
+    void resolveDomainName() const;
+    ConfigCbHandle nextCbHandle();
 
     string
     getActiveTenant() const
@@ -221,7 +227,7 @@ private:
         config_updates.expected_configurations = move(files);
 
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ConfigComponent>();
-        MessageMetadata service_config_req_md("127.0.0.1", 7777);
+        MessageMetadata service_config_req_md(localhost_ip, 7777);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         service_config_req_md.setSuspension(false);
@@ -240,7 +246,7 @@ private:
                 << ", error-code: "
                 << static_cast<int>(service_config_status.getErr().getHTTPStatusCode());
 
-            MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
+            MessageMetadata secondary_port_req_md(localhost_ip, 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             secondary_port_req_md.setSuspension(false);
@@ -296,7 +302,7 @@ private:
     sendOrchestatorReloadStatusMsg(const LoadNewConfigurationStatus &status)
     {
         I_Messaging *messaging = Singleton::Consume<I_Messaging>::by<ConfigComponent>();
-        MessageMetadata service_config_req_md("127.0.0.1", 7777);
+        MessageMetadata service_config_req_md(localhost_ip, 7777);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         service_config_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         service_config_req_md.setSuspension(false);
@@ -310,7 +316,7 @@ private:
         );
         if (!service_config_status) {
             dbgWarning(D_CONFIG) << "Could not send reconf-status to orchestrator 7777, retrying on 7778";
-            MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
+            MessageMetadata secondary_port_req_md(localhost_ip, 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             secondary_port_req_md.setSuspension(false);
@@ -348,9 +354,11 @@ private:
 
     I_TenantManager *tenant_manager = nullptr;
 
-    vector<ConfigCb> configuration_prepare_cbs;
-    vector<ConfigCb> configuration_commit_cbs;
-    vector<ConfigCb> configuration_abort_cbs;
+    // 0 is reserved for INVALID_CB_HANDLE; single counter shared across all three lists
+    uint64_t next_cb_id{1};
+    vector<pair<ConfigCbHandle, ConfigCb>> configuration_prepare_cbs;
+    vector<pair<ConfigCbHandle, ConfigCb>> configuration_commit_cbs;
+    vector<pair<ConfigCbHandle, ConfigCb>> configuration_abort_cbs;
 
     bool is_continuous_report = false;
     bool is_force_reload = getenv("FORCE_CONFIG_RELOAD") && string(getenv("FORCE_CONFIG_RELOAD")) == "TRUE";
@@ -368,6 +376,7 @@ private:
     size_t policy_load_count = 0;
     string policy_load_id = "";
     bool is_cache_enabled = false;
+    mutable string localhost_ip = "";
 
     TypeWrapper empty;
 };
@@ -394,8 +403,9 @@ void
 ConfigComponent::Impl::init()
 {
     reloadFileSystemPaths();
-
     resolveVsId();
+    resolveDomainName();
+    getLocalhostIP();
 
     tenant_manager = Singleton::Consume<I_TenantManager>::by<ConfigComponent>();
 
@@ -713,22 +723,63 @@ ConfigComponent::Impl::reloadConfiguration(const string &version, bool is_async,
     return AsyncLoadConfigStatus::InProgress;
 }
 
-void
+ConfigCbHandle
+ConfigComponent::Impl::nextCbHandle()
+{
+    ConfigCbHandle id = next_cb_id++;
+    if (id == 0) id = next_cb_id++;  // 0 is INVALID_CB_HANDLE, skip it on wrap-around
+    return id;
+}
+
+ConfigCbHandle
 ConfigComponent::Impl::registerConfigPrepareCb(ConfigCb cb)
 {
-    configuration_prepare_cbs.push_back(cb);
+    auto id = nextCbHandle();
+    configuration_prepare_cbs.emplace_back(id, std::move(cb));
+    return id;
 }
 
-void
+ConfigCbHandle
 ConfigComponent::Impl::registerConfigLoadCb(ConfigCb cb)
 {
-    configuration_commit_cbs.push_back(cb);
+    auto id = nextCbHandle();
+    configuration_commit_cbs.emplace_back(id, std::move(cb));
+    return id;
+}
+
+ConfigCbHandle
+ConfigComponent::Impl::registerConfigAbortCb(ConfigCb cb)
+{
+    auto id = nextCbHandle();
+    configuration_abort_cbs.emplace_back(id, std::move(cb));
+    return id;
 }
 
 void
-ConfigComponent::Impl::registerConfigAbortCb(ConfigCb cb)
+ConfigComponent::Impl::unregisterConfigPrepareCb(ConfigCbHandle handle)
 {
-    configuration_abort_cbs.push_back(cb);
+    auto &v = configuration_prepare_cbs;
+    auto it =
+        find_if(v.begin(), v.end(), [handle](const pair<ConfigCbHandle, ConfigCb> &p) { return p.first == handle; });
+    if (it != v.end()) v.erase(it);
+}
+
+void
+ConfigComponent::Impl::unregisterConfigLoadCb(ConfigCbHandle handle)
+{
+    auto &v = configuration_commit_cbs;
+    auto it =
+        find_if(v.begin(), v.end(), [handle](const pair<ConfigCbHandle, ConfigCb> &p) { return p.first == handle; });
+    if (it != v.end()) v.erase(it);
+}
+
+void
+ConfigComponent::Impl::unregisterConfigAbortCb(ConfigCbHandle handle)
+{
+    auto &v = configuration_abort_cbs;
+    auto it =
+        find_if(v.begin(), v.end(), [handle](const pair<ConfigCbHandle, ConfigCb> &p) { return p.first == handle; });
+    if (it != v.end()) v.erase(it);
 }
 
 void
@@ -784,15 +835,36 @@ ConfigComponent::Impl::periodicRegistrationRefresh()
     }
 }
 
+// Callbacks may yield, and during a yield an unregisterConfigLoadCb() call can erase entries from
+// the vector, invalidating any live iterator or reference.  Snapshot handle IDs first, then look
+// each one up in the (possibly-modified) live vector before calling this is both crash-safe and
+// avoids calling a callback whose owner was already destroyed and unregistered.
+static void
+callCallbacksSafely(vector<pair<ConfigCbHandle, ConfigCb>> &cbs)
+{
+    vector<ConfigCbHandle> handles;
+    handles.reserve(cbs.size());
+    for (auto &p : cbs) {
+        handles.push_back(p.first);
+    }
+    for (size_t i = 0; i < handles.size(); i++) {
+        ConfigCbHandle handle = handles[i];
+        for (size_t j = 0; j < cbs.size(); j++) {
+            if (cbs[j].first == handle) {
+                cbs[j].second();
+                break;
+            }
+        }
+    }
+}
+
 bool
 ConfigComponent::Impl::loadConfiguration(vector<shared_ptr<JSONInputArchive>> &file_archives, bool is_async)
 {
     is_cache_enabled = false;
     auto mainloop = is_async ? Singleton::Consume<I_MainLoop>::by<ConfigComponent>() : nullptr;
 
-    for (auto &cb : configuration_prepare_cbs) {
-        cb();
-    }
+    callCallbacksSafely(configuration_prepare_cbs);
 
     try {
         for (auto &archive : file_archives) {
@@ -850,14 +922,12 @@ bool
 ConfigComponent::Impl::commitSuccess()
 {
     new_resource_nodes.clear();
-    configuration_nodes = move(new_configuration_nodes);
-    settings_nodes = move(new_settings_nodes);
+    configuration_nodes = std::move(new_configuration_nodes);
+    settings_nodes = std::move(new_settings_nodes);
 
     reloadFileSystemPaths();
 
-    for (auto &cb : configuration_commit_cbs) {
-        cb();
-    }
+    callCallbacksSafely(configuration_commit_cbs);
     policy_load_count++;
     try {
         policy_load_id = to_string(boost::uuids::random_generator()());
@@ -878,9 +948,7 @@ ConfigComponent::Impl::commitFailure(const string &error)
     new_resource_nodes.clear();
     new_configuration_nodes.clear();
     new_settings_nodes.clear();
-    for (auto &cb : configuration_abort_cbs) {
-        cb();
-    }
+    callCallbacksSafely(configuration_abort_cbs);
     policy_load_id = "";
     return false;
 }
@@ -1058,6 +1126,45 @@ ConfigComponent::Impl::resolveVsId() const
 
     dbgWarning(D_CONFIG) << "Possible VSX installation but VS ID is invalid, VS ID: " << vs_id;
     return;
+}
+
+void
+ConfigComponent::Impl::resolveDomainName() const
+{
+    const string &path = getConfigurationFlag("filesystem_path");
+
+    size_t domain_pos = path.rfind("/domain-");
+    if (domain_pos == string::npos) return;
+
+    string domain_name = path.substr(domain_pos + 8);
+
+    if (!domain_name.empty()) {
+        dbgDebug(D_CONFIG) << "Identified Domain installation, Domain Name: " << domain_name;
+        Singleton::Consume<I_Environment>::by<ConfigComponent>()->registerValue("Domain Name", domain_name);
+        return;
+    }
+
+    dbgWarning(D_CONFIG) << "Possible Domain installation but Domain Name is invalid, Domain Name: " << domain_name;
+    return;
+}
+
+// In MDS environments: uses CMA specific IP from CP_CMA_LOCAL_HOST_IP
+// In non-MDS environments: uses default 127.0.0.1
+string
+ConfigComponent::Impl::getLocalhostIP() const
+{
+    if (localhost_ip.empty()) {
+        dbgDebug(D_CONFIG) << "Resolving localhost IP address for orchestrator communication";
+        const char* env_val = getenv("CP_CMA_LOCAL_HOST_IP");
+        if (env_val != NULL && strlen(env_val) > 0) {
+            localhost_ip = env_val;
+            dbgDebug(D_CONFIG) << "Found domain-specific localhost IP: '" << localhost_ip << "'";
+        } else {
+            dbgDebug(D_CONFIG) << "Using default localhost IP for non-MDS environment";
+            return "127.0.0.1";
+        }
+    }
+    return localhost_ip;
 }
 
 void

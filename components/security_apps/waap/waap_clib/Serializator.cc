@@ -554,6 +554,7 @@ SerializeToLocalAndRemoteSyncBaseT<ComponentType>::SerializeToLocalAndRemoteSync
     m_pMainLoop(nullptr),
     m_waitForSync(waitForSync),
     m_workerRoutineId(0),
+    m_mergeRoutineId(0),
     m_daysCount(0),
     m_windowsCount(0),
     m_intervalsCounter(0),
@@ -649,7 +650,16 @@ void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::incrementIntervalsCount(
 template<typename ComponentType>
 SerializeToLocalAndRemoteSyncBaseT<ComponentType>::~SerializeToLocalAndRemoteSyncBaseT()
 {
-
+    if (m_pMainLoop != nullptr && Singleton::exists<I_MainLoop>()) {
+        if (m_mergeRoutineId != 0) {
+            m_pMainLoop->stop(m_mergeRoutineId);
+            m_mergeRoutineId = 0;
+        }
+        if (m_workerRoutineId != 0) {
+            m_pMainLoop->stop(m_workerRoutineId);
+            m_workerRoutineId = 0;
+        }
+    }
 }
 
 template <typename ComponentType>
@@ -1115,9 +1125,13 @@ void SerializeToLocalAndRemoteSyncBaseT<ComponentType>::mergeProcessedFromRemote
 {
     dbgDebug(D_WAAP_SERIALIZE) << "Merging processed data from remote. assetId='" << m_assetId <<
         "', owner='" << m_owner << "'";
-    m_pMainLoop->addOneTimeRoutine(
+    if (m_mergeRoutineId != 0) {
+        m_pMainLoop->stop(m_mergeRoutineId);
+        m_mergeRoutineId = 0;
+    }
+    m_mergeRoutineId = m_pMainLoop->addOneTimeRoutine(
         I_MainLoop::RoutineType::Offline,
-        [&]()
+        [this]()
         {
             // Instrumentation breadcrumbs to help diagnose startup crash inside this routine
             dbgTrace(D_WAAP_SERIALIZE) << "start routine for assetId='" << m_assetId

@@ -33,7 +33,7 @@ typedef int64_t NanoHttpCpInjectPos;
 #define INJECT_POS_IRRELEVANT -1
 #define CORRUPTED_SESSION_ID 0
 #define METRIC_PERIODIC_TIMEOUT 600
-#define MAX_CONTAINER_ID_LEN 12
+#define MAX_CONTAINER_ID_LEN 13
 #define CONTAINER_ID_FILE_PATH "/proc/self/cgroup"
 #define RESPONSE_PAGE_PARTS 4
 #define UUID_SIZE 64
@@ -185,6 +185,8 @@ typedef enum AttachmentDataType
     CONTENT_LENGTH,
     METRIC_DATA_FROM_PLUGIN,
     REQUEST_DELAYED_VERDICT,
+    WS_FRAME_PAYLOAD,
+    WS_FRAME_END,
 
     COUNT
 } AttachmentDataType;
@@ -203,9 +205,14 @@ typedef enum HttpChunkType
     HTTP_RESPONSE_HEADER,
     HTTP_RESPONSE_BODY,
     HTTP_RESPONSE_END,
-    HOLD_DATA
+    HOLD_DATA,
+    WEBSOCKET_HANDSHAKE,
+    WEBSOCKET_FRAME_HEADER,
+    WEBSOCKET_PAYLOAD_DATA,
+    WEBSOCKET_MESSAGE_END
 } HttpChunkType;
 
+// Important: the verdict priority is determined by getVerdictPriority() function, not enum order
 #ifdef __cplusplus
 typedef enum class ServiceVerdict
 #else
@@ -221,7 +228,40 @@ typedef enum ServiceVerdict
     TRAFFIC_VERDICT_DELAYED,
     LIMIT_RESPONSE_HEADERS,
     TRAFFIC_VERDICT_CUSTOM_RESPONSE
+
 } ServiceVerdict;
+
+/// @brief Returns the priority of a ServiceVerdict for aggregation logic.
+/// Higher return values indicate higher priority.
+/// Priority order: DROP > CUSTOM_RESPONSE > INJECT > DELAYED >
+///                 LIMIT_RESPONSE_HEADERS > RECONF > INSPECT > ACCEPT > IRRELEVANT
+static inline int getVerdictPriority(ServiceVerdict verdict)
+{
+    switch (verdict) {
+#ifdef __cplusplus
+        case ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT:      return 0;
+        case ServiceVerdict::TRAFFIC_VERDICT_ACCEPT:          return 1;
+        case ServiceVerdict::TRAFFIC_VERDICT_INSPECT:         return 2;
+        case ServiceVerdict::TRAFFIC_VERDICT_RECONF:          return 3;
+        case ServiceVerdict::LIMIT_RESPONSE_HEADERS:          return 4;
+        case ServiceVerdict::TRAFFIC_VERDICT_DELAYED:         return 5;
+        case ServiceVerdict::TRAFFIC_VERDICT_INJECT:          return 6;
+        case ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE: return 7;
+        case ServiceVerdict::TRAFFIC_VERDICT_DROP:            return 8;
+#else
+        case TRAFFIC_VERDICT_IRRELEVANT:      return 0;
+        case TRAFFIC_VERDICT_ACCEPT:          return 1;
+        case TRAFFIC_VERDICT_INSPECT:         return 2;
+        case TRAFFIC_VERDICT_RECONF:          return 3;
+        case LIMIT_RESPONSE_HEADERS:          return 4;
+        case TRAFFIC_VERDICT_DELAYED:         return 5;
+        case TRAFFIC_VERDICT_INJECT:          return 6;
+        case TRAFFIC_VERDICT_CUSTOM_RESPONSE: return 7;
+        case TRAFFIC_VERDICT_DROP:            return 8;
+#endif
+        default:                              return -1;
+    }
+}
 
 #ifdef __cplusplus
 typedef enum class AttachmentVerdict
@@ -405,6 +445,8 @@ typedef struct HttpSessionData {
     double                 res_proccesing_time; ///< Holds session's response processing time.
     uint64_t               processed_req_body_size; ///< Holds session's request body's size.
     uint64_t               processed_res_body_size; ///< Holds session's response body's size'.
+
+    struct HttpMetaData    *ws_handshake_metadata; ///< Handshake metadata reused per-frame.
 } HttpSessionData;
 
 typedef struct HttpMetaData {
@@ -453,6 +495,16 @@ typedef struct NanoHttpBody {
     nano_str_t *data;
     size_t bodies_count;
 } NanoHttpBody;
+
+/// @brief Carries a WebSocket frame payload with its traffic direction.
+/// Used by WEBSOCKET_PAYLOAD_DATA and WEBSOCKET_MESSAGE_END chunk types so a
+/// single chunk type covers both client-to-server and server-to-client frames.
+typedef struct WsFrameData {
+    int          is_response; ///< 0 = client-to-server (REQUEST_*), 1 = server-to-client (RESPONSE_*)
+    NanoHttpBody *body;       ///< Frame payload; NULL when used with WEBSOCKET_MESSAGE_END
+    uint8_t      ws_opcode;   ///< WebSocket opcode (0x1=text, 0x2=binary, 0x8=close, etc.)
+    uint8_t      ws_flags;    ///< RSV1/RSV2/RSV3 bits from the first frame of the message
+} WsFrameData;
 
 typedef struct AttachmentData {
     SessionID session_id;

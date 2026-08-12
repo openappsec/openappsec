@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <math.h>
 #include "WaapAssetState.h"
+#include "waap.h"
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/archives/json.hpp>
 #include <cereal/types/memory.hpp>
@@ -27,6 +28,8 @@ USE_DEBUG_FLAG(D_WAAP_SCORE_BUILDER);
 
 #define GENERATE_FALSE_POSITIVES_LIST_THRESHOLD 100
 #define SCORE_CALCULATION_THRESHOLD 5000
+#define SNAPSHOT_YIELD_KEYWORDS_INTERVAL 100
+#define SNAPSHOT_REBUILD_MAX_ATTEMPTS 5
 
 using namespace std::chrono;
 
@@ -107,6 +110,9 @@ ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState) :
     m_fpStore(),
     m_serializedData(),
     m_keywordsScorePools(m_serializedData.m_keywordsScorePools),
+    m_snapshot(std::make_shared<const SnapshotState>()),
+    m_snapRoutineId(0),
+    m_calcScoreGeneration(0),
     m_falsePositivesSetsIntersection(),
     m_pWaapAssetState(pWaapAssetState)
 {
@@ -119,12 +125,23 @@ ScoreBuilder::ScoreBuilder(I_WaapAssetState* pWaapAssetState, ScoreBuilder& base
     m_fpStore(),
     m_serializedData(),
     m_keywordsScorePools(m_serializedData.m_keywordsScorePools),
+    m_snapshot(std::make_shared<const SnapshotState>()),
+    m_snapRoutineId(0),
+    m_calcScoreGeneration(0),
     m_falsePositivesSetsIntersection(),
     m_pWaapAssetState(pWaapAssetState)
 {
     restore();
     // merge
     mergeScores(baseScores);
+}
+
+ScoreBuilder::~ScoreBuilder()
+{
+    if (m_snapRoutineId != 0 && Singleton::exists<I_MainLoop>()) {
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->stop(m_snapRoutineId);
+        m_snapRoutineId = 0;
+    }
 }
 
 void ScoreBuilder::restore()
@@ -309,10 +326,9 @@ void ScoreBuilder::pumpKeywordScore(ScoreBuilderData& data, const std::string &p
     if (doBackup && m_scoreTrigger >= SCORE_CALCULATION_THRESHOLD)
     {
         calcScore(poolName);
-        if (m_pWaapAssetState != NULL)
-        {
-            m_pWaapAssetState->updateScores();
-        }
+        // The snapshot rebuild is deferred to an async mainloop routine so the
+        // periodic recalc does not block the request path.
+        scheduleSnapshotRebuild();
     }
 }
 
@@ -374,67 +390,175 @@ void ScoreBuilder::calcScore(const std::string &poolName)
         }
     }
     keywordsDataMap = newKeywordsDataMap;
+    // New normalization epoch: an in-flight snapshot rebuild must re-run.
+    m_calcScoreGeneration++;
 }
 
 void ScoreBuilder::snap()
 {
-    // Copy data from all mutable score pools to "snapshot" keyword->scores map
-    for (const auto &pool : m_keywordsScorePools) {
-        const std::string &poolName = pool.first;
-        const KeywordsScorePool& keywordScorePool = pool.second;
-        m_snapshotKwScoreMap[poolName];
-        m_snapshotKwCoefMap[poolName];
-        m_snapshotSpecialLinksMap[poolName];
-        m_snapshotKwTypeMap[poolName];
-        if (keywordScorePool.m_keywordsDataMap.empty()) {
-            m_snapshotStatsMap[poolName] = KeywordsStats();
+    // Synchronous rebuild + publish, used by the WaapAssetState ctor tails
+    // (via updateScores) and as the no-mainloop fallback. Never yields.
+    m_snapshot = buildSnapshot(nullptr);
+}
+
+void ScoreBuilder::scheduleSnapshotRebuild()
+{
+    if (m_snapRoutineId != 0) {
+        if (Singleton::exists<I_MainLoop>() &&
+            !Singleton::Consume<I_MainLoop>::by<WaapComponent>()->doesRoutineExist(m_snapRoutineId))
+        {
+            // The pending routine was unwound externally (e.g. mainloop stop):
+            // clear the stale id and reschedule instead of skipping forever.
+            dbgWarning(D_WAAP_SCORE_BUILDER) << "stale snapshot rebuild routine id, rescheduling";
+            m_snapRoutineId = 0;
         } else {
-            m_snapshotStatsMap[poolName] = keywordScorePool.m_stats;
+            dbgTrace(D_WAAP_SCORE_BUILDER) << "snapshot rebuild already pending, skipping";
+            return;
+        }
+    }
+    if (!Singleton::exists<I_MainLoop>()) {
+        // No mainloop (stripped environment): keep the old synchronous behavior.
+        snap();
+        return;
+    }
+    I_MainLoop *mainLoop = Singleton::Consume<I_MainLoop>::by<WaapComponent>();
+    m_snapRoutineId = mainLoop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::Offline,
+        [this, mainLoop]() {
+            // calcScore() can renormalize the pools while we are suspended at a
+            // yield; publishing then would mix two score epochs. Rebuild until
+            // no calcScore() ran during the build, then publish once.
+            //
+            // A sustained burst of never-before-seen keywords can bump the
+            // generation on every attempt, so the retry is capped: past the cap
+            // publish the last build anyway. A mixed-epoch snapshot is no worse
+            // than what the old synchronous snap() could produce, while never
+            // publishing would freeze the snapshot until the next trigger.
+            unsigned int generation;
+            unsigned int attempts = 0;
+            std::shared_ptr<const SnapshotState> newState;
+            do {
+                generation = m_calcScoreGeneration;
+                newState = buildSnapshot(mainLoop);
+                attempts++;
+            } while (generation != m_calcScoreGeneration && attempts < SNAPSHOT_REBUILD_MAX_ATTEMPTS);
+
+            if (generation != m_calcScoreGeneration) {
+                dbgWarning(D_WAAP_SCORE_BUILDER)
+                    << "score recalculation kept interrupting the snapshot rebuild, publishing a "
+                    << "possibly mixed-epoch snapshot after " << attempts << " attempts";
+            }
+            m_snapshot = newState;
+            m_snapRoutineId = 0; // last act: lets the destructor skip stop()
+        },
+        "ScoreBuilder snapshot rebuild"
+    );
+}
+
+std::shared_ptr<const ScoreBuilder::SnapshotState>
+ScoreBuilder::buildSnapshot(I_MainLoop *yieldingMainLoop) const
+{
+    // Copy data from all mutable score pools into a fresh snapshot (double
+    // buffer): readers keep seeing the previous coherent snapshot until the
+    // caller publishes the returned state. Keywords pruned from the live pool
+    // by calcScore() drop out of the snapshot here (they used to linger).
+    //
+    // Yield-safety (async path): while suspended at yield(), the request path
+    // may insert into a pool's m_keywordsDataMap (rehash) or replace it
+    // wholesale (calcScore). Never hold an iterator into that unordered_map
+    // across a yield -- collect the key names first, then re-find() each one.
+    // Pool map nodes themselves are stable (std::map, pools are never erased).
+    auto newState = std::make_shared<SnapshotState>();
+
+    std::vector<std::string> poolNames;
+    poolNames.reserve(m_keywordsScorePools.size());
+    for (const auto &pool : m_keywordsScorePools) {
+        poolNames.push_back(pool.first);
+    }
+
+    size_t processed = 0;
+    for (const std::string &poolName : poolNames) {
+        const auto poolIt = m_keywordsScorePools.find(poolName);
+        if (poolIt == m_keywordsScorePools.end()) {
+            continue;
+        }
+        const KeywordsScorePool &keywordScorePool = poolIt->second;
+
+        // Pool PRESENCE (even empty) matters: readers fall back to the base
+        // pool only when a pool is absent from the snapshot.
+        newState->keywordsMap[poolName];
+        newState->specialLinksMap[poolName];
+        if (keywordScorePool.m_keywordsDataMap.empty()) {
+            newState->statsMap[poolName] = KeywordsStats();
+        } else {
+            newState->statsMap[poolName] = keywordScorePool.m_stats;
         }
 
-        for (const auto &kwData : keywordScorePool.m_keywordsDataMap)
-        {
-            const std::string &kwName = kwData.first;
-            if (keywordScorePool.m_stats.isLinModel) {
-                m_snapshotKwScoreMap[poolName][kwName] = kwData.second.new_score;
-            } else {
-                m_snapshotKwScoreMap[poolName][kwName] = kwData.second.score;
-            }
-            m_snapshotKwCoefMap[poolName][kwName] = kwData.second.coef;
-            m_snapshotKwTypeMap[poolName][kwName] = kwData.second.type;
+        const bool is_lin_model = keywordScorePool.m_stats.isLinModel;
 
-            if (!kwData.second.special_links.empty()) {
+        std::vector<std::string> kwNames;
+        kwNames.reserve(keywordScorePool.m_keywordsDataMap.size());
+        for (const auto &kwData : keywordScorePool.m_keywordsDataMap) {
+            kwNames.push_back(kwData.first);
+        }
+
+        for (const std::string &kwName : kwNames) {
+            const auto kwIt = keywordScorePool.m_keywordsDataMap.find(kwName);
+            if (kwIt == keywordScorePool.m_keywordsDataMap.end()) {
+                // Pruned by calcScore() while we were suspended at a yield.
+                continue;
+            }
+            const KeywordData &kwData = kwIt->second;
+            SnapshotEntry entry;
+            if (is_lin_model) {
+                entry.score = kwData.new_score;
+            } else {
+                entry.score = kwData.score;
+            }
+            entry.coef = kwData.coef;
+            entry.type = kwData.type;
+            newState->keywordsMap[poolName][kwName] = entry;
+
+            if (!kwData.special_links.empty()) {
                 dbgTrace(D_WAAP_SCORE_BUILDER)
-                    << "snap(): keyword '"
+                    << "keyword '"
                     << kwName
                     << "' has "
-                    << kwData.second.special_links.size()
+                    << kwData.special_links.size()
                     << " special links.";
-                m_snapshotSpecialLinksMap[poolName][kwName] = kwData.second.special_links;
+                newState->specialLinksMap[poolName][kwName] = kwData.special_links;
+            }
+
+            if (yieldingMainLoop != nullptr &&
+                (++processed % SNAPSHOT_YIELD_KEYWORDS_INTERVAL) == 0)
+            {
+                yieldingMainLoop->yield(false);
             }
         }
     }
+    return newState;
 }
 
-const std::vector<std::string>& ScoreBuilder::getSnapshotSpecialLinks(
+std::vector<std::string> ScoreBuilder::getSnapshotSpecialLinks(
     const std::string &keyword,
     const std::string &poolName
 ) const
 {
-    static const std::vector<std::string> empty;
-    std::map<std::string, KeywordSpecialLinksMap>::const_iterator poolIt = m_snapshotSpecialLinksMap.find(poolName);
-    if (poolIt == m_snapshotSpecialLinksMap.end()) {
-        poolIt = m_snapshotSpecialLinksMap.find(KEYWORDS_SCORE_POOL_BASE);
+    std::shared_ptr<const SnapshotState> snapshot = m_snapshot;
+    std::map<std::string, KeywordSpecialLinksMap>::const_iterator poolIt =
+        snapshot->specialLinksMap.find(poolName);
+    if (poolIt == snapshot->specialLinksMap.end()) {
+        poolIt = snapshot->specialLinksMap.find(KEYWORDS_SCORE_POOL_BASE);
     }
 
-    if (poolIt == m_snapshotSpecialLinksMap.end()) {
-        return empty;
+    if (poolIt == snapshot->specialLinksMap.end()) {
+        return std::vector<std::string>();
     }
 
     const KeywordSpecialLinksMap &kwLinksMap = poolIt->second;
     KeywordSpecialLinksMap::const_iterator kwFound = kwLinksMap.find(keyword);
     if (kwFound == kwLinksMap.end()) {
-        return empty;
+        return std::vector<std::string>();
     }
     return kwFound->second;
 }
@@ -442,14 +566,15 @@ const std::vector<std::string>& ScoreBuilder::getSnapshotSpecialLinks(
 KeywordsStats
 ScoreBuilder::getSnapshotStats(const std::string &poolName) const
 {
-    std::map<std::string, KeywordsStats>::const_iterator poolIt = m_snapshotStatsMap.find(poolName);
-    if (poolIt == m_snapshotStatsMap.end()) {
+    std::shared_ptr<const SnapshotState> snapshot = m_snapshot;
+    std::map<std::string, KeywordsStats>::const_iterator poolIt = snapshot->statsMap.find(poolName);
+    if (poolIt == snapshot->statsMap.end()) {
         dbgTrace(D_WAAP_SCORE_BUILDER)
             << "pool "
             << poolName
             << " does not exist. Getting stats from base pool";
-        poolIt = m_snapshotStatsMap.find(KEYWORDS_SCORE_POOL_BASE);
-        if (poolIt == m_snapshotStatsMap.end()) {
+        poolIt = snapshot->statsMap.find(KEYWORDS_SCORE_POOL_BASE);
+        if (poolIt == snapshot->statsMap.end()) {
             dbgWarning(D_WAAP_SCORE_BUILDER) <<
                 "base pool does not exist! This is probably a bug. Returning empty stats";
             return KeywordsStats();
@@ -460,13 +585,14 @@ ScoreBuilder::getSnapshotStats(const std::string &poolName) const
 
 KeywordType ScoreBuilder::getSnapshotKeywordType(const std::string &keyword, const std::string &poolName) const
 {
-    std::map<std::string, KeywordTypeMap>::const_iterator poolIt = m_snapshotKwTypeMap.find(poolName);
-    if (poolIt != m_snapshotKwTypeMap.end())
+    std::shared_ptr<const SnapshotState> snapshot = m_snapshot;
+    auto poolIt = snapshot->keywordsMap.find(poolName);
+    if (poolIt != snapshot->keywordsMap.end())
     {
-        KeywordTypeMap::const_iterator kwIt = poolIt->second.find(keyword);
+        auto kwIt = poolIt->second.find(keyword);
         if (kwIt != poolIt->second.end())
         {
-            return kwIt->second;
+            return kwIt->second.type;
         }
     }
 
@@ -476,14 +602,15 @@ KeywordType ScoreBuilder::getSnapshotKeywordType(const std::string &keyword, con
 double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double defaultScore,
     const std::string &poolName) const
 {
-    std::map<std::string, KeywordScoreMap>::const_iterator poolIt = m_snapshotKwScoreMap.find(poolName);
-    if (poolIt == m_snapshotKwScoreMap.end()) {
+    std::shared_ptr<const SnapshotState> snapshot = m_snapshot;
+    auto poolIt = snapshot->keywordsMap.find(poolName);
+    if (poolIt == snapshot->keywordsMap.end()) {
         dbgTrace(D_WAAP_SCORE_BUILDER)
             << "pool "
             << poolName
             << " does not exist. Getting score from base pool";
-        poolIt = m_snapshotKwScoreMap.find(KEYWORDS_SCORE_POOL_BASE);
-        if (poolIt == m_snapshotKwScoreMap.end()) {
+        poolIt = snapshot->keywordsMap.find(KEYWORDS_SCORE_POOL_BASE);
+        if (poolIt == snapshot->keywordsMap.end()) {
             dbgDebug(D_WAAP_SCORE_BUILDER)
                 << "base pool does not exist! This is probably a bug. Returning default score "
                 << defaultScore;
@@ -492,10 +619,10 @@ double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double 
         }
     }
 
-    const KeywordScoreMap &kwScoreMap = poolIt->second;
+    const KeywordSnapshotMap &kwMap = poolIt->second;
 
-    KeywordScoreMap::const_iterator kwScoreFound = kwScoreMap.find(keyword);
-    if (kwScoreFound == kwScoreMap.end()) {
+    auto kwFound = kwMap.find(keyword);
+    if (kwFound == kwMap.end()) {
         dbgTrace(D_WAAP_SCORE_BUILDER)
             << "keywordScore:'"
             << keyword
@@ -511,36 +638,37 @@ double ScoreBuilder::getSnapshotKeywordScore(const std::string &keyword, double 
         << "keywordScore:'"
         << keyword
         << "': "
-        << kwScoreFound->second
+        << kwFound->second.score
         << " (pool '"
         << poolName
         << "')";
-    return kwScoreFound->second;
+    return kwFound->second.score;
 }
 
 double
 ScoreBuilder::getSnapshotKeywordCoef(const std::string &keyword, double defaultCoef, const std::string &poolName) const
 {
-    std::map<std::string, KeywordScoreMap>::const_iterator poolIt = m_snapshotKwCoefMap.find(poolName);
-    if (poolIt == m_snapshotKwCoefMap.end()) {
+    std::shared_ptr<const SnapshotState> snapshot = m_snapshot;
+    auto poolIt = snapshot->keywordsMap.find(poolName);
+    if (poolIt == snapshot->keywordsMap.end()) {
         dbgTrace(D_WAAP_SCORE_BUILDER)
             << "pool "
             << poolName
             << " does not exist. Getting coef from base pool";
-        poolIt = m_snapshotKwCoefMap.find(KEYWORDS_SCORE_POOL_BASE);
+        poolIt = snapshot->keywordsMap.find(KEYWORDS_SCORE_POOL_BASE);
     }
 
-    if (poolIt == m_snapshotKwCoefMap.end()) {
+    if (poolIt == snapshot->keywordsMap.end()) {
         dbgWarning(D_WAAP_SCORE_BUILDER)
             << "base pool does not exist! This is probably a bug. Returning default coef "
             << defaultCoef;
         return defaultCoef;
     }
 
-    const KeywordScoreMap &kwCoefMap = poolIt->second;
+    const KeywordSnapshotMap &kwMap = poolIt->second;
 
-    KeywordScoreMap::const_iterator kwCoefFound = kwCoefMap.find(keyword);
-    if (kwCoefFound == kwCoefMap.end()) {
+    auto kwFound = kwMap.find(keyword);
+    if (kwFound == kwMap.end()) {
         dbgTrace(D_WAAP_SCORE_BUILDER)
             << "keywordCoef:'"
             << keyword
@@ -556,11 +684,11 @@ ScoreBuilder::getSnapshotKeywordCoef(const std::string &keyword, double defaultC
         << "keywordCoef:'"
         << keyword
         << "': "
-        << kwCoefFound->second
+        << kwFound->second.coef
         << " (pool '"
         << poolName
         << "')";
-    return kwCoefFound->second;
+    return kwFound->second.coef;
 }
 
 keywords_set ScoreBuilder::getIpItemKeywordsSet(std::string ip)

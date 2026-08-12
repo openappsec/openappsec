@@ -75,6 +75,7 @@ public:
     fini()
     {
         streams.clear();
+        streams_preperation.clear();
         if (i_mainloop != nullptr && i_mainloop->doesRoutineExist(log_send_routine)) {
             i_mainloop->stop(log_send_routine);
         }

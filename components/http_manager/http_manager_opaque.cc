@@ -62,64 +62,47 @@ HttpManagerOpaque::getCurrVerdict() const
         return manager_verdict;
     }
 
-    uint accepted_apps = 0;
-    ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_INSPECT;
-    bool is_drop_app_exist = false;
-    string drop_app_with_response;
+    ServiceVerdict verdict = ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT;
 
-    for (const auto &app_verdic_pair : applications_verdicts) {
-        switch (app_verdic_pair.second) {
-            case ServiceVerdict::TRAFFIC_VERDICT_DROP:
-            {
-                is_drop_app_exist = true;
-                dbgTrace(D_HTTP_MANAGER) << "Verdict DROP for app: " << app_verdic_pair.first;
-                auto it = applications_web_user_response.find(app_verdic_pair.first);
-                if (it != applications_web_user_response.end() && !it->second.empty()) {
-                    current_web_user_response = applications_web_user_response.at(app_verdic_pair.first);
-                    dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
-                    return app_verdic_pair.second;
-                }
-                break;
+    for (const auto &app_verdict_pair : applications_verdicts) {
+        int priority = getVerdictPriority(app_verdict_pair.second);
+        if (priority < 0) {
+            dbgAssertOpt(false)
+                << AlertInfo(AlertTeam::CORE, "http manager")
+                << "Received unknown verdict "
+                << static_cast<int>(app_verdict_pair.second);
+            bool is_fail_open = getProfileAgentSettingWithDefault(true, "agent.failOpenState.nginxModule");
+            if (!is_fail_open) {
+                return ServiceVerdict::TRAFFIC_VERDICT_DROP;
             }
-            case ServiceVerdict::TRAFFIC_VERDICT_INJECT:
-                // Sent in ResponseHeaders and ResponseBody.
-                verdict = ServiceVerdict::TRAFFIC_VERDICT_INJECT;
-                break;
-            case ServiceVerdict::TRAFFIC_VERDICT_ACCEPT:
-                accepted_apps++;
-                break;
-            case ServiceVerdict::TRAFFIC_VERDICT_INSPECT:
-                break;
-            case ServiceVerdict::LIMIT_RESPONSE_HEADERS:
-                // Sent in End Request.
-                verdict = ServiceVerdict::LIMIT_RESPONSE_HEADERS;
-                break;
-            case ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT:
-                dbgTrace(D_HTTP_MANAGER) << "Verdict 'Irrelevant' is not yet supported. Returning Accept";
-                accepted_apps++;
-                break;
-            case ServiceVerdict::TRAFFIC_VERDICT_DELAYED:
-                // Sent in Request Headers and Request Body.
-                verdict = ServiceVerdict::TRAFFIC_VERDICT_DELAYED;
-                break;
-            case ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE:
-                verdict = ServiceVerdict::TRAFFIC_VERDICT_CUSTOM_RESPONSE;
-                break;
-            default:
-                dbgAssert(false)
-                    << AlertInfo(AlertTeam::CORE, "http manager")
-                    << "Received unknown verdict "
-                    << static_cast<int>(app_verdic_pair.second);
+            continue;
+        }
+
+        if (getVerdictPriority(app_verdict_pair.second) > getVerdictPriority(verdict)) {
+            dbgTrace(D_HTTP_MANAGER)
+                << "Updating aggregated verdict to "
+                << static_cast<int>(app_verdict_pair.second)
+                << " based on app: " << app_verdict_pair.first;
+            verdict = app_verdict_pair.second;
+
+            if (verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
+                dbgTrace(D_HTTP_MANAGER) << "Verdict DROP for app: " << app_verdict_pair.first;
+                auto it = applications_web_user_response.find(app_verdict_pair.first);
+                if (it != applications_web_user_response.end() && !it->second.empty()) {
+                    current_web_user_response = it->second;
+                    dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
+                    return verdict;
+                }
+            }
         }
     }
 
-    if (is_drop_app_exist) {
+    if (verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
         current_web_user_response = "";
         dbgTrace(D_HTTP_MANAGER) << "current_web_user_response=" << current_web_user_response;
-        return ServiceVerdict::TRAFFIC_VERDICT_DROP;
     }
 
-    return accepted_apps == applications_verdicts.size() ? ServiceVerdict::TRAFFIC_VERDICT_ACCEPT : verdict;
+    return verdict;
 }
 
 std::set<std::string>
@@ -129,13 +112,13 @@ HttpManagerOpaque::getCurrentDropVerdictCausers() const
     if (manager_verdict == ServiceVerdict::TRAFFIC_VERDICT_DROP) {
         causers.insert(HTTP_MANAGER_NAME);
     }
-    for (const auto &app_verdic_pair : applications_verdicts) {
-        bool was_dropped = app_verdic_pair.second == ServiceVerdict::TRAFFIC_VERDICT_DROP;
+    for (const auto &app_verdict_pair : applications_verdicts) {
+        bool was_dropped = app_verdict_pair.second == ServiceVerdict::TRAFFIC_VERDICT_DROP;
         dbgTrace(D_HTTP_MANAGER)
-            << "The verdict from: " << app_verdic_pair.first
+            << "The verdict from: " << app_verdict_pair.first
             << (was_dropped ? " is \"drop\"" : " is not \"drop\" ");
         if (was_dropped) {
-            causers.insert(app_verdic_pair.first);
+            causers.insert(app_verdict_pair.first);
         }
     }
     return causers;

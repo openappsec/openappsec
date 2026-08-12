@@ -22,6 +22,12 @@ using namespace std;
 
 void yieldIfPossible(const string &func, int line)
 {
+    // Do not yield during stack unwinding (e.g. boost::context::detail::forced_unwind).
+    // Yielding while an exception is propagating causes a second forced_unwind to be thrown
+    // inside a noexcept destructor, which terminates the process via std::terminate.
+    if (std::uncaught_exception()) {
+        return;
+    }
     // check mainloop exists and current routine is not the main routine
     if (Singleton::exists<I_MainLoop>() &&
         Singleton::Consume<I_MainLoop>::by<WaapComponent>()->getCurrentRoutineId().ok())
@@ -267,7 +273,9 @@ m_underlying_stream(underlying_stream),
     m_decompressed_pos(0),
     m_compression_stream(nullptr),
     m_eof_reached(false),
-    m_stream_finished(false)
+    m_stream_finished(false),
+    m_plain_passthrough(false),
+    m_chunks_attempted(0)
 {
     m_buffer.resize(OUTPUT_BUFFER_SIZE);
     m_encrypted_buffer.reserve(CHUNK_SIZE);
@@ -397,10 +405,33 @@ bool BufferedCompressedInputStream::DecompressedBuffer::processNextChunk()
 
         dbgTrace(D_WAAP_SERIALIZE) << "Read " << bytes_read << " encrypted bytes from stream";
 
+        // Plain-passthrough mode: once enabled (on first-chunk decrypt failure),
+        // pass all subsequent bytes through as-is without decrypt/decompress.
+        if (m_plain_passthrough) {
+            m_decompressed_buffer.assign(m_encrypted_buffer.begin(), m_encrypted_buffer.end());
+            m_decompressed_pos = 0;
+            dbgTrace(D_WAAP_SERIALIZE) << "passthrough chunk: " << m_encrypted_buffer.size() << " bytes";
+            YIELD_IF_POSSIBLE();
+            return true;
+        }
+
         // Decrypt the chunk
         std::vector<char> decrypted_chunk;
+        ++m_chunks_attempted;
         if (!decryptChunk(m_encrypted_buffer, decrypted_chunk)) {
             dbgWarning(D_WAAP_SERIALIZE) << "Failed to decrypt chunk";
+            // If this was the first chunk, content is likely plain (not encrypted).
+            // Switch to passthrough mode and emit the raw bytes we already read.
+            if (m_chunks_attempted == 1) {
+                dbgInfo(D_WAAP_SERIALIZE)
+                    << "decrypt failed on first chunk; falling back to plain passthrough ("
+                    << m_encrypted_buffer.size() << " bytes)";
+                m_plain_passthrough = true;
+                m_decompressed_buffer.assign(m_encrypted_buffer.begin(), m_encrypted_buffer.end());
+                m_decompressed_pos = 0;
+                YIELD_IF_POSSIBLE();
+                return true;
+            }
             break;
         }
 
@@ -408,6 +439,19 @@ bool BufferedCompressedInputStream::DecompressedBuffer::processNextChunk()
         std::vector<char> decompressed_chunk;
         if (!decompressChunk(decrypted_chunk, decompressed_chunk)) {
             dbgWarning(D_WAAP_SERIALIZE) << "Failed to decompress chunk";
+            // First-chunk fallback for stream that was encrypted but not compressed.
+            // Decryption already succeeded; the decrypted plaintext IS the payload.
+            // Use decrypted_chunk (NOT m_encrypted_buffer, which is still encrypted).
+            if (m_chunks_attempted == 1) {
+                dbgInfo(D_WAAP_SERIALIZE)
+                    << "decompress failed on first chunk; falling back to decrypted passthrough ("
+                    << decrypted_chunk.size() << " bytes)";
+                m_plain_passthrough = true;
+                m_decompressed_buffer.assign(decrypted_chunk.begin(), decrypted_chunk.end());
+                m_decompressed_pos = 0;
+                YIELD_IF_POSSIBLE();
+                return true;
+            }
             break;
         }
 

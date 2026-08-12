@@ -185,6 +185,7 @@ private:
     size_t m_post_index;
     I_MainLoop *m_mainLoop;
     I_MainLoop::RoutineID m_routineId;
+    I_MainLoop::RoutineID m_gcRoutineId;
     std::vector<std::string> m_filesToRemove;
 
     // Additional member variables for conditional tracking (INXT-46771)

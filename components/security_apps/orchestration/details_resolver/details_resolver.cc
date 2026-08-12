@@ -43,6 +43,7 @@ public:
     bool isKernelVersion3OrHigher() override;
     bool isGw() override;
     bool isGwNotVsx() override;
+    bool isMgmtNotMds() override;
     bool isVersionAboveR8110() override;
     bool isReverseProxy() override;
     bool isCloudStorageEnabled() override;
@@ -191,6 +192,21 @@ DetailsResolver::Impl::isGwNotVsx()
     auto is_vsx = DetailsResolvingHanlder::getCommandOutput(is_vsx_cmd);
     if (is_gw.ok() && is_vsx.ok() && !is_gw.unpack().empty() && !is_vsx.unpack().empty()) {
         return is_gw.unpack().front() == '1' && is_vsx.unpack().front() == '0';
+    }
+#endif
+    return false;
+}
+
+bool
+DetailsResolver::Impl::isMgmtNotMds()
+{
+#if defined(gaia)
+    static const string is_mgmt_cmd = "cpprod_util FwIsFirewallMgmt";
+    static const string is_mds_cmd = "cpprod_util CPPROD_GetValue PROVIDER-1 ProdActive 1";
+    auto is_mgmt = DetailsResolvingHanlder::getCommandOutput(is_mgmt_cmd);
+    auto is_mds = DetailsResolvingHanlder::getCommandOutput(is_mds_cmd);
+    if (is_mgmt.ok() && is_mds.ok() && !is_mds.unpack().empty() && !is_mgmt.unpack().empty()) {
+        return is_mgmt.unpack().front() == '1' && is_mds.unpack().front() == '0';
     }
 #endif
     return false;

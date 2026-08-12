@@ -604,6 +604,11 @@ bool Waf2Transaction::checkIsHeaderOverrideScanRequired()
 
 const std::string Waf2Transaction::getCurrentWebUserResponse() {
     dbgFlow(D_WAAP);
+    // INXT-53598: m_siteConfig is NULL during the post-restart pre-policy-load window; fail safe.
+    if (!m_siteConfig) {
+        dbgTrace(D_WAAP) << "No site config, can't set web user response";
+        return "";
+    }
     m_waapDecision.orderDecisions();
     DecisionType practiceType = m_waapDecision.getHighestPriorityDecisionToLog();
 
@@ -623,6 +628,36 @@ const std::string Waf2Transaction::getCurrentWebUserResponse() {
     return responses[0];
 }
 
+const std::vector<std::pair<std::string, std::string>>&
+Waf2Transaction::getLowercasedHdrPairs() const
+{
+    if (m_lowercased_hdr_pairs_cached) return m_lowercased_hdr_pairs;
+    const auto &hdrs = getHdrPairs();
+    m_lowercased_hdr_pairs.reserve(hdrs.size());
+    for (const auto &hp : hdrs) {
+        std::string n = hp.first;
+        std::transform(n.begin(), n.end(), n.begin(), ::tolower);
+        std::string v = hp.second;
+        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+        m_lowercased_hdr_pairs.emplace_back(std::move(n), std::move(v));
+    }
+    m_lowercased_hdr_pairs_cached = true;
+    return m_lowercased_hdr_pairs;
+}
+
+const std::vector<std::pair<std::string, std::string>>&
+Waf2Transaction::getKeywordInfoPairs() const
+{
+    if (m_keyword_info_pairs_cached) return m_keyword_info_pairs;
+    const auto &keywords = getKeywordInfo();
+    m_keyword_info_pairs.reserve(keywords.size());
+    for (const DeepParser::KeywordInfo &k : keywords) {
+        m_keyword_info_pairs.emplace_back(k.getName(), k.getValue());
+    }
+    m_keyword_info_pairs_cached = true;
+    return m_keyword_info_pairs;
+}
+
 std::unordered_map<std::string, std::set<std::string>>
 Waf2Transaction::getExceptionsDict(DecisionType practiceType) {
     std::unordered_map<std::string, std::set<std::string>> exceptions_dict;
@@ -632,145 +667,131 @@ Waf2Transaction::getExceptionsDict(DecisionType practiceType) {
 
     extractEnvSourceIdentifier();
     exceptions_dict["sourceIdentifier"].insert(m_source_identifier);
-    if (
-        practiceType == DecisionType::AUTONOMOUS_SECURITY_DECISION
-    ) {
-        for (const DeepParser::KeywordInfo& keywordInfo : getKeywordInfo()) {
-            exceptions_dict["paramName"].insert(keywordInfo.getName());
-        }
-    }
     if (practiceType == DecisionType::AUTONOMOUS_SECURITY_DECISION) {
         exceptions_dict["hostName"].insert(m_hostStr);
         for (const std::string& keywordStr : getKeywordMatches()) {
             exceptions_dict["indicator"].insert(keywordStr);
-        }
-        for (const DeepParser::KeywordInfo& keywordInfo : getKeywordInfo()) {
-            exceptions_dict["paramValue"].insert(keywordInfo.getValue());
+            exceptions_dict["keyword"].insert(keywordStr);
         }
         exceptions_dict["paramLocation"].insert(getLocation());
-        if (!checkIsHeaderOverrideScanRequired()) {
-            dbgDebug(D_WAAP) << "Header name override scan is not required";
-        } else {
-            for (auto& hdr_pair : getHdrPairs()) {
-                std::string name = hdr_pair.first;
-                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-                exceptions_dict["headerName"].insert(name);
-                std::string value = hdr_pair.second;
-                std::transform(value.begin(), value.end(), value.begin(), ::tolower);
-                exceptions_dict["headerValue"].insert(value);
-            }
-        }
     }
+    // Note: paramName, paramValue, headerName, headerValue are intentionally NOT added here.
+    // They are evaluated through per-pair correlated matching in getBehaviors() to prevent
+    // cross-matching across different parameters or headers (INXT-52398).
     return exceptions_dict;
+}
+
+const ParameterException &
+Waf2Transaction::getCachedParameterException(const std::string &id)
+{
+    auto it = m_paramExceptionCache.find(id);
+    if (it != m_paramExceptionCache.end()) return it->second;
+    I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<Waf2Transaction>();
+    auto result = m_paramExceptionCache.emplace(id, i_rulebase->getParameterException(id));
+    return result.first->second;
+}
+
+static void
+insertIfNotEmpty(
+    std::unordered_map<std::string, std::set<std::string>> &dict,
+    const std::string &key,
+    const std::string &value)
+{
+    if (value.empty()) return;
+    dict[key].insert(value);
 }
 
 std::set<ParameterBehavior>
 Waf2Transaction::getBehaviors(
     const std::unordered_map<std::string, std::set<std::string>> &exceptions_dict,
-    const std::vector<std::string>& exceptions, bool checkResponse = false)
+    const std::vector<std::string>& exceptions,
+    DecisionType practiceType,
+    bool checkResponse)
 {
     std::set<ParameterBehavior> all_params;
-    I_GenericRulebase *i_rulebase = Singleton::Consume<I_GenericRulebase>::by<Waf2Transaction>();
+
+    bool doParamPairMatching = (
+        practiceType == DecisionType::AUTONOMOUS_SECURITY_DECISION);
+
+    bool doHeaderPairMatching = (
+        practiceType == DecisionType::AUTONOMOUS_SECURITY_DECISION &&
+        checkIsHeaderOverrideScanRequired());
+
+    static const std::vector<std::pair<std::string, std::string>> empty_pairs;
+    const auto &header_pairs_lower = doHeaderPairMatching
+        ? getLowercasedHdrPairs() : empty_pairs;
+    const auto &param_pairs        = doParamPairMatching
+        ? getKeywordInfoPairs()    : empty_pairs;
+    std::unordered_map<std::string, std::set<std::string>> base_dict = exceptions_dict;
+    if (checkResponse && !getResponseBody().empty()) {
+        base_dict["responseBody"].insert(getResponseBody());
+    }
+    std::unordered_map<std::string, std::set<std::string>> non_kv_dict = base_dict;
+    for (const auto &p : header_pairs_lower) {
+        non_kv_dict["headerName"].insert(p.first);
+        non_kv_dict["headerValue"].insert(p.second);
+    }
+    for (const auto &p : param_pairs) {
+        non_kv_dict["paramName"].insert(p.first);
+        non_kv_dict["paramValue"].insert(p.second);
+    }
+    if (doParamPairMatching) {
+        insertIfNotEmpty(non_kv_dict, "paramName", getParamKey());
+        insertIfNotEmpty(non_kv_dict, "paramName", getParam());
+        insertIfNotEmpty(non_kv_dict, "paramValue", getSample());
+    }
+
+    std::unordered_set<std::string> request_keys;
+    for (const auto &kv : non_kv_dict) request_keys.insert(kv.first);
+
     for (const auto &id : exceptions) {
         dbgTrace(D_WAAP_OVERRIDE) << "get parameter exception for: " << id;
 
-        const auto &paramException = i_rulebase->getParameterException(id);
-        auto params = paramException.getBehavior(exceptions_dict);
-        bool hasKVPair = paramException.isContainingKVPair();
+        const auto &paramException = getCachedParameterException(id);
 
-        // Pass 1: Handle non-KV behaviors (traditional logic).
-        // If hasKVPair is true, we collect/apply behaviors from non-KV match_queries (e.g. sourceIdentifier-only).
-        // If hasKVPair is false, we allow normal behavior using existing 'params'.
-        std::set<ParameterBehavior> nonKvParams;
-        if (hasKVPair) {
-            // These are match_queries that don't contain paramName+paramValue or headerName+headerValue
-            // pairs, e.g. sourceIdentifier-only or url-only exceptions. They must be evaluated with
-            // the full dict (traditional matching), not through the per-keyword KV path.
-            nonKvParams = paramException.getBehaviorForNonKVPairs(exceptions_dict);
-        }
+        const auto &ekeys = paramException.getAllReferencedKeys();
 
-        if (!hasKVPair || !nonKvParams.empty()) {
-            if (!hasKVPair) {
-                dbgTrace(D_WAAP_OVERRIDE) << "Using traditional matching for exception " << id << " (no KV pairs)";
-            } else {
-                dbgTrace(D_WAAP_OVERRIDE) << "got " << nonKvParams.size()
-                    << " behaviors from non-KV match_queries in mixed exception " << id;
+        if (checkResponse && ekeys.count("responseBody")) {
+            bool has_other_keys = false;
+            for (const auto &k : ekeys) {
+                if (k != "responseBody") { has_other_keys = true; break; }
             }
-
-            if (checkResponse && !getResponseBody().empty()) {
-                std::unordered_map<std::string, std::set<std::string>> response_dict = {
-                    {"responseBody", {getResponseBody()}}
-                };
-                auto responseParams = hasKVPair ? paramException.getBehaviorForNonKVPairs(response_dict)
-                                                : paramException.getBehavior(response_dict);
-                if (responseParams.size() > 0) {
-                    dbgTrace(D_WAAP_OVERRIDE)
-                        << (hasKVPair ? "got responseBody behavior for non-KV, setApplyOverride(true)"
-                                        : "got responseBody behavior, setApplyOverride(true)");
-                    m_responseInspectReasons.setApplyOverride(true);
-                    all_params.insert(responseParams.begin(), responseParams.end());
-                    // once found, no need to check again
-                    checkResponse = false;
-                }
-            }
-
-            if (!hasKVPair) {
-                dbgTrace(D_WAAP_OVERRIDE) << "got " << params.size() << " behaviors (non-KV pair)";
-                all_params.insert(params.begin(), params.end());
+            bool can_still_match = !has_other_keys
+                || paramException.isContainingKVPair()
+                || !paramException.getBehavior(non_kv_dict, true).empty();
+            if (can_still_match) {
+                dbgTrace(D_WAAP_OVERRIDE) << "arming response inspection for exception: " << id;
+                m_responseInspectReasons.setApplyOverride(true);
             } else {
-                all_params.insert(nonKvParams.begin(), nonKvParams.end());
+                dbgTrace(D_WAAP_OVERRIDE) << "not arming response inspection, exception cannot match: " << id;
             }
         }
 
-        if (hasKVPair) {
-
-            // Pass 2: For KV-pair match_queries, do per-keyword matching (existing logic)
-            if (params.size() > 0) {
-                bool anyKVMatched = false;
-                std::set<ParameterBehavior> kvParams;
-
-                dbgTrace(D_WAAP_OVERRIDE) << "Using KV pair matching for exception " << id;
-                // Check parameter name/value pairs
-                for (const DeepParser::KeywordInfo& keywordInfo : getKeywordInfo()) {
-                    std::unordered_map<std::string, std::set<std::string>> kv_dict = {
-                        {"paramName", {keywordInfo.getName()}},
-                        {"paramValue", {keywordInfo.getValue()}}
-                    };
-                    auto kvBehaviors = i_rulebase->getParameterException(id).getBehavior(kv_dict, true);
-                    if (kvBehaviors.size() > 0) {
-                        anyKVMatched = true;
-                        kvParams.insert(kvBehaviors.begin(), kvBehaviors.end());
-                    }
-                }
-
-                // Check header name/value pairs
-                for (const auto& hdr_pair : getHdrPairs()) {
-                    std::string name = hdr_pair.first;
-                    std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-                    std::string value = hdr_pair.second;
-                    std::transform(value.begin(), value.end(), value.begin(), ::tolower);
-
-                    std::unordered_map<std::string, std::set<std::string>> kv_dict = {
-                        {"headerName", {name}},
-                        {"headerValue", {value}}
-                    };
-                    auto kvBehaviors = i_rulebase->getParameterException(id).getBehavior(kv_dict, true);
-                    if (kvBehaviors.size() > 0) {
-                        anyKVMatched = true;
-                        kvParams.insert(kvBehaviors.begin(), kvBehaviors.end());
-                    }
-                }
-
-                // Consider matches only if at least one of the key/value pairs have been successfully matched
-                if (anyKVMatched) {
-                    dbgTrace(D_WAAP_OVERRIDE) << "got "<< kvParams.size() << " behaviors (KV pair matched)";
-                    all_params.insert(kvParams.begin(), kvParams.end());
-                } else {
-                    dbgTrace(D_WAAP_OVERRIDE) << "KV pair exception found but no specific pairs matched";
-                }
-            } else {
-                dbgTrace(D_WAAP_OVERRIDE) << "KV pair exception found but no initial match";
+        if (!ekeys.empty()) {
+            bool any_relevant = false;
+            for (const auto &k : ekeys) {
+                if (request_keys.count(k)) { any_relevant = true; break; }
             }
+            if (!any_relevant) {
+                dbgTrace(D_WAAP_OVERRIDE) << "skip exception " << id << ": no relevant keys in request";
+                continue;
+            }
+        }
+
+        bool exceptionHasKVPair = paramException.isContainingKVPair();
+
+        if (exceptionHasKVPair) {
+            auto params = paramException.getBehaviorForNonKVPairs(non_kv_dict);
+            if (!params.empty()) all_params.insert(params.begin(), params.end());
+        } else {
+            auto params = paramException.getBehavior(non_kv_dict);
+            if (!params.empty()) all_params.insert(params.begin(), params.end());
+        }
+
+        if (exceptionHasKVPair && (doHeaderPairMatching || doParamPairMatching)) {
+            auto kvParams = paramException.getBehaviorForKVPairs(
+                base_dict, header_pairs_lower, param_pairs);
+            if (!kvParams.empty()) all_params.insert(kvParams.begin(), kvParams.end());
         }
     }
     return all_params;
@@ -790,7 +811,7 @@ bool Waf2Transaction::shouldEnforceByPracticeExceptions(DecisionType practiceTyp
         if (!exceptions.empty()) {
             dbgTrace(D_WAAP_OVERRIDE) << "get behaviors for practice: " << practiceType;
 
-            auto behaviors = getBehaviors(getExceptionsDict(practiceType), exceptions);
+            auto behaviors = getBehaviors(getExceptionsDict(practiceType), exceptions, practiceType);
             if (behaviors.size() > 0)
             {
                 auto it = m_overrideStateByPractice.find(practiceType);
@@ -848,6 +869,9 @@ void Waf2Transaction::setOverrideState(const std::set<ParameterBehavior>& behavi
                 dbgTrace(D_WAAP_OVERRIDE) << "setting bForceBlock due to override behavior: " << behavior.getId();
                 state.bForceBlock = true;
                 state.forceBlockIds.insert(behavior.getId());
+            } else {
+                dbgTrace(D_WAAP_OVERRIDE) << "override behavior matched with no effect on state here: "
+                    << behavior.getId();
             }
         } else if(behavior.getKey() == BehaviorKey::LOG && behavior.getValue() == BehaviorValue::IGNORE) {
             dbgTrace(D_WAAP_OVERRIDE) << "setting bSupressLog due to override behavior: " << behavior.getId();
@@ -868,7 +892,11 @@ Waap::Override::State Waf2Transaction::getOverrideState(IWaapConfig* sitePolicy)
         if (!exceptions.empty()) {
             dbgTrace(D_WAAP_OVERRIDE) << "get behaviors for override state";
             m_responseInspectReasons.setApplyOverride(false);
-            auto behaviors = getBehaviors(getExceptionsDict(AUTONOMOUS_SECURITY_DECISION), exceptions, true);
+            auto behaviors = getBehaviors(
+                getExceptionsDict(AUTONOMOUS_SECURITY_DECISION),
+                exceptions,
+                AUTONOMOUS_SECURITY_DECISION,
+                true);
             if (behaviors.size() > 0) {
                 dbgTrace(D_WAAP_OVERRIDE) << "set override state by practice found behaviors";
                 setOverrideState(behaviors, m_overrideStateByPractice[AUTONOMOUS_SECURITY_DECISION]);

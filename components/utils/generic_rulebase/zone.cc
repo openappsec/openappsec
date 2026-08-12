@@ -141,7 +141,7 @@ Zone::load(cereal::JSONInputArchive &archive_in)
         match_query.getKey() == "any" &&
         match_query.getValue().count("any") > 0;
 
-    set<string> keys = match_query.getAllKeys();
+    (void)match_query.getAllKeys();
 }
 
 const string
@@ -161,7 +161,8 @@ Zone::contains(const Asset &asset)
     }
 
     ScopedContext req_attrs_key;
-    req_attrs_key.registerValue<set<string>>(TagsValues::req_attrs_ctx_key, match_query.getAllKeys());
+    const auto &uk = match_query.getAllKeys();
+    req_attrs_key.registerValue<set<string>>(TagsValues::req_attrs_ctx_key, set<string>(uk.begin(), uk.end()));
 
     I_Intelligence_IS_V2 *intelligence = Singleton::Consume<I_Intelligence_IS_V2>::by<Zone>();
     auto query_res = intelligence->queryIntelligence<TagsValues>(request);

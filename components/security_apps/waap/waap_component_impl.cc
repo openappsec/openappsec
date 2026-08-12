@@ -374,9 +374,9 @@ WaapComponent::Impl::respond(const ResponseCodeEvent &event)
         << "\e[0m";
 
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_NGINX_EVENTS)
-                << " * \e[31mNGEN_EVENT: ResponseCodeTransactionEvent - failed to get waf2 transaction, "
-                << "state does not exist\e[0m";
+        dbgDebug(D_NGINX_EVENTS)
+                << " * NGEN_EVENT: ResponseCodeTransactionEvent - failed to get waf2 transaction, "
+                << "state does not exist";
         return drop_response;
     }
 
@@ -634,7 +634,7 @@ EventVerdict
 WaapComponent::Impl::respond(const EndTransactionEvent &)
 {
     if (!waapStateTable->hasState<Waf2Transaction>()) {
-        dbgWarning(D_NGINX_EVENTS) <<
+        dbgDebug(D_NGINX_EVENTS) <<
             " * \e[31mNGEN_EVENT: endTransaction - failed to get waf2 transaction, state does not exist\e[0m";
         return EventVerdict(drop_response);
     }

@@ -16,6 +16,7 @@
 #include "debug.h"
 #include <string.h>
 #include <map>
+#include <vector>
 #include <tuple>
 
 using namespace std;
@@ -26,16 +27,31 @@ USE_DEBUG_FLAG(D_WAAP);
 
 const string ParserBinaryFile::m_parserName = "ParserBinaryFile";
 
-static const map<BinaryFileType, pair<string, string>> m_head_tail_map = {
-    {BinaryFileType::FILE_TYPE_PNG,
-        {string("\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"), // PNG
-        string("\x49\x45\x4e\x44\xae\x42\x60\x82")}},  // IEND
-    {BinaryFileType::FILE_TYPE_JPEG,
-        {string("\xff\xd8\xff"),
-        string("\xff\xd9")}},
-    {BinaryFileType::FILE_TYPE_PDF,
-        {string("%PDF-"),
-        string("%%EOF")}}
+struct BinarySignature {
+    string head;
+    string tail;
+    string b64_prefix;            // empty disables base64 detection
+    bool (*validate)(const string &);  // nullptr = no post-decode validation
+};
+
+static bool isValidJpegFirstMarker(const string &decoded);
+
+static const map<BinaryFileType, BinarySignature> m_file_signatures = {
+    {BinaryFileType::FILE_TYPE_PNG, {
+        string("\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"),
+        string("\x49\x45\x4e\x44\xae\x42\x60\x82"),
+        "iVBORw0",
+        nullptr}},
+    {BinaryFileType::FILE_TYPE_JPEG, {
+        string("\xff\xd8\xff"),
+        string("\xff\xd9"),
+        "/9j/",
+        isValidJpegFirstMarker}},
+    {BinaryFileType::FILE_TYPE_PDF, {
+        string("%PDF-"),
+        string("%%EOF"),
+        "JVBER",
+        nullptr}},
 };
 
 ParserBinaryFile::ParserBinaryFile(
@@ -54,6 +70,112 @@ ParserBinaryFile::ParserBinaryFile(
 ParserBinaryFile::~ParserBinaryFile()
 {}
 
+// Returns the number of decoded bytes written (up to outCapacity), or 0 on invalid base64.
+// '<0' tests below collapse padding (-2) and invalid (-1) into the same stop condition.
+static size_t decodeBase64Header(const string &s, size_t pos, char *out, size_t outCapacity)
+{
+    size_t remaining = s.size() - pos;
+    size_t b64Needed = ((outCapacity + 2) / 3) * 4;
+    size_t b64Len = min(remaining, b64Needed);
+    b64Len = (b64Len / 4) * 4;
+    if (b64Len < 4) return 0;
+
+    size_t decoded = 0;
+    for (size_t i = 0; i + 3 < b64Len && decoded < outCapacity; i += 4) {
+        int8_t a = base64_table[(unsigned char)s[pos + i]];
+        int8_t b = base64_table[(unsigned char)s[pos + i + 1]];
+        int8_t c = base64_table[(unsigned char)s[pos + i + 2]];
+        int8_t d = base64_table[(unsigned char)s[pos + i + 3]];
+        if (a < 0 || b < 0) return 0;
+        out[decoded++] = (char)((a << 2) | (b >> 4));
+        if (decoded < outCapacity && c >= 0) {
+            out[decoded++] = (char)(((b & 0x0F) << 4) | (c >> 2));
+            if (decoded < outCapacity && d >= 0) {
+                out[decoded++] = (char)(((c & 0x03) << 6) | d);
+            }
+        }
+    }
+    return decoded;
+}
+
+// Rejects inputs where a recognized binary header is followed by non-base64 bytes
+// (otherwise silently dropped by ParserBinaryFile, enabling XSS bypass).
+static bool
+isPureBase64FromOffset(const string &s, size_t pos)
+{
+    int paddingSeen = 0;
+    for (size_t i = pos; i < s.size(); i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '=') {
+            if (++paddingSeen > 2) return false;
+        } else if (paddingSeen > 0 || !Waap::Util::isBase64AlphaChar(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The JPEG header (FF D8 FF) is only 4 base64 chars, so the prefix check alone is too weak.
+// Validates the byte after SOI is a real first-segment marker; rejects e.g. "/9j/+cat+...".
+static bool
+isValidJpegFirstMarker(const string &decoded)
+{
+    if (decoded.size() < 4) return false;
+    unsigned char m = (unsigned char)decoded[3];
+    bool valid =
+        (m >= 0xE0 && m <= 0xEF)    // APP0-APP15 (JFIF, EXIF, etc)
+        || (m >= 0xC0 && m <= 0xCF) // SOF markers
+        || m == 0xDB                // DQT
+        || m == 0xDA                // SOS
+        || m == 0xDD                // DRI
+        || m == 0xFE;               // COM
+    if (!valid) {
+        dbgTrace(D_WAAP_PARSER_BINARY_FILE)
+            << "JPEG header matched but marker type byte[3]=0x" << hex << (unsigned int)m
+            << " is not a recognized JPEG marker";
+    }
+    return valid;
+}
+
+BinaryFileType
+ParserBinaryFile::detectBinaryBase64Prefix(const string &s, size_t pos)
+{
+    size_t remaining = s.size() - pos;
+
+    for (const auto &entry : m_file_signatures) {
+        const BinaryFileType type = entry.first;
+        const BinarySignature &sig = entry.second;
+
+        if (sig.b64_prefix.empty()) continue;
+        if (remaining < sig.b64_prefix.size()) continue;
+        if (s.compare(pos, sig.b64_prefix.size(), sig.b64_prefix) != 0) continue;
+
+        // Prefixes are 1:1 with types: any failure below is terminal, no other prefix can match.
+        char headerBuf[MAX_HEADER_LOOKUP];
+        size_t decodedLen = decodeBase64Header(s, pos, headerBuf, MAX_HEADER_LOOKUP);
+        if (decodedLen < MIN_HEADER_LOOKUP) return BinaryFileType::FILE_TYPE_NONE;
+
+        string decoded(headerBuf, decodedLen);
+        if (decoded.size() < sig.head.size() ||
+            decoded.compare(0, sig.head.size(), sig.head) != 0) {
+            return BinaryFileType::FILE_TYPE_NONE;
+        }
+
+        if (sig.validate && !sig.validate(decoded)) return BinaryFileType::FILE_TYPE_NONE;
+
+        if (!isPureBase64FromOffset(s, pos)) {
+            dbgTrace(D_WAAP_PARSER_BINARY_FILE)
+                << "Rejecting binary detection: input has non-base64 bytes after the header";
+            return BinaryFileType::FILE_TYPE_NONE;
+        }
+
+        dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "Verified known binary file from base64 data, type=" << type;
+        return type;
+    }
+
+    return BinaryFileType::FILE_TYPE_NONE;
+}
+
 BinaryFileType
 ParserBinaryFile::detectBinaryFileHeader(const string &buf)
 {
@@ -62,8 +184,8 @@ ParserBinaryFile::detectBinaryFileHeader(const string &buf)
         return BinaryFileType::FILE_TYPE_NONE;
     }
     const string searchStr = buf.substr(0, MAX_HEADER_LOOKUP);
-    for (const auto &entry : m_head_tail_map) {
-        const string &head = entry.second.first;
+    for (const auto &entry : m_file_signatures) {
+        const string &head = entry.second.head;
         size_t pos = searchStr.find(head);
         if (pos != string::npos) {
             if (buf.size() - pos >= MIN_HEADER_LOOKUP) {
@@ -113,12 +235,12 @@ ParserBinaryFile::push(const char *buf, size_t len)
         }
         return 0;
     }
-    if (m_head_tail_map.find(m_file_type) == m_head_tail_map.end()) {
+    if (m_file_signatures.find(m_file_type) == m_file_signatures.end()) {
         dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "unknown file type: " << m_file_type;
         m_state = s_error;
         return 0;
     }
-    const string tail = m_head_tail_map.at(m_file_type).second;
+    const string tail = m_file_signatures.at(m_file_type).tail;
 
     switch (m_state) {
             case s_start:
@@ -129,8 +251,7 @@ ParserBinaryFile::push(const char *buf, size_t len)
                     dbgTrace(D_WAAP_PARSER_BINARY_FILE) << "parsing base64";
                     bool keepParsing = true;
                     for (size_t i = 0; i < len; i++) {
-                        bool isB64AlphaChar =
-                            Waap::Util::isAlphaAsciiFast(buf[i]) || isdigit(buf[i]) || buf[i] == '/' || buf[i] == '+';
+                        bool isB64AlphaChar = Waap::Util::isBase64AlphaChar(buf[i]);
                         if (buf[i] == '=') {
                             dbgTrace(D_WAAP_PARSER_BINARY_FILE)
                                 << "base64 padding found (offset=" << i << "). end of stream.";

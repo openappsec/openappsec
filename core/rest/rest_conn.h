@@ -31,7 +31,12 @@ private:
     void stop() const;
     std::string readLine() const;
     std::string readSize(int len) const;
-    void sendResponse(const std::string &status, const std::string &body, bool add_newline = true) const;
+    void sendResponse(
+        const std::string &status,
+        const std::string &body,
+        bool add_newline = true,
+        const std::string &content_type = "application/json"
+    ) const;
 
     int fd;
     I_MainLoop *mainloop;

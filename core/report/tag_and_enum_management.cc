@@ -119,7 +119,9 @@ TagAndEnumManagement::convertStringToTag(const string &tag)
         {"NGINX Unified Server", ReportIS::Tags::WEB_SERVER_NGINX_UNIFIED},
         {"AI Guard", ReportIS::Tags::AIGUARD},
         {"Central NGINX Manager", ReportIS::Tags::CENTRAL_NGINX_MANAGER},
-        {"Browser Agent", ReportIS::Tags::BROWSER_AGENT}
+        {"Browser Agent", ReportIS::Tags::BROWSER_AGENT},
+        {"Anomaly Detection Log Upload", ReportIS::Tags::ANOMALY_DETECTION_LOG_UPLOAD},
+        {"AntiBot", ReportIS::Tags::ANTIBOT}
     };
     
     auto report_is_tag = strings_to_tags.find(tag);
@@ -285,6 +287,8 @@ TagAndEnumManagement::convertToString(const IssuingEngine &issuing_engine)
         case IssuingEngine::HORIZON_TELEMETRY_METRICS: return "horizonTelemetryMetrics";
         case IssuingEngine::LB_HEALTH_STATUS: return "lbHealthStatusEngine";
         case IssuingEngine::BROWSER_AGENT: return "browserAgentEngine";
+        case IssuingEngine::ANOMALY_DETECTION: return "anomalyDetectionEngine";
+        case IssuingEngine::ANTIBOT: return "antibotEngine";
     }
 
     dbgAssertOpt(false) << alert << "Reached impossible engine value of: " << static_cast<int>(issuing_engine);
@@ -336,7 +340,9 @@ EnumArray<Tags, string> TagAndEnumManagement::tags_translation_arr {
     "NGINX Unified Server",
     "AI Guard",
     "Central NGINX Manager",
-    "Browser Agent"
+    "Browser Agent",
+    "Anomaly Detection Log Upload",
+    "AntiBot"
 };
 
 EnumArray<AudienceTeam, string> TagAndEnumManagement::audience_team_translation {

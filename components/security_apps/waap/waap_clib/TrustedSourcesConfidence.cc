@@ -142,11 +142,17 @@ bool TrustedSourcesConfidenceCalculator::postData()
     std::string url = getPostDataUrl();
 
     dbgTrace(D_WAAP_CONFIDENCE_CALCULATOR) << "Sending the data to: " << url;
-    mergeIncrementalToPersistent();
 
+    // Construct the Post snapshot BEFORE merging into persistent.
+    // mergeIncrementalToPersistent() clears m_incremental_logger as its last step;
+    // capturing the logger first ensures the posted snapshot is non-empty.
     TrustedSourcesLogger logger(m_incremental_logger);
 
-    // Clear and reset incremental logger for next cycle
+    mergeIncrementalToPersistent();
+
+    // Reset incremental logger for next cycle (mergeIncrementalToPersistent
+    // already cleared it; we replace the shared_ptr so the captured Post snapshot
+    // is not affected by future log() calls in the next window).
     m_incremental_logger = std::make_shared<KeyValSourceLogger>();
 
     bool ok = sendNoReplyObjectWithRetry(logger,

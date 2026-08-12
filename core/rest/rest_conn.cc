@@ -134,7 +134,7 @@ RestConn::parseConn() const
     }
 
     if (method=="GET" && invoke->isGetCall(identifier)) {
-        return sendResponse("200 OK", invoke->invokeGet(identifier), false);
+        return sendResponse("200 OK", invoke->invokeGet(identifier), false, invoke->getGetContentType(identifier));
     }
 
     if (is_external_ip) {
@@ -210,17 +210,16 @@ RestConn::readSize(int len) const
 }
 
 void
-RestConn::sendResponse(const string &status, const string &body, bool add_newline) const
+RestConn::sendResponse(const string &status, const string &body, bool add_newline, const string &content_type) const
 {
     stringstream stream;
     stream <<
         "HTTP/1.1 " << status << "\r\n" <<
-        "Content-Type: application/json\r\n" <<
+        "Content-Type: " << content_type << "\r\n" <<
         "Content-Length: " << (body.size() + (add_newline ? 2 : 0)) << "\r\n" <<
         "\r\n" <<
         body;
     if (add_newline) stream << "\r\n";
-
 
     string res = stream.str();
     while (res.size() > 0 ) {

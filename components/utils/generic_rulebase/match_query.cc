@@ -114,8 +114,14 @@ MatchQuery::load(cereal::JSONInputArchive &archive_in)
             is_ignore_keyword = (key == "indicator" || key == "keyword");
 
             if (condition_type != Conditions::Exist) {
-                archive_in(cereal::make_nvp("value", value));
-                for(const auto &val: value) {
+                vector<string> raw_values;
+                archive_in(cereal::make_nvp("value", raw_values));
+                const bool normalize_case = (key == "headerName" || key == "headerValue");
+                for (auto val : raw_values) {
+                    if (normalize_case) {
+                        transform(val.begin(), val.end(), val.begin(), ::tolower);
+                    }
+                    value.insert(val);
                     if (isKeyTypeIp()) {
                         auto ip_range = IPUtilities::createRangeFromString<IPRange, IpAddress>(val, ip_addr_type_name);
                         if (ip_range.ok()) {
@@ -178,6 +184,9 @@ MatchQuery::load(cereal::JSONInputArchive &archive_in)
             break;
         }
     }
+    all_keys_cache.clear();
+    all_keys_cached = false;
+    (void)getAllKeys();
 }
 
 MatchQuery::StaticKeys
@@ -224,21 +233,20 @@ MatchQuery::isKeyTypeStatic() const
     return (key_type != StaticKeys::NotStatic);
 }
 
-set<string>
+const unordered_set<string> &
 MatchQuery::getAllKeys() const
 {
-    set<string> keys;
+    if (all_keys_cached) return all_keys_cache;
     if (type == MatchType::Condition) {
-        if (!key.empty()) keys.insert(key);
-        return keys;
+        if (!key.empty()) all_keys_cache.insert(key);
+    } else {
+        for (const MatchQuery &inner_match: items) {
+            const unordered_set<string> &iner_keys = inner_match.getAllKeys();
+            all_keys_cache.insert(iner_keys.begin(), iner_keys.end());
+        }
     }
-
-    for (const MatchQuery &inner_match: items) {
-        set<string> iner_keys = inner_match.getAllKeys();
-        keys.insert(iner_keys.begin(), iner_keys.end());
-    }
-
-    return keys;
+    all_keys_cached = true;
+    return all_keys_cache;
 }
 
 bool

@@ -20,7 +20,6 @@ enum class RateLimitAction
     ACCORDING_TO_PRACTICE,
     DETECT,
     PREVENT,
-
     UNKNOWN
 };
 

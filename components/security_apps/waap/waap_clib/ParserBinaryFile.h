@@ -25,6 +25,7 @@
 class ParserBinaryFile : public ParserBase {
 public:
     static Waap::Util::BinaryFileType detectBinaryFileHeader(const std::string &buf);
+    static Waap::Util::BinaryFileType detectBinaryBase64Prefix(const std::string &s, size_t pos);
 
     ParserBinaryFile(
         IParserStreamReceiver &receiver,

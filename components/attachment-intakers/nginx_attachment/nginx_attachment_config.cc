@@ -49,6 +49,8 @@ HttpAttachmentConfig::init()
     setRetriesForVerdict();
     setPairedAffinityEnabled();
     setAsyncMode();
+    setWebSocketStreamEnabled();
+    setIsMaxChunksToProcessEnabled();
 }
 
 bool
@@ -216,6 +218,13 @@ HttpAttachmentConfig::setFailOpenTimeout()
         "NGINX wait thread timeout msec"
     ));
 
+    conf_data.setNumericalValue("async_body_stage_timeout_msec", getAttachmentConf<uint>(
+        5000,
+        "agent.asyncMode.bodyStageTimeout",
+        "HTTP manager",
+        "NGINX async body stage timeout msec"
+    ));
+
     conf_data.setNumericalValue("remove_server_header", getAttachmentConf<uint>(
         0,
         "agent.removeServerHeader.nginxModule",
@@ -242,6 +251,13 @@ HttpAttachmentConfig::setFailOpenTimeout()
         "agent.isBrotliInspectionEnabled.nginxModule",
         "HTTP manager",
         "Brotli inspection enabled"
+    ));
+
+    conf_data.setNumericalValue("is_max_chunks_to_process_enabled", getAttachmentConf<uint>(
+        1,
+        "agent.isMaxChunksToProcessEnabled.nginxModule",
+        "HTTP manager",
+        "Max chunks to process enabled"
     ));
 
     uint inspection_mode = getAttachmentConf<uint>(
@@ -568,21 +584,38 @@ HttpAttachmentConfig::setAsyncMode() {
 
     if (is_async_mode_enabled) {
         uint num_of_nginx_ipc_elements = calculateAsyncIpcElements(NUM_OF_NGINX_IPC_ELEMENTS_ASYNC);
-        dbgInfo(D_NGINX_ATTACHMENT) << "Number of Async NGINX IPC elements: " << num_of_nginx_ipc_elements;
-        
-        if (num_of_nginx_ipc_elements > NUM_OF_NGINX_IPC_ELEMENTS_ASYNC) {
-            dbgWarning(D_NGINX_ATTACHMENT)
-                << "Number of Async NGINX IPC elements "
-                << num_of_nginx_ipc_elements
-                << " exceeds the maximum allowed "
-                << NUM_OF_NGINX_IPC_ELEMENTS_ASYNC
-                << ". Setting to maximum.";
-            num_of_nginx_ipc_elements = NUM_OF_NGINX_IPC_ELEMENTS_ASYNC;
-        }
 
-        dbgTrace(D_NGINX_ATTACHMENT)
-            << "Number of Async NGINX IPC elements: "
-            << num_of_nginx_ipc_elements;
+        dbgInfo(D_NGINX_ATTACHMENT) << "Number of Async NGINX IPC elements: " << num_of_nginx_ipc_elements;
         conf_data.setNumericalValue("num_of_nginx_ipc_elements", num_of_nginx_ipc_elements);
     }
+}
+
+void
+HttpAttachmentConfig::setWebSocketStreamEnabled() {
+    bool is_websocket_stream_enabled = getAttachmentConf<bool>(
+        false,
+        "agent.webSocketStream.nginxModule",
+        "HTTP manager",
+        "WebSocket Stream state"
+    );
+
+    dbgTrace(D_NGINX_ATTACHMENT)
+        << "Attachment WebSocket stream is: "
+        << (is_websocket_stream_enabled ? "Enabled" : "Disabled");
+    conf_data.setNumericalValue("is_websocket_stream_enabled", is_websocket_stream_enabled);
+}
+
+void
+HttpAttachmentConfig::setIsMaxChunksToProcessEnabled() {
+    bool is_max_chunks_to_process_enabled = getAttachmentConf<bool>(
+        true,
+        "agent.isMaxChunksToProcessEnabled.nginxModule",
+        "HTTP manager",
+        "Max chunks to process enabled"
+    );
+
+    dbgTrace(D_NGINX_ATTACHMENT)
+        << "Max chunks to process is: "
+        << (is_max_chunks_to_process_enabled ? "Enabled" : "Disabled");
+    conf_data.setNumericalValue("is_max_chunks_to_process_enabled", is_max_chunks_to_process_enabled);
 }

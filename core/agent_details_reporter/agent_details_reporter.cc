@@ -135,6 +135,7 @@ private:
     bool is_attr_deleted = false;
 
     I_Messaging *messaging = nullptr;
+    Config::I_Config *i_config = nullptr;
     bool is_server;
 };
 
@@ -256,8 +257,11 @@ AgentDetailsReporter::Impl::sendAttributes()
         return true;
     }
 
+    string localhost_ip = i_config->getLocalhostIP();
+    dbgDebug(D_AGENT_DETAILS) << "AgentDetailsReporter using localhost IP: " << localhost_ip;
+
     for (uint retry = 3; retry > 0; retry--) {
-        MessageMetadata add_agent_details_req_md("127.0.0.1", 7777);
+        MessageMetadata add_agent_details_req_md(localhost_ip, 7777);
         add_agent_details_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
         add_agent_details_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
         auto add_agent_details_status = messaging->sendSyncMessage(
@@ -268,7 +272,7 @@ AgentDetailsReporter::Impl::sendAttributes()
             add_agent_details_req_md
         );
         if (!add_agent_details_status.ok()) {
-            MessageMetadata secondary_port_req_md("127.0.0.1", 7778);
+            MessageMetadata secondary_port_req_md(localhost_ip, 7778);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::ONE_TIME_CONN);
             secondary_port_req_md.setConnectioFlag(MessageConnectionConfig::UNSECURE_CONN);
             add_agent_details_status = messaging->sendSyncMessage(
@@ -380,6 +384,7 @@ void
 AgentDetailsReporter::Impl::init()
 {
     messaging = Singleton::Consume<I_Messaging>::by<AgentDetailsReporter>();
+    i_config = Singleton::Consume<Config::I_Config>::by<AgentDetailsReporter>();
     auto is_orchestrator = Singleton::Consume<I_Environment>::by<AgentDetailsReporter>()->get<bool>("Is Orchestrator");
     is_server = is_orchestrator.ok() && *is_orchestrator;
 

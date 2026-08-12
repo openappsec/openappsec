@@ -78,9 +78,12 @@ void reportConfigurationError(const std::string &err);
 
 std::ostream & operator<<(std::ostream &os, const Config::Errors &err);
 
-void registerConfigPrepareCb(Config::ConfigCb);
-void registerConfigLoadCb(Config::ConfigCb);
-void registerConfigAbortCb(Config::ConfigCb);
+Config::ConfigCbHandle registerConfigPrepareCb(Config::ConfigCb);
+Config::ConfigCbHandle registerConfigLoadCb(Config::ConfigCb);
+Config::ConfigCbHandle registerConfigAbortCb(Config::ConfigCb);
+void unregisterConfigPrepareCb(Config::ConfigCbHandle);
+void unregisterConfigLoadCb(Config::ConfigCbHandle);
+void unregisterConfigAbortCb(Config::ConfigCbHandle);
 
 bool reloadConfiguration(const std::string &version = "");
 

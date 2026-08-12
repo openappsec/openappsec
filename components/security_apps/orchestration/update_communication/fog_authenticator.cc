@@ -259,6 +259,10 @@ FogAuthenticator::registerAgent(
         request << make_pair("isGwNotVsx", "true");
     }
 
+    if (details_resolver->isMgmtNotMds()) {
+        request << make_pair("isMgmtNotMds", "true");
+    }
+
     if (details_resolver->isVersionAboveR8110()) {
         request << make_pair("isVersionAboveR8110", "true");
     }
@@ -270,9 +274,16 @@ FogAuthenticator::registerAgent(
     if (details_resolver->compareCheckpointVersion(8200, std::greater_equal<int>())) {
         request << make_pair("isCheckpointVersionGER82", "true");
     }
+    if (details_resolver->compareCheckpointVersion(8210, std::greater_equal<int>())) {
+        request << make_pair("isCheckpointVersionGER8210", "true");
+    }
     auto maybe_vs_id = Singleton::Consume<I_Environment>::by<FogAuthenticator>()->get<string>("VS ID");
     if (maybe_vs_id.ok()) {
         request << make_pair("virtualSystemId", maybe_vs_id.unpack());
+    }
+    auto maybe_domain_name = Singleton::Consume<I_Environment>::by<FogAuthenticator>()->get<string>("Domain Name");
+    if (maybe_domain_name.ok()) {
+        request << make_pair("domainName", maybe_domain_name.unpack());
     }
 #endif // gaia || smb
 
@@ -522,6 +533,11 @@ FogAuthenticator::getCredentials()
     if (maybe_vs_id.ok()) {
         host_name.append(":");
         host_name.append(maybe_vs_id.unpack());
+    }
+    auto maybe_domain_name = Singleton::Consume<I_Environment>::by<FogAuthenticator>()->get<string>("Domain Name");
+    if (maybe_domain_name.ok()) {
+        host_name.append(":");
+        host_name.append(maybe_domain_name.unpack());
     }
 
     Maybe<string> platform = details_resolver->getPlatform();

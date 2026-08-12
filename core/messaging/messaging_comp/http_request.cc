@@ -60,6 +60,10 @@ HTTPRequest::setConnectionHeaders(const Connection &conn)
             method_statement = "CONNECT " + host + " HTTP/1.1";
             break;
         }
+        case HTTPMethod::DELETE: {
+            method_statement = "DELETE " + uri_prefix + uri + " HTTP/1.1";
+            break;
+        }
         default: {
             return false;
         }

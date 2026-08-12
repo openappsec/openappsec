@@ -12,6 +12,7 @@ add_library(waap_clib
     ParserJson.cc
     ParserMultipartForm.cc
     ParserRaw.cc
+    ParserDefaultSpecial.cc
     ParserGzip.cc
     ParserUrlEncode.cc
     ParserXML.cc
@@ -96,6 +97,7 @@ add_library(waap_clib
     WaapHyperscanEngine.cc
     buffered_compressed_stream.cc
     UnifiedIndicatorsContainer.cc
+    WaapDedicatedParsers.cc
 )
 
 add_library(

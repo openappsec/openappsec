@@ -50,7 +50,9 @@ WaapConfigBase::WaapConfigBase()
     m_errorLimitingPolicy(nullptr),
     m_errorLimiting(nullptr),
     m_userLimitsPolicy(nullptr),
-    m_securityHeadersPolicy(nullptr)
+    m_securityHeadersPolicy(nullptr),
+    m_dedicatedParsersPolicy(nullptr),
+    m_hasDedicatedParsers(false)
 {
     m_blockingLevel = BlockingLevel::NO_BLOCKING;
 }
@@ -63,6 +65,7 @@ void WaapConfigBase::load(cereal::JSONInputArchive& ar)
     loadTrustedSourcesPolicy(ar);
     loadWaapParametersPolicy(ar);
     loadUserLimitsPolicy(ar);
+    loadDedicatedParsersPolicy(ar);
     loadRateLimitingPolicy(ar);
     loadErrorLimitingPolicy(ar);
 }
@@ -178,6 +181,33 @@ void WaapConfigBase::loadWaapParametersPolicy(cereal::JSONInputArchive& ar)
         ar.setNextName(nullptr);
         dbgWarning(D_WAAP) << failMessage << e.what();
         m_waapParameters = nullptr;
+    }
+}
+
+void WaapConfigBase::loadDedicatedParsersPolicy(cereal::JSONInputArchive& ar)
+{
+    std::string failMessage = "Failed to load the Dedicated Parsers policy of the current rule: " +
+        m_ruleName + ": ";
+    try {
+        m_dedicatedParsersPolicy = std::make_shared<Waap::DedicatedParsers::DedicatedParsersConfig>();
+        ar(cereal::make_nvp("dedicatedParsers", *m_dedicatedParsersPolicy));
+        m_dedicatedParsersPolicy->initialize();
+        m_hasDedicatedParsers = !m_dedicatedParsersPolicy->empty();
+        dbgTrace(D_WAAP)
+            << "Loaded "
+            << m_dedicatedParsersPolicy->size()
+            << " dedicated parser rules for asset: "
+            << m_assetId;
+    }
+    catch (std::runtime_error & e) {
+        ar.setNextName(nullptr);
+        dbgTrace(D_WAAP)
+            << "No dedicated parsers configured for asset: "
+            << m_assetId
+            << " error: "
+            << e.what();
+        m_dedicatedParsersPolicy = nullptr;
+        m_hasDedicatedParsers = false;
     }
 }
 
@@ -473,6 +503,18 @@ const std::shared_ptr<Waap::SecurityHeaders::Policy>& WaapConfigBase::get_Securi
 const std::shared_ptr<Waap::UserLimits::Policy>& WaapConfigBase::get_UserLimitsPolicy() const
 {
     return m_userLimitsPolicy;
+}
+
+const std::shared_ptr<Waap::DedicatedParsers::DedicatedParsersConfig>&
+WaapConfigBase::get_DedicatedParsersPolicy() const
+{
+    return m_dedicatedParsersPolicy;
+}
+
+bool
+WaapConfigBase::hasDedicatedParsers() const
+{
+    return m_hasDedicatedParsers;
 }
 
 BlockingLevel WaapConfigBase::blockingLevelBySensitivityStr(const std::string& sensitivity) const

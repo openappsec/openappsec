@@ -32,6 +32,7 @@
 #include <utility>
 #include <stdarg.h>
 #include <cstring>
+#include <vector>
 
 #include <boost/range/iterator_range.hpp>
 #include <boost/algorithm/string.hpp>
@@ -39,6 +40,7 @@
 
 #include "nginx_attachment_config.h"
 #include "nginx_attachment_opaque.h"
+#include "attachment_channel.h"
 #include "generic_rulebase/evaluators/trigger_eval.h"
 #include "nginx_parser.h"
 #include "i_instance_awareness.h"
@@ -149,7 +151,8 @@ public:
 #ifdef FAILURE_TEST
     intentional_failure_handler(),
 #endif
-    nginx_plugin_cpu_metric(true)
+    nginx_plugin_cpu_metric(true),
+    channels()
     {}
 
     void
@@ -178,7 +181,7 @@ public:
                 {
                     while (true) {
                         if (!setActiveTenantAndProfile()) {
-                            mainloop->yield(std::chrono::seconds(2));
+                            mainloop->yield(chrono::seconds(2));
                         } else {
                             break;
                         }
@@ -202,13 +205,6 @@ public:
         );
 
         dbgInfo(D_NGINX_ATTACHMENT) << "Async mode configuration: enabled=" << attachment_config.isAsyncModeEnabled();
-
-        ofstream agent_metadata_stream(SHARED_MEM_PATH "agent-metadata", ofstream::out);
-        if (agent_metadata_stream.is_open()) {
-            agent_metadata_stream << "EFFECTIVE_SHM_SEGMENT_SIZE=4096\n";
-        } else {
-            dbgWarning(D_NGINX_ATTACHMENT) << "Failed to write agent metadata file";
-        }
 
         nginx_attachment_metric.init(
             "Nginx Attachment data",
@@ -276,7 +272,7 @@ public:
             );
         }
 
-        const char* ignored_headers_env = getenv("SAAS_IGNORED_UPSTREAM_HEADERS");
+        const char *ignored_headers_env = getenv("SAAS_IGNORED_UPSTREAM_HEADERS");
         if (ignored_headers_env) {
             string ignored_headers_str = ignored_headers_env;
             ignored_headers_str = NGEN::Strings::trim(ignored_headers_str);
@@ -356,26 +352,10 @@ public:
     fini()
     {
         resetCompressionDebugFunctionsToStandardError();
-        remove(SHARED_MEM_PATH "agent-metadata");
-
-        if (server_sock > 0) {
-            i_socket->closeSocket(server_sock);
-            server_sock = -1;
-        }
 
         if (attachment_routine_id > 0 && mainloop->doesRoutineExist(attachment_routine_id)) {
             mainloop->stop(attachment_routine_id);
             attachment_routine_id = 0;
-        }
-
-        if (attachment_sock > 0) {
-            i_socket->closeSocket(attachment_sock);
-            attachment_sock = -1;
-        }
-
-        if (secondary_server_sock > 0) {
-            i_socket->closeSocket(secondary_server_sock);
-            secondary_server_sock = -1;
         }
 
         if (secondary_attachment_routine_id > 0 && mainloop->doesRoutineExist(secondary_attachment_routine_id)) {
@@ -383,20 +363,13 @@ public:
             secondary_attachment_routine_id = 0;
         }
 
-        if (secondary_attachment_sock > 0) {
-            i_socket->closeSocket(secondary_attachment_sock);
-            secondary_attachment_sock = -1;
+        if (websocket_attachment_routine_id > 0 && mainloop->doesRoutineExist(websocket_attachment_routine_id)) {
+            mainloop->stop(websocket_attachment_routine_id);
+            websocket_attachment_routine_id = 0;
         }
 
-        if (primary_attachment_ipc != nullptr) {
-            destroyIpc(primary_attachment_ipc, 1);
-            primary_attachment_ipc = nullptr;
-        }
-
-        if (secondary_attachment_sync_ipc != nullptr) {
-            destroyIpc(secondary_attachment_sync_ipc, 1);
-            secondary_attachment_sync_ipc = nullptr;
-        }
+        channels.closeAllSockets(i_socket);
+        channels.cleanupAllIpc();
     }
 
     bool
@@ -476,7 +449,7 @@ public:
             << to_string(num_compressed_responses);
 
         metrics_average_table_size =
-            (i_transaction_table->count() + metrics_average_table_size * metrics_sample_count) /
+            (i_transaction_table->count() + metrics_average_table_size *metrics_sample_count) /
             (metrics_sample_count + 1);
 
         metrics_sample_count++;
@@ -497,7 +470,7 @@ private:
     bool
     registerAttachmentProcess(uint32_t nginx_user_id, uint32_t nginx_group_id, I_Socket::socketFd new_socket)
     {
-        dbgAssert(server_sock > 0)
+        dbgAssert(channels.getChannel(PRIMARY_CHANNEL).isInitialized())
         << alert
         << "Registration attempt occurred while registration socket is uninitialized";
 
@@ -511,25 +484,15 @@ private:
         }
 
         string curr_instance_unique_id = inst_awareness->getUniqueID().unpack();
-        if (primary_attachment_ipc != nullptr) {
+        if (channels.getChannel(PRIMARY_CHANNEL).ipc != nullptr) {
             if (nginx_worker_user_id != nginx_user_id || nginx_worker_group_id != nginx_group_id) {
-                destroyIpc(primary_attachment_ipc, 1);
-                primary_attachment_ipc = nullptr;
-                if (secondary_attachment_sync_ipc != nullptr) {
-                    destroyIpc(secondary_attachment_sync_ipc, 1);
-                    secondary_attachment_sync_ipc = nullptr;
-                }
-            } else if (isCorruptedShmem(primary_attachment_ipc, 1)) {
+                channels.cleanupAllIpc();
+            } else if (channels.getChannel(PRIMARY_CHANNEL).hasCorruptedShmem()) {
                 dbgWarning(D_NGINX_ATTACHMENT)
                     << "Destroying shmem IPC for Attachment with corrupted shared memory. Attachment id: "
                     << curr_instance_unique_id;
 
-                destroyIpc(primary_attachment_ipc, 1);
-                primary_attachment_ipc = nullptr;
-                if (secondary_attachment_sync_ipc != nullptr) {
-                    destroyIpc(secondary_attachment_sync_ipc, 1);
-                    secondary_attachment_sync_ipc = nullptr;
-                }
+                channels.cleanupAllIpc();
             } else {
                 dbgInfo(D_NGINX_ATTACHMENT) << "Re-registering attachment with id: " << curr_instance_unique_id;
                 uint max_registrations = getProfileAgentSettingWithDefault<uint>(
@@ -546,12 +509,7 @@ private:
                 );
                 if (curr_times_diff < chrono::milliseconds(duration_of_registrations)) {
                     if (++curr_attachment_registrations_counter > max_registrations) {
-                        destroyIpc(primary_attachment_ipc, 1);
-                        primary_attachment_ipc = nullptr;
-                        if (secondary_attachment_sync_ipc != nullptr) {
-                            destroyIpc(secondary_attachment_sync_ipc, 1);
-                            secondary_attachment_sync_ipc = nullptr;
-                        }
+                        channels.cleanupAllIpc();
 
                         dbgWarning(D_NGINX_ATTACHMENT)
                             << "Attachment with id: "
@@ -568,43 +526,33 @@ private:
             }
         }
 
-        if (primary_attachment_ipc == nullptr) {
-            primary_attachment_ipc = initIpc(
-                curr_instance_unique_id.c_str(),
-                nginx_user_id,
-                nginx_group_id,
-                1,
-                num_of_nginx_ipc_elements,
-                IpcDebug
-            );
+        vector<IPCInitConfig> channel_configs = getNginxIPCInitConfigs(
+            static_cast<uint16_t>(num_of_nginx_ipc_elements)
+        );
 
-            if (SHOULD_FAIL(
-                primary_attachment_ipc != nullptr,
+        auto failure_check = [this](bool success, bool *did_fail) -> bool {
+#ifdef FAILURE_TEST
+            return SHOULD_FAIL(
+                success,
                 IntentionalFailureHandler::FailureType::InitializeConnectionChannel,
-                &did_fail_on_purpose
-            )) {
-                dbgWarning(D_NGINX_ATTACHMENT) << "Failed to initialize communication channel with attachment";
-                return false;
-            }
-        }
-
-        // Initialize secondary sync IPC if not already initialized (only needed in async mode)
-        if (attachment_config.isAsyncModeEnabled() && secondary_attachment_sync_ipc == nullptr) {
-            string secondary_unique_id = curr_instance_unique_id + "_sync";
-            secondary_attachment_sync_ipc = initIpc(
-                secondary_unique_id.c_str(),
-                nginx_user_id,
-                nginx_group_id,
-                1,
-                200,
-                IpcDebug
+                did_fail
             );
+#else
+            (void)did_fail;  // Unused in non-FAILURE_TEST builds
+            return !success;
+#endif
+        };
 
-            if (secondary_attachment_sync_ipc == nullptr) {
-                dbgWarning(D_NGINX_ATTACHMENT)
-                    << "Failed to initialize secondary sync communication channel with attachment";
-                return false;
-            }
+        if (!channels.initializeChannelsIPCs(
+            curr_instance_unique_id,
+            nginx_user_id,
+            nginx_group_id,
+            channel_configs,
+            IpcDebug,
+            failure_check
+        )) {
+            dbgWarning(D_NGINX_ATTACHMENT) << "Failed to initialize communication channels with attachment";
+            return false;
         }
 
         dbgDebug(D_NGINX_ATTACHMENT) << "Successfully initialized shmem channel";
@@ -612,27 +560,27 @@ private:
         nginx_worker_group_id = nginx_group_id;
         instance_unique_id = curr_instance_unique_id;
 
-        if (attachment_sock > 0 && attachment_sock != new_socket) {
-            i_socket->closeSocket(attachment_sock);
+        if (channels.getChannel(PRIMARY_CHANNEL).comm_socket > 0
+            && channels.getChannel(PRIMARY_CHANNEL).comm_socket != new_socket) {
+            i_socket->closeSocket(channels.getChannel(PRIMARY_CHANNEL).comm_socket);
         }
-        attachment_sock = new_socket;
+        channels.getChannel(PRIMARY_CHANNEL).comm_socket = new_socket;
 
         uint8_t success = 1;
         vector<char> reg_success(reinterpret_cast<char *>(&success), reinterpret_cast<char *>(&success) + 1);
         DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::WriteDataToSocket);
-        bool res = i_socket->writeData(attachment_sock, reg_success);
+        bool res = i_socket->writeData(channels.getChannel(PRIMARY_CHANNEL).comm_socket, reg_success);
         if (SHOULD_FAIL(
             res, IntentionalFailureHandler::FailureType::WriteDataToSocket, &did_fail_on_purpose
         )) {
             dbgWarning(D_NGINX_ATTACHMENT) << "Failed to ack registration success to attachment";
-            i_socket->closeSocket(attachment_sock);
-            attachment_sock = -1;
+            channels.getChannel(PRIMARY_CHANNEL).closeCommSocket(i_socket);
             return false;
         }
 
         attachment_routine_id = mainloop->addFileRoutine(
             I_MainLoop::RoutineType::RealTime,
-            attachment_sock,
+            channels.getChannel(PRIMARY_CHANNEL).comm_socket,
             [this] () mutable
             {
                 auto on_exit = make_scope_exit(
@@ -645,11 +593,16 @@ private:
                     }
                 );
 
-                while (isSignalPending(attachment_sock)) {
+                while (channels.getChannel(PRIMARY_CHANNEL).isSignalPending(i_socket)) {
                     if (attachment_config.isAsyncModeEnabled()) {
                         if (!handleInspectionAsync()) break;
                     } else {
-                        if (!handleInspection(attachment_sock, primary_attachment_ipc)) break;
+                        if (!handleInspection(
+                            channels.getChannel(PRIMARY_CHANNEL).comm_socket,
+                            channels.getChannel(PRIMARY_CHANNEL).ipc
+                        )) {
+                            break;
+                        }
                     }
                 }
             },
@@ -750,7 +703,7 @@ private:
             }
         }
 
-       return false;
+        return false;
     }
 
     bool
@@ -838,13 +791,13 @@ private:
         auto on_exit = make_scope_exit(
             [this]()
             {
-                if (primary_attachment_ipc == nullptr) return;
+                if (channels.getChannel(PRIMARY_CHANNEL).ipc == nullptr) return;
 
-                handleVerdictResponse(FilterVerdict(RECONF), primary_attachment_ipc, 0, false);
+                handleVerdictResponse(FilterVerdict(RECONF), channels.getChannel(PRIMARY_CHANNEL).ipc, 0, false);
 
                 dbgDebug(D_NGINX_ATTACHMENT)
                     << "Sending verdict RECONF for NGINX attachment with UID: "
-                    << primary_attachment_ipc;
+                    << channels.getChannel(PRIMARY_CHANNEL).ipc;
             }
         );
 
@@ -926,6 +879,10 @@ private:
             return "Metrics";
         case ChunkType::REQUEST_DELAYED_VERDICT:
             return "HOLD_DATA";
+        case ChunkType::WS_FRAME_PAYLOAD:
+            return "WebSocket Frame Payload";
+        case ChunkType::WS_FRAME_END:
+            return "WebSocket Frame End";
         case ChunkType::COUNT:
             dbgAssert(false) << alert << "Invalid 'COUNT' ChunkType";
             return "";
@@ -1139,6 +1096,44 @@ private:
     }
 
     FilterVerdict
+    handleWsFramePayload(const Buffer &data)
+    {
+        if (data.size() < 3) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "WebSocket payload data too small ("
+                << data.size()
+                << " bytes). Returning default verdict.";
+            return default_verdict;
+        }
+        bool is_request = (reinterpret_cast<const uint8_t *>(data.data())[0] == 0);
+        Buffer payload(
+            data.data() + 3,
+            data.size() - 3,
+            Buffer::MemoryType::VOLATILE
+        );
+        HttpBody ws_body(payload, true, 0);
+        return handleModifiableChunk(Maybe<HttpBody>(ws_body), "ws frame payload", is_request);
+    }
+
+    FilterVerdict
+    handleWsFrameEnd(const Buffer &data)
+    {
+        if (data.size() < 2) {
+            dbgWarning(D_NGINX_ATTACHMENT)
+                << "WebSocket message end data too small ("
+                << data.size()
+                << " bytes). Returning default verdict.";
+            return default_verdict;
+        }
+        bool is_request = (reinterpret_cast<const uint8_t *>(data.data())[0] == 0);
+        if (is_request) {
+            i_transaction_table->setExpiration(chrono::hours(1));
+            return FilterVerdict(http_manager->inspectEndRequest());
+        }
+        return FilterVerdict(http_manager->inspectEndTransaction());
+    }
+
+    FilterVerdict
     handleChunkedData(ChunkType chunk_type, const Buffer &data, NginxAttachmentOpaque &opaque)
     {
         ScopedContext event_type;
@@ -1194,6 +1189,10 @@ private:
                 return FilterVerdict(ServiceVerdict::TRAFFIC_VERDICT_IRRELEVANT);
             case ChunkType::REQUEST_DELAYED_VERDICT:
                 return FilterVerdict(http_manager->inspectDelayedVerdict());
+            case ChunkType::WS_FRAME_PAYLOAD:
+                return handleWsFramePayload(data);
+            case ChunkType::WS_FRAME_END:
+                return handleWsFrameEnd(data);
             case ChunkType::COUNT:
                 break;
         }
@@ -1367,7 +1366,7 @@ private:
     string
     process_html_content(const string &body, const string &uuid)
     {
-        const string uuid_placeholder = "<!-- CHECK_POINT_USERCHECK_UUID_PLACEHOLDER-->";
+        const string uuid_placeholder = "CHECK_POINT_INCIDENT_ID";
         size_t placeholder_pos = body.find(uuid_placeholder);
 
         if (placeholder_pos == string::npos) {
@@ -1377,9 +1376,8 @@ private:
 
         dbgTrace(D_NGINX_ATTACHMENT) << "Found UUID placeholder at position: " << placeholder_pos;
 
-        string incident_id_text = "Incident Id: " + uuid;
         string processed_body = body;
-        processed_body.replace(placeholder_pos, uuid_placeholder.length(), incident_id_text);
+        processed_body.replace(placeholder_pos, uuid_placeholder.length(), uuid);
 
         dbgTrace(D_NGINX_ATTACHMENT)
             << "UUID replacement: original_len=" << body.length()
@@ -1397,13 +1395,13 @@ private:
         const CustomResponse &custom_response_data)
     {
         string response_body = custom_response_data.getBody();
-        const auto& headers_map = custom_response_data.getHeaders();
+        const auto &headers_map = custom_response_data.getHeaders();
         
         size_t total_headers_size = 0;
         vector<string> header_keys;
         vector<string> header_values;
         
-        for (const auto& header_pair : headers_map) {
+        for (const auto &header_pair : headers_map) {
             header_keys.push_back(header_pair.first);
             header_values.push_back(header_pair.second);
             total_headers_size += sizeof(HttpHeaderPackedData) + header_pair.first.size() + header_pair.second.size();
@@ -1416,9 +1414,9 @@ private:
 
         static vector<char> custom_response_buffer;
         custom_response_buffer.resize(custom_response_size);
-        char* buffer_ptr = custom_response_buffer.data();
+        char *buffer_ptr = custom_response_buffer.data();
         
-        HttpCustomResponseData* custom_response_header =
+        HttpCustomResponseData *custom_response_header =
             reinterpret_cast<HttpCustomResponseData*>(buffer_ptr);
         custom_response_header->response_code = custom_response_data.getStatusCode();
         
@@ -1445,7 +1443,7 @@ private:
         buffer_ptr += sizeof(HttpCustomResponseData);
         
         for (size_t i = 0; i < header_keys.size(); ++i) {
-            HttpHeaderPackedData* header_data = reinterpret_cast<HttpHeaderPackedData*>(buffer_ptr);
+            HttpHeaderPackedData *header_data = reinterpret_cast<HttpHeaderPackedData*>(buffer_ptr);
             header_data->key_size = header_keys[i].size();
             header_data->value_size = header_values[i].size();
             
@@ -1605,8 +1603,7 @@ private:
                 << "Failed to receive data from corrupted IPC Resetting the IPC"
                 << dumpIpcWrapper(attachment_ipc);
 
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            channels.resetAllIpc(num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return genError("Failed to receive data from corrupted IPC");
         }
@@ -1635,8 +1632,7 @@ private:
                 << (did_fail_on_purpose ? "[Intentional Failure]" : "");
 
             popData(attachment_ipc);
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            channels.resetAllIpc(num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return genError("Data received is smaller than expected");
         }
@@ -1671,8 +1667,7 @@ private:
                 << " to ChunkType enum. Resetting IPC"
                 << dumpIpcWrapper(attachment_ipc);
             popData(attachment_ipc);
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            channels.resetAllIpc(num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return make_pair(corrupted_session_id, true);
         }
@@ -1931,42 +1926,37 @@ private:
         already_failed_on_id = false;
         shared_verdict_signal_path += ("-" + id.unpack());
 
-        Maybe<I_Socket::socketFd> sock = i_socket->genSocket(
-            I_Socket::SocketType::UNIX,
-            true,
-            true,
-            shared_verdict_signal_path
-        );
-        if (SHOULD_FAIL(
-            sock.ok(), IntentionalFailureHandler::FailureType::CreateSocket, &did_fail_on_purpose
-        )) {
+        vector<SocketInitConfig> socket_configs = getNginxSocketInitConfigs();
+
+        auto failure_check_func = [this](bool is_ok, bool *did_fail) -> bool {
+            (void)did_fail;
+            return SHOULD_FAIL(is_ok, IntentionalFailureHandler::FailureType::CreateSocket, did_fail);
+        };
+
+        auto error_callback = [this](size_t channel_index, const string &error_msg, bool did_fail_on_purpose) {
+            const char *channel_name = (channel_index == AttachmentChannelIndices::PRIMARY_CHANNEL)
+                ? "server"
+                : (channel_index == AttachmentChannelIndices::SECONDARY_CHANNEL)
+                    ? "secondary server"
+                    : "websocket server";
             dbgWarning(D_NGINX_ATTACHMENT)
-                << "Failed to open a server socket. Error: "
-                << (did_fail_on_purpose ? "Intentional Failure" : sock.getErr());
+                << "Failed to open a " << channel_name << " socket. Error: "
+                << (did_fail_on_purpose ? "Intentional Failure" : error_msg);
+        };
+
+        auto socket_init_result = channels.initializeChannelsSockets(
+                i_socket,
+                shared_verdict_signal_path,
+                socket_configs,
+                failure_check_func,
+                error_callback
+            );
+        if (!socket_init_result.ok()) {
             return false;
         }
 
-        dbgAssert(sock.unpack() > 0) << alert << "The generated server socket is OK, yet negative";
-        server_sock = sock.unpack();
-        if (attachment_config.isAsyncModeEnabled()) {
-            Maybe<I_Socket::socketFd> secondary_sock = i_socket->genSocket(
-                I_Socket::SocketType::UNIX,
-                true,
-                true,
-                shared_verdict_signal_path + "_secondary"
-            );
-            if (SHOULD_FAIL(
-                secondary_sock.ok(), IntentionalFailureHandler::FailureType::CreateSocket, &did_fail_on_purpose
-            )) {
-                dbgWarning(D_NGINX_ATTACHMENT)
-                    << "Failed to open a secondary server socket. Error: "
-                    << (did_fail_on_purpose ? "Intentional Failure" : secondary_sock.getErr());
-                return false;
-            }
-
-            dbgAssert(secondary_sock.unpack() > 0) << alert << "The generated secondary server socket is OK, yet negative";
-            secondary_server_sock = secondary_sock.unpack();
-        }
+        // Verify sockets are valid
+        channels.validateAllChannelsListenSockets(alert);
 
         I_MainLoop::Routine accept_attachment_routine =
             [this] ()
@@ -1977,7 +1967,10 @@ private:
 
                 bool did_fail_on_purpose = false;
                 DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::AcceptSocket);
-                Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(server_sock, true);
+                Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(
+                    channels.getChannel(PRIMARY_CHANNEL).listen_socket,
+                    true
+                );
                 if (SHOULD_FAIL(
                     new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
                 )) {
@@ -2084,73 +2077,153 @@ private:
             };
         mainloop->addFileRoutine(
             I_MainLoop::RoutineType::System,
-            server_sock,
+            channels.getChannel(PRIMARY_CHANNEL).listen_socket,
             accept_attachment_routine,
             "Nginx Attachment registration listener",
             true
         );
 
-        if (attachment_config.isAsyncModeEnabled()) {
-            I_MainLoop::Routine secondary_accept_attachment_routine =
-                [this] ()
+        I_MainLoop::Routine secondary_accept_attachment_routine =
+            [this] ()
+            {
+                bool did_fail_on_purpose = false;
+                Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(
+                    channels.getChannel(SECONDARY_CHANNEL).listen_socket,
+                    true
+                );
+                if (SHOULD_FAIL(
+                    new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
+                )) {
+                    dbgWarning(D_NGINX_ATTACHMENT) << "Failed to accept a new socket. Error: "
+                    << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
+                    return;
+                }
+                dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
+                I_Socket::socketFd secondary_attachment_sock_tmp = new_sock.unpack();
+                if (channels.getChannel(SECONDARY_CHANNEL).comm_socket > 0
+                    && channels.getChannel(SECONDARY_CHANNEL).comm_socket != secondary_attachment_sock_tmp)
                 {
-                    bool did_fail_on_purpose = false;
-                    Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(secondary_server_sock, true);
-                    if (SHOULD_FAIL(
-                        new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
-                    )) {
-                        dbgWarning(D_NGINX_ATTACHMENT) << "Failed to accept a new socket. Error: "
-                        << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
-                        return;
-                    }
-                    dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
-                    I_Socket::socketFd secondary_attachment_sock_tmp = new_sock.unpack();
-                    if (secondary_attachment_sock > 0 && secondary_attachment_sock != secondary_attachment_sock_tmp) {
-                        i_socket->closeSocket(secondary_attachment_sock);
-                    }
-                    secondary_attachment_sock = secondary_attachment_sock_tmp;
+                    i_socket->closeSocket(channels.getChannel(SECONDARY_CHANNEL).comm_socket);
+                }
+                channels.getChannel(SECONDARY_CHANNEL).comm_socket = secondary_attachment_sock_tmp;
 
-                    if (
-                        secondary_attachment_routine_id > 0
-                        && mainloop->doesRoutineExist(secondary_attachment_routine_id)
-                    ) {
-                        mainloop->stop(secondary_attachment_routine_id);
-                        secondary_attachment_routine_id = 0;
-                    }
+                if (
+                    secondary_attachment_routine_id > 0
+                    && mainloop->doesRoutineExist(secondary_attachment_routine_id)
+                ) {
+                    mainloop->stop(secondary_attachment_routine_id);
+                    secondary_attachment_routine_id = 0;
+                }
 
-                    secondary_attachment_routine_id = mainloop->addFileRoutine(
-                        I_MainLoop::RoutineType::RealTime,
-                        secondary_attachment_sock,
-                        [this] () mutable
-                        {
-                            auto on_exit = make_scope_exit(
-                                [this]()
-                                {
-                                    nginx_attachment_event.notify();
-                                    nginx_attachment_event.resetAllCounters();
-                                    nginx_intaker_event.notify();
-                                    nginx_intaker_event.resetAllCounters();
-                                }
-                            );
-
-                            while (isSignalPending(secondary_attachment_sock)) {
-                                dbgTrace(D_NGINX_ATTACHMENT) << "Processing secondary attachment socket";
-                                if (!handleInspection(secondary_attachment_sock, secondary_attachment_sync_ipc)) break;
+                secondary_attachment_routine_id = mainloop->addFileRoutine(
+                    I_MainLoop::RoutineType::RealTime,
+                    channels.getChannel(SECONDARY_CHANNEL).comm_socket,
+                    [this] () mutable
+                    {
+                        auto on_exit = make_scope_exit(
+                            [this]()
+                            {
+                                nginx_attachment_event.notify();
+                                nginx_attachment_event.resetAllCounters();
+                                nginx_intaker_event.notify();
+                                nginx_intaker_event.resetAllCounters();
                             }
-                        },
-                        "Secondary Nginx Attachment inspection handler",
-                        true
-                    );
-                };
+                        );
 
-            mainloop->addFileRoutine(
-                I_MainLoop::RoutineType::System,
-                secondary_server_sock,
-                secondary_accept_attachment_routine,
-                "Nginx Secondary Attachment registration listener",
-                true
-            );
-        }
+                        while (channels.getChannel(SECONDARY_CHANNEL).isSignalPending(i_socket)) {
+                            dbgTrace(D_NGINX_ATTACHMENT) << "Processing secondary attachment socket";
+                            if (!handleInspection(
+                                channels.getChannel(SECONDARY_CHANNEL).comm_socket,
+                                channels.getChannel(SECONDARY_CHANNEL).ipc
+                            )) {
+                                break;
+                            }
+                        }
+                    },
+                    "Secondary Nginx Attachment inspection handler",
+                    true
+                );
+            };
+
+        mainloop->addFileRoutine(
+            I_MainLoop::RoutineType::System,
+            channels.getChannel(SECONDARY_CHANNEL).listen_socket,
+            secondary_accept_attachment_routine,
+            "Nginx Secondary Attachment registration listener",
+            true
+        );
+
+        I_MainLoop::Routine websocket_accept_attachment_routine =
+            [this] ()
+            {
+                bool did_fail_on_purpose = false;
+                Maybe<I_Socket::socketFd> new_sock = i_socket->acceptSocket(
+                    channels.getChannel(WEBSOCKET_CHANNEL).listen_socket,
+                    true
+                );
+                if (SHOULD_FAIL(
+                    new_sock.ok(), IntentionalFailureHandler::FailureType::AcceptSocket, &did_fail_on_purpose
+                )) {
+                    dbgWarning(D_NGINX_ATTACHMENT) << "Failed to accept a new socket. Error: "
+                    << (did_fail_on_purpose ? "Intentional Failure" : new_sock.getErr());
+                    return;
+                }
+                dbgAssert(new_sock.unpack() > 0) << alert << "The generated client socket is OK, yet negative";
+                I_Socket::socketFd websocket_attachment_sock_tmp = new_sock.unpack();
+                if (channels.getChannel(WEBSOCKET_CHANNEL).comm_socket > 0
+                    && channels.getChannel(WEBSOCKET_CHANNEL).comm_socket != websocket_attachment_sock_tmp)
+                {
+                    i_socket->closeSocket(channels.getChannel(WEBSOCKET_CHANNEL).comm_socket);
+                }
+                channels.getChannel(WEBSOCKET_CHANNEL).comm_socket = websocket_attachment_sock_tmp;
+
+                if (
+                    websocket_attachment_routine_id > 0
+                    && mainloop->doesRoutineExist(websocket_attachment_routine_id)
+                ) {
+                    mainloop->stop(websocket_attachment_routine_id);
+                    websocket_attachment_routine_id = 0;
+                }
+
+                websocket_attachment_routine_id = mainloop->addFileRoutine(
+                    I_MainLoop::RoutineType::RealTime,
+                    channels.getChannel(WEBSOCKET_CHANNEL).comm_socket,
+                    // LCOV_EXCL_START
+                    [this] () mutable
+                    {
+                        auto on_exit = make_scope_exit(
+                            [this]()
+                            {
+                                nginx_attachment_event.notify();
+                                nginx_attachment_event.resetAllCounters();
+                                nginx_intaker_event.notify();
+                                nginx_intaker_event.resetAllCounters();
+                            }
+                        );
+
+                        while (channels.getChannel(WEBSOCKET_CHANNEL).isSignalPending(i_socket)) {
+                            dbgTrace(D_NGINX_ATTACHMENT) << "Processing websocket attachment socket";
+                            if (!handleInspection(
+                                channels.getChannel(WEBSOCKET_CHANNEL).comm_socket,
+                                channels.getChannel(WEBSOCKET_CHANNEL).ipc
+                            )) {
+                                break;
+                            }
+                        }
+                    },
+                    // LCOV_EXCL_STOP
+                    "Websocket Nginx Attachment inspection handler",
+                    true
+                );
+            };
+
+        mainloop->addFileRoutine(
+            I_MainLoop::RoutineType::System,
+            channels.getChannel(WEBSOCKET_CHANNEL).listen_socket,
+            websocket_accept_attachment_routine,
+            "Nginx Websocket Attachment registration listener",
+            true
+        );
 
         return true;
     }
@@ -2158,7 +2231,7 @@ private:
     Maybe<string>
     getUidFromSocket(I_Socket::socketFd new_attachment_socket)
     {
-        dbgAssert(server_sock > 0)
+        dbgAssert(channels.getChannel(PRIMARY_CHANNEL).isInitialized())
             << alert
             << "Registration attempt occurred while registration socket is uninitialized";
 
@@ -2222,7 +2295,7 @@ private:
             }
 
             uid_integer = stoul(worker_id_str);
-        } catch (const std::exception &e) {
+        } catch (const exception &e) {
             return genError(string("Failed to convert UID to integer: ") + e.what());
         }
 
@@ -2290,20 +2363,20 @@ private:
     CPUMetric nginx_plugin_cpu_metric;
 
     // Attachment Details
-    I_Socket::socketFd server_sock = -1;
-    I_Socket::socketFd secondary_server_sock = -1;
-    I_Socket::socketFd attachment_sock = -1;
-    I_Socket::socketFd secondary_attachment_sock = -1;
+    static constexpr size_t PRIMARY_CHANNEL = AttachmentChannelIndices::PRIMARY_CHANNEL;
+    static constexpr size_t SECONDARY_CHANNEL = AttachmentChannelIndices::SECONDARY_CHANNEL;
+    static constexpr size_t WEBSOCKET_CHANNEL = AttachmentChannelIndices::WEBSOCKET_CHANNEL;
+
+    AttachmentChannelManager channels;
 
     uint num_of_nginx_ipc_elements = NUM_OF_NGINX_IPC_ELEMENTS;
     uint32_t nginx_worker_user_id = 0;
     uint32_t nginx_worker_group_id = 0;
     string instance_unique_id;
-    SharedMemoryIPC *primary_attachment_ipc = nullptr;
-    SharedMemoryIPC *secondary_attachment_sync_ipc = nullptr;
     HttpAttachmentConfig attachment_config;
     I_MainLoop::RoutineID attachment_routine_id = 0;
     I_MainLoop::RoutineID secondary_attachment_routine_id = 0;
+    I_MainLoop::RoutineID websocket_attachment_routine_id = 0;
     bool traffic_indicator = false;
     unordered_set<string> ignored_headers;
 
@@ -2346,8 +2419,8 @@ private:
         Maybe<vector<char>> comm_trigger = genError("comm trigger uninitialized");
 
         static map<I_Socket::socketFd, bool> comm_status;
-        if (comm_status.find(attachment_sock) == comm_status.end()) {
-            comm_status[attachment_sock] = true;
+        if (comm_status.find(channels.getChannel(PRIMARY_CHANNEL).comm_socket) == comm_status.end()) {
+            comm_status[channels.getChannel(PRIMARY_CHANNEL).comm_socket] = true;
         }
 
         DELAY_IF_NEEDED(IntentionalFailureHandler::FailureType::ReceiveDataFromSocket);
@@ -2355,7 +2428,10 @@ private:
         // Read session ID from socket (used as doorbell only)
         uint32_t signaled_session_id = 0;
         for (int retry = 0; retry < 3; retry++) {
-            comm_trigger = i_socket->receiveData(attachment_sock, sizeof(signaled_session_id));
+            comm_trigger = i_socket->receiveData(
+                channels.getChannel(PRIMARY_CHANNEL).comm_socket,
+                sizeof(signaled_session_id)
+            );
             if (comm_trigger.ok()) break;
         }
 
@@ -2365,24 +2441,24 @@ private:
             IntentionalFailureHandler::FailureType::ReceiveDataFromSocket,
             &did_fail_on_purpose
         )) {
-            if (comm_status[attachment_sock] == true) {
+            if (comm_status[channels.getChannel(PRIMARY_CHANNEL).comm_socket] == true) {
                 dbgDebug(D_NGINX_ATTACHMENT)
                     << "Failed to get signal from attachment socket (async mode)"
-                    << ", Socket: " << attachment_sock
+                    << ", Socket: " << channels.getChannel(PRIMARY_CHANNEL).comm_socket
                     << ", Error: " << (did_fail_on_purpose ? "Intentional Failure" : comm_trigger.getErr());
-                comm_status[attachment_sock] = false;
+                comm_status[channels.getChannel(PRIMARY_CHANNEL).comm_socket] = false;
             }
             return false;
         }
         
         signaled_session_id = *reinterpret_cast<const uint32_t *>(comm_trigger.unpack().data());
-        comm_status.erase(attachment_sock);
+        comm_status.erase(channels.getChannel(PRIMARY_CHANNEL).comm_socket);
         traffic_indicator = true;
 
-        while (isDataAvailable(primary_attachment_ipc)) {
+        while (channels.getChannel(PRIMARY_CHANNEL).hasDataAvailable()) {
             traffic_indicator = true;
             
-            uint32_t handled_session_id = handleRequestFromQueueAsync(primary_attachment_ipc);
+            uint32_t handled_session_id = handleRequestFromQueueAsync(channels.getChannel(PRIMARY_CHANNEL).ipc);
             
             if (handled_session_id == 0 || handled_session_id == corrupted_session_id) {
                 continue;
@@ -2404,7 +2480,7 @@ private:
                 &did_fail_on_purpose
             )) {
                 for (int retry = 0; retry < 3; retry++) {
-                    if (i_socket->writeDataAsync(attachment_sock, session_id_data)) {
+                    if (i_socket->writeDataAsync(channels.getChannel(PRIMARY_CHANNEL).comm_socket, session_id_data)) {
                         dbgTrace(D_NGINX_ATTACHMENT)
                             << "Successfully sent signal to attachment (async mode).";
                         res = true;
@@ -2421,8 +2497,7 @@ private:
                     << (did_fail_on_purpose ? "[Intentional Failure]" : "");
                 if (!did_fail_on_purpose) {
                     dbgWarning(D_NGINX_ATTACHMENT) << "Resetting IPC and socket";
-                    resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-                    resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+                    channels.resetAllIpc(num_of_nginx_ipc_elements);
                 }
                 return false;
             }
@@ -2466,8 +2541,7 @@ private:
                 << " to ChunkType enum. Resetting IPC"
                 << dumpIpcWrapper(ipc);
             popData(ipc);
-            resetIpc(primary_attachment_ipc, num_of_nginx_ipc_elements);
-            resetIpc(secondary_attachment_sync_ipc, num_of_nginx_ipc_elements);
+            channels.resetAllIpc(num_of_nginx_ipc_elements);
             nginx_attachment_event.addNetworkingCounter(nginxAttachmentEvent::networkVerdict::CONNECTION_FAIL);
             return corrupted_session_id;
         }

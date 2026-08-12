@@ -33,17 +33,20 @@ TuningDecision::TuningDecision(const string& remotePath)
     {
         return;
     }
-    Singleton::Consume<I_MainLoop>::by<WaapComponent>()->addRecurringRoutine(
+    m_routineId = Singleton::Consume<I_MainLoop>::by<WaapComponent>()->addRecurringRoutine(
         I_MainLoop::RoutineType::System,
         chrono::minutes(30),
-        [&]() { updateDecisions(); },
+        [this]() { updateDecisions(); },
         "Get tuning updates"
     );
 }
 
 TuningDecision::~TuningDecision()
 {
-
+    if (m_routineId != 0 && Singleton::exists<I_MainLoop>()) {
+        Singleton::Consume<I_MainLoop>::by<WaapComponent>()->stop(m_routineId);
+        m_routineId = 0;
+    }
 }
 
 struct TuningEvent

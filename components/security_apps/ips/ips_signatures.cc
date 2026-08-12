@@ -772,6 +772,13 @@ IPSSignatures::load(cereal::JSONInputArchive &ar)
         source_id = "";
     }
 
+    try {
+        ar(cereal::make_nvp("webUserResponseId", web_user_response));
+    } catch (const cereal::Exception &e) {
+        ar.setNextName(nullptr);
+        web_user_response = "";
+    }
+
     RuleSelector ruleSelector;
     ruleSelector.load(ar);
     std::vector<IPSSignatureSubTypes::SignatureAndAction> signatures = ruleSelector.selectSignatures();

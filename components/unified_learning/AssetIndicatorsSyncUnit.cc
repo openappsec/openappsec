@@ -23,12 +23,13 @@ AssetIndicatorsSyncUnit::AssetIndicatorsSyncUnit(
     const std::string &asset_id,
     std::chrono::minutes sync_interval,
     std::chrono::seconds wait_for_sync,
-    const std::string &remotePath
+    const std::string &remotePath,
+    const std::string &backupPath
 ) :
     SerializeToLocalAndRemoteSyncBaseT<UnifiedLearningComponent>(
         sync_interval,
         wait_for_sync,
-        "/tmp/unified_learning_backup_" + asset_id + ".data",
+        backupPath,
         remotePath,
         asset_id,
         "AssetIndicatorsSyncUnit"
@@ -36,7 +37,7 @@ AssetIndicatorsSyncUnit::AssetIndicatorsSyncUnit(
     m_asset_id(asset_id),
     indicators_container(std::make_shared<UnifiedIndicatorsContainer>())
 {
-    dbgTrace(D_UNIFIED_LEARNING)
+    dbgDebug(D_UNIFIED_LEARNING)
         << "Created AssetIndicatorsSyncUnit for asset: "
         << asset_id;
 }
@@ -62,7 +63,7 @@ AssetIndicatorsSyncUnit::addEntry(const UnifiedIndicatorsContainer::Entry &entry
 void
 AssetIndicatorsSyncUnit::handleNewPolicy()
 {
-    dbgTrace(D_UNIFIED_LEARNING)
+    dbgDebug(D_UNIFIED_LEARNING)
         << "Asset sync unit received policy change notification: "
         << m_asset_id;
 
@@ -73,7 +74,7 @@ AssetIndicatorsSyncUnit::handleNewPolicy()
 
     std::chrono::minutes new_interval(interval_minutes);
     if (getIntervalDuration() != new_interval) {
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
         << "Learning sync interval changed for asset "
         << m_asset_id
         << " from "
@@ -109,7 +110,7 @@ AssetIndicatorsSyncUnit::serialize(std::ostream &stream)
     }
     compressed_out.close();
     
-    dbgTrace(D_UNIFIED_LEARNING)
+    dbgDebug(D_UNIFIED_LEARNING)
         << "Serialized indicators for asset: "
         << m_asset_id;
 }
@@ -120,7 +121,7 @@ AssetIndicatorsSyncUnit::deserialize(std::istream &stream)
     try {
         BufferedCompressedInputStream decompressed_stream(stream);
         indicators_container->deserialize(decompressed_stream);
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
             << "Deserialized indicators for asset: "
             << m_asset_id;
     } catch (const std::exception &e) {
@@ -136,12 +137,12 @@ AssetIndicatorsSyncUnit::deserialize(std::istream &stream)
 bool
 AssetIndicatorsSyncUnit::postData()
 {
-    dbgTrace(D_UNIFIED_LEARNING)
+    dbgDebug(D_UNIFIED_LEARNING)
         << "Posting indicators for asset: "
         << m_asset_id;
 
     if (indicators_container->getKeyCount() == 0) {
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
             << "No indicators to post for asset: "
             << m_asset_id;
         m_dataWasSent = false;
@@ -151,7 +152,7 @@ AssetIndicatorsSyncUnit::postData()
     UnifiedIndicatorsLogPost logPost(indicators_container);
     std::string postUrl = getPostDataUrl();
 
-    dbgTrace(D_UNIFIED_LEARNING)
+    dbgDebug(D_UNIFIED_LEARNING)
         << "Posting "
         << indicators_container->getIndicatorCount()
         << " indicators for asset "
@@ -169,7 +170,7 @@ AssetIndicatorsSyncUnit::postData()
             << postUrl;
             m_dataWasSent = false;
     } else {
-        dbgTrace(D_UNIFIED_LEARNING)
+        dbgDebug(D_UNIFIED_LEARNING)
             << "Successfully posted indicators for asset: "
             << m_asset_id;
             m_dataWasSent = true;

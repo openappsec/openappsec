@@ -11,6 +11,7 @@ using namespace testing;
 // Extern the static variables from shared_ring_queue.c so we can reset them for testing
 extern "C" {
     extern int g_effective_size_initialized;
+    extern int g_docker_env_initialized;
     extern uint16_t g_effective_segment_size;
     extern uint16_t g_effective_entry_size;
 }
@@ -352,6 +353,7 @@ public:
     EffectiveSegmentSizeTest()
     {
         g_effective_size_initialized = 0;
+        g_docker_env_initialized = 0;
         g_effective_segment_size = 0;
         g_effective_entry_size = 0;
     }
@@ -367,6 +369,7 @@ public:
 TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_metadata_file)
 {
     g_effective_size_initialized = 0;
+    g_docker_env_initialized = 0;
     g_effective_segment_size = 0;
     g_effective_entry_size = 0;
     
@@ -432,6 +435,7 @@ TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_metadata_file)
 TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_environment_variable)
 {
     g_effective_size_initialized = 0;
+    g_docker_env_initialized = 0;
     g_effective_segment_size = 0;
     g_effective_entry_size = 0;
     

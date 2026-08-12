@@ -19,6 +19,7 @@
 #include "WaapAssetState.h"
 #include "Waf2Regex.h"
 #include "Waf2Util.h"
+#include "WaapDedicatedParsers.h"
 #include "maybe_res.h"
 #include <deque>
 
@@ -35,6 +36,12 @@ public:
     virtual int onKv(const char *k, size_t k_len, const char *v, size_t v_len, int flags, size_t parser_depth);
 
     void clear();
+    // Initialize per-request context caches (dedicated parsers policy pointer, URI, method).
+    // Must be called from start_request_body() after the site config is fully resolved.
+    void initRequestContext();
+    // Returns true when dedicated parser rules are active for the current request.
+    // Used by tests and can also inform debug/logging at higher levels.
+    bool hasDedicatedParsers() const { return m_cachedDedicatedParsersPolicy != nullptr; }
     void showStats(std::string& buff, const ValueStatsAnalyzer& valueStats);
     void apiProcessKey(const char *v, size_t v_len);
     size_t depth() const;
@@ -130,9 +137,11 @@ private:
         bool isUrlPayload,
         bool isUrlParamPayload,
         bool isCookiePayload,
+        const std::string &locationLabel,
         int flags,
         size_t parser_depth,
-        Waap::Util::BinaryFileType b64FileType
+        Waap::Util::BinaryFileType b64FileType,
+        bool b64DataEncoded = false
     );
 
     int createUrlParserForJson(
@@ -163,6 +172,7 @@ private:
         bool isUrlPayload,
         bool isUrlParamPayload,
         bool isCookiePayload,
+        const std::string &locationLabel,
         int flags,
         size_t parser_depth,
         bool base64ParamFound,
@@ -180,6 +190,19 @@ private:
     void setLocalMaxObjectDepth(size_t depth) { m_localMaxObjectDepth = depth; }
     void setGlobalMaxObjectDepthReached() { m_globalMaxObjectDepthReached = true; }
     bool isPDFDetected(const std::string &cur_val) const;
+
+    // Check if a dedicated parser is configured for the current parameter context
+    // Returns the parser type if found, or genError if not configured
+    Maybe<Waap::DedicatedParsers::ParserType> getDedicatedParserType(
+        const std::string& paramName,
+        const std::string& location) const;
+
+    // Create a parser based on the dedicated parser type
+    // Returns offset (0) if parser was created, -1 if not applicable
+    int createDedicatedParser(
+        Waap::DedicatedParsers::ParserType parserType,
+        size_t parser_depth);
+
     bool m_deepParserFlag;
     std::stack<std::tuple<size_t, size_t, std::string>> m_splitTypesStack; // depth, splitIndex, splitType
     std::deque<std::shared_ptr<ParserBase>> m_parsersDeque;
@@ -188,6 +211,13 @@ private:
     size_t m_localMaxObjectDepth;
     bool m_globalMaxObjectDepthReached;
     bool m_is_wbxml;
+
+    // Per-request cache set by initRequestContext() at the start of each request body.
+    // Non-null only when dedicated parser rules are active; used as the fast early-exit
+    // guard inside createInternalParser() (one pointer comparison, no virtual calls).
+    // URI and method are read lazily from m_pTransaction only when this is non-null.
+    // Raw ptr into the shared_ptr owned by the site config - valid for the lifetime of one request.
+    const Waap::DedicatedParsers::DedicatedParsersConfig* m_cachedDedicatedParsersPolicy;
 };
 
 #endif // __PARSER_PARAMETER_DEEP_H__549cc3ee
