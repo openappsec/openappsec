@@ -363,6 +363,7 @@ public:
         unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
         unsetenv("INFINITY_NEXT_NANO_AGENT");
         unlink("/dev/shm/attachment-metadata");
+        unlink("/dev/shm/agent-metadata");
     }
 };
 
@@ -475,4 +476,83 @@ TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_environment_variabl
     
     unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
     unsetenv("INFINITY_NEXT_NANO_AGENT");
+}
+
+
+TEST_F(EffectiveSegmentSizeTest, non_owner_adopts_segment_size_from_existing_queue_header)
+{
+    const string metadata_file_path = "/dev/shm/attachment-metadata";
+    const string test_queue_name = "header_adoption_test_queue";
+
+    // Owner creates a BC (1024) queue, as an old agent would.
+    setenv("EFFECTIVE_SHM_SEGMENT_SIZE", "1024", 1);
+    setenv("INFINITY_NEXT_NANO_AGENT", "TRUE", 1);
+    SharedRingQueue *test_owners_queue = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    ASSERT_NE(test_owners_queue, nullptr);
+    EXPECT_EQ(g_effective_segment_size, 1024);
+
+    // A non-owner whose negotiation channels all say 4096 must still adopt the real 1024 geometry.
+    unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    {
+        ofstream metadata_file(metadata_file_path);
+        ASSERT_TRUE(metadata_file.is_open());
+        metadata_file << "EFFECTIVE_SHM_SEGMENT_SIZE=4096" << endl;
+    }
+    SharedRingQueue *test_users_queue = createSharedRingQueue(test_queue_name.c_str(), 5, 0, 0);
+    ASSERT_NE(test_users_queue, nullptr);
+    EXPECT_EQ(g_effective_segment_size, 1024)
+        << "Non-owner must adopt the owner's segment size from the queue header";
+
+    const char test_data[] = "Header adoption test data";
+    const char *read_data;
+    uint16_t read_bytes = 0;
+    EXPECT_EQ(pushToQueue(test_users_queue, test_data, sizeof(test_data)), 0);
+    EXPECT_EQ(peekToQueue(test_owners_queue, &read_data, &read_bytes), 0);
+    EXPECT_EQ(read_bytes, sizeof(test_data));
+    EXPECT_STREQ(read_data, test_data);
+    EXPECT_EQ(popFromQueue(test_owners_queue), 0);
+
+    destroySharedRingQueue(test_owners_queue, 1, 1);
+    destroySharedRingQueue(test_users_queue, 0, 0);
+}
+
+TEST_F(EffectiveSegmentSizeTest, owner_conforms_to_existing_queue_unless_env_override)
+{
+    const string metadata_file_path = "/dev/shm/attachment-metadata";
+    const string test_queue_name = "owner_conform_test_queue";
+
+    setenv("EFFECTIVE_SHM_SEGMENT_SIZE", "1024", 1);
+    setenv("INFINITY_NEXT_NANO_AGENT", "TRUE", 1);
+    SharedRingQueue *first_owner = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    ASSERT_NE(first_owner, nullptr);
+    EXPECT_EQ(g_effective_segment_size, 1024);
+
+    // Without an explicit env override, a re-creating owner conforms to the live queue geometry
+    // even when the metadata channel claims a different size.
+    unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    {
+        ofstream metadata_file(metadata_file_path);
+        ASSERT_TRUE(metadata_file.is_open());
+        metadata_file << "EFFECTIVE_SHM_SEGMENT_SIZE=4096" << endl;
+    }
+    SharedRingQueue *second_owner = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    ASSERT_NE(second_owner, nullptr);
+    EXPECT_EQ(g_effective_segment_size, 1024) << "Owner should conform to the existing queue size";
+
+    // An explicit environment override wins for the owner.
+    setenv("EFFECTIVE_SHM_SEGMENT_SIZE", "4096", 1);
+    SharedRingQueue *third_owner = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    ASSERT_NE(third_owner, nullptr);
+    EXPECT_EQ(g_effective_segment_size, 4096) << "Explicit env override must win for the owner";
+
+    // The owner advertises the size it resolved.
+    ifstream agent_metadata("/dev/shm/agent-metadata");
+    ASSERT_TRUE(agent_metadata.is_open()) << "Owner must write the agent metadata file";
+    string line;
+    getline(agent_metadata, line);
+    EXPECT_EQ(line, "EFFECTIVE_SHM_SEGMENT_SIZE=4096");
+
+    destroySharedRingQueue(third_owner, 1, 1);
+    destroySharedRingQueue(second_owner, 1, 1);
+    destroySharedRingQueue(first_owner, 1, 1);
 }

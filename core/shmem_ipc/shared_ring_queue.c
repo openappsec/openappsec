@@ -29,7 +29,7 @@
 
 // Attachment metadata file path
 #define ATTACHMENT_METADATA_FILE_PATH "/dev/shm/attachment-metadata"
-#define DUAL_DOCKER_NGINX_FILE "/etc/dual_docker_nginx"
+#define AGENT_METADATA_FILE_PATH "/dev/shm/agent-metadata"
 
 static const uint16_t empty_buff_mgmt_magic = 0xfffe;
 static const uint16_t skip_buff_mgmt_magic = 0xfffd;
@@ -51,19 +51,9 @@ static int g_queue_params_initialized = 0;
 uint16_t g_effective_segment_size = 0;
 uint16_t g_effective_entry_size = 0;
 int g_effective_size_initialized = 0;
-static int is_dual_docker_nginx_env = 0;
-static int is_dual_docker_env = 0;
+// Kept only because tests reset it alongside the sizing globals; dual-docker
+// detection no longer takes part in segment size resolution.
 int g_docker_env_initialized = 0;
-
-static void
-initializeDockerEnvironment()
-{
-    if (!g_docker_env_initialized) {
-        g_docker_env_initialized = 1;
-        is_dual_docker_nginx_env = (access(DUAL_DOCKER_NGINX_FILE, F_OK) == 0);
-        is_dual_docker_env = getenv("INFINITY_NEXT_NANO_AGENT") != NULL;
-    }
-}
 
 static void
 initializeQueueParams()
@@ -152,13 +142,6 @@ isLargerDataSegmentSupported()
     char *line = NULL;
     size_t len = 0;
     ssize_t read_len;
-
-    initializeDockerEnvironment();
-
-    if (!is_dual_docker_env && !is_dual_docker_nginx_env) {
-        writeDebug(TraceLevel, "Not a dual docker environment, assuming larger data segment is supported");
-        return 1;
-    }
 
     char *effective_size_str = getenv("EFFECTIVE_SHM_SEGMENT_SIZE");
     if (effective_size_str != NULL) {
@@ -253,6 +236,67 @@ getEffectiveEntrySize()
         SHARED_MEMORY_SEGMENT_ENTRY_SIZE : SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC;
 
     return g_effective_entry_size;
+}
+
+// Fixed header prefix shared by every released SharedRingQueue layout (fields before mgmt_segment).
+#define SHARED_RING_QUEUE_HEADER_PREFIX_SIZE (offsetof(SharedRingQueue, mgmt_segment))
+
+static uint16_t
+deriveSegmentSizeFromExistingQueue(int fd, const char *shared_location_name)
+{
+    struct stat st;
+    SharedRingQueue header;
+    uint32_t payload_size;
+    uint32_t divisor;
+    uint32_t derived_size;
+
+    if (fstat(fd, &st) != 0) return 0;
+    if ((size_t)st.st_size < SHARED_RING_QUEUE_HEADER_PREFIX_SIZE) return 0;
+
+    if (pread(fd, &header, SHARED_RING_QUEUE_HEADER_PREFIX_SIZE, 0) !=
+        (ssize_t)SHARED_RING_QUEUE_HEADER_PREFIX_SIZE)
+    {
+        return 0;
+    }
+
+    if (header.num_of_data_segments == 0 || header.num_of_data_segments > max_num_of_data_segments) return 0;
+    if (header.size_of_memory <= (int32_t)SHARED_RING_QUEUE_HEADER_PREFIX_SIZE) return 0;
+
+    // The owner stamped: size_of_memory = header prefix + (num_of_data_segments + 1) * segment size
+    // (the extra segment is the management segment). Accept the derived size only if it reconstructs
+    // the stamped memory size exactly and is one of the two sizes ever released.
+    payload_size = header.size_of_memory - SHARED_RING_QUEUE_HEADER_PREFIX_SIZE;
+    divisor = (uint32_t)header.num_of_data_segments + 1;
+    derived_size = payload_size / divisor;
+    if (derived_size * divisor != payload_size) return 0;
+    if (derived_size != SHARED_MEMORY_SEGMENT_ENTRY_SIZE && derived_size != SHARED_MEMORY_SEGMENT_ENTRY_SIZE_BC) {
+        return 0;
+    }
+
+    writeDebug(
+        DebugLevel,
+        "Derived segment size %u from existing shared memory queue '%s' (memory size: %d, data segments: %u)",
+        derived_size,
+        shared_location_name,
+        header.size_of_memory,
+        header.num_of_data_segments
+    );
+    return (uint16_t)derived_size;
+}
+
+// The owner advertises the size it actually resolved, so peers that negotiate through
+// /dev/shm/agent-metadata (1.1.35-era attachments) land on the same geometry it built.
+static void
+writeAgentMetadataFile(uint16_t effective_entry_size)
+{
+    FILE *file = fopen(AGENT_METADATA_FILE_PATH, "w");
+    if (file == NULL) {
+        writeDebug(WarningLevel, "Failed to write agent metadata file: %s", AGENT_METADATA_FILE_PATH);
+        return;
+    }
+    fprintf(file, "EFFECTIVE_SHM_SEGMENT_SIZE=%u\n", effective_entry_size);
+    fclose(file);
+    chmod(AGENT_METADATA_FILE_PATH, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 }
 
 static uint32_t
@@ -396,9 +440,6 @@ createSharedRingQueue(const char *shared_location_name, uint16_t num_of_data_seg
         return NULL;
     }
 
-    uint16_t effective_size = getEffectiveSegmentSize();
-    uint32_t effective_queue_size = getEffectiveSharedRingQueueSize();
-
     fd = shm_open(shared_location_name, shmem_fd_flags, S_IRWXU | S_IRWXG | S_IRWXO);
     if (fd == -1) {
         writeDebug(
@@ -410,6 +451,30 @@ createSharedRingQueue(const char *shared_location_name, uint16_t num_of_data_seg
         return NULL;
     }
 
+    // Backward compatibility with mixed agent/attachment versions: an existing queue's header
+    // is authoritative for the segment size. A non-owner must match the owner's real geometry
+    // to function at all; an owner re-creating over a live queue conforms to it unless an
+    // explicit EFFECTIVE_SHM_SEGMENT_SIZE override is present in the environment.
+    int env_size_override = getenv("EFFECTIVE_SHM_SEGMENT_SIZE") != NULL;
+    uint16_t adopted_size = deriveSegmentSizeFromExistingQueue(fd, shared_location_name);
+    if (adopted_size != 0 && (!is_owner || !env_size_override)) {
+        uint16_t negotiated_size = getEffectiveSegmentSize();
+        if (adopted_size != negotiated_size) {
+            writeDebug(
+                WarningLevel,
+                "Adopting segment size %u from existing shared memory queue '%s' (negotiated size was %u)",
+                adopted_size,
+                shared_location_name,
+                negotiated_size
+            );
+            g_effective_segment_size = adopted_size;
+            g_effective_entry_size = adopted_size;
+            g_effective_size_initialized = 1;
+        }
+    }
+
+    uint16_t effective_size = getEffectiveSegmentSize();
+    uint32_t effective_queue_size = getEffectiveSharedRingQueueSize();
     size_of_memory = effective_queue_size + (num_of_data_segments * effective_size);
     if (is_owner && ftruncate(fd, size_of_memory + 1) != 0) {
         writeDebug(
@@ -458,6 +523,10 @@ createSharedRingQueue(const char *shared_location_name, uint16_t num_of_data_seg
         munmap(queue, size_of_memory);
         close(fd);
         return NULL;
+    }
+
+    if (is_owner) {
+        writeAgentMetadataFile(effective_size);
     }
 
     writeDebug(

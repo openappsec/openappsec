@@ -352,6 +352,7 @@ public:
     fini()
     {
         resetCompressionDebugFunctionsToStandardError();
+        remove(SHARED_MEM_PATH "agent-metadata");
 
         if (attachment_routine_id > 0 && mainloop->doesRoutineExist(attachment_routine_id)) {
             mainloop->stop(attachment_routine_id);
