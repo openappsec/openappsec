@@ -472,3 +472,56 @@ TEST_F(EffectiveSegmentSizeTest, effective_segment_size_from_environment_variabl
     unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
     unsetenv("INFINITY_NEXT_NANO_AGENT");
 }
+
+TEST_F(EffectiveSegmentSizeTest, happy_path_resolves_4096_from_attachment_metadata)
+{
+    const string metadata_file_path = "/dev/shm/attachment-metadata";
+    const string test_queue_name = "happy_path_4096_test_queue";
+
+    // A modern attachment publishes its metadata before the agent ever creates the queues.
+    g_effective_size_initialized = 0;
+    g_effective_segment_size = 0;
+    g_effective_entry_size = 0;
+    unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    {
+        ofstream metadata_file(metadata_file_path);
+        ASSERT_TRUE(metadata_file.is_open());
+        metadata_file << "EFFECTIVE_SHM_SEGMENT_SIZE=4096" << endl;
+    }
+
+    SharedRingQueue *owner = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    SharedRingQueue *user = createSharedRingQueue(test_queue_name.c_str(), 5, 0, 0);
+    ASSERT_NE(owner, nullptr);
+    ASSERT_NE(user, nullptr);
+    EXPECT_EQ(g_effective_segment_size, 4096) << "Happy path must keep the full 4096 segment size";
+
+    string large_test_data(2000, 'Y');
+    const char *read_data;
+    uint16_t read_bytes = 0;
+    EXPECT_EQ(pushToQueue(user, large_test_data.c_str(), large_test_data.size() + 1), 0);
+    EXPECT_EQ(peekToQueue(owner, &read_data, &read_bytes), 0);
+    EXPECT_EQ(read_bytes, large_test_data.size() + 1);
+    EXPECT_EQ(popFromQueue(owner), 0);
+
+    destroySharedRingQueue(owner, 1, 1);
+    destroySharedRingQueue(user, 0, 0);
+    unlink(metadata_file_path.c_str());
+}
+
+TEST_F(EffectiveSegmentSizeTest, no_evidence_default_segment_size)
+{
+    const string test_queue_name = "default_size_test_queue";
+
+    g_effective_size_initialized = 0;
+    g_effective_segment_size = 0;
+    g_effective_entry_size = 0;
+    unsetenv("EFFECTIVE_SHM_SEGMENT_SIZE");
+    unlink("/dev/shm/attachment-metadata");
+
+    SharedRingQueue *owner = createSharedRingQueue(test_queue_name.c_str(), 5, 1, 1);
+    ASSERT_NE(owner, nullptr);
+    // With no evidence of attachment support, the agent must fall back to the BC-safe 1024.
+    EXPECT_EQ(g_effective_segment_size, 1024);
+
+    destroySharedRingQueue(owner, 1, 1);
+}
