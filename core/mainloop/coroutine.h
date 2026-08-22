@@ -41,6 +41,7 @@ public:
     bool isPrimary() { return is_primary; }
     const std::string & getRoutineName() const { return routine_name; }
     bool isActive() const;
+    bool isHalted() const;
     bool shouldRun(const I_MainLoop::RoutineType &limit) const;
     void run();
     void yield();

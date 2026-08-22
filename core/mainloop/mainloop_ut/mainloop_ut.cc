@@ -2,7 +2,10 @@
 #include "mainloop.h"
 
 #include <fcntl.h>
+#include <poll.h>
+#include <sys/socket.h>
 #include <chrono>
+#include <thread>
 
 #include "cptest.h"
 #include "config.h"
@@ -432,6 +435,268 @@ TEST_F(MainloopTest, call_file_cb)
 
     mainloop->run();
     EXPECT_EQ(4, num_called);
+}
+
+TEST_F(MainloopTest, timed_yield_does_not_spin_the_scheduler)
+{
+    size_t monotonic_reads = 0;
+    auto start_time = steady_clock::now();
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(
+        InvokeWithoutArgs(
+            [&monotonic_reads, start_time] () {
+                monotonic_reads++;
+                return duration_cast<microseconds>(steady_clock::now() - start_time);
+            }
+        )
+    );
+
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        [this] () {
+            mainloop->yield(milliseconds(250));
+            mainloop->stop();
+        },
+        "timed idle routine",
+        true
+    );
+
+    mainloop->run();
+    EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
+}
+
+TEST_F(MainloopTest, idle_file_routine_wait_is_interrupted_by_readiness)
+{
+    mainloop_comp.preload();
+    setConfiguration<uint>(
+        1000,
+        string("Mainloop"),
+        string("Idle event wait timeout in msec")
+    );
+
+    size_t monotonic_reads = 0;
+    auto start_time = steady_clock::now();
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(
+        InvokeWithoutArgs(
+            [&monotonic_reads, start_time] () {
+                monotonic_reads++;
+                return duration_cast<microseconds>(steady_clock::now() - start_time);
+            }
+        )
+    );
+
+    int pipe_fds[2];
+    ASSERT_EQ(0, pipe(pipe_fds));
+    auto close_pipe = make_scope_exit(
+        [&pipe_fds] () {
+            close(pipe_fds[0]);
+            close(pipe_fds[1]);
+        }
+    );
+
+    thread writer(
+        [&pipe_fds] () {
+            this_thread::sleep_for(milliseconds(250));
+            char byte = 'a';
+            EXPECT_EQ(1, write(pipe_fds[1], &byte, 1));
+        }
+    );
+    auto join_writer = make_scope_exit([&writer] () { writer.join(); });
+
+    mainloop->addFileRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        pipe_fds[0],
+        [&pipe_fds, this] () {
+            char byte;
+            ASSERT_EQ(1, read(pipe_fds[0], &byte, 1));
+            mainloop->stop();
+        },
+        "idle pipe reader",
+        true
+    );
+
+    mainloop->run();
+    auto elapsed = duration_cast<milliseconds>(steady_clock::now() - start_time);
+    EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
+    EXPECT_LT(elapsed.count(), 500) << "File readiness was handled after " << elapsed.count() << " ms";
+}
+
+TEST_F(MainloopTest, yielding_file_callback_remains_runnable)
+{
+    mainloop_comp.preload();
+    setConfiguration<uint>(
+        1000,
+        string("Mainloop"),
+        string("Idle event wait timeout in msec")
+    );
+
+    int pipe_fds[2];
+    ASSERT_EQ(0, pipe(pipe_fds));
+    auto close_pipe = make_scope_exit(
+        [&pipe_fds] () {
+            close(pipe_fds[0]);
+            close(pipe_fds[1]);
+        }
+    );
+    char byte = 'a';
+    ASSERT_EQ(1, write(pipe_fds[1], &byte, 1));
+
+    mainloop->addFileRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        pipe_fds[0],
+        [&pipe_fds, this] () {
+            char byte;
+            ASSERT_EQ(1, read(pipe_fds[0], &byte, 1));
+            mainloop->yield(true);
+            mainloop->stop();
+        },
+        "yielding pipe reader",
+        true
+    );
+
+    auto start_time = steady_clock::now();
+    mainloop->run();
+    auto elapsed = duration_cast<milliseconds>(steady_clock::now() - start_time);
+    EXPECT_LT(elapsed.count(), 250) << "File callback resumed after " << elapsed.count() << " ms";
+}
+
+TEST_F(MainloopTest, timed_yield_in_file_callback_suspends_descriptor_polling)
+{
+    mainloop_comp.preload();
+    setConfiguration<uint>(
+        1000,
+        string("Mainloop"),
+        string("Idle event wait timeout in msec")
+    );
+
+    size_t monotonic_reads = 0;
+    auto start_time = steady_clock::now();
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(
+        InvokeWithoutArgs(
+            [&monotonic_reads, start_time] () {
+                monotonic_reads++;
+                return duration_cast<microseconds>(steady_clock::now() - start_time);
+            }
+        )
+    );
+
+    int pipe_fds[2];
+    ASSERT_EQ(0, pipe(pipe_fds));
+    auto close_pipe = make_scope_exit(
+        [&pipe_fds] () {
+            close(pipe_fds[0]);
+            close(pipe_fds[1]);
+        }
+    );
+    const char bytes[] = { 'a', 'b' };
+    ASSERT_EQ(2, write(pipe_fds[1], bytes, sizeof(bytes)));
+
+    mainloop->addFileRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        pipe_fds[0],
+        [&pipe_fds, this] () {
+            char byte;
+            ASSERT_EQ(1, read(pipe_fds[0], &byte, 1));
+            mainloop->yield(milliseconds(250));
+            mainloop->stop();
+        },
+        "timed yielding pipe reader",
+        true
+    );
+
+    mainloop->run();
+    EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
+}
+
+TEST_F(MainloopTest, readable_eof_does_not_spin_the_scheduler)
+{
+    size_t monotonic_reads = 0;
+    auto start_time = steady_clock::now();
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(
+        InvokeWithoutArgs(
+            [&monotonic_reads, start_time] () {
+                monotonic_reads++;
+                return duration_cast<microseconds>(steady_clock::now() - start_time);
+            }
+        )
+    );
+
+    int socket_fds[2];
+    ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_STREAM, 0, socket_fds));
+    close(socket_fds[1]);
+    auto close_reader = make_scope_exit([&socket_fds] () { close(socket_fds[0]); });
+
+    struct pollfd readiness;
+    readiness.fd = socket_fds[0];
+    readiness.events = POLLIN;
+    readiness.revents = 0;
+    ASSERT_EQ(1, poll(&readiness, 1, 0));
+    ASSERT_NE(0, readiness.revents & POLLIN);
+    ASSERT_NE(0, readiness.revents & POLLHUP);
+
+    size_t callback_count = 0;
+    mainloop->addFileRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        socket_fds[0],
+        [&socket_fds, &callback_count] () {
+            char byte;
+            EXPECT_EQ(0, read(socket_fds[0], &byte, 1));
+            callback_count++;
+        },
+        "closed socket reader",
+        true
+    );
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        [this] () {
+            mainloop->yield(milliseconds(250));
+            mainloop->stopAll();
+        },
+        "terminal descriptor timeout",
+        false
+    );
+
+    mainloop->run();
+    EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
+    EXPECT_LT(callback_count, 10u) << "EOF callback ran " << callback_count << " times";
+}
+
+TEST_F(MainloopTest, terminal_only_event_does_not_spin_the_scheduler)
+{
+    size_t monotonic_reads = 0;
+    auto start_time = steady_clock::now();
+    EXPECT_CALL(mock_time, getMonotonicTime()).WillRepeatedly(
+        InvokeWithoutArgs(
+            [&monotonic_reads, start_time] () {
+                monotonic_reads++;
+                return duration_cast<microseconds>(steady_clock::now() - start_time);
+            }
+        )
+    );
+
+    int pipe_fds[2];
+    ASSERT_EQ(0, pipe(pipe_fds));
+    close(pipe_fds[1]);
+    auto close_reader = make_scope_exit([&pipe_fds] () { close(pipe_fds[0]); });
+
+    mainloop->addFileRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        pipe_fds[0],
+        [] () {},
+        "closed pipe reader",
+        true
+    );
+    mainloop->addOneTimeRoutine(
+        I_MainLoop::RoutineType::RealTime,
+        [this] () {
+            mainloop->yield(milliseconds(250));
+            mainloop->stopAll();
+        },
+        "terminal descriptor timeout",
+        false
+    );
+
+    mainloop->run();
+    EXPECT_LT(monotonic_reads, 100u) << "Monotonic clock was read " << monotonic_reads << " times";
 }
 
 TEST_F(MainloopTest, stop_while_routines_are_running)
