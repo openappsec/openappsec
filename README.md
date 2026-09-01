@@ -94,6 +94,8 @@ Before compiling the services, you'll need to ensure the latest development vers
 * Boost
 * OpenSSL
 * PCRE2
+* Brotli
+* zlib
 * libxml2
 * GTest
 * GMock
@@ -107,7 +109,7 @@ An example of installing the packages on Alpine:
 
 ```bash
  $ apk update
- $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis libmaxminddb-dev yq
+ $ apk add boost-dev openssl-dev pcre2-dev libxml2-dev gtest-dev curl-dev hiredis-dev redis libmaxminddb-dev yq brotli-dev zlib-dev
 ```
 
 ## Compiling and packaging the agent code
