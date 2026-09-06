@@ -1654,7 +1654,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
 
     const auto& decision = m_waapDecision.getDecision(practiceType);
     bool send_extended_log = shouldSendExtendedLog(triggerLog, practiceType);
-    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webUrlPath) || decision->shouldForceLog()) {
+    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webUrlPath)) {
         std::string httpUriPath = m_uriPath;
 
         if (httpUriPath.length() > MAX_LOG_FIELD_SIZE)
@@ -1664,7 +1664,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
 
         waapLog << LogField("httpUriPath", httpUriPath, LogFieldOption::XORANDB64);
     }
-    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webUrlQuery) || decision->shouldForceLog()) {
+    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webUrlQuery)) {
         std::string uriQuery = m_uriQuery;
         if (uriQuery.length() > MAX_LOG_FIELD_SIZE)
         {
@@ -1672,7 +1672,7 @@ void Waf2Transaction::appendCommonLogFields(LogGen& waapLog,
         }
         waapLog << LogField("httpUriQuery", uriQuery, LogFieldOption::XORANDB64);
     }
-    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webHeaders) || decision->shouldForceLog()) {
+    if (triggerLog.isWebLogFieldActive(LogTriggerConf::WebLogFields::webHeaders)) {
         waapLog << LogField("httpRequestHeaders", logHeadersStr(), LogFieldOption::XORANDB64);
     }
     // Log http response code if it is known
