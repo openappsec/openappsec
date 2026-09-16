@@ -43,6 +43,12 @@ RoutineWrapper::isActive() const
 }
 
 bool
+RoutineWrapper::isHalted() const
+{
+    return is_halt;
+}
+
+bool
 RoutineWrapper::shouldRun(const I_MainLoop::RoutineType &limit) const
 {
     return !is_halt && pri<=limit;
